@@ -1,15 +1,13 @@
-"""Conservative PR test admission, including every slow test after any change.
-
-Import graphs cannot prove completeness for dynamic imports, fixture hooks or
-literal/data dependencies. Until that proof exists, every nonempty diff runs the
-full set. This intentionally trades extra execution for zero mapped omissions.
-"""
+"""Select PR slow witnesses by tracked imports and paths, with explicit fallback."""
 
 from __future__ import annotations
 
 import argparse
+import ast
 import json
+import re
 import subprocess
+import sys
 from pathlib import Path
 
 
@@ -38,27 +36,286 @@ def changed_paths(root: Path, base: str, head: str = "HEAD") -> set[str]:
     return paths
 
 
-def affected_tests(root: Path, paths: set[str]) -> list[str]:
-    """Return the complete tracked test inventory for every changed input.
+def _module(path: str) -> str:
+    return path.removesuffix(".py").removesuffix("/__init__").replace("/", ".")
 
-    Enumerate every tracked Python file, including vendored packages and roots
-    omitted by the old import scan. No package-name inference or path-literal
-    matching is used to exclude a test. Full pytest roots remain authoritative
-    for execution, including custom collection rules.
-    """
-    if not paths:
-        return []
-    result = subprocess.run(
-        ["git", "ls-files", "-z", "*.py"], cwd=root, check=True, capture_output=True, text=True
+
+def _joined_literal(node: ast.AST) -> str | None:
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
+    if isinstance(node, ast.BinOp) and isinstance(node.op, (ast.Div, ast.Add)):
+        left, right = _joined_literal(node.left), _joined_literal(node.right)
+        if isinstance(node.op, ast.Div) and left is None:
+            return right
+        if left is not None and right is not None:
+            return left + ("/" if isinstance(node.op, ast.Div) else "") + right
+    if isinstance(node, ast.Call) and node.args:
+        if isinstance(node.func, ast.Name) and node.func.id in {"Path", "PurePath"}:
+            return _joined_literal(node.args[0])
+    return None
+
+
+def _references(path: Path, relative: str) -> tuple[set[str], set[str]]:
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=relative)
+    imports, literals = set(), set()
+    package = _module(relative).split(".")[:-1]
+    if path.name == "__init__.py":
+        package = _module(relative).split(".")
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            imports.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            prefix = node.module or ""
+            if node.level:
+                prefix = ".".join(
+                    package[: len(package) - node.level + 1] + ([prefix] if prefix else [])
+                )
+            imports.add(prefix)
+            imports.update(f"{prefix}.{alias.name}" for alias in node.names)
+        literal = _joined_literal(node)
+        if literal:
+            literals.add(literal.strip("/"))
+    return imports, literals
+
+
+def _dependency_index(vertices: set[str]) -> tuple[dict, dict, dict]:
+    """Index module aliases, directory prefixes and unambiguous basenames."""
+    basenames = {}
+    for path in vertices:
+        basenames.setdefault(Path(path).name, set()).add(path)
+    modules = {}
+    path_prefixes = {}
+    for dependency in sorted(vertices):
+        if dependency.endswith(".py"):
+            aliases = {_module(dependency)}
+            if dependency.startswith("fast-pysf/"):
+                aliases.add(_module(dependency.removeprefix("fast-pysf/")))
+            for alias in aliases:
+                modules.setdefault(alias, set()).add(dependency)
+        parts = dependency.split("/")
+        for index in range(1, len(parts) + 1):
+            path_prefixes.setdefault("/".join(parts[:index]), set()).add(dependency)
+    return modules, path_prefixes, basenames
+
+
+def _source_dependencies(imports, literals, text, modules, path_prefixes, basenames) -> dict:
+    """Resolve static imports and path references without running input code."""
+    dependencies = {}
+    for name in sorted(imports | (literals & modules.keys())):
+        parts = name.split(".")
+        for index in range(1, len(parts) + 1):
+            prefix = ".".join(parts[:index])
+            for dependency in modules.get(prefix, ()):
+                dependencies[dependency] = "import"
+    # Text inputs can themselves point at other inputs (YAML -> SVG, etc.).
+    references = literals | {token for token in re.findall(r"[\w./-]+", text) if "/" in token}
+    for literal in sorted(references):
+        for dependency in path_prefixes.get(literal.strip("/"), ()):
+            dependencies.setdefault(dependency, "path")
+        if len(basenames.get(literal, ())) == 1:
+            dependency = next(iter(basenames[literal]))
+            dependencies.setdefault(dependency, "path")
+    return dependencies
+
+
+def _reverse_graph(vertices: set[str], sources: dict) -> dict:
+    """Build edges from each dependency to the files that consume it."""
+    modules, path_prefixes, basenames = _dependency_index(vertices)
+    reverse = {}
+    for source, (imports, literals, text) in sources.items():
+        dependencies = _source_dependencies(
+            imports, literals, text, modules, path_prefixes, basenames
+        )
+        for dependency, kind in sorted(dependencies.items()):
+            if source != dependency:
+                reverse.setdefault(dependency, []).append((source, kind))
+    # A conftest dependency applies implicitly to every test in its directory.
+    for fixture in sorted(path for path in vertices if Path(path).name == "conftest.py"):
+        parent = Path(fixture).parent
+        scope = "" if parent == Path(".") else parent.as_posix() + "/"
+        for consumer in sorted(
+            path for path in sources if path.startswith(scope) and path != fixture
+        ):
+            reverse.setdefault(fixture, []).append((consumer, "fixture"))
+    return reverse
+
+
+def _closure(paths: set[str], reverse: dict) -> dict:
+    """Find consumers breadth first, retaining the first sorted explanation chain."""
+    reached = {path: "changed: " + path for path in sorted(paths)}
+    queue = list(reached)
+    for dependency in queue:
+        for source, kind in reverse.get(dependency, []):
+            if source not in reached:
+                reached[source] = reached[dependency] + f" -> {kind}: {source}"
+                queue.append(source)
+    return reached
+
+
+def _reaches_test(changed: str, tests: list[str], reverse: dict) -> bool:
+    """Check each changed input independently, including overlapping closures."""
+    seen = {changed}
+    pending = [changed]
+    for dependency in pending:
+        if dependency in tests:
+            return True
+        for source, _ in reverse.get(dependency, ()):
+            if source not in seen:
+                seen.add(source)
+                pending.append(source)
+    return False
+
+
+def _always_witness(path: str, text: str) -> bool:
+    """Recognize integrity witnesses by purpose and digest use, regardless of marks."""
+    stem = Path(path).stem
+    return (
+        bool(re.search(r"(?:^|_)(?:pins?|pinned|inventory|manifest|registry)(?:_|$)", stem))
+        or any(
+            word in stem
+            for word in ("optimized_assert", "optimized_mode_assert", "docs_evidence", "issue_5303")
+        )
+        or any(word in text for word in ("sha256", "sha1", "hashlib", "required_pin_inventory"))
     )
-    return sorted(
+
+
+def _is_slow_test(text: str) -> bool:
+    """Recognize tests excluded by the default PR marker filter."""
+    return "pytest.mark.slow" in text or "robot-sf-test-lane: slow" in text
+
+
+def _has_unproven_slow_dependency(imports: set[str], text: str) -> bool:
+    """Return whether a slow test can read inputs beyond the static graph."""
+    try:
+        tree = ast.parse(text)
+    except SyntaxError:
+        return True
+    dynamic_call_names = {"chr", "open"}
+    dynamic_method_names = {
+        "glob",
+        "iterdir",
+        "load",
+        "open",
+        "read",
+        "read_bytes",
+        "read_text",
+        "rglob",
+        "safe_load",
+        "walk",
+    }
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            function = node.func
+            if isinstance(function, ast.Name) and function.id in dynamic_call_names:
+                return True
+            if isinstance(function, ast.Attribute) and function.attr in dynamic_method_names:
+                return True
+        elif isinstance(node, ast.JoinedStr):
+            return True
+    return bool(
+        imports
+        & {
+            "csv",
+            "glob",
+            "importlib.resources",
+            "json",
+            "os",
+            "pathlib",
+            "tomllib",
+            "yaml",
+        }
+    )
+
+
+def _unproven_slow_tests(tests: list[str], sources: dict, selected: dict[str, str]) -> list[str]:
+    """List unselected slow files whose dependencies are not fully statically proven."""
+    unproven = []
+    for path in tests:
+        if path in selected:
+            continue
+        source = sources.get(path)
+        if source is None:
+            unproven.append(path)
+            continue
+        imports, _, text = source
+        if _is_slow_test(text) and _has_unproven_slow_dependency(imports, text):
+            unproven.append(path)
+    return unproven
+
+
+def _scan_sources(root: Path, files: set[str], tests: list[str]) -> tuple[dict, dict]:
+    """Read tracked text and Python ASTs; no untracked artifacts enter the graph."""
+    reasons = {}
+    sources = {}
+    for path in sorted(files):
+        target = root / path
+        if target.stat().st_size > 2_000_000:
+            continue
+        try:
+            text = target.read_text(encoding="utf-8")
+        except UnicodeError:
+            continue
+        imports, literals = set(), set()
+        if path.endswith(".py"):
+            try:
+                imports, literals = _references(target, path)
+            except (SyntaxError, ValueError):
+                raise ValueError(f"cannot parse {path}") from None
+        sources[path] = (imports, literals, text)
+        if path in tests and _always_witness(path, text):
+            reasons[path] = "always: pin/inventory/manifest witness"
+    return sources, reasons
+
+
+def selection_reasons(root: Path, paths: set[str]) -> tuple[str, dict[str, str]]:
+    """Trace tracked imports and input references; retain full fallback for unknown inputs.
+
+    No dependency code is executed. Include package initializers, vendored module
+    aliases, joined path literals, unique basenames, and transitive data references.
+    Fixture/build/CI changes and unmapped inputs require complete admission.
+    """
+    tracked = subprocess.check_output(["git", "ls-files", "-z"], cwd=root, text=True).split("\0")
+    files = {path for path in tracked if path and (root / path).is_file()}
+    tests = sorted(
         path
-        for path in result.stdout.split("\0")
-        if path
-        and (root / path).is_file()
-        and (path.startswith("tests/") or path.startswith("fast-pysf/tests/"))
+        for path in files
+        if path.endswith(".py")
+        and path.startswith(("tests/", "fast-pysf/tests/"))
         and (Path(path).name.startswith("test_") or Path(path).name.endswith("_test.py"))
     )
+    if any(
+        Path(path).name == "conftest.py"
+        or path.startswith(".github/")
+        or path in {"pyproject.toml", "uv.lock", "setup.cfg", "pytest.ini"}
+        or path.startswith("scripts/dev/")
+        for path in paths
+    ):
+        return "full", dict.fromkeys(tests, "fallback: shared collection/build/CI input")
+    try:
+        sources, reasons = _scan_sources(root, files, tests)
+    except ValueError as error:
+        return "full", dict.fromkeys(tests, f"fallback: {error}")
+    # Deleted and renamed paths remain vertices even when no longer tracked.
+    vertices = files | paths
+    reverse = _reverse_graph(vertices, sources)
+    reached = _closure(paths, reverse)
+    for path in tests:
+        if path in reached:
+            reasons.setdefault(path, reached[path])
+    unproven_slow = _unproven_slow_tests(tests, sources, reasons) if paths else []
+    if unproven_slow:
+        return "full", dict.fromkeys(
+            tests, "fallback: unproven slow-test dependency " + unproven_slow[0]
+        )
+    unmapped = sorted(path for path in paths if not _reaches_test(path, tests, reverse))
+    if unmapped:
+        return "full", dict.fromkeys(tests, "fallback: unmapped input " + unmapped[0])
+    return "affected", dict(sorted(reasons.items()))
+
+
+def affected_tests(root: Path, paths: set[str]) -> list[str]:
+    """Return deterministic affected files plus unconditional integrity witnesses."""
+    return sorted(selection_reasons(root, paths)[1])
 
 
 def _identity(root: Path, ref: str) -> str:
@@ -68,19 +325,21 @@ def _identity(root: Path, ref: str) -> str:
 
 
 def selection_report(root: Path, base: str, head: str = "HEAD") -> dict:
-    """Prepare a reusable immutable diff decision without scanning test bodies."""
+    """Prepare one commit-bound diff decision for reuse across all shards."""
     base_sha = _identity(root, f"{base}^{{commit}}")
     head_sha = _identity(root, f"{head}^{{commit}}")
     paths = changed_paths(root, base_sha, head_sha)
+    mode, reasons = selection_reasons(root, paths)
     return {
         "schema_version": "affected-test-selection.v1",
         "base_sha": base_sha,
         "head_sha": head_sha,
         "tree_sha": _identity(root, f"{head_sha}^{{tree}}"),
-        "mode": "full" if paths else "unchanged",
-        "reason": "Any changed input requires complete admission; dependency inference is not exclusion proof.",
+        "mode": mode,
+        "reason": "Tracked import/path closure plus always-run integrity witnesses; full fallback for uncertain inputs.",
+        "reasons": reasons,
         "changed_paths": sorted(paths),
-        "tests": affected_tests(root, paths),
+        "tests": sorted(reasons),
     }
 
 
@@ -92,7 +351,7 @@ def read_report(root: Path, path: Path, base: str, head: str) -> dict:
         or report.get("head_sha") != _identity(root, f"{head}^{{commit}}")
         or report.get("base_sha") != _identity(root, f"{base}^{{commit}}")
         or report.get("tree_sha") != _identity(root, f"{head}^{{tree}}")
-        or report.get("mode") not in {"full", "unchanged"}
+        or report.get("mode") not in {"full", "affected", "unchanged"}
         or (
             report.get("mode") == "unchanged"
             and (
@@ -120,6 +379,10 @@ def main() -> None:
         if args.read_report
         else selection_report(root, args.base, args.head)
     )
+    print(f"[test-selection] mode={report['mode']} files={len(report['tests'])}", file=sys.stderr)
+    if not args.read_report:
+        for test, reason in sorted(report.get("reasons", {}).items()):
+            print(f"[test-selection] {test}: {reason}", file=sys.stderr)
     if args.json_output:
         args.json_output.parent.mkdir(parents=True, exist_ok=True)
         args.json_output.write_text(json.dumps(report, indent=2) + "\n")

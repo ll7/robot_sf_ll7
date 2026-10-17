@@ -457,6 +457,8 @@ def _write_dataset_manifest(
         "dataset_sha1": _sha1_file(dataset_path),
         "summary_path": str(summary_path),
         "summary": summary,
+        "dataset_schema": summary.get("dataset_schema"),
+        "supervision_metadata": summary.get("supervision_metadata"),
         "diagnostics": _dataset_npz_diagnostics(dataset_path),
         "extra": extra or {},
     }

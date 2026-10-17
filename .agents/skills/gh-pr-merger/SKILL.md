@@ -49,7 +49,7 @@ merge. It also fails closed when a trusted unexpired exact-head `review-claim` m
 worker as active; the claim must be released after exact-head evidence is published and before
 `merge-ready` admission. That workflow is the merge-queue entry point for this contract; this
 skill remains the binding authority for guarded merges it executes directly.
-See `docs/dev_guide.md` ("Merge queue gate") for the required-check toggle and
+See `docs/dev_guide_reference.md` ("Merge queue gate") for the required-check toggle and
 the audit record shape (`merge_queue_gate.v1`).
 
 ## Single-account merge receipt (issue #7669)
@@ -101,7 +101,7 @@ Do not use it for:
 - `AGENTS.md`
 - `.agents/skills/goal-pr-review/SKILL.md`
 - `docs/code_review.md`
-- `docs/dev_guide.md` ("Merge queue gate", issue #6274)
+- `docs/dev_guide_reference.md` ("Merge queue gate", issue #6274)
 - `.github/workflows/merge-queue-gate.yml`
 - `scripts/dev/merge_queue_gate.py`
 - `scripts/dev/single_account_merge_receipt.py`

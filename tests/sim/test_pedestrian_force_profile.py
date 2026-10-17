@@ -136,3 +136,24 @@ def test_legacy_settings_serialization_and_hash_stay_identical():
         stable_config_hash(settings)
         == "0d054279f4a6e090d40e1fa54accaf58e955e624a3309472b44107f8790bb78d"
     )
+
+
+def test_interaction_profile_composes_with_exact_group_allocation():
+    """Independent opt-in selectors survive scenario loading and serialization together."""
+    from robot_sf.training.scenario_loader import _apply_simulation_overrides
+
+    config = RobotSimulationConfig()
+    _apply_simulation_overrides(
+        config,
+        {
+            "pedestrian_force_profile": "pedestrian_interaction_v2",
+            "group_allocation_mode": "exact_small_crowd_v1",
+        },
+    )
+    assert (
+        getattr(config.sim_config, "pedestrian_force_profile", None) == "pedestrian_interaction_v2"
+    )
+    assert config.sim_config.group_allocation_mode == "exact_small_crowd_v1"
+    restored = SimulationSettings(**config.sim_config.to_dict())
+    assert restored.pedestrian_force_profile == "pedestrian_interaction_v2"
+    assert restored.group_allocation_mode == "exact_small_crowd_v1"

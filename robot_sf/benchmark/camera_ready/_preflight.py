@@ -76,7 +76,7 @@ from robot_sf.common.artifact_paths import (
     get_repository_root,
 )
 
-CAMPAIGN_SCHEMA_VERSION = "benchmark-camera-ready-campaign.v1"
+CAMPAIGN_SCHEMA_VERSION = "benchmark-camera-ready-campaign.v2"
 
 if TYPE_CHECKING:
     from collections.abc import Callable

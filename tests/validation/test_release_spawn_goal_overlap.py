@@ -223,7 +223,7 @@ def test_station_route_spread_cannot_spawn_a_pedestrian_in_the_robot_goal():
 def test_release_zone_audit_has_all_51_scenarios_and_102_endpoint_rectangles():
     from scripts.validation.check_scenario_archetype_geometry import inspect_release_zones
 
-    rows = inspect_release_zones()
+    rows = inspect_release_zones(endpoint_policy="pedestrian_radius_v1")
     assert len(rows) == 102
     assert len({row["scenario"] for row in rows}) == 51
     assert {row["ped_radius_m"] for row in rows} == {0.4}
@@ -235,7 +235,7 @@ def test_checked_in_dispositions_are_exact_and_do_not_waive_overtaking():
         inspect_release_zones,
     )
 
-    rows = inspect_release_zones()
+    rows = inspect_release_zones(endpoint_policy="pedestrian_radius_v1")
     assert not any(
         row["intersections"]
         for row in rows
@@ -272,7 +272,7 @@ def test_original_overtaking_map_is_refused_without_a_disposition(tmp_path):
             ]
         },
     )
-    rows = inspect_release_zones([manifest])
+    rows = inspect_release_zones([manifest], endpoint_policy="pedestrian_radius_v1")
     assert rows[0]["bounds"] == [3.0, 4.0, 5.0, 6.0]
     assert rows[0]["intersections"][0]["actor"] == "h1"
     waivers = tmp_path / "waivers.yaml"
@@ -306,7 +306,7 @@ def test_radius_only_intersection_and_trajectory_override_are_detected(tmp_path,
             ]
         },
     )
-    rows = inspect_release_zones([manifest])
+    rows = inspect_release_zones([manifest], endpoint_policy="pedestrian_radius_v1")
     hit = rows[0]["intersections"][0]
     assert hit["distance_m"] > 0
     assert hit["distance_m"] == pytest.approx(lane_y - 4.5)
@@ -323,7 +323,7 @@ def test_geometry_change_invalidates_intended_overlap_disposition(tmp_path, monk
     )
     from scripts.validation.scenario_validation_waivers import WaiverValidationError
 
-    rows = inspect_release_zones()
+    rows = inspect_release_zones(endpoint_policy="pedestrian_radius_v1")
     doc = yaml.safe_load(
         Path("configs/scenarios/release_0_0_8_endpoint_dispositions.yaml").read_text()
     )
@@ -347,7 +347,7 @@ def test_geometry_change_invalidates_intended_overlap_disposition(tmp_path, monk
         return scenarios
 
     monkeypatch.setattr(scenario_loader, "load_scenarios", force_crowd_population)
-    forced_rows = inspect_release_zones()
+    forced_rows = inspect_release_zones(endpoint_policy="pedestrian_radius_v1")
     with pytest.raises(WaiverValidationError, match="changed"):
         enforce_release_zone_waivers(
             forced_rows, Path("configs/scenarios/release_0_0_8_endpoint_dispositions.yaml")
@@ -388,6 +388,8 @@ def test_release_zone_cli_enforces_dispositions(capsys, tmp_path):
     assert (
         main(
             [
+                "--endpoint-policy",
+                "pedestrian_radius_v1",
                 "--release-zones",
                 "--waiver-file",
                 "configs/scenarios/release_0_0_8_endpoint_dispositions.yaml",
@@ -396,11 +398,22 @@ def test_release_zone_cli_enforces_dispositions(capsys, tmp_path):
         == 0
     )
     assert "classic_bottleneck_low" in capsys.readouterr().out
-    assert main(["--release-zones"]) == 2
+    assert main(["--endpoint-policy", "pedestrian_radius_v1", "--release-zones"]) == 2
     assert "requires --waiver-file" in capsys.readouterr().err
     invalid = tmp_path / "invalid.yaml"
     write_json(invalid, {"schema": "scenario_validation_waivers.v1", "release_zones": []})
-    assert main(["--release-zones", "--waiver-file", str(invalid)]) == 2
+    assert (
+        main(
+            [
+                "--endpoint-policy",
+                "pedestrian_radius_v1",
+                "--release-zones",
+                "--waiver-file",
+                str(invalid),
+            ]
+        )
+        == 2
+    )
     assert "missing release zone overlap" in capsys.readouterr().err
 
 

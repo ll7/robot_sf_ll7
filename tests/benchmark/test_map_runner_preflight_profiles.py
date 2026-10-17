@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sys
 import types
+from contextlib import contextmanager
 from dataclasses import fields
 from inspect import Parameter, signature
 from typing import TYPE_CHECKING
@@ -15,10 +16,11 @@ import yaml
 # lightweight validation venv does not include torch, but map_runner imports the experimental
 # CrowdNav_HEIGHT adapter at module import time. Provide only the marker SciPy probes during import;
 # tests that execute torch-dependent adapter code should still fail instead of silently passing.
-try:  # pragma: no cover - exercised only in optional-dependency environments
-    import torch as _torch  # noqa: F401
-except ModuleNotFoundError:  # pragma: no cover - local lightweight validation path
-    _torch_stub = types.ModuleType("torch")
+
+
+def _build_torch_marker_stub() -> types.ModuleType:
+    """Build the marker torch stub for the guarded import below."""
+    stub = types.ModuleType("torch")
 
     class _TorchTensor:
         """Marker class for SciPy optional torch-array detection."""
@@ -31,18 +33,54 @@ except ModuleNotFoundError:  # pragma: no cover - local lightweight validation p
             """Report the lightweight test environment as CPU-only."""
             return False
 
-    _torch_stub.Tensor = _TorchTensor
-    _torch_stub.cuda = _TorchCuda
-    sys.modules["torch"] = _torch_stub
+    stub.Tensor = _TorchTensor
+    stub.cuda = _TorchCuda
+    return stub
 
-from robot_sf.benchmark.map_runner import map_runner
-from robot_sf.benchmark.types import MapBatchConfig
+
+@contextmanager
+def _isolated_torch_stub_import() -> Iterator[types.ModuleType | None]:
+    """Install the marker torch stub only for the guarded import (issue #10332).
+
+    Yields the installed stub when real torch is absent, else None. Restores
+    ``sys.modules`` on exit so later modules observe the genuinely missing
+    optional dependency instead of this module's collection-time fake.
+    """
+    try:
+        import torch as _torch  # noqa: F401
+    except ModuleNotFoundError:
+        stub = _build_torch_marker_stub()
+        prior = sys.modules.get("torch")
+        sys.modules["torch"] = stub
+        try:
+            yield stub
+        finally:
+            if prior is None:
+                sys.modules.pop("torch", None)
+            else:
+                sys.modules["torch"] = prior
+    else:
+        yield None
+
+
+_TORCH_IMPORT_STUB: types.ModuleType | None = None
+with _isolated_torch_stub_import() as _installed_stub:
+    from robot_sf.benchmark.map_runner import map_runner
+    from robot_sf.benchmark.types import MapBatchConfig
+
+    _TORCH_IMPORT_STUB = _installed_stub
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
     from pathlib import Path
 
 
 SCHEMA_PATH = "robot_sf/benchmark/schemas/episode.schema.v1.json"
+
+
+def test_collection_torch_stub_does_not_leak_into_sys_modules() -> None:
+    """The import-time torch marker must not pollute later imports (issue #10332)."""
+    assert sys.modules.get("torch") is not _TORCH_IMPORT_STUB
 
 
 def _scenario() -> dict[str, object]:

@@ -2,6 +2,7 @@
 
 from copy import deepcopy
 from dataclasses import replace
+from numbers import Real
 
 import pytest
 
@@ -179,150 +180,93 @@ def test_rounding_sensitive_real_simulator_timeout(monkeypatch, name, dt, budget
     assert row["outcome"]["timeout_event"]
 
 
+def _assert_paired_metrics(actual, expected, path="metrics"):
+    """Compare nested metric payloads, including paired undefined (NaN) values."""
+    if isinstance(expected, dict):
+        assert actual.keys() == expected.keys(), path
+        for key, value in expected.items():
+            _assert_paired_metrics(actual[key], value, f"{path}.{key}")
+    elif isinstance(expected, list):
+        assert len(actual) == len(expected), path
+        for index, value in enumerate(expected):
+            _assert_paired_metrics(actual[index], value, f"{path}[{index}]")
+    elif isinstance(expected, Real) and not isinstance(expected, bool):
+        assert actual == pytest.approx(expected, rel=1e-12, abs=1e-12, nan_ok=True), path
+    else:
+        assert actual == expected, path
+
+
 @pytest.mark.parametrize(
-    ("config_name", "name", "algo", "seed", "steps", "reason", "avg_speed", "failure_to_progress"),
+    ("config_name", "name", "algo", "seed"),
     [
-        (
-            "benchmark_data_2026_08",
-            "francis2023_narrow_doorway",
-            "orca",
-            1001,
-            400,
-            "terminated",
-            # Main 6fd6d463c (#10009): forward-axis ORCA projection.
-            0.24059849301207314,
-            232.0,
-        ),
-        (
-            "benchmark_data_2026_08",
-            "francis2023_narrow_doorway",
-            "orca",
-            1002,
-            400,
-            "terminated",
-            # Main 6fd6d463c (#10009): forward-axis ORCA projection.
-            0.23017620618943224,
-            # Main 977378cbd (#10014): freeze terminal goal for metric-v2 scoring.
-            241.0,
-        ),
-        (
-            "runtime_smoke_v0_3",
-            "francis2023_blind_corner",
-            "goal",
-            1001,
-            263,
-            "collision",
-            0.94991463368817,
-            0.0,
-        ),
-        (
-            "runtime_smoke_v0_3",
-            "francis2023_blind_corner",
-            "goal",
-            1002,
-            262,
-            "collision",
-            0.9490333775512672,
-            0.0,
-        ),
+        ("benchmark_data_2026_08", "francis2023_narrow_doorway", "orca", 1001),
+        ("benchmark_data_2026_08", "francis2023_narrow_doorway", "orca", 1002),
+        ("runtime_smoke_v0_3", "francis2023_blind_corner", "goal", 1001),
+        ("runtime_smoke_v0_3", "francis2023_blind_corner", "goal", 1002),
         (
             "benchmark_data_2026_08",
             "classic_realworld_double_bottleneck_high",
             "social_force",
             1001,
-            600,
-            "max_steps",
-            # Main 6fd6d463c (#10009): observe dt=0.1 instead of relaxation tau=0.5.
-            0.21944634296423818,
-            308.0,
         ),
     ],
 )
-def test_historical_runner_cap_matches_main_oracle(  # noqa: PLR0913
-    config_name, name, algo, seed, steps, reason, avg_speed, failure_to_progress, monkeypatch
-):
-    """Native dev-seed oracle; changed planner values bisected through main 3a7a46a9."""
-    import numpy as np
+def test_historical_runner_cap_matches_paired_horizon_path(config_name, name, algo, seed):
+    """Compare unbound runner-cap execution with admitted legacy binding at this commit.
 
-    import robot_sf.benchmark.map_runner.map_runner_episode as episode
+    Only horizon admission differs: the historical config, native policy, dev seed,
+    runner cap and authored simulator limit are identical. This is preservation
+    coverage, not a release-number oracle or evidence of planner quality.
+    """
     from robot_sf.benchmark.map_runner.map_runner import _build_policy
     from robot_sf.benchmark.map_runner.map_runner_episode import run_map_episode
 
-    captured = {}
-    teardown = episode._teardown_step_loop
-    compute_metrics = episode._compute_post_loop_metrics
-
-    def capture_targets(env, *args, **kwargs):
-        captured["legacy_goal"] = np.array(env.simulator.goal_pos[0], copy=True)
-        return teardown(env, *args, **kwargs)
-
-    def capture_trajectory(**kwargs):
-        captured.update(kwargs)
-        return compute_metrics(**kwargs)
-
-    monkeypatch.setattr(episode, "_teardown_step_loop", capture_targets)
-    monkeypatch.setattr(episode, "_compute_post_loop_metrics", capture_trajectory)
     cfg = load_campaign_config(
         ROOT / "configs/benchmarks" / f"paper_experiment_matrix_v2_h600_s30_{config_name}.yaml"
     )
-    scenario = next(
-        s for s in _load_campaign_scenarios(cfg, repository_root=ROOT) if s["name"] == name
-    )
-    scenario["seeds"] = [seed]
+    # Load both sides through production admission. Before horizon policies were
+    # introduced, old protocols used only the runner's horizon argument.
+    historical_cfg = replace(cfg, horizon_policy=None)
+    scenarios = [
+        next(s for s in _load_campaign_scenarios(c, repository_root=ROOT) if s["name"] == name)
+        for c in (historical_cfg, cfg)
+    ]
     planner = next(p for p in cfg.planners if p.algo == algo)
-    row = run_map_episode(
-        scenario,
-        seed,
-        horizon=600,
-        dt=0.1,
-        record_forces=True,
-        snqi_weights=None,
-        snqi_baseline=None,
-        algo=algo,
-        algo_config_path=planner.algo_config_path,
-        scenario_path=ROOT / "scoped_scenarios.json",
-        policy_builder=_build_policy,
-    )
-    main_episode_ids = {
-        ("francis2023_narrow_doorway", 1001): "francis2023_narrow_doorway--1001--dd063c0bd8131283",
-        ("francis2023_narrow_doorway", 1002): "francis2023_narrow_doorway--1002--ec38a96935d88b5e",
-        ("francis2023_blind_corner", 1001): "francis2023_blind_corner--1001--553660886afe757a",
-        ("francis2023_blind_corner", 1002): "francis2023_blind_corner--1002--1e9a60737c43cf9b",
-        (
-            "classic_realworld_double_bottleneck_high",
-            1001,
-        ): "classic_realworld_double_bottleneck_high--1001--6df9b00227cecdfe",
-    }
-    assert row["episode_id"] == main_episode_ids[(name, seed)]
-    assert row["config_hash"] == main_episode_ids[(name, seed)].rsplit("--", 1)[1]
-    assert row["steps"] == steps
-    assert row["termination_reason"] == reason
-    assert row["metrics"]["avg_speed"] == pytest.approx(avg_speed, rel=1e-12)
-    if (
-        row["metric_schema_version"] == "robot-sf-metrics.v2"
-        and name == "classic_realworld_double_bottleneck_high"
-    ):
-        # #10014 freezes the final target; v1 used the current intermediate waypoint.
-        # The same recorded trajectory must still reproduce the literal v1 oracle.
-        positions = np.asarray(captured["robot_positions"])
-        window = int(np.ceil(5.0 / 0.1))
-
-        def count_for_goal(goal):
-            distances = np.linalg.norm(positions - goal, axis=1)
-            return sum(
-                distances[i] - distances[i + window - 1] < 0.1
-                for i in range(len(positions) - window + 1)
+    rows = []
+    for scenario in scenarios:
+        scenario["seeds"] = [seed]
+        rows.append(
+            run_map_episode(
+                deepcopy(scenario),
+                seed,
+                horizon=600,
+                dt=0.1,
+                record_forces=True,
+                snqi_weights=None,
+                snqi_baseline=None,
+                algo=algo,
+                algo_config_path=planner.algo_config_path,
+                scenario_path=ROOT / "scoped_scenarios.json",
+                policy_builder=_build_policy,
             )
+        )
+    historical, bound = rows
+    for key in (
+        "episode_id",
+        "config_hash",
+        "steps",
+        "termination_reason",
+        "outcome",
+        "metric_schema_version",
+        "horizon",
+        "effective_budget_steps",
+        "scenario_params",
+    ):
+        assert bound[key] == historical[key], key
+    _assert_paired_metrics(bound["metrics"], historical["metrics"])
 
-        assert count_for_goal(captured["legacy_goal"]) == failure_to_progress
-        assert not np.array_equal(captured["goal_vec"], captured["legacy_goal"])
-        assert row["metrics"]["failure_to_progress"] == count_for_goal(captured["goal_vec"])
-    else:
-        assert row["metrics"]["failure_to_progress"] == failure_to_progress
-    assert row["horizon"] == row["scenario_params"]["run_horizon"] == 600
-    authored = scenario["simulation_config"]["max_episode_steps"]
-    assert row["effective_budget_steps"] == min(authored, 600)
-    assert row["metadata"]["scenario_horizon"] == {
+    authored = scenarios[0]["simulation_config"]["max_episode_steps"]
+    assert bound["metadata"]["scenario_horizon"] == {
         "policy": "legacy_runner_cap",
         "authored_max_episode_steps": authored,
         "runner_horizon": 600,

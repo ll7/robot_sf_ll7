@@ -24,3 +24,9 @@ Legacy helpers such as `SLURM/log_gpu_cpu_usage.py` and `SLURM/slurm_train.sl` a
 compatibility examples only. Do not use them as the starting point for new submissions; choose a
 public template, the optional private operations overlay, or the LiCCA cluster-specific README plus
 `SLURM/AGENTS.md` instead.
+
+## Unsubmitted released-PPO pilot
+
+The [fine-tuning pilot plan](../docs/training/ppo_ftplan_pilot.md) describes the
+config, 1M-step segments, CPU selection, seed-replication barrier and custody.
+Its [public template](ftplan/released_ppo_pilot.slurm) has not been submitted.

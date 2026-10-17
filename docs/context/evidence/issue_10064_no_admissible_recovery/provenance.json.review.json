@@ -1,0 +1,10 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "artifact_path": "docs/context/evidence/issue_10064_no_admissible_recovery/provenance.json",
+  "artifact_sha256": "f628b79ea0ad1ce0e0378e60c382787e353edfb24f2828d905b54f1d28a7bf79",
+  "preserved_exact_bytes": false,
+  "original_source_commit": "f6e010178bc0319a483c5021e0f87fe244c844a7",
+  "original_source_sha256": "d7d9e825f0e739a4485bd6ee5df457a6f6adc5609c8a063e3da9bb2bc52b2037",
+  "integration_note": "Only home prefixes and historical matrix locators normalized; numeric observations, measurement digests and producer commits unchanged. Original producer bytes remain in the reviewed merge ancestry."
+}

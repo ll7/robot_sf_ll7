@@ -545,6 +545,7 @@ def test_classify_missing_base_precedes_blocked_preflight() -> None:
     pr["preflight"] = {"status": "blocked", "reasons": ["base_sha_missing"]}
 
     assert classify_pr_state(pr) == "stale_merge_base"
+    assert classify_pr_state(pr, stale_base_refresh_count=1) == "stale_merge_base"
 
 
 def test_classify_stale_merge_base() -> None:
@@ -561,6 +562,7 @@ def test_classify_stale_merge_base() -> None:
         main_sha="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
     )
     assert classify_pr_state(pr) == "stale_merge_base"
+    assert classify_pr_state(pr, stale_base_refresh_count=1) == "stale_base_churn"
 
 
 def test_classify_stale_merge_base_equal_shas_ok() -> None:
@@ -660,6 +662,7 @@ def test_classify_ordinary_stale_base_allows_merge_candidate_after_policy_select
     )
 
     assert classify_pr_state(pr) == "ready_to_merge"
+    assert classify_pr_state(pr, stale_base_refresh_count=1) == "ready_to_merge"
 
 
 def test_classify_current_base_policy_does_not_bypass_stale_base() -> None:
@@ -682,6 +685,7 @@ def test_classify_current_base_policy_does_not_bypass_stale_base() -> None:
     )
 
     assert classify_pr_state(pr) == "stale_merge_base"
+    assert classify_pr_state(pr, stale_base_refresh_count=1) == "stale_base_churn"
 
 
 def test_classify_ordinary_policy_does_not_bypass_missing_base_provenance() -> None:
@@ -704,6 +708,7 @@ def test_classify_ordinary_policy_does_not_bypass_missing_base_provenance() -> N
     )
 
     assert classify_pr_state(pr) == "stale_merge_base"
+    assert classify_pr_state(pr, stale_base_refresh_count=1) == "stale_merge_base"
 
 
 def test_classify_base_freshness_missing_base_blocks_ready_to_merge() -> None:
@@ -738,6 +743,7 @@ def test_classify_base_freshness_unavailable_current_main_blocks_ready_to_merge(
         current_main_sha=None,
     )
     assert classify_pr_state(pr) == "stale_merge_base"
+    assert classify_pr_state(pr, stale_base_refresh_count=1) == "stale_merge_base"
 
 
 def test_classify_no_action_default() -> None:
@@ -2013,6 +2019,37 @@ def test_evaluate_queue_stale_merge_base_rejected() -> None:
     assert "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" in decision["reason"]
 
 
+def test_evaluate_queue_reports_stale_base_churn_after_one_refresh() -> None:
+    """A second stale result in one merge attempt stops instead of rebasing again."""
+    prs = [
+        _with_merge_base(
+            _pr(
+                4041,
+                overall="success",
+                labels=["merge-ready"],
+                head_sha=FULL_SHA,
+                gate_verdict=FULL_SHA,
+            ),
+            base_sha="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            main_sha="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        )
+    ]
+
+    result = evaluate_queue(
+        prs,
+        max_actions=3,
+        stale_base_refresh_counts={4041: 1},
+    )
+
+    decision = result["decisions"][0]
+    assert decision["state"] == "stale_base_churn"
+    assert decision["action"] == "report_base_churn"
+    assert decision["flow_decision"] == "stop"
+    assert "after one refresh" in decision["reason"]
+    assert "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" in decision["reason"]
+    assert "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" in decision["reason"]
+
+
 # ---------------------------------------------------------------------------
 # recommend_action
 # ---------------------------------------------------------------------------
@@ -2282,6 +2319,29 @@ def test_main_stdin_json(capsys: pytest.CaptureFixture[str]) -> None:
     assert rc == 0
     output = json.loads(capsys.readouterr().out)
     assert output["decisions"][0]["action"] == "wait_ci"
+
+
+def test_main_stale_base_refresh_count_reports_churn(capsys: pytest.CaptureFixture[str]) -> None:
+    """The CLI exposes a bounded refresh count for a stale-base merge attempt."""
+    stale_pr = _with_merge_base(
+        _pr(
+            4042,
+            overall="success",
+            labels=["merge-ready"],
+            head_sha=FULL_SHA,
+            gate_verdict=FULL_SHA,
+        ),
+        base_sha="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        main_sha="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    )
+    stdin = StringIO(json.dumps(_snapshot([stale_pr])))
+    with patch("sys.stdin", stdin):
+        rc = main(["--stdin", "--stale-base-refresh-count", "4042=1", "--json"])
+
+    assert rc == 0
+    decision = json.loads(capsys.readouterr().out)["decisions"][0]
+    assert decision["state"] == "stale_base_churn"
+    assert decision["action"] == "report_base_churn"
 
 
 def test_main_snapshot_file(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:

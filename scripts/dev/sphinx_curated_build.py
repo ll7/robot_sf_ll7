@@ -31,11 +31,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import Any
 
 MANIFEST_SCHEMA = "sphinx_curated_sources.v1"
@@ -343,13 +345,21 @@ def strict_build(
         builder,
         "-D",
         "suppress_warnings=",
-        "-D",
-        "exclude_patterns=" + ",".join(excluded),
         *extra_sphinx_args,
         str(docs_dir),
         str(target_dir),
     ]
-    completed = subprocess.run(command, capture_output=True, text=True, check=False)
+    # File transport avoids Linux's per-argument limit without changing the complement.
+    # The matching hook in docs/conf.py replaces (rather than extends) its defaults,
+    # exactly as the former -D exclude_patterns override did.
+    with TemporaryDirectory(prefix="sphinx-exclusions-", dir=target_dir.parent) as scratch:
+        exclusions_file = Path(scratch) / "exclude_patterns.json"
+        exclusions_file.write_text(json.dumps(excluded), encoding="utf-8")
+        environment = os.environ.copy()
+        environment["ROBOT_SF_SPHINX_EXCLUSIONS_FILE"] = str(exclusions_file)
+        completed = subprocess.run(
+            command, capture_output=True, text=True, check=False, env=environment
+        )
     combined = completed.stdout + completed.stderr
     warnings = tuple(
         line

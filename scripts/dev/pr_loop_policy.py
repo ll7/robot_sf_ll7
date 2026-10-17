@@ -3,8 +3,8 @@
 
 Classifies PR state from compact snapshots and recommends one bounded action:
 stop, continue, reroute, escalate, wait_ci, inspect_failed_ci, verify_artifacts,
-refresh_snapshot, mark_ready_candidate, await_gate_verdict, reconcile_pr_metadata,
-await_review_threads, or no_action.
+refresh_snapshot, report_base_churn, mark_ready_candidate, await_gate_verdict,
+reconcile_pr_metadata, await_review_threads, or no_action.
 
 Two parking states are machine-recognized from trusted PR comments (issue #7508,
 the machine half of the goal-pr-review skill contract from PR #7500):
@@ -119,6 +119,7 @@ VALID_ACTIONS = frozenset(
         "inspect_failed_ci",
         "verify_artifacts",
         "refresh_snapshot",
+        "report_base_churn",
         "mark_ready_candidate",
         "promote_merge_if_ci_green",
         "await_gate_verdict",
@@ -138,6 +139,7 @@ VALID_STATES = frozenset(
         "missing_artifacts",
         "stale_worktree",
         "stale_merge_base",
+        "stale_base_churn",
         "blocked_preflight",
         "unknown_review_threads",
         "pending_gate_verdict",
@@ -1258,6 +1260,7 @@ def _preflight_state_before_pending(
     *,
     overall: str,
     head_sha: str,
+    stale_base_refresh_count: int = 0,
 ) -> str | None:
     """Return the fail-closed state that precedes a pending-CI wait, or None.
 
@@ -1267,6 +1270,13 @@ def _preflight_state_before_pending(
     """
     base_state = _base_state_after_policy(pr, head_sha)
     if base_state is not None:
+        verdict, _, _ = _base_freshness_provenance(pr)
+        if (
+            base_state == "stale_merge_base"
+            and verdict == "stale"
+            and stale_base_refresh_count >= 1
+        ):
+            return "stale_base_churn"
         return base_state
     head_state = _head_preflight_state(pr)
     if head_state is not None:
@@ -1294,6 +1304,7 @@ def classify_pr_state(
     *,
     compact_artifacts: dict[str, Any] | None = None,
     now: datetime | None = None,
+    stale_base_refresh_count: int = 0,
 ) -> str:
     """Classify a single PR into a machine-checkable loop state.
 
@@ -1347,7 +1358,12 @@ def classify_pr_state(
         return stacked_state
     if overall == "failure":
         return "failed_ci"
-    preflight_state = _preflight_state_before_pending(pr, overall=overall, head_sha=head_sha)
+    preflight_state = _preflight_state_before_pending(
+        pr,
+        overall=overall,
+        head_sha=head_sha,
+        stale_base_refresh_count=stale_base_refresh_count,
+    )
     if preflight_state is not None:
         return preflight_state
     artifact_state = _artifact_state(artifacts, compact_artifacts=compact_artifacts)
@@ -1406,7 +1422,7 @@ def _compute_flow_decision(
       - ready_to_merge -> continue
       - unknown_review_threads -> continue (wait for a thread-capable snapshot)
       - failed_ci, failed_validation, missing_artifacts, stale_worktree, stale_merge_base -> reroute
-      - active_writer, author_decision, blocked_preflight, merged_externally -> stop (parked)
+      - stale_base_churn, active_writer, author_decision, blocked_preflight, merged_externally -> stop
       - stacked_not_independently_mergeable -> stop (parked; parent must merge first)
       - no_action -> stop
     """
@@ -1433,6 +1449,8 @@ def _compute_flow_decision(
             | "stale_merge_base"
         ):
             return "reroute"
+        case "stale_base_churn":
+            return "stop"
         case _:
             return "stop"
 
@@ -1592,6 +1610,20 @@ def recommend_action(  # noqa: C901, PLR0912
                 ),
                 actions_remaining=remaining,
             )
+        case "stale_base_churn":
+            stale = stale_base_sha or "?"
+            current = current_main_sha or "?"
+            return PolicyDecision(
+                pr=pr_number,
+                action="report_base_churn",
+                state=state,
+                flow_decision="stop",
+                reason=(
+                    "base became stale again after one refresh; stop this merge attempt and "
+                    f"report churn (base {stale}, current main {current})"
+                ),
+                actions_remaining=remaining,
+            )
         case "blocked_preflight":
             return PolicyDecision(
                 pr=pr_number,
@@ -1676,6 +1708,7 @@ def evaluate_queue(
     expected_head_shas: dict[int, str] | None = None,
     artifact_presence: dict[int, bool] | None = None,
     compact_artifacts: dict[int, dict[str, Any]] | None = None,
+    stale_base_refresh_counts: dict[int, int] | None = None,
     now: datetime | None = None,
 ) -> dict[str, Any]:
     """Evaluate a PR queue and emit per-PR decisions under a loop budget.
@@ -1689,6 +1722,17 @@ def evaluate_queue(
     expected_shas = expected_head_shas or {}
     artifacts = artifact_presence or {}
     compact_by_pr = compact_artifacts or {}
+    refresh_counts = stale_base_refresh_counts or {}
+    pr_numbers = {_pr_number(pr) for pr in prs}
+    if any(type(number) is not int or number < 1 for number in refresh_counts):
+        raise ValueError("stale base refresh counts require positive integer PR numbers")
+    if any(type(count) is not int or count < 0 for count in refresh_counts.values()):
+        raise ValueError("stale base refresh counts must be non-negative integers")
+    unknown_prs = sorted(set(refresh_counts) - pr_numbers)
+    if unknown_prs:
+        raise ValueError(
+            f"stale base refresh counts reference PRs absent from snapshot: {unknown_prs}"
+        )
     for pr in prs:
         num = _pr_number(pr)
         enriched: dict[str, Any] = dict(pr)
@@ -1699,7 +1743,12 @@ def evaluate_queue(
         compact = compact_by_pr.get(num)
         if compact is not None:
             enriched["compact_artifacts"] = compact
-        state = classify_pr_state(enriched, compact_artifacts=compact, now=now)
+        state = classify_pr_state(
+            enriched,
+            compact_artifacts=compact,
+            now=now,
+            stale_base_refresh_count=refresh_counts.get(num, 0),
+        )
         review = _review_state(enriched)
         labels = enriched.get("labels") or []
         label_names = [str(label) for label in labels] if isinstance(labels, list) else []
@@ -1721,7 +1770,7 @@ def evaluate_queue(
             break
         stale_base = ""
         current_main = ""
-        if state == "stale_merge_base":
+        if state in {"stale_merge_base", "stale_base_churn"}:
             _, stale_base, current_main = _base_freshness_provenance(enriched)
         decision = recommend_action(
             state,
@@ -1754,6 +1803,18 @@ def format_text(result: dict[str, Any]) -> str:
             f"— {d['reason']} [remaining={d['actions_remaining']}]"
         )
     return "\n".join(lines)
+
+
+def _parse_stale_base_refresh_count(value: str) -> tuple[int, int]:
+    """Parse one positive PR number and non-negative refresh count pair."""
+    if value.count("=") != 1:
+        raise argparse.ArgumentTypeError("expected PR=COUNT")
+    pr_text, count_text = value.split("=", 1)
+    if not pr_text.isdigit() or int(pr_text) < 1:
+        raise argparse.ArgumentTypeError("PR must be a positive integer")
+    if not count_text.isdigit():
+        raise argparse.ArgumentTypeError("COUNT must be a non-negative integer")
+    return int(pr_text), int(count_text)
 
 
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
@@ -1792,6 +1853,17 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         nargs="*",
         metavar="PR=PATH",
         help="Routed-worker manifest paths as PR=PATH pairs; overrides --artifact-present.",
+    )
+    parser.add_argument(
+        "--stale-base-refresh-count",
+        action="append",
+        type=_parse_stale_base_refresh_count,
+        default=[],
+        metavar="PR=COUNT",
+        help=(
+            "Number of completed base refreshes for a PR in this merge attempt; "
+            "after one, another stale base reports churn and stops."
+        ),
     )
     parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
     return parser.parse_args(argv)
@@ -1916,6 +1988,42 @@ def load_manifest_artifacts(
     return artifact_presence, compact_artifacts, warnings
 
 
+def _evaluate_and_emit_cli_result(
+    prs: list[dict[str, Any]],
+    *,
+    max_actions: int,
+    expected_head_shas: dict[int, str],
+    artifact_presence: dict[int, bool],
+    compact_artifacts: dict[int, dict[str, Any]],
+    stale_base_refresh_pairs: list[tuple[int, int]],
+    json_output: bool,
+) -> int:
+    """Evaluate CLI inputs, report malformed policy inputs, and emit the result."""
+    stale_base_refresh_counts: dict[int, int] = {}
+    for pr_number, count in stale_base_refresh_pairs:
+        if pr_number in stale_base_refresh_counts:
+            print(f"duplicate stale-base refresh count for PR {pr_number}", file=sys.stderr)
+            return 2
+        stale_base_refresh_counts[pr_number] = count
+    try:
+        result = evaluate_queue(
+            prs,
+            max_actions=max_actions,
+            expected_head_shas=expected_head_shas,
+            artifact_presence=artifact_presence,
+            compact_artifacts=compact_artifacts,
+            stale_base_refresh_counts=stale_base_refresh_counts,
+        )
+    except ValueError as exc:
+        print(f"invalid PR loop policy input: {exc}", file=sys.stderr)
+        return 2
+    if json_output:
+        print(json.dumps(result, indent=2, sort_keys=True))
+    else:
+        print(format_text(result))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     """CLI entry point."""
     args = _parse_args(argv)
@@ -1955,18 +2063,15 @@ def main(argv: list[str] | None = None) -> int:
     artifact_presence.update(manifest_presence)
     for warning in manifest_warnings:
         print(warning, file=sys.stderr)
-    result = evaluate_queue(
+    return _evaluate_and_emit_cli_result(
         prs,
         max_actions=args.max_actions,
         expected_head_shas=expected_shas,
         artifact_presence=artifact_presence,
         compact_artifacts=compact_artifacts,
+        stale_base_refresh_pairs=args.stale_base_refresh_count,
+        json_output=args.json,
     )
-    if args.json:
-        print(json.dumps(result, indent=2, sort_keys=True))
-    else:
-        print(format_text(result))
-    return 0
 
 
 if __name__ == "__main__":

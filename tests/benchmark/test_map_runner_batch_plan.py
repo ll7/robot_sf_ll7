@@ -67,10 +67,10 @@ class TestBuildSeedJobs:
         assert jobs[0][1] == 42
         assert jobs[1][1] == 43
 
-    def test_fallback_to_seed_zero(self) -> None:
-        """Without any seeds, the fallback must be [0]."""
+    def test_declared_zero_default(self) -> None:
+        """An explicitly declared zero default remains valid."""
         scenarios = [{"name": "sc1"}]
-        jobs = build_seed_jobs(scenarios, suite_seeds={}, suite_key="default")
+        jobs = build_seed_jobs(scenarios, suite_seeds={"default": [0]}, suite_key="default")
         assert len(jobs) == 1
         assert jobs[0][1] == 0
 

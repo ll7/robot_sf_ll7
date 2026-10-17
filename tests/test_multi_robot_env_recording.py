@@ -28,6 +28,8 @@ def _build_config() -> SimpleNamespace:
         sim_config=SimpleNamespace(
             time_per_step_in_secs=0.1,
             sim_time_in_secs=5.0,
+            episode_step_limit=None,
+            max_sim_steps=50,
             ped_radius=0.3,
             goal_radius=0.5,
         ),
@@ -55,6 +57,7 @@ class _FakeSimulator:
         self._goal_pos = [(10.0, 0.0) for _ in range(num_robots)]
         self.ped_pos = np.zeros((0, 2), dtype=float)
         self.reset_calls = 0
+        self.repopulation_seeds: list[int] = []
         self.step_calls: list[list[np.ndarray]] = []
 
     @property
@@ -66,6 +69,10 @@ class _FakeSimulator:
     def goal_pos(self):
         """Return robot goal positions."""
         return self._goal_pos
+
+    def repopulate_crowd(self, seed: int) -> None:
+        """Record deterministic crowd reseeds."""
+        self.repopulation_seeds.append(seed)
 
     def reset_state(self) -> None:
         """Record simulator reset calls."""
@@ -79,8 +86,18 @@ class _FakeSimulator:
 class _FakeRobotState:
     """RobotState stub that emits deterministic observations and metadata."""
 
-    def __init__(self, nav, occupancy, sensors, d_t: float, sim_time_limit: float):
+    def __init__(
+        self,
+        nav,
+        occupancy,
+        sensors,
+        d_t: float,
+        sim_time_limit: float,
+        *,
+        episode_step_limit: int | None = None,
+    ):
         self.nav = nav
+        self.episode_step_limit = episode_step_limit
         self.occupancy = occupancy
         self.sensors = sensors
         self.timestep = 0
@@ -257,7 +274,8 @@ def test_multi_robot_env_step_reset_render_and_step_agents(monkeypatch) -> None:
         assert "agents" in info
         assert env.simulators[0].reset_calls >= 1
 
-        reset_obs, reset_info = env.reset(seed=13)
+        reset_obs, reset_info = env.reset(seed=1001)
+        assert env.simulators[0].repopulation_seeds == [1001]
         assert OBS_DRIVE_STATE in reset_obs
         assert OBS_RAYS in reset_obs
         assert reset_info == {
@@ -266,9 +284,9 @@ def test_multi_robot_env_step_reset_render_and_step_agents(monkeypatch) -> None:
             "time_per_step_in_secs": 0.1,
             "max_sim_steps": 50,
             "num_robots": 2,
-            "seed": 13,
+            "seed": 1001,
         }
-        assert env.applied_seed == 13
+        assert env.applied_seed == 1001
 
         env.render()
         assert all(view.render_calls == 1 for view in env._sim_views)

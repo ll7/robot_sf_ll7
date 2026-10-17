@@ -1,0 +1,41 @@
+{
+  "validation_scope": "Delivered content, bound by SHA256SUMS; PR and hosted checks bind the final Git head.",
+  "local_checks": {
+    "ruff_check": "passed",
+    "ruff_format_check": "passed",
+    "ty_advisory_ratchet": "passed; 6435 general, exception-adjusted 6432; no new findings",
+    "docs_evidence_integrity": "passed; 696 files before adding validation logs",
+    "evidence_registry_ratchet": "passed; 492 equals baseline",
+    "contract_and_analysis_and_resume_tests": "passed; 122",
+    "pr_contract_check": "passed",
+    "behaviour_receipt": "accepted or out of scope; no behavior-bearing path in this PR"
+  },
+  "scientific_reconciliation": {
+    "requested": 21900,
+    "recorded": 21900,
+    "eligible": 21900,
+    "missing": 0,
+    "excluded": 0,
+    "native_binding_mismatches": 0,
+    "success_metric_disagreements": 0,
+    "matched_control_pairs": 1500,
+    "matched_control_outcome_and_step_mismatches": 0
+  },
+  "hosted_configuration_pr": {
+    "number": 10363,
+    "head_sha": "e7d5cf188173557b09715b458eb1f0804e47ee08",
+    "red_checks": [
+      {
+        "name": "pr-contract-check",
+        "classification": "missing behaviour receipt; orchestrator #10000"
+      },
+      {
+        "name": "fast-feedback (6)",
+        "classification": "known #10315 config-hash failure",
+        "test_file": "tests/test_env_util_helpers.py",
+        "test": "test_robot_env_hash_pins_explicit_body_edge_wall_identity"
+      }
+    ]
+  },
+  "protected_inputs": "No frozen/release config, default, planner/simulator implementation, model weight or locked thesis text changed."
+}

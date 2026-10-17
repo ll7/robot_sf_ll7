@@ -457,13 +457,29 @@ def test_tag_check_fails_closed_on_ambiguous_state(
     assert summary in check.summary
 
 
-def test_manifest_check_reports_bad_path_and_wrong_cell_count(tmp_path: Path) -> None:
+def test_manifest_check_reports_bad_path_and_wrong_cell_count(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Manifest diagnostics fail safely for malformed paths and cardinality drift."""
     missing, manifest, cfg = release_doctor._manifest_check(tmp_path / "missing.yaml", 1)
     assert missing.status == "fail"
     assert manifest is None
     assert cfg is None
 
+    # Exercise cardinality after successful admission with explicitly authored
+    # H600 synthetic rows. Historical H400/H500 refusal has separate coverage.
+    monkeypatch.setattr(
+        release_doctor,
+        "_load_campaign_scenarios",
+        lambda *_args, **_kwargs: [
+            {
+                "name": f"synthetic_h600_{index}",
+                "simulation_config": {"max_episode_steps": 600},
+                "seeds": list(range(1001, 1031)),
+            }
+            for index in range(48)
+        ],
+    )
     check, manifest, cfg = release_doctor._manifest_check(
         Path(
             "configs/benchmarks/releases/"

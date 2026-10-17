@@ -99,12 +99,12 @@ def test_public_api_quickstart_json_format_matches_facts(tmp_path: Path, capsys)
 def test_public_api_quickstart_cli_main(tmp_path: Path, capsys) -> None:
     """The main entry point dispatches CLI arguments and exits cleanly."""
     rc = quickstart_mod.main(
-        ["--output-dir", str(tmp_path), "--seed", "123", "--horizon", "2", "--format", "json"]
+        ["--output-dir", str(tmp_path), "--seed", "1013", "--horizon", "2", "--format", "json"]
     )
     assert rc == 0
     captured = capsys.readouterr()
     payload = json.loads(captured.out)
-    assert payload["seed"] == 123
+    assert payload["seed"] == 1013
     assert payload["horizon"] == 2
 
 

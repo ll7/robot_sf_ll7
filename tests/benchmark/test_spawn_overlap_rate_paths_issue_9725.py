@@ -21,7 +21,11 @@ from robot_sf.benchmark.parquet_export import (
     _comparison_record_eligible,
 )
 from robot_sf.benchmark.seed_variance import build_seed_variability_rows
-from robot_sf.benchmark.spawn_validity import build_spawn_validity
+from robot_sf.benchmark.spawn_validity import (
+    build_spawn_validity,
+    record_has_invalid_spawn,
+    record_has_spawn_overlap,
+)
 
 _OVERLAP = build_spawn_validity({"overlap": True}, [])
 _CLEAN = build_spawn_validity({"overlap": False}, [])
@@ -152,16 +156,21 @@ def test_collision_pressure_report_excludes_invalid_run_ledgers() -> None:
     assert _ledger_exclusion_reason(ledger) == "invalid_run"
 
 
-def test_reset_overlap_with_completed_route_is_not_invalid_and_reconciles() -> None:
-    """A completed route is never invalid, so goal_reached/invalid_run stay exclusive."""
+def test_reset_overlap_with_completed_route_is_invalid_and_reconciles() -> None:
+    """Observed success remains visible but an invalid reset cannot enter rates."""
     spawn = build_spawn_validity({"overlap": True}, [], route_complete=True)
+    assert spawn["schema_version"] == "spawn_validity.v2"
     assert spawn["reset_overlap"] is True
-    assert spawn["invalid_run"] is False
+    assert spawn["invalid_run"] is True
+    assert spawn["invalid_reason"] == "spawn_overlap"
     record = _record(seed=1, collision=False, spawn=spawn)
     ledger = build_event_ledger(record)
     assert ledger["exact_events"]["goal_reached"] is True
-    assert ledger["exact_events"]["invalid_run"] is False
+    assert ledger["exact_events"]["invalid_run"] is True
+    assert ledger["provenance"]["invalid_reason"] == "spawn_overlap"
     assert reconcile_event_ledger(ledger) == []
+    assert _cell_record_eligible(record) is False
+    assert _comparison_record_eligible(record) is False
     collided = _record(seed=2, collision=True, spawn=_OVERLAP)
     collided["metrics"]["total_collision_count"] = 1.0
     collided_ledger = build_event_ledger(collided)
@@ -180,11 +189,18 @@ def test_respawn_collision_needs_same_pedestrian_and_time_window() -> None:
             "collision_time": time_s,
         }
 
-    same_soon = build_spawn_validity({}, [event], collision_events=[collision("3", 1.1)])
+    same_soon = build_spawn_validity(
+        {"overlap": False}, [event], collision_events=[collision("3", 1.1)]
+    )
     assert same_soon["invalid_run"] is True
-    other_ped = build_spawn_validity({}, [event], collision_events=[collision("7", 1.1)])
+    assert record_has_spawn_overlap({"spawn_validity": same_soon}) is True
+    other_ped = build_spawn_validity(
+        {"overlap": False}, [event], collision_events=[collision("7", 1.1)]
+    )
     assert other_ped["invalid_run"] is False
-    too_late = build_spawn_validity({}, [event], collision_events=[collision("4", 5.0)])
+    too_late = build_spawn_validity(
+        {"overlap": False}, [event], collision_events=[collision("4", 5.0)]
+    )
     assert too_late["invalid_run"] is False
 
 
@@ -227,34 +243,125 @@ def test_respawn_attribution_uses_every_contact_partner_and_lower_tolerance() ->
         "contact_partner_ids": ["2", "5"],
         "collision_time": 1.0,
     }
-    assert build_spawn_validity({}, [event], collision_events=[nearest_other])["invalid_run"]
+    assert build_spawn_validity({"overlap": False}, [event], collision_events=[nearest_other])[
+        "invalid_run"
+    ]
     boundary = {
         "collision_partner_type": "pedestrian",
         "collision_partner_id": "5",
         "collision_time": 0.9,
     }
     # elapsed == -dt exactly (0.9 - 1.0): inside the tolerant lower bound.
-    assert build_spawn_validity({}, [event], collision_events=[boundary])["invalid_run"]
+    assert build_spawn_validity({"overlap": False}, [event], collision_events=[boundary])[
+        "invalid_run"
+    ]
 
 
 def test_aggregate_meta_counts_unmeasured_reset_clearance() -> None:
-    """Rows whose reset clearance could not be measured are counted in aggregate metadata."""
+    """Unmeasured resets are visible in metadata and excluded from rates."""
     from robot_sf.benchmark.aggregate import compute_aggregates
+    from robot_sf.benchmark.seed_variance import build_seed_episode_rows
 
     unmeasured = build_spawn_validity(None, [], reset_clearance_error="AttributeError: x")
     assert unmeasured["reset_clearance_status"] == "unavailable"
     assert unmeasured["reset_clearance_error"] == "AttributeError: x"
+    assert unmeasured["invalid_run"] is True
+    assert unmeasured["invalid_reason"] == "reset_clearance_unavailable"
     records = [
         _record(seed=1, collision=False, spawn=unmeasured),
         _record(seed=2, collision=True, spawn=_OVERLAP),
         _record(seed=3, collision=False, spawn=_CLEAN),
     ]
-    meta = compute_aggregates(records, group_by="algo")["_meta"]["spawn_validity"]
+    aggregate = compute_aggregates(records, group_by="algo")
+    meta = aggregate["_meta"]["spawn_validity"]
     assert meta == {
         "records_with_spawn_validity": 3,
         "spawn_overlap_excluded_count": 1,
         "reset_clearance_unavailable_count": 1,
     }
+    assert aggregate["_meta"]["evidence_eligibility"]["excluded_record_count"] == 2
+    assert aggregate["orca"]["success"]["mean"] == pytest.approx(1.0)
+    assert _cell_record_eligible(records[0]) is False
+    assert _comparison_record_eligible(records[0]) is False
+    unknown_ledger = build_event_ledger(records[0])
+    assert unknown_ledger["exact_events"]["goal_reached"] is True
+    assert unknown_ledger["exact_events"]["invalid_run"] is True
+    assert unknown_ledger["provenance"]["invalid_reason"] == "reset_clearance_unavailable"
+    assert reconcile_event_ledger(unknown_ledger) == []
+    seed_rows = build_seed_variability_rows(
+        records, metrics=["success"], campaign_id="c", config_hash="h", git_hash="g"
+    )
+    assert len(seed_rows) == 1
+    assert seed_rows[0]["seed_list"] == [3]
+    episode_rows = {row["seed"]: row for row in build_seed_episode_rows(records)}
+    assert episode_rows[1]["invalid_run"] is True
+    assert episode_rows[1]["invalid_reason"] == "reset_clearance_unavailable"
+    metrics, *_ = _resolve_planner_metrics({}, records, (0.0, 0.0), (0.0, 0.0), (0.0, 0.0))
+    assert metrics["success_mean"] == pytest.approx(1.0)
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    ["reported_overlap", "raw_overlap", "unavailable", "missing_status"],
+)
+def test_v2_forged_valid_reset_telemetry_stays_out_of_rates(mutation: str) -> None:
+    """Rate readers inspect v2 reset telemetry, not only its invalid flag."""
+    from robot_sf.benchmark.aggregate import compute_aggregates
+    from robot_sf.benchmark.seed_variance import build_seed_episode_rows
+
+    forged = build_spawn_validity({"overlap": False}, [])
+    if mutation == "reported_overlap":
+        forged["reset_overlap"] = True
+    elif mutation == "raw_overlap":
+        forged["reset_clearance"]["overlap"] = True
+    elif mutation == "unavailable":
+        forged["reset_clearance_status"] = "unavailable"
+    else:
+        del forged["reset_clearance_status"]
+    assert forged["invalid_run"] is False
+    bad = _record(seed=1, collision=True, spawn=forged)
+    good = _record(seed=2, collision=False, spawn=_CLEAN)
+    assert record_has_invalid_spawn(bad) is True
+    assert _cell_record_eligible(bad) is False
+    assert _comparison_record_eligible(bad) is False
+    assert compute_aggregates([bad, good], group_by="algo")["orca"]["success"][
+        "mean"
+    ] == pytest.approx(1.0)
+    metrics, *_ = _resolve_planner_metrics({}, [bad, good], (0.0, 0.0), (0.0, 0.0), (0.0, 0.0))
+    assert metrics["success_mean"] == pytest.approx(1.0)
+    seed_rows = build_seed_variability_rows(
+        [bad, good], metrics=["success"], campaign_id="c", config_hash="h", git_hash="g"
+    )
+    assert seed_rows[0]["seed_list"] == [2]
+    rows = {row["seed"]: row for row in build_seed_episode_rows([bad, good])}
+    assert rows[1]["invalid_run"] is True
+    assert rows[1]["invalid_reason"] == "spawn_validity_inconsistent"
+    legacy = dict(forged, schema_version="spawn_validity.v1")
+    assert record_has_invalid_spawn(_record(seed=1, collision=True, spawn=legacy)) is False
+
+
+def test_v1_non_overlap_invalid_reason_keeps_historical_rate_classification() -> None:
+    """Legacy rows were excluded only for the explicit spawn-overlap reason."""
+    from robot_sf.benchmark.aggregate import compute_aggregates
+
+    historical = dict(
+        build_spawn_validity({"overlap": False}, []),
+        schema_version="spawn_validity.v1",
+        invalid_run=True,
+        invalid_reason="other_diagnostic_reason",
+    )
+    row = _record(seed=1, collision=True, spawn=historical)
+    assert record_has_invalid_spawn(row) is False
+    assert _cell_record_eligible(row) == _cell_record_eligible(
+        {key: value for key, value in row.items() if key != "spawn_validity"}
+    )
+    assert _comparison_record_eligible(row) is True
+    result = compute_aggregates(
+        [row, _record(seed=2, collision=False, spawn=_CLEAN)], group_by="algo"
+    )
+    assert result["orca"]["success"]["mean"] == pytest.approx(0.5)
+    historical["invalid_reason"] = "spawn_overlap"
+    assert record_has_invalid_spawn(row) is True
 
 
 def test_map_inventory_includes_successor_maps() -> None:

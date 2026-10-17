@@ -11,7 +11,7 @@ import pytest
 from robot_sf.benchmark.reference_oracle_report import evaluate_oracles, render_markdown
 
 SCENARIOS = ["open", "probe"]
-SEEDS = [111, 112]
+SEEDS = [1001, 1002]
 SOURCE_SHA = "a" * 40
 THRESHOLDS: dict[str, int | float] = {
     "max_goal_failure_count": 0,
@@ -98,7 +98,7 @@ def _inputs() -> dict[str, Any]:
             seed,
             arm="stationary",
             population_mode=None,
-            ped_collision_count=1.0 if (scenario, seed) == ("open", 111) else 0.0,
+            ped_collision_count=1.0 if (scenario, seed) == ("open", 1001) else 0.0,
         )
         for scenario in SCENARIOS
         for seed in SEEDS
@@ -147,7 +147,7 @@ def test_complete_native_matrix_passes_and_reports_stationary_contact_rate() -> 
 def test_probe_failures_are_listed_but_exempt_only_from_goal_failure_threshold() -> None:
     inputs = _inputs()
     inputs["rows_by_arm"]["goal"] = [
-        _row(scenario, seed, success=not (scenario == "probe" and seed == 111))
+        _row(scenario, seed, success=not (scenario == "probe" and seed == 1001))
         for scenario in SCENARIOS
         for seed in SEEDS
     ]
@@ -165,7 +165,7 @@ def test_probe_failures_are_listed_but_exempt_only_from_goal_failure_threshold()
 def test_non_probe_goal_failure_and_paired_aware_regression_fail_gate() -> None:
     inputs = _inputs()
     inputs["rows_by_arm"]["goal"] = [
-        _row(scenario, seed, success=not (scenario == "open" and seed == 111))
+        _row(scenario, seed, success=not (scenario == "open" and seed == 1001))
         for scenario in SCENARIOS
         for seed in SEEDS
     ]
@@ -175,7 +175,7 @@ def test_non_probe_goal_failure_and_paired_aware_regression_fail_gate() -> None:
             seed,
             arm="aware",
             execution_mode="adapter",
-            success=not (scenario == "probe" and seed == 112),
+            success=not (scenario == "probe" and seed == 1002),
         )
         for scenario in SCENARIOS
         for seed in SEEDS
@@ -188,7 +188,7 @@ def test_non_probe_goal_failure_and_paired_aware_regression_fail_gate() -> None:
     assert report["dominance_regressions"] == [
         {
             "scenario_id": "probe",
-            "seed": 112,
+            "seed": 1002,
             "goal_arm": "goal",
             "aware_arm": "social",
             "goal_status": "success",
@@ -200,7 +200,7 @@ def test_non_probe_goal_failure_and_paired_aware_regression_fail_gate() -> None:
     markdown = render_markdown(report)
     assert "## Goal failures" in markdown
     assert "## Dominance regressions" in markdown
-    assert "| social | probe | 112 | success | failure |" in markdown
+    assert "| social | probe | 1002 | success | failure |" in markdown
 
 
 def test_missing_duplicate_and_non_native_rows_block_and_remain_visible() -> None:
@@ -321,7 +321,7 @@ def test_invalid_matrix_and_arm_configuration_cannot_pass() -> None:
         ("scenario_ids", [], "scenario_ids_empty"),
         ("scenario_ids", ["open", "open"], "scenario_ids_duplicate"),
         ("seeds", [], "seeds_empty"),
-        ("seeds", [111, 111], "seeds_duplicate"),
+        ("seeds", [1001, 1001], "seeds_duplicate"),
         ("probe_scenario_ids", ["probe", "probe"], "probe_scenario_ids_duplicate"),
         (
             "stationary_no_pedestrian_scenario_ids",
@@ -348,7 +348,7 @@ def test_malformed_and_out_of_matrix_episode_rows_fail_closed() -> None:
     inputs = _inputs()
     rows = inputs["rows_by_arm"]["goal"]
     rows[0] = None
-    rows[1] = {"scenario_id": "open", "seed": 112}
+    rows[1] = {"scenario_id": "open", "seed": 1002}
     rows.append(_row("open", 999))
 
     report = evaluate_oracles(**inputs)

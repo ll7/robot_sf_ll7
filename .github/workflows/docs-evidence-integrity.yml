@@ -3,10 +3,13 @@ name: Docs & Evidence Integrity
 # Lightweight, changed-path-scoped guard for research-facing documentation and
 # evidence surfaces (issue #3476). The job is blocking but only inspects files
 # the PR actually touches, so it cannot fail on untouched legacy drift and is
-# independent of the full Python test suite.
+# independent of the full Python test suite. Docs changes also run the full
+# internal-link scan in this environment, preserving checks for broken links
+# in untouched files without provisioning a second checker environment.
 
 on:
   pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
     paths:
       - "**/*.md"
       - "**/*.markdown"
@@ -17,6 +20,9 @@ on:
       - ".github/ISSUE_TEMPLATE/**"
       - "AGENTS.md"
       - "CLAUDE.md"
+      - "scripts/dev/check_docs_evidence_integrity.py"
+      - "tests/dev/test_docs_link_integrity_workflow.py"
+      - ".github/workflows/docs-evidence-integrity.yml"
 
 concurrency:
   group: docs-evidence-${{ github.ref }}
@@ -24,6 +30,7 @@ concurrency:
 
 jobs:
   docs-evidence-integrity:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -43,3 +50,32 @@ jobs:
         run: |
           python scripts/dev/check_docs_evidence_integrity.py \
             --base-ref "origin/${{ github.base_ref }}"
+
+      - name: Docs link integrity (full-repo scan)
+        env:
+          BASE_REF: origin/${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+          changed=$(git diff --name-only "$BASE_REF"...HEAD -- \
+            docs scripts/dev/check_docs_evidence_integrity.py \
+            .github/workflows/docs-evidence-integrity.yml \
+            .github/workflows/docs-link-integrity.yml \
+            tests/dev/test_docs_link_integrity_workflow.py)
+          if [[ -n "$changed" ]]; then
+            python scripts/dev/check_docs_evidence_integrity.py --full
+          else
+            echo "Full docs-link scan is not needed for these changed paths."
+          fi
+
+  docs-link-integrity:
+    # Preserve the former job name and propagate either checker mode's failure.
+    needs: docs-evidence-integrity
+    if: ${{ always() && github.event.pull_request.draft == false }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report consolidated docs integrity result
+        env:
+          INTEGRITY_RESULT: ${{ needs.docs-evidence-integrity.result }}
+        run: |
+          echo "Docs link validation runs in docs-evidence-integrity ($INTEGRITY_RESULT)."
+          test "$INTEGRITY_RESULT" = success

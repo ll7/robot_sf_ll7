@@ -89,7 +89,7 @@ def test_typical_tier_decouples_desired_speed_from_spawn():
             ped_density_by_difficulty=[0.04],
             population_size=200,
             ped_speed_tier="typical",
-            desired_speed_seed=123,
+            desired_speed_seed=1013,
         )
     )
     peds = sim.pysf_sim.peds

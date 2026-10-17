@@ -1,0 +1,147 @@
+# Generated from authored limits; do not infer budgets from episode outcomes.
+schema_version: 1
+scenarios:
+  classic_bottleneck_high:
+    recommended_horizon_steps: 500
+    status: authored
+  classic_bottleneck_low:
+    recommended_horizon_steps: 500
+    status: authored
+  classic_bottleneck_medium:
+    recommended_horizon_steps: 500
+    status: authored
+  classic_cross_trap_high:
+    recommended_horizon_steps: 600
+    status: authored
+  classic_cross_trap_low:
+    recommended_horizon_steps: 600
+    status: authored
+  classic_cross_trap_medium:
+    recommended_horizon_steps: 600
+    status: authored
+  classic_doorway_high:
+    recommended_horizon_steps: 500
+    status: authored
+  classic_doorway_low:
+    recommended_horizon_steps: 500
+    status: authored
+  classic_doorway_medium:
+    recommended_horizon_steps: 500
+    status: authored
+  classic_group_crossing_high:
+    recommended_horizon_steps: 500
+    status: authored
+  classic_group_crossing_low:
+    recommended_horizon_steps: 500
+    status: authored
+  classic_group_crossing_medium:
+    recommended_horizon_steps: 500
+    status: authored
+  classic_head_on_corridor_low:
+    recommended_horizon_steps: 500
+    status: authored
+  classic_head_on_corridor_medium:
+    recommended_horizon_steps: 500
+    status: authored
+  classic_merging_low:
+    recommended_horizon_steps: 600
+    status: authored
+  classic_merging_medium:
+    recommended_horizon_steps: 600
+    status: authored
+  classic_overtaking_low:
+    recommended_horizon_steps: 600
+    status: authored
+  classic_overtaking_medium:
+    recommended_horizon_steps: 600
+    status: authored
+  classic_realworld_double_bottleneck_high:
+    recommended_horizon_steps: 700
+    status: authored
+  classic_station_platform_medium:
+    recommended_horizon_steps: 650
+    status: authored
+  classic_t_intersection_low:
+    recommended_horizon_steps: 500
+    status: authored
+  classic_t_intersection_medium:
+    recommended_horizon_steps: 500
+    status: authored
+  classic_urban_crossing_medium:
+    recommended_horizon_steps: 600
+    status: authored
+  francis2023_accompanying_peer:
+    recommended_horizon_steps: 400
+    status: authored
+  francis2023_blind_corner:
+    recommended_horizon_steps: 400
+    status: authored
+  francis2023_circular_crossing:
+    recommended_horizon_steps: 400
+    status: authored
+  francis2023_crowd_navigation:
+    recommended_horizon_steps: 400
+    status: authored
+  francis2023_down_path:
+    recommended_horizon_steps: 400
+    status: authored
+  francis2023_entering_elevator:
+    recommended_horizon_steps: 400
+    status: authored
+  francis2023_entering_room:
+    recommended_horizon_steps: 400
+    status: authored
+  francis2023_exiting_elevator:
+    recommended_horizon_steps: 400
+    status: authored
+  francis2023_exiting_room:
+    recommended_horizon_steps: 400
+    status: authored
+  francis2023_following_human:
+    recommended_horizon_steps: 400
+    status: authored
+  francis2023_frontal_approach:
+    recommended_horizon_steps: 400
+    status: authored
+  francis2023_intersection_no_gesture:
+    recommended_horizon_steps: 400
+    status: authored
+  francis2023_intersection_proceed:
+    recommended_horizon_steps: 400
+    status: authored
+  francis2023_intersection_wait:
+    recommended_horizon_steps: 400
+    status: authored
+  francis2023_join_group:
+    recommended_horizon_steps: 400
+    status: authored
+  francis2023_leading_human:
+    recommended_horizon_steps: 400
+    status: authored
+  francis2023_leave_group:
+    recommended_horizon_steps: 400
+    status: authored
+  francis2023_narrow_doorway:
+    recommended_horizon_steps: 400
+    status: authored
+  francis2023_narrow_hallway:
+    recommended_horizon_steps: 400
+    status: authored
+  francis2023_parallel_traffic:
+    recommended_horizon_steps: 400
+    status: authored
+  francis2023_pedestrian_obstruction:
+    recommended_horizon_steps: 400
+    status: authored
+  francis2023_pedestrian_overtaking:
+    recommended_horizon_steps: 600
+    status: authored
+  francis2023_perpendicular_traffic:
+    recommended_horizon_steps: 400
+    status: authored
+  francis2023_robot_crowding:
+    recommended_horizon_steps: 400
+    status: authored
+  francis2023_robot_overtaking:
+    recommended_horizon_steps: 400
+    status: authored

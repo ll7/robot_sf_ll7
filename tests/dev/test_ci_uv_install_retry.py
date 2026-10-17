@@ -8,6 +8,8 @@ import subprocess
 import textwrap
 from pathlib import Path
 
+import yaml
+
 
 def _repo_root() -> Path:
     """Return the repository root for workflow contract checks."""
@@ -218,7 +220,16 @@ def test_shared_setup_keeps_pinned_action_and_adds_fail_closed_fallback() -> Non
     assert 'actual_version="${actual#uv }"' in action_text
     assert '"$actual_version" != "$UV_VERSION"' in action_text
     assert 'enable-cache: "true"' in action_text
-    assert 'prune-cache: "true"' in action_text
+    setup = next(
+        step
+        for step in yaml.safe_load(action_text)["runs"]["steps"]
+        if step.get("id") == "setup-uv"
+    )
+    # The pinned action includes pruning mode in its key: false selects the
+    # retained-wheel family instead of the old immutable metadata-only cache.
+    assert setup["uses"] == "astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9"
+    assert setup["with"]["prune-cache"] == "false"
+    assert setup["with"]["cache-dependency-glob"].splitlines() == ["pyproject.toml", "uv.lock"]
 
 
 def test_direct_uv_workflows_use_the_retry_helper() -> None:

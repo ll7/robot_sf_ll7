@@ -1,0 +1,4 @@
+# Paired issue #9764 diagnostic arm. This opt-in config corrects the shortest
+# signed-angle calculation without changing the shared campaign template.
+social_force_planner_version: resolution_independent_v2
+social_force_kernel_version: wrapped_v2

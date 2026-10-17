@@ -21,7 +21,7 @@ from robot_sf.training.scenario_loader import load_scenarios
 SCENARIO_PATH = Path("configs/scenarios/archetypes/classic_head_on_corridor.yaml")
 FIXTURE_MANIFEST_PATH = Path("configs/benchmarks/issue_9428_social_force_goal_approach.yaml")
 SCENARIO_ID = "classic_head_on_corridor_medium"
-SEED = 24
+SEED = 1013
 
 
 def _make_observation(*, goal: tuple[float, float], next_goal: tuple[float, float]) -> dict:
@@ -233,8 +233,8 @@ def test_goal_approach_preserves_wall_avoidance(version: str) -> None:
 
 
 @pytest.mark.slow
-def test_seed_24_legacy_limit_cycle_and_opt_in_completion() -> None:
-    """The frozen native seed reproduces legacy timeout and fixed completion."""
+def test_dev_seed_legacy_limit_cycle_and_opt_in_completion() -> None:
+    """Development seed 1013 reproduces legacy timeout and opt-in completion."""
     scenario = next(
         dict(row) for row in load_scenarios(SCENARIO_PATH) if row.get("name") == SCENARIO_ID
     )

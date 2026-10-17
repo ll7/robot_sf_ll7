@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from robot_sf.benchmark.scenario_difficulty import build_scenario_difficulty_analysis
+from robot_sf.benchmark.utils import _config_hash
 from scripts.tools.analyze_camera_ready_campaign import (
     _build_markdown_report,
     _build_scenario_difficulty_markdown,
@@ -94,7 +95,10 @@ def _write_legacy_integrity_campaign(campaign_root: Path, rows: list[dict]) -> N
 
 def _legacy_integrity_row(scenario_id: str, seed: int, config_hash: str, commit: str) -> dict:
     """Build one episode row with the provenance fields required by the shared checker."""
+    params = {"algo": "goal", "algo_config_hash": _config_hash({}), "fixture_variant": config_hash}
+    config_hash = _config_hash(params)
     return {
+        "scenario_params": params,
         "scenario_id": scenario_id,
         "seed": seed,
         "status": "success",

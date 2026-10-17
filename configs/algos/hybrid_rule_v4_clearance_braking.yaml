@@ -68,11 +68,12 @@ obstacle_search_cells: 12
 # the 2.0 m/s drive maximum only from 2.3 m surface clearance.
 # The v3 centre-distance fields (stop/slow/moderate_distance_human) are unused
 # for speed limits. In v4, corridor_subgoal_min_nearest_ped_distance,
-# route_trace_recovery_min_nearest_ped_distance and the static-recovery gate
-# (slow_distance_human) are compared with surface clearance too. The near-human
-# turn limit (near_human_angular_limit_distance, centre distance) is kept on
-# purpose: turning a round robot does not move its footprint, and the swept
-# path of turning while moving is covered by the braking check.
+# route_trace_recovery_min_nearest_ped_distance and both static-recenter and
+# deadlock-escape score gates (slow_distance_human) use surface clearance too.
+# The near-human turn limit (near_human_angular_limit_distance, centre
+# distance) is kept on purpose: turning a round robot does not move its
+# footprint, and the swept path of turning while moving is covered by the
+# braking check.
 v4_stop_clearance_human: 0.15
 v4_slow_clearance_human: 0.35
 v4_moderate_clearance_human: 0.6

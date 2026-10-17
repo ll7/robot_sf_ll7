@@ -45,19 +45,19 @@ def test_pedestrian_free_overlay_removes_explicit_svg_actors_without_mutating_so
     original_count = sum(len(m.single_pedestrians) for m in original.map_pool.map_defs.values())
     assert original_count > 0
 
-    derived = _scenario_arm([source], [111], "pedestrian_free_v1")[0]
+    derived = _scenario_arm([source], [1001], "pedestrian_free_v1")[0]
     ped_free = build_env_config(derived, scenario_path=matrix_path)
     assert ped_free.sim_config.population_size == 0
     assert all(not m.single_pedestrians for m in ped_free.map_pool.map_defs.values())
     assert all(not m.social_groups for m in ped_free.map_pool.map_defs.values())
-    assert source["seeds"] != [111]
+    assert source["seeds"] != [1001]
     assert "reference_population_mode" not in source
 
 
 def test_pedestrian_free_overlay_rejects_nonzero_population() -> None:
     """A malformed variant cannot claim that pedestrians were removed."""
     config, scenarios = load_contract(CONFIG)
-    derived = _scenario_arm([scenarios[0]], [111], "pedestrian_free_v1")[0]
+    derived = _scenario_arm([scenarios[0]], [1001], "pedestrian_free_v1")[0]
     derived["simulation_config"]["population_size"] = 1
     with pytest.raises(ValueError, match="requires simulation_config.population_size: 0"):
         build_env_config(derived, scenario_path=ROOT / config["_resolved"]["matrix_path"])
@@ -67,7 +67,7 @@ def test_stand_still_batch_preserves_policy_contract_when_resumed(tmp_path: Path
     """A one-step source cell keeps zero-command metadata and stable resume identity."""
     config, scenarios = load_contract(CONFIG)
     source = next(s for s in scenarios if s["name"] == "classic_bottleneck_low")
-    scenario = _scenario_arm([source], [111], "original")
+    scenario = _scenario_arm([source], [1001], "original")
     matrix_path = ROOT / config["_resolved"]["matrix_path"]
     output = tmp_path / "stand_still.jsonl"
     kwargs = {
@@ -109,7 +109,7 @@ def test_density_spawned_stationary_row_enters_oracle_contact_denominator(tmp_pa
     """Measure actual pedestrians for an original-population oracle cell."""
     config, scenarios = load_contract(CONFIG)
     source = next(s for s in scenarios if s["name"] == "classic_cross_trap_low")
-    scenario = _scenario_arm([source], [111], "original")
+    scenario = _scenario_arm([source], [1001], "original")
     assert scenario[0]["simulation_config"].get("population_size") is None
     matrix_path = ROOT / config["_resolved"]["matrix_path"]
     output = tmp_path / "stationary.jsonl"
@@ -135,7 +135,7 @@ def test_density_spawned_stationary_row_enters_oracle_contact_denominator(tmp_pa
     report = evaluate_oracles(
         release_id="vv2-one-cell-diagnostic",
         scenario_ids=[source["name"]],
-        seeds=[111],
+        seeds=[1001],
         rows_by_arm={"goal": [], "stationary": [row], "aware": []},
         goal_key="goal",
         stationary_key="stationary",

@@ -1494,6 +1494,7 @@ def _srev24_journal_semantic_error(
         validator._answerability_document = loop._answerability_document(validated.answerability)
         validator._elapsed_base = 0.0
         validator._started_at = 0.0
+        validator._clock = loop._default_clock
         with tempfile.TemporaryDirectory(prefix="srev28-journal-check-") as directory:
             validator.journal_path = Path(directory) / JOURNAL_FILENAME
             validator.journal_path.write_bytes(_json_bytes(journal))
@@ -2297,6 +2298,7 @@ def run(
     executor: Any | None = None,
     source_admission: Mapping[str, Any] | None = None,
     cancel: Callable[[], bool] | Any | None = None,
+    clock: Callable[[], float] | None = None,
 ) -> ComponentResult:
     """Run one SREV-28 session, delegating execution and resume to SREV-24."""
 
@@ -2479,6 +2481,7 @@ def run(
             executor=executor,
             source_admission=child_proof,
             cancel=cancel,
+            clock=clock,
         )
     except (ReviewSessionError, loop.ExperimentLoopError, OSError, TypeError, ValueError) as error:
         return _result(normalized, "failed", reason=str(error))

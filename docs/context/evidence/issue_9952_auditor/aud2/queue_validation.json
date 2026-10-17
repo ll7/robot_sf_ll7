@@ -1,0 +1,17 @@
+{
+  "schema_version": "aud2-queue-validation.v1",
+  "claim_boundary": "offline queue admission/ranking only",
+  "input_bytes": 1238250933,
+  "input_sha256": "409cac0ace4421d63bfe90ce996f55bf7ec7778f0639ae13acba5cc916f5a201",
+  "retained_input_candidates": 20160,
+  "cli_exit_code": 0,
+  "top_count": 100,
+  "top_distinct_cells": 100,
+  "cell_definition": [
+    "campaign_digest",
+    "scenario_id",
+    "seed"
+  ],
+  "top100_sha256": "49f2a99e437b13df2e1f39a3a572fdafed51f3897277375e6823949a3041a05d",
+  "command": "scripts/dev/run_worktree_shared_venv.sh -- python -m robot_sf.analysis_workbench.audit_queue rank --input /home/luttkule/aud2-evidence/after-scan/queue.json --policy fixed --limit 100 --output /home/luttkule/aud2-evidence/top100.json"
+}

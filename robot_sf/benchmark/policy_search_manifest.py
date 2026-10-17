@@ -10,6 +10,8 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import TYPE_CHECKING, Any
 
+from robot_sf.benchmark.release_parameter_freeze import assert_release_parameters_frozen
+
 if TYPE_CHECKING:
     from collections.abc import Callable
 
@@ -81,6 +83,8 @@ def resolve_candidate_manifest_runtime(  # noqa: C901
     Returns:
         Effective algorithm and flattened runtime config for this scenario.
     """
+    # Issue #9751: an unfrozen release placeholder must never resolve to a runtime config.
+    assert_release_parameters_frozen(manifest, label="candidate manifest")
     if not is_candidate_manifest(manifest):
         return default_algo, manifest
 

@@ -1,7 +1,9 @@
 {
   "artifact_path": "docs/context/evidence/issue_7896_terminal_label_inventory/receipt.json",
-  "artifact_sha256": "963ecd3e79683f36be195d8cd99ac5872e63f413b3481c76fc5f08f4fa740e61",
-  "preserved_exact_bytes": true,
+  "artifact_sha256": "5a10707621330fff753a2b1f9cf09ddb342f5651a7e6e7e7d0f5cf15f9d8e30f",
+  "preserved_exact_bytes": false,
   "review_marker": "AI-GENERATED NEEDS-REVIEW",
-  "schema_version": "evidence-review-marker.v1"
+  "schema_version": "evidence-review-marker.v1",
+  "supersedes_artifact_sha256": "963ecd3e79683f36be195d8cd99ac5872e63f413b3481c76fc5f08f4fa740e61",
+  "supersession_note": "PR #9836 replaces scratch-root locators and availability metadata; this marker supersedes the prior artifact digest. These are revised bytes, not an exact-byte preservation or new domain approval."
 }

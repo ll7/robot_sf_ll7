@@ -7,6 +7,8 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "benchmark_repro_check.py"
 SPEC = importlib.util.spec_from_file_location("benchmark_repro_check", SCRIPT_PATH)
 assert SPEC is not None
@@ -18,7 +20,7 @@ SPEC.loader.exec_module(MODULE)
 
 def test_minimal_simple_policy_run_matches_current_aggregate_contract(tmp_path: Path):
     """A real minimal run passes schema validation and emits the required aggregate shape."""
-    result = MODULE.run_benchmark_pipeline(tmp_path, seed=123)
+    result = MODULE.run_benchmark_pipeline(tmp_path, seed=1001)
     assert result["status"] == "passed"
     assert result["episodes_count"] == 2
 
@@ -60,8 +62,16 @@ def test_same_seed_comparison_rejects_near_drift(tmp_path: Path):
     summary2 = tmp_path / "summary2.json"
     write_summary(summary1, 1.0)
     write_summary(summary2, 1.04)
-    result1 = {"summary_file": summary1, "episodes_count": 2}
-    result2 = {"summary_file": summary2, "episodes_count": 2}
+    episodes = tmp_path / "episodes.jsonl"
+    episodes.write_text(
+        json.dumps(
+            {"seed": 1001, "scenario_params": {"algo": "simple_policy"}, "metrics": {"success": 0}}
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    result1 = {"summary_file": summary1, "episodes_count": 2, "episodes_file": episodes}
+    result2 = {"summary_file": summary2, "episodes_count": 2, "episodes_file": episodes}
 
     assert MODULE.compare_reproducibility(result1, result2) is False
 
@@ -107,3 +117,87 @@ def test_main_reports_expected_setup_error_with_narrow_handler(tmp_path: Path, m
     assert report["status"] == "failed"
     assert report["stage"] == "setup_or_execution"
     assert report["error"] == "OSError: artifact root unavailable"
+
+
+def _stored_run(tmp_path: Path, name: str, metrics: list[dict]) -> dict:
+    """Write real episode/summary bytes; identical summaries isolate support checks."""
+    summary_path = tmp_path / f"{name}.json"
+    episodes_path = tmp_path / f"{name}.jsonl"
+    stats = {"mean": 0.5, "median": 0.5, "p95": 1.0}
+    summary_path.write_text(
+        json.dumps(
+            {
+                "simple_policy": {
+                    "success": stats,
+                    "collisions": stats,
+                    "path_efficiency": stats,
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    episodes_path.write_text(
+        "".join(
+            json.dumps(
+                {"seed": 1001 + i, "scenario_params": {"algo": "simple_policy"}, "metrics": row}
+            )
+            + "\n"
+            for i, row in enumerate(metrics)
+        ),
+        encoding="utf-8",
+    )
+    return {
+        "summary_file": summary_path,
+        "episodes_file": episodes_path,
+        "episodes_count": len(metrics),
+    }
+
+
+def test_matching_all_failed_runs_pass(tmp_path: Path) -> None:
+    """Success-only statistics are absent legitimately when support is zero."""
+    rows = [{"success": 0, "path_efficiency": None}, {"success": 0, "path_efficiency": None}]
+    first = _stored_run(tmp_path, "first", rows)
+    second = _stored_run(tmp_path, "second", rows)
+    stats = {"mean": 0.0, "median": 0.0, "p95": 0.0}
+    summary = {"simple_policy": {"success": stats, "collisions": stats}}
+    for run in (first, second):
+        run["summary_file"].write_text(json.dumps(summary), encoding="utf-8")
+    assert MODULE.validate_simple_policy_aggregate(summary)["status"] == "passed"
+    assert MODULE.compare_reproducibility(first, second) is True
+
+
+def test_success_count_drift_is_rejected_even_with_identical_summaries(tmp_path: Path) -> None:
+    """A stale summary cannot hide a changed number of successful episodes."""
+    first = _stored_run(tmp_path, "first", [{"success": 1}, {"success": 0}])
+    second = _stored_run(tmp_path, "second", [{"success": 0}, {"success": 0}])
+    assert MODULE.compare_reproducibility(first, second) is False
+
+
+@pytest.mark.parametrize(
+    "metric",
+    [
+        "path_efficiency",
+        "time_to_goal_norm_success_only",
+        "time_to_goal_ideal_ratio",
+        "time_to_goal",
+        "aggregated_time",
+    ],
+)
+def test_success_only_null_pattern_drift_is_rejected(tmp_path: Path, metric: str) -> None:
+    """Equal finite aggregates and success counts cannot hide changed episode support."""
+    first = _stored_run(
+        tmp_path, "first", [{"success": 1, metric: 0.5}, {"success": 0, metric: None}]
+    )
+    second = _stored_run(
+        tmp_path, "second", [{"success": 1, metric: None}, {"success": 0, metric: 0.5}]
+    )
+    assert MODULE.compare_reproducibility(first, second) is False
+
+
+def test_successful_group_requires_path_efficiency_statistics() -> None:
+    """Positive success support retains the required efficiency statistics gate."""
+    stats = {"mean": 0.5, "median": 0.5, "p95": 1.0}
+    summary = {"simple_policy": {"success": stats, "collisions": stats}}
+    diagnostic = MODULE.validate_simple_policy_aggregate(summary)
+    assert diagnostic["status"] == "failed"
+    assert diagnostic["missing_metrics"] == ["path_efficiency"]

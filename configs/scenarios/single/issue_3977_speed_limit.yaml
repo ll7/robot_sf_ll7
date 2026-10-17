@@ -6,7 +6,7 @@ scenarios:
     simulation_config:
       max_episode_steps: 80
       ped_density: 0.0
-      single_pedestrians: []
+    single_pedestrians: []
     robot_config:
       max_linear_speed: 2.0
     metadata:

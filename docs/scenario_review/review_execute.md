@@ -169,21 +169,21 @@ Stable reason codes include `invalid_config`, `corrupt_recipe`,
 `invalid_source_identity`, `output_collision`, `missing capabilities`,
 `incompatible_version`, `unsupported_factor`, `unsupported_measurement`,
 `control_fidelity_failure` (blocks treatment interpretation),
+`intervention_not_activated` (measured treatment telemetry did not show the configured start-delay
+onset shift with pedestrian motion),
 `execution_budget_exhausted`, `wall_timeout`,
 `per_execution_timeout`, and `stubborn_child`.
 
-`single_pedestrian_start_delay_offset` candidates resolve to `unavailable`
-with `intervention_not_executable`: the canonical single-pedestrian
-start-delay release path holds pedestrian `max_speeds` at zero, so the
-delayed pedestrian never moves on the fixture path, and this component
-refuses to synthesize motion. Simulator behavior is owned outside this leaf;
-see the portfolio follow-up for the release-path fix.
-
 Control/treatment pairs share the scenario seed and are checked to differ
-only in the intervened factor; activation (control motion present,
-treatment-versus-control speed change beyond tolerance) is measured from
-executed trajectories, never from requested config. Deterministic reruns
-agree on verdicts, metrics, and trace bytes; ledgers additionally record
+only in the intervened factor. Activation is measured from executed
+trajectories, never from requested config: speed interventions use the measured
+speed change; start-delay interventions require both pedestrian displacement
+and the configured discrete `ped_motion_onset_step` shift, derived from the
+simulator's repeated-subtraction release ticks. A start-delay pair
+that executes but does not show that measured change remains `unavailable` with
+its telemetry and a typed reason in the report and activation trace. Failed
+control fidelity still blocks treatment execution, as for other interventions.
+Deterministic reruns agree on verdicts, metrics, and trace bytes; ledgers additionally record
 wall timing outside the logical digest. The `simple_policy` fixture path is the only dependent planner family exercised
 here. Fixture velocity commands are routed through the canonical
 `_simple_robot_policy` from `robot_sf.benchmark.runner` (`_simple_policy_fixture_adapter`).

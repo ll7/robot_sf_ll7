@@ -60,7 +60,7 @@ from shapely.ops import unary_union
 from shapely.validation import explain_validity, make_valid
 
 from robot_sf.common.errors import raise_fatal_with_remedy
-from robot_sf.common.types import Line2D, Rect, Zone
+from robot_sf.common.types import Line2D, Rect, TriangleZone, Zone
 from robot_sf.nav.global_route import GlobalRoute
 from robot_sf.nav.map_config import MapDefinition, SinglePedestrianDefinition
 from robot_sf.nav.nav_types import (
@@ -1302,7 +1302,7 @@ class SvgMapConverter:
         *,
         edge: float,
     ) -> Rect:
-        """Create a deterministic right-triangle zone anchored at a waypoint.
+        """Create a deterministic square zone anchored at a waypoint.
 
         Route-only maps intentionally omit explicit spawn/goal rectangles and rely on
         route endpoints to define respawn anchors. This helper centralizes synthetic
@@ -1310,7 +1310,8 @@ class SvgMapConverter:
         different zone sizes while sharing the same geometry convention.
 
         Returns:
-            Rect: Synthetic triangular zone anchored at ``waypoint`` with side length ``edge``.
+            Rect: Three-corner square zone anchored at ``waypoint`` with side length ``edge``
+                (the fourth corner is implied, as for every :data:`Rect`).
         """
         wx, wy = waypoint
         return ((wx, wy), (wx + edge, wy), (wx + edge, wy + edge))
@@ -1318,10 +1319,26 @@ class SvgMapConverter:
     def _process_crowded_zone_path(self, path: SvgPath) -> Zone:
         """Process a path labeled as crowded zone.
 
+        A crowded-zone path is a true triangle: its three vertices are wrapped in
+        :class:`TriangleZone` so samplers do not read them as a three-corner rectangle.
+        A closing vertex that repeats the first one is dropped.
+
         Returns:
-            Zone: Zone polygon defined by path coordinates.
+            Zone: Triangle zone defined by the path coordinates.
+
+        Raises:
+            ValueError: If the path does not describe exactly three distinct vertices.
         """
-        return Zone(list(path.coordinates))
+        vertices = [(float(x), float(y)) for x, y in path.coordinates]
+        if len(vertices) > 3 and vertices[-1] == vertices[0]:
+            vertices = vertices[:-1]
+        if len(vertices) != 3:
+            raise ValueError(
+                "crowded_zone path must describe a triangle with exactly three vertices; got "
+                f"{len(vertices)} for path id={path.id!r}. Use a ped_crowded_zone rect for "
+                "rectangular zones."
+            )
+        return TriangleZone(tuple(vertices))
 
     @staticmethod
     def _parse_semantic_boundary_label(label: str) -> tuple[str, frozenset[str]]:
@@ -1684,8 +1701,16 @@ class SvgMapConverter:
     ) -> list[Rect]:
         """Build an ordered zone list, honoring explicit indices when present.
 
+        Route labels bind zones by list position, so every explicit index must land at
+        that position. A gap below the highest explicit index is filled with an
+        unindexed zone when one exists; otherwise the map is rejected, because compacting
+        the list would bind routes to the wrong authored zone.
+
         Returns:
             list[Rect]: Ordered zones for the requested zone type.
+
+        Raises:
+            ValueError: If an explicit index gap cannot be filled.
         """
         indexed = indexed_zones[zone_type]
         unindexed = unindexed_zones[zone_type]
@@ -1699,11 +1724,11 @@ class SvgMapConverter:
                 result.append(indexed[idx])
             elif unindexed:
                 result.append(unindexed.pop(0))
-            else:  # pragma: no cover - missing-index diagnostic
-                logger.warning(
-                    "Missing {} index {} with no unindexed zones available.",
-                    zone_type,
-                    idx,
+            else:
+                raise ValueError(
+                    f"SVG {zone_type} index {idx} is missing below the highest explicit index "
+                    f"{max_index} and no unindexed {zone_type} can fill it; routes bind zones "
+                    "by index, so renumber the zones without gaps."
                 )
         result.extend(unindexed)
         return result

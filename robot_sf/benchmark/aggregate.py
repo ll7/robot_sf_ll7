@@ -32,9 +32,10 @@ from robot_sf.benchmark.errors import (
     EpisodeRecordInputError,
 )
 from robot_sf.benchmark.grouping import EFFECTIVE_REPORT_GROUP_KEY, resolve_report_group_key
+from robot_sf.benchmark.metric_definitions import require_uniform_metric_schema
 from robot_sf.benchmark.metric_layers import MetricSourceBinding  # noqa: TC001
 from robot_sf.benchmark.metrics import snqi as snqi_fn
-from robot_sf.benchmark.spawn_validity import record_has_spawn_overlap, spawn_validity_counts
+from robot_sf.benchmark.spawn_validity import record_has_invalid_spawn, spawn_validity_counts
 from robot_sf.benchmark.thresholds import validate_threshold_parameter_consistency
 
 if TYPE_CHECKING:
@@ -253,12 +254,12 @@ def _record_is_evidence_eligible(record: dict[str, Any]) -> bool:
     ``evidence_eligible=false`` in its structured provenance. Its diagnostics
     remain available in episode JSONL, but its metrics must not enter aggregate
     evidence summaries (issue #6190). Records without that explicit marker keep
-    the legacy eligible behavior. Rows marked invalid for a spawn overlap
-    (issue #9725) are excluded the same way.
+    the legacy eligible behavior. Rows marked invalid for a spawn overlap or
+    unmeasured reset clearance are excluded the same way (issues #9725/#9861).
     """
-    if record_has_spawn_overlap(record):
-        # Issue #9725: a reset or respawn overlap is a simulator spawn defect; the
-        # row stays in episode JSONL but must not enter planner rates.
+    if record_has_invalid_spawn(record):
+        # Issues #9725/#9861: an invalid or unmeasured spawn stays in episode
+        # JSONL but must not enter planner rates.
         return False
     algorithm_metadata = record.get("algorithm_metadata")
     if not isinstance(algorithm_metadata, dict):
@@ -389,9 +390,14 @@ def _resolve_group_key(
     if group_by.startswith("scenario_params"):
         _ensure_mapping(record, "scenario_params", episode_ref)
 
-    nested_algo = _normalize_algo(_get_nested(record, group_by))
-    if nested_algo is not None:
-        return nested_algo
+    group_value = _get_nested(record, group_by)
+    if group_by in {"algo", "scenario_params.algo", "algorithm_metadata.algorithm"}:
+        nested_algo = _normalize_algo(group_value)
+        if nested_algo is not None:
+            return nested_algo
+    elif group_value is not None:
+        # Generic grouping fields are identities, not algorithm identifiers.
+        return str(group_value)
 
     top_level_algo = _normalize_algo(record.get("algo"))
     if top_level_algo is not None:
@@ -906,6 +912,7 @@ def _compute_aggregates_and_contributors(  # noqa: PLR0913
     Returns:
         Aggregate summary, contributor IDs by group/metric, and eligible episode records.
     """
+    require_uniform_metric_schema(records)
     spawn_validity_meta = spawn_validity_counts(records)
     records, excluded_evidence_records = filter_evidence_eligible_records(records)
     for rec in records:
@@ -966,8 +973,9 @@ def _compute_aggregates_and_contributors(  # noqa: PLR0913
             "policy": (
                 "Rows with algorithm_metadata.foresight_prediction.evidence_eligible=false "
                 "are excluded from benchmark evidence aggregation. Rows with "
-                "spawn_validity.invalid_run=true (invalid_reason=spawn_overlap) are "
-                "excluded as simulator spawn defects."
+                "spawn_validity.invalid_run=true are excluded when a reset "
+                "overlaps, reset clearance is unavailable, or a respawn collision "
+                "is attributed to the simulator."
             ),
         },
         "spawn_validity": spawn_validity_meta,
@@ -1279,17 +1287,30 @@ def _paired_metric_differences(
     left_rows: list[dict[str, Any]],
     right_rows: list[dict[str, Any]],
 ) -> dict[str, np.ndarray]:
-    """Return paired ``right - left`` metric differences keyed by metric name."""
-    left_by_id = {
-        identity: _numeric_items(row)
-        for row in left_rows
-        if (identity := _pair_identity(row)) is not None
-    }
-    right_by_id = {
-        identity: _numeric_items(row)
-        for row in right_rows
-        if (identity := _pair_identity(row)) is not None
-    }
+    """Return paired ``right - left`` differences, rejecting repeated cells.
+
+    Repeats must be reduced upstream under a declared policy before using this
+    generic comparison. Row order must never select a surviving observation.
+    """
+
+    def index_unique(
+        rows: list[dict[str, Any]], side: str
+    ) -> dict[tuple[str, str], dict[str, float]]:
+        indexed: dict[tuple[str, str], dict[str, float]] = {}
+        for row in rows:
+            identity = _pair_identity(row)
+            if identity is None:
+                continue
+            if identity in indexed:
+                raise ValueError(
+                    f"duplicate (scenario_id, seed) key in {side} paired comparison: {identity!r}; "
+                    "reduce repeats under a declared policy before pairing"
+                )
+            indexed[identity] = _numeric_items(row)
+        return indexed
+
+    left_by_id = index_unique(left_rows, "left")
+    right_by_id = index_unique(right_rows, "right")
     paired_ids = sorted(set(left_by_id) & set(right_by_id))
     diffs: dict[str, list[float]] = defaultdict(list)
     for identity in paired_ids:

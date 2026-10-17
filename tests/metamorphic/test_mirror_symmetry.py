@@ -18,6 +18,11 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
+from pysocialforce.config import (
+    LEGACY_SHIFTED_GRADIENT_V1,
+    SOCIAL_FORCE_KERNEL_LEGACY_UNWRAPPED_V1,
+    SOCIAL_FORCE_KERNEL_WRAPPED_V2,
+)
 
 from robot_sf.nav.global_route import GlobalRoute
 from robot_sf.nav.map_config import MapDefinition, SinglePedestrianDefinition
@@ -35,6 +40,8 @@ from tests.metamorphic.planner_arms import (
     interaction_scene,
     mirror_x,
     mirror_y,
+    release_arm,
+    robot_env_config,
     rotate_90,
     run_arm_episode,
 )
@@ -285,35 +292,37 @@ def _requires_rvo2(arm: str) -> None:
         pytest.skip("rvo2 is required for the native ORCA release arm")
 
 
-_BRANCH_CUT_REASON = (
-    "#9733 finding (issue pending): the social-force pair kernel takes "
-    "theta = atan2(interaction) - atan2(difference) without wrapping, so a pair whose "
-    "two angles straddle +/-pi gets |theta| ~ 2 pi and zero force; the release v2 arm "
-    "drops the crossing pedestrian in the +x scene but not in the rotated one"
-)
-
-
 @pytest.mark.parametrize(
     "arm",
-    [
-        pytest.param(
-            "social_force",
-            marks=pytest.mark.xfail(strict=True, raises=AssertionError, reason=_BRANCH_CUT_REASON),
-        ),
-        "orca",
-    ],
+    ["social_force", "orca"],
 )
 def test_release_arm_trace_is_mirror_and_rotation_equivariant(arm: str) -> None:
-    """Release arms return the transformed trace for y-mirror, x-mirror and a 90-degree turn."""
+    """The corrected social-force successor and ORCA preserve transformed traces."""
     _requires_rvo2(arm)
-    base = run_arm_episode(arm, interaction_scene(), seed=_SEED, max_steps=_ARM_STEPS)
+    kernel_version = SOCIAL_FORCE_KERNEL_WRAPPED_V2 if arm == "social_force" else None
+    base = run_arm_episode(
+        arm,
+        interaction_scene(),
+        seed=_SEED,
+        max_steps=_ARM_STEPS,
+        social_force_kernel_version=kernel_version,
+    )
     assert base.status == "ok"
+    assert base.flat_socnav_observation
     assert len(base.commands) >= 20
     without_pedestrian = run_arm_episode(
-        arm, interaction_scene(pedestrian=False), seed=_SEED, max_steps=_ARM_STEPS
+        arm,
+        interaction_scene(pedestrian=False),
+        seed=_SEED,
+        max_steps=_ARM_STEPS,
+        social_force_kernel_version=kernel_version,
     )
     without_obstacle = run_arm_episode(
-        arm, interaction_scene(obstacle=False), seed=_SEED, max_steps=_ARM_STEPS
+        arm,
+        interaction_scene(obstacle=False),
+        seed=_SEED,
+        max_steps=_ARM_STEPS,
+        social_force_kernel_version=kernel_version,
     )
     shared = min(len(base.commands), len(without_pedestrian.commands))
     assert (
@@ -332,25 +341,66 @@ def test_release_arm_trace_is_mirror_and_rotation_equivariant(arm: str) -> None:
 
     for name, (point_map, _heading_map, _sign) in _TRANSFORMS.items():
         transformed = run_arm_episode(
-            arm, interaction_scene(point_map), seed=_SEED, max_steps=_ARM_STEPS
+            arm,
+            interaction_scene(point_map),
+            seed=_SEED,
+            max_steps=_ARM_STEPS,
+            social_force_kernel_version=kernel_version,
         )
+        assert transformed.flat_socnav_observation
         _assert_arm_equivariant(base, transformed, name)
 
 
-def test_risk_dwa_release_trace_is_rotation_equivariant() -> None:
-    """The deterministic Risk-DWA release arm rotates its flat scene and trace."""
-    base = run_arm_episode("risk_dwa", interaction_scene(), seed=_SEED, max_steps=_ARM_STEPS)
+@pytest.mark.parametrize(
+    "arm",
+    [
+        "scenario_adaptive_hybrid_orca_v2_bottleneck_yield",
+        "scenario_adaptive_hybrid_orca_v2_collision_guard",
+    ],
+)
+def test_release_scenario_orca_override_trace_is_rotation_equivariant(arm: str) -> None:
+    """The two leave-group overrides resolve to ORCA and rotate through the episode path."""
+    _requires_rvo2("orca")
+    scenario = "francis2023_leave_group"
+    effective_algo, effective_config = release_arm(arm, scenario=scenario)
+    assert effective_algo == "orca"
+    assert effective_config["orca_symmetry_bias"] == pytest.approx(0.22)
+    assert effective_config["orca_head_on_bias"] == pytest.approx(0.30)
+
+    base = run_arm_episode(
+        arm, interaction_scene(), seed=1001, max_steps=_ARM_STEPS, scenario=scenario
+    )
     rotated = run_arm_episode(
-        "risk_dwa", interaction_scene(rotate_90), seed=_SEED, max_steps=_ARM_STEPS
+        arm,
+        interaction_scene(rotate_90),
+        seed=1001,
+        max_steps=_ARM_STEPS,
+        scenario=scenario,
     )
 
     assert base.status == rotated.status == "ok"
+    assert base.flat_socnav_observation
+    assert rotated.flat_socnav_observation
+    _assert_arm_equivariant(base, rotated, "rotate_90")
+
+
+def test_risk_dwa_flat_release_trace_is_rotation_equivariant() -> None:
+    """The deterministic Risk-DWA release arm rotates its flat scene and trace."""
+    # Use development seed 1001 to keep this episode check within the 1001-1030 dev range.
+    base = run_arm_episode("risk_dwa", interaction_scene(), seed=1001, max_steps=_ARM_STEPS)
+    rotated = run_arm_episode(
+        "risk_dwa", interaction_scene(rotate_90), seed=1001, max_steps=_ARM_STEPS
+    )
+
+    assert base.status == rotated.status == "ok"
+    assert base.flat_socnav_observation
+    assert rotated.flat_socnav_observation
     _assert_arm_equivariant(base, rotated, "rotate_90")
 
 
 @pytest.mark.parametrize("arm", ["risk_dwa", "guarded_ppo"])
 def test_flat_velocity_rotation_equivariance_for_world_frame_rollouts(arm: str) -> None:
-    """World-frame safety inputs rotate with a 90-degree transformed flat scene."""
+    """World-frame rollouts agree for a 90-degree transformed flat scene."""
     heading = 0.37
     ego_velocity = np.asarray([0.8, -0.25], dtype=float)
     cos_h, sin_h = np.cos(heading), np.sin(heading)
@@ -398,6 +448,42 @@ def test_flat_velocity_rotation_equivariance_for_world_frame_rollouts(arm: str) 
         err_msg=arm,
     )
 
+    command = (0.45, 0.12)
+    if arm == "risk_dwa":
+        planner = RiskDWAPlannerAdapter()
+        base_state = planner._extract_robot_goal_ped(base)
+        transformed_state = planner._extract_robot_goal_ped(transformed)
+        base_score = planner._rollout_score(
+            robot_pos=base_state[0],
+            heading=base_state[1],
+            goal=base_state[2],
+            command=command,
+            ped_pos=base_state[3],
+            ped_vel=base_state[4],
+            observation=base,
+            current_speed=0.0,
+        )
+        transformed_score = planner._rollout_score(
+            robot_pos=transformed_state[0],
+            heading=transformed_state[1],
+            goal=transformed_state[2],
+            command=command,
+            ped_pos=transformed_state[3],
+            ped_vel=transformed_state[4],
+            observation=transformed,
+            current_speed=0.0,
+        )
+        assert transformed_score == pytest.approx(base_score, rel=0.0, abs=1e-12)
+    else:
+        planner = GuardedPPOAdapter()
+        base_evaluation = planner._evaluate_command(base, command)
+        transformed_evaluation = planner._evaluate_command(transformed, command)
+        assert transformed_evaluation["safe"] == base_evaluation["safe"]
+        for key in ("progress", "min_ped_clear", "first_ped_clear", "min_obs_clear", "min_ttc"):
+            assert transformed_evaluation[key] == pytest.approx(
+                base_evaluation[key], rel=0.0, abs=1e-12
+            )
+
 
 @pytest.mark.xfail(
     strict=True,
@@ -430,6 +516,13 @@ def test_release_hybrid_v3_outcome_is_mirror_and_rotation_invariant() -> None:
     assert set(outcomes.values()) == {(True, False, False)}, outcomes
 
 
+def test_release_arm_harness_pins_historical_pedestrian_wall_law() -> None:
+    """Release-arm metamorphic fixtures must not inherit the moving 0.1.0 default."""
+    config = robot_env_config(interaction_scene(), max_steps=10)
+
+    assert config.sim_config.obstacle_force_law == LEGACY_SHIFTED_GRADIENT_V1
+
+
 def test_diagnostic_hybrid_v4_trace_is_mirror_equivariant() -> None:
     """The explicitly bound v4 diagnostic arm preserves reflected traces."""
     base = run_arm_episode(
@@ -447,7 +540,6 @@ def test_diagnostic_hybrid_v4_trace_is_mirror_equivariant() -> None:
         _assert_arm_equivariant(base, transformed, name)
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason=_BRANCH_CUT_REASON)
 def test_social_force_pair_kernel_is_rotation_equivariant() -> None:
     """Rotating a robot-pedestrian pair rotates its force (release v2 kernel parameters)."""
     config = SocNavPlannerConfig()
@@ -460,11 +552,26 @@ def test_social_force_pair_kernel_is_rotation_equivariant() -> None:
     # A pedestrian 2 m straight ahead of a robot driving along +x, crossing it.
     position_difference = np.asarray([[-2.0, -0.05]])
     velocity_difference = np.asarray([[-1.2, 0.9]])
+    legacy_implicit = _pairwise_social_force_kernel(
+        position_difference,
+        velocity_difference,
+        **parameters,
+    )
+    legacy_explicit = _pairwise_social_force_kernel(
+        position_difference,
+        velocity_difference,
+        kernel_version=SOCIAL_FORCE_KERNEL_LEGACY_UNWRAPPED_V1,
+        **parameters,
+    )
+    np.testing.assert_array_equal(legacy_implicit, legacy_explicit)
     reference = None
     for angle in (0.0, 0.3, np.pi / 2.0, np.pi, -np.pi / 2.0):
         rotation = np.asarray([[np.cos(angle), -np.sin(angle)], [np.sin(angle), np.cos(angle)]])
         force = _pairwise_social_force_kernel(
-            position_difference @ rotation.T, velocity_difference @ rotation.T, **parameters
+            position_difference @ rotation.T,
+            velocity_difference @ rotation.T,
+            kernel_version=SOCIAL_FORCE_KERNEL_WRAPPED_V2,
+            **parameters,
         )
         unrotated = force @ rotation
         if reference is None:

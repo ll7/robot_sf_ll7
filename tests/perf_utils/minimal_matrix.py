@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from robot_sf.evidence.writers import write_text
+
 if TYPE_CHECKING:
     from pathlib import Path
 
@@ -25,7 +27,7 @@ scenarios:
       archetype: test
       density: low
     seeds:
-      - 123
+      - 1013
 """
 
 
@@ -33,5 +35,5 @@ def write_minimal_matrix(directory: Path) -> Path:
     """Write the minimal matrix YAML into directory and return its path."""
     path = directory / "mini_matrix.yaml"
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(MINIMAL_MATRIX_YAML)
+    write_text(path, "# AI-GENERATED NEEDS-REVIEW\n" + MINIMAL_MATRIX_YAML)
     return path

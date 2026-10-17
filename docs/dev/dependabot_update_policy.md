@@ -14,7 +14,7 @@ The repository separates automated dependency updates by compatibility risk so a
   HEAD tree for stale old refs.
 - scripts/validation/dependency_coherence.v1.json maps each declaration to its required lock and supported profile owners.
 - scripts/dev/check_dependency_coherence.py checks that map against the exact pull-request base.
-- .github/workflows/pr-contract-check.yml runs the checker for every pull request.
+- .github/workflows/pr-contract-check.yml runs the checker for every ready pull request.
 - .github/workflows/ci.yml owns the required compatibility evidence; the policy does not create a second dependency test suite.
 
 The checker also covers the standalone fast-pysf project files. A new direct package must be added to the manifest with a reviewed class before it can pass the policy check. Unknown transitive lock rows remain visible and route through the conservative compatibility jobs.

@@ -115,4 +115,5 @@ class RobotEnvWithImage(RobotEnv):
             cast("SensorFusion", sensors[0]),
             env_config.sim_config.time_per_step_in_secs,
             env_config.sim_config.sim_time_in_secs,
+            episode_step_limit=env_config.sim_config.episode_step_limit,
         )

@@ -1,0 +1,7 @@
+{
+  "artifact_path": "docs/context/evidence/issue_10007_fxm/fxm2_regression_failures.txt",
+  "artifact_sha256": "e5666efe93e40715089a7f9177019a230c8216d7013a07365948ad93432161d2",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "evidence-review-marker.v1"
+}

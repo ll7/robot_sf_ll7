@@ -14,6 +14,7 @@ concurrency:
 
 jobs:
   route-coderabbit:
+    if: github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

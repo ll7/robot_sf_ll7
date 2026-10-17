@@ -33,6 +33,7 @@ from robot_sf.benchmark.camera_ready._config import (
     load_campaign_config,
 )
 from robot_sf.benchmark.camera_ready._util import _hash_payload, _jsonable_repo_relative
+from robot_sf.benchmark.metric_definitions import require_uniform_trace_schema
 from robot_sf.benchmark.result_provenance import validate_result_provenance_manifest
 from robot_sf.benchmark.utils import _config_hash
 from scripts.tools.build_simulation_trace_export import (
@@ -641,6 +642,11 @@ def _index_rows(
     Returns:
         A dictionary indexing episode rows by their planner/scenario/seed tuple.
     """
+    rows = list(rows)
+    try:
+        require_uniform_trace_schema(rows)
+    except ValueError as exc:
+        raise TraceReexportPackagingError(str(exc)) from exc
     indexed: dict[tuple[str, str, int], dict[str, Any]] = {}
     for row in rows:
         key = _row_tuple(row, planner_hint=planner_hint)
@@ -786,7 +792,8 @@ def _verify_rerun_row(  # noqa: C901
     trace = metadata.get("simulation_step_trace")
     if (
         not isinstance(trace, Mapping)
-        or trace.get("schema_version") != "simulation-step-trace.v1"
+        or trace.get("schema_version")
+        not in {"simulation-step-trace.v1", "simulation-step-trace.v2"}
         or not isinstance(trace.get("steps"), list)
         or not trace["steps"]
     ):
@@ -1407,7 +1414,8 @@ def _verify_real_rerun_row(row: Mapping[str, Any], *, key: tuple[str, str, int])
     trace = metadata.get("simulation_step_trace")
     if (
         not isinstance(trace, Mapping)
-        or trace.get("schema_version") != "simulation-step-trace.v1"
+        or trace.get("schema_version")
+        not in {"simulation-step-trace.v1", "simulation-step-trace.v2"}
         or not isinstance(trace.get("steps"), list)
         or not trace["steps"]
     ):
@@ -1594,6 +1602,7 @@ def bind_real_reexport_arms(  # noqa: C901, PLR0912, PLR0915
 
     receipt_rows: list[dict[str, Any]] = []
     arm_receipts: list[dict[str, Any]] = []
+    trace_records: list[dict[str, Any]] = []
     try:
         for arm in REAL_REEXPORT_ARMS:
             source_root = Path(arm_roots[arm.key]).resolve()
@@ -1613,6 +1622,11 @@ def bind_real_reexport_arms(  # noqa: C901, PLR0912, PLR0915
                 episodes_path.read_bytes(), str(episodes_path)
             )
             rows = [row for row, _raw_bytes, _line_number in rows_with_raw]
+            trace_records.extend(rows)
+            try:
+                require_uniform_trace_schema(trace_records)
+            except ValueError as exc:
+                raise RealReexportBindingError(str(exc)) from exc
             indexed = _index_rows(rows, planner_hint=arm.planner)
             raw_by_key = {
                 _row_tuple(row, planner_hint=arm.planner): (raw_bytes, line_number)
@@ -2058,6 +2072,10 @@ def package_trace_reexport(  # noqa: PLR0913, PLR0915
     ppo = _load_rerun_output(ppo_output.resolve(), expectations["ppo"])
     goal = _load_rerun_output(goal_output.resolve(), expectations["goal"])
     rerun = {**ppo, **goal}
+    try:
+        require_uniform_trace_schema([*canary.values(), *rerun.values()])
+    except ValueError as exc:
+        raise TraceReexportPackagingError(str(exc)) from exc
     if len(rerun) != 90 or set(rerun) != set(requests):
         raise TraceReexportPackagingError(
             "combined full rerun does not contain exactly 90 requests"

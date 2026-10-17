@@ -1,0 +1,9 @@
+{
+  "original_packet_commit": "acd878b4028341846e1fc1c8b0bf0c3ef9923dad",
+  "original_review_task_note_sha256": "26a0f2c2fcdd93f5101d79efb527cf774ce4e2a5d1fdb11652ef7c7ac7b7ec5e",
+  "source_note_excerpt": "decision_rule_source.md",
+  "original_analyzer_sha256": "82d39e20877647fc5d2081fd2f2eb79d84153f994e931db9e422650ba87316a7",
+  "registered_analyzer_sha256": "82d39e20877647fc5d2081fd2f2eb79d84153f994e931db9e422650ba87316a7",
+  "packet_unchanged_between_original_commit_and_registration_base": true,
+  "arm_yaml_bytes_identical_to_original": true
+}

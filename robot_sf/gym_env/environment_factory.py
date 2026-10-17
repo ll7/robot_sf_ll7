@@ -46,6 +46,8 @@ from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
+from robot_sf.benchmark.runtime_seed_guard import check_seed_config, check_simulation_seed
+
 # Hoisted imports (avoid per-call import overhead for performance regression guard)
 try:  # pragma: no cover - import errors would surface in tests
     from robot_sf.gym_env.robot_env import RobotEnv  # type: ignore
@@ -235,6 +237,8 @@ class EnvironmentFactory:
         Raises:
             RuntimeError: If environment class import fails.
         """
+        check_simulation_seed(seed, boundary="create_robot_env")
+        check_seed_config(config, boundary="create_robot_env")
         if config is None:
             config = ImageRobotConfig() if use_image_obs else RobotSimulationConfig()
         if seed is not None:
@@ -313,6 +317,8 @@ class EnvironmentFactory:
         Returns:
             SingleAgentEnv: Initialized pedestrian environment for training/evaluation.
         """
+        check_simulation_seed(seed, boundary="create_pedestrian_env")
+        check_seed_config(config, boundary="create_pedestrian_env")
         if config is None:
             config = PedestrianSimulationConfig()
         if seed is not None:
@@ -371,6 +377,8 @@ class EnvironmentFactory:
         Returns:
             MultiAgentEnv: Initialized multi-agent environment instance.
         """
+        check_simulation_seed(seed, boundary="create_multi_robot_env")
+        check_seed_config(config, boundary="create_multi_robot_env")
         if config is None:
             config = MultiRobotConfig()
         if seed is not None:
@@ -605,6 +613,8 @@ def make_robot_env(  # noqa: PLR0913
         Side-effects: seeds RNGs (idempotent for same seed), logs creation line.
         Performance: heavy image rendering imports are avoided along this path.
     """
+    check_simulation_seed(seed, boundary="make_robot_env")
+    check_seed_config(config, boundary="make_robot_env")
     if reward_func is None:
         reward_name = reward_name or "route_completion_v2"
         if reward_curriculum is not None:
@@ -712,6 +722,8 @@ def make_image_robot_env(  # noqa: PLR0913
     Returns:
         Initialized SingleAgentEnv with image observation capabilities.
     """
+    check_simulation_seed(seed, boundary="make_image_robot_env")
+    check_seed_config(config, boundary="make_image_robot_env")
     if reward_func is None:
         reward_name = reward_name or "route_completion_v2"
         if reward_curriculum is not None:
@@ -809,6 +821,8 @@ def make_pedestrian_env(  # noqa: PLR0913
     Returns:
         Initialized SingleAgentEnv for adversarial pedestrian training.
     """
+    check_simulation_seed(seed, boundary="make_pedestrian_env")
+    check_seed_config(config, boundary="make_pedestrian_env")
     # Capture explicit override intent BEFORE normalization mutates structures.
     _apply_global_seed(seed)
 
@@ -892,6 +906,8 @@ def make_crowd_sim_env(  # noqa: PLR0913
     Returns:
         CrowdSimEnv: Configured crowd-only Gymnasium environment.
     """
+    check_simulation_seed(seed, boundary="make_crowd_sim_env")
+    check_seed_config(config, boundary="make_crowd_sim_env")
     _apply_global_seed(seed)
     CrowdSimEnv, CrowdSimulationConfig = _load_crowd_sim_env()
     if config is None:
@@ -939,6 +955,7 @@ def _apply_global_seed(seed: int | None) -> None:
         Positioned at end of module to keep import block contiguous (PEP8).
         Silent failures for optional dependencies keep the factory lightweight.
     """
+    check_simulation_seed(seed, boundary="environment_factory")
     if seed is None:
         return
     random.seed(seed)
@@ -998,6 +1015,8 @@ def make_multi_robot_env(  # noqa: PLR0913
     MultiAgentEnv
         Configured multi-agent environment ready for training/evaluation.
     """
+    check_simulation_seed(seed, boundary="make_multi_robot_env")
+    check_seed_config(config, boundary="make_multi_robot_env")
     return EnvironmentFactory.create_multi_robot_env(
         config=config,
         num_robots=num_robots,

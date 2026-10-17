@@ -88,6 +88,22 @@ from robot_sf.benchmark.utils import _config_hash, _git_hash_fallback
 from robot_sf.common.artifact_paths import get_repository_root
 
 
+@pytest.fixture(autouse=True)
+def _mock_runtime_physics_for_orchestrator_units(monkeypatch):
+    """Orchestrator units use mocked episodes; native physics has separate integration tests."""
+    monkeypatch.setattr(
+        camera_ready_campaign_impl_module,
+        "campaign_physics",
+        lambda root: {
+            "effective_physics_schema_version": "effective-physics.v1",
+            "effective_physics_episode_count": 0,
+            "effective_physics_samples": [],
+            "release_design_parameters": {},
+        },
+        raising=False,
+    )
+
+
 def test_camera_ready_campaign_reexports_package_artifact_helpers() -> None:
     """Legacy camera_ready_campaign imports expose moved artifact helpers."""
     helper_names = (
@@ -2772,7 +2788,7 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noq
     scenario_abs = (tmp_path / scenario_rel).resolve()
     scenario_abs.parent.mkdir(parents=True, exist_ok=True)
     scenario_abs.write_text(
-        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [111]\n",
+        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [1001]\n",
         encoding="utf-8",
     )
 
@@ -2788,7 +2804,7 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noq
                 "record_simulation_step_trace: true",
                 "seed_policy:",
                 "  mode: fixed-list",
-                "  seeds: [111]",
+                "  seeds: [1001]",
                 "planners:",
                 "  - key: goal",
                 "    algo: goal",
@@ -2837,7 +2853,7 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noq
             {
                 "episode_id": f"e-{algo}-0",
                 "scenario_id": "mock",
-                "seed": 111,
+                "seed": 1001,
                 "scenario_params": {"algo": algo, "metadata": {"archetype": "crossing"}},
                 "metrics": {"success": 1.0, "collisions": 0.0, "near_misses": 0.0},
                 "algorithm_metadata": {"algorithm": algo, "status": "ok"},
@@ -3216,7 +3232,7 @@ def test_run_campaign_writes_synthetic_actuation_artifacts(
                 "scenario_matrix": str(scenario_path),
                 "kinematics_matrix": ["differential_drive"],
                 "scenario_candidates": ["classic_overtaking_medium"],
-                "seed_policy": {"mode": "fixed-list", "seeds": [111]},
+                "seed_policy": {"mode": "fixed-list", "seeds": [1001]},
                 "synthetic_actuation_profile": {
                     "name": "amv-actuation-stress-v0",
                     "profile_version": "v0",
@@ -3263,7 +3279,7 @@ def test_run_campaign_writes_synthetic_actuation_artifacts(
         record = {
             "episode_id": "e-goal-0",
             "scenario_id": "classic_overtaking_medium",
-            "seed": 111,
+            "seed": 1001,
             "scenario_params": {
                 "algo": algo,
                 "synthetic_actuation_profile": kwargs["synthetic_actuation_profile"],
@@ -3498,7 +3514,7 @@ def test_run_campaign_stops_on_partial_failure_when_configured(tmp_path: Path, m
     scenario_abs = (tmp_path / scenario_rel).resolve()
     scenario_abs.parent.mkdir(parents=True, exist_ok=True)
     scenario_abs.write_text(
-        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [111]\n",
+        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [1001]\n",
         encoding="utf-8",
     )
 
@@ -3510,7 +3526,7 @@ def test_run_campaign_stops_on_partial_failure_when_configured(tmp_path: Path, m
                 f"scenario_matrix: {scenario_rel.as_posix()}",
                 "seed_policy:",
                 "  mode: fixed-list",
-                "  seeds: [111]",
+                "  seeds: [1001]",
                 "stop_on_failure: true",
                 "planners:",
                 "  - key: prediction_planner",
@@ -3547,7 +3563,7 @@ def test_run_campaign_stops_on_partial_failure_when_configured(tmp_path: Path, m
                 "total_jobs": 1,
                 "written": 0,
                 "failed_jobs": 1,
-                "failures": [{"scenario_id": "mock", "seed": 111, "error": "mock"}],
+                "failures": [{"scenario_id": "mock", "seed": 1001, "error": "mock"}],
                 "preflight": {
                     "status": "ok",
                     "learned_policy_contract": {"status": "not_applicable"},
@@ -3575,7 +3591,7 @@ def test_run_campaign_continues_after_not_available_when_stop_enabled(
     scenario_abs = (tmp_path / scenario_rel).resolve()
     scenario_abs.parent.mkdir(parents=True, exist_ok=True)
     scenario_abs.write_text(
-        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [111]\n",
+        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [1001]\n",
         encoding="utf-8",
     )
 
@@ -3587,7 +3603,7 @@ def test_run_campaign_continues_after_not_available_when_stop_enabled(
                 f"scenario_matrix: {scenario_rel.as_posix()}",
                 "seed_policy:",
                 "  mode: fixed-list",
-                "  seeds: [111]",
+                "  seeds: [1001]",
                 "stop_on_failure: true",
                 "planners:",
                 "  - key: ppo",
@@ -3666,7 +3682,7 @@ def test_run_campaign_skips_dependency_gated_planner_before_execution(
     scenario_abs = (tmp_path / scenario_rel).resolve()
     scenario_abs.parent.mkdir(parents=True, exist_ok=True)
     scenario_abs.write_text(
-        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [111]\n",
+        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [1001]\n",
         encoding="utf-8",
     )
 
@@ -3679,7 +3695,7 @@ def test_run_campaign_skips_dependency_gated_planner_before_execution(
                 f"scenario_matrix: {scenario_rel.as_posix()}",
                 "seed_policy:",
                 "  mode: fixed-list",
-                "  seeds: [111]",
+                "  seeds: [1001]",
                 "stop_on_failure: true",
                 "planners:",
                 "  - key: goal",
@@ -3720,7 +3736,7 @@ def test_run_campaign_skips_dependency_gated_planner_before_execution(
                 {
                     "episode_id": "e-goal-0",
                     "scenario_id": "mock",
-                    "seed": 111,
+                    "seed": 1001,
                     "scenario_params": {
                         "algo": "goal",
                         "metadata": {"archetype": "crossing"},
@@ -3775,7 +3791,7 @@ def test_run_campaign_continues_after_failure_when_stop_disabled(
     scenario_abs = (tmp_path / scenario_rel).resolve()
     scenario_abs.parent.mkdir(parents=True, exist_ok=True)
     scenario_abs.write_text(
-        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [111]\n",
+        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [1001]\n",
         encoding="utf-8",
     )
 
@@ -3787,7 +3803,7 @@ def test_run_campaign_continues_after_failure_when_stop_disabled(
                 f"scenario_matrix: {scenario_rel.as_posix()}",
                 "seed_policy:",
                 "  mode: fixed-list",
-                "  seeds: [111]",
+                "  seeds: [1001]",
                 "stop_on_failure: false",
                 "planners:",
                 "  - key: prediction_planner",
@@ -3820,7 +3836,7 @@ def test_run_campaign_continues_after_failure_when_stop_disabled(
                 "total_jobs": 1,
                 "written": 0,
                 "failed_jobs": 1,
-                "failures": [{"scenario_id": "mock", "seed": 111, "error": "worker crash"}],
+                "failures": [{"scenario_id": "mock", "seed": 1001, "error": "worker crash"}],
                 "preflight": {
                     "status": "ok",
                     "learned_policy_contract": {"status": "not_applicable"},
@@ -3867,7 +3883,7 @@ def test_run_campaign_counts_existing_records_when_resumed_attempt_fails(
     scenario_abs = (tmp_path / scenario_rel).resolve()
     scenario_abs.parent.mkdir(parents=True, exist_ok=True)
     scenario_abs.write_text(
-        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [111]\n",
+        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [1001]\n",
         encoding="utf-8",
     )
 
@@ -3879,7 +3895,7 @@ def test_run_campaign_counts_existing_records_when_resumed_attempt_fails(
                 f"scenario_matrix: {scenario_rel.as_posix()}",
                 "seed_policy:",
                 "  mode: fixed-list",
-                "  seeds: [111]",
+                "  seeds: [1001]",
                 "resume: true",
                 "stop_on_failure: false",
                 "planners:",
@@ -3907,7 +3923,7 @@ def test_run_campaign_counts_existing_records_when_resumed_attempt_fails(
             json.dumps(
                 {
                     "scenario_id": "smoke",
-                    "seed": 111,
+                    "seed": 1001,
                     "termination_reason": "success",
                     "metrics": {"success": 1.0, "collisions": 0.0, "snqi": 0.5},
                 }
@@ -3920,7 +3936,7 @@ def test_run_campaign_counts_existing_records_when_resumed_attempt_fails(
             "total_jobs": 1,
             "written": 0,
             "failed_jobs": 1,
-            "failures": [{"scenario_id": "smoke", "seed": 111, "error": "resume crash"}],
+            "failures": [{"scenario_id": "smoke", "seed": 1001, "error": "resume crash"}],
             "preflight": {
                 "status": "ok",
                 "learned_policy_contract": {"status": "not_applicable"},
@@ -4833,7 +4849,7 @@ def test_run_campaign_checks_orca_rvo2_before_loading_optional_artifacts(
         name="orca_run_guard",
         scenario_matrix_path=scenario_path,
         planners=(PlannerSpec(key="orca", algo="orca"),),
-        seed_policy=SeedPolicy(),
+        seed_policy=SeedPolicy(mode="fixed-list", seeds=(1001,)),
     )
 
     monkeypatch.setitem(sys.modules, "rvo2", None)
@@ -4857,7 +4873,7 @@ def test_run_campaign_sanitizes_run_directory_keys(tmp_path: Path, monkeypatch) 
     scenario_abs = (tmp_path / scenario_rel).resolve()
     scenario_abs.parent.mkdir(parents=True, exist_ok=True)
     scenario_abs.write_text(
-        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [111]\n",
+        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [1001]\n",
         encoding="utf-8",
     )
     config_path = tmp_path / "campaign_sanitize.yaml"
@@ -4868,7 +4884,7 @@ def test_run_campaign_sanitizes_run_directory_keys(tmp_path: Path, monkeypatch) 
                 f"scenario_matrix: {scenario_rel.as_posix()}",
                 "seed_policy:",
                 "  mode: fixed-list",
-                "  seeds: [111]",
+                "  seeds: [1001]",
                 'kinematics_matrix: ["holonomic/../unsafe"]',
                 "planners:",
                 '  - key: "../../planner|unsafe"',
@@ -4898,7 +4914,7 @@ def test_run_campaign_sanitizes_run_directory_keys(tmp_path: Path, monkeypatch) 
                 {
                     "episode_id": f"e-{algo}-0",
                     "scenario_id": "mock",
-                    "seed": 111,
+                    "seed": 1001,
                     "scenario_params": {"algo": algo, "metadata": {"archetype": "crossing"}},
                     "metrics": {"success": 1.0, "collisions": 0.0, "near_misses": 0.0},
                     "algorithm_metadata": {"algorithm": algo, "status": "ok"},
@@ -4937,7 +4953,7 @@ def test_run_campaign_marks_skipped_preflight_as_not_available(tmp_path: Path, m
     scenario_abs = (tmp_path / scenario_rel).resolve()
     scenario_abs.parent.mkdir(parents=True, exist_ok=True)
     scenario_abs.write_text(
-        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [111]\n",
+        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [1001]\n",
         encoding="utf-8",
     )
     config_path = tmp_path / "campaign_skipped.yaml"
@@ -4948,7 +4964,7 @@ def test_run_campaign_marks_skipped_preflight_as_not_available(tmp_path: Path, m
                 f"scenario_matrix: {scenario_rel.as_posix()}",
                 "seed_policy:",
                 "  mode: fixed-list",
-                "  seeds: [111]",
+                "  seeds: [1001]",
                 "planners:",
                 "  - key: goal",
                 "    algo: goal",
@@ -4996,7 +5012,7 @@ def test_run_campaign_success_ignores_not_available_experimental_when_core_ok(
     scenario_abs = (tmp_path / scenario_rel).resolve()
     scenario_abs.parent.mkdir(parents=True, exist_ok=True)
     scenario_abs.write_text(
-        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [111]\n",
+        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [1001]\n",
         encoding="utf-8",
     )
     config_path = tmp_path / "campaign_core_with_optional_experimental.yaml"
@@ -5007,7 +5023,7 @@ def test_run_campaign_success_ignores_not_available_experimental_when_core_ok(
                 f"scenario_matrix: {scenario_rel.as_posix()}",
                 "seed_policy:",
                 "  mode: fixed-list",
-                "  seeds: [111]",
+                "  seeds: [1001]",
                 "planners:",
                 "  - key: goal",
                 "    algo: goal",
@@ -5034,7 +5050,7 @@ def test_run_campaign_success_ignores_not_available_experimental_when_core_ok(
                     {
                         "episode_id": "e-goal-0",
                         "scenario_id": "mock",
-                        "seed": 111,
+                        "seed": 1001,
                         "scenario_params": {
                             "algo": "goal",
                             "metadata": {"archetype": "crossing"},
@@ -5114,7 +5130,7 @@ def test_run_campaign_fails_if_core_run_is_unattempted_after_stop_on_failure(
     scenario_abs = (tmp_path / scenario_rel).resolve()
     scenario_abs.parent.mkdir(parents=True, exist_ok=True)
     scenario_abs.write_text(
-        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [111]\n",
+        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [1001]\n",
         encoding="utf-8",
     )
     config_path = tmp_path / "campaign_core_stop.yaml"
@@ -5125,7 +5141,7 @@ def test_run_campaign_fails_if_core_run_is_unattempted_after_stop_on_failure(
                 f"scenario_matrix: {scenario_rel.as_posix()}",
                 "seed_policy:",
                 "  mode: fixed-list",
-                "  seeds: [111]",
+                "  seeds: [1001]",
                 "stop_on_failure: true",
                 "planners:",
                 "  - key: goal",
@@ -5208,7 +5224,7 @@ def test_run_campaign_marks_empty_run_set_as_non_success(tmp_path: Path, monkeyp
     scenario_abs = (tmp_path / scenario_rel).resolve()
     scenario_abs.parent.mkdir(parents=True, exist_ok=True)
     scenario_abs.write_text(
-        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [111]\n",
+        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [1001]\n",
         encoding="utf-8",
     )
     config_path = tmp_path / "campaign_empty.yaml"
@@ -5219,7 +5235,7 @@ def test_run_campaign_marks_empty_run_set_as_non_success(tmp_path: Path, monkeyp
                 f"scenario_matrix: {scenario_rel.as_posix()}",
                 "seed_policy:",
                 "  mode: fixed-list",
-                "  seeds: [111]",
+                "  seeds: [1001]",
                 "planners:",
                 "  - key: goal",
                 "    algo: goal",
@@ -5253,7 +5269,7 @@ def test_run_campaign_enforces_snqi_contract_error_mode(tmp_path: Path, monkeypa
     scenario_abs = (tmp_path / scenario_rel).resolve()
     scenario_abs.parent.mkdir(parents=True, exist_ok=True)
     scenario_abs.write_text(
-        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [111]\n",
+        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [1001]\n",
         encoding="utf-8",
     )
     config_path = tmp_path / "campaign_snqi_error.yaml"
@@ -5267,7 +5283,7 @@ def test_run_campaign_enforces_snqi_contract_error_mode(tmp_path: Path, monkeypa
                 "comparability_mapping: configs/benchmarks/alyassi_comparability_map_v1.yaml",
                 "seed_policy:",
                 "  mode: fixed-list",
-                "  seeds: [111]",
+                "  seeds: [1001]",
                 "snqi_contract:",
                 "  enabled: true",
                 "  enforcement: error",
@@ -5305,13 +5321,13 @@ def test_run_campaign_enforces_snqi_contract_error_mode(tmp_path: Path, monkeypa
                 {
                     "episode_id": "e-goal-0",
                     "scenario_id": "smoke",
-                    "seed": 111,
+                    "seed": 1001,
                     "config_hash": "scenario-config-smoke",
                     "git_hash": _git_hash_fallback(),
                     "scenario_params": {"algo": "goal", "metadata": {"archetype": "crossing"}},
                     "result_provenance": {
                         "scenario_id": "smoke",
-                        "seed": 111,
+                        "seed": 1001,
                         "config_hash": "scenario-config-smoke",
                         "repo_commit": _git_hash_fallback(),
                     },
@@ -5365,7 +5381,7 @@ def test_run_campaign_surfaces_snqi_contract_warn_mode(tmp_path: Path, monkeypat
     scenario_abs = (tmp_path / scenario_rel).resolve()
     scenario_abs.parent.mkdir(parents=True, exist_ok=True)
     scenario_abs.write_text(
-        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [111]\n",
+        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [1001]\n",
         encoding="utf-8",
     )
     config_path = tmp_path / "campaign_snqi_warn.yaml"
@@ -5379,7 +5395,7 @@ def test_run_campaign_surfaces_snqi_contract_warn_mode(tmp_path: Path, monkeypat
                 "comparability_mapping: configs/benchmarks/alyassi_comparability_map_v1.yaml",
                 "seed_policy:",
                 "  mode: fixed-list",
-                "  seeds: [111]",
+                "  seeds: [1001]",
                 "snqi_contract:",
                 "  enabled: true",
                 "  enforcement: warn",
@@ -5417,7 +5433,7 @@ def test_run_campaign_surfaces_snqi_contract_warn_mode(tmp_path: Path, monkeypat
                 {
                     "episode_id": "e-goal-0",
                     "scenario_id": "smoke",
-                    "seed": 111,
+                    "seed": 1001,
                     "config_hash": _config_hash(
                         {
                             "algo": "goal",
@@ -5433,7 +5449,7 @@ def test_run_campaign_surfaces_snqi_contract_warn_mode(tmp_path: Path, monkeypat
                     },
                     "result_provenance": {
                         "scenario_id": "smoke",
-                        "seed": 111,
+                        "seed": 1001,
                         "config_hash": _config_hash(
                             {
                                 "algo": "goal",
@@ -5498,7 +5514,7 @@ def test_run_campaign_parity_table_includes_ci_columns(tmp_path: Path, monkeypat
     scenario_abs = (tmp_path / scenario_rel).resolve()
     scenario_abs.parent.mkdir(parents=True, exist_ok=True)
     scenario_abs.write_text(
-        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [111]\n",
+        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [1001]\n",
         encoding="utf-8",
     )
     config_path = tmp_path / "campaign_ci.yaml"
@@ -5509,7 +5525,7 @@ def test_run_campaign_parity_table_includes_ci_columns(tmp_path: Path, monkeypat
                 f"scenario_matrix: {scenario_rel.as_posix()}",
                 "seed_policy:",
                 "  mode: fixed-list",
-                "  seeds: [111]",
+                "  seeds: [1001]",
                 "planners:",
                 "  - key: goal",
                 "    algo: goal",
@@ -5537,7 +5553,7 @@ def test_run_campaign_parity_table_includes_ci_columns(tmp_path: Path, monkeypat
                 {
                     "episode_id": "e-goal-0",
                     "scenario_id": "mock",
-                    "seed": 111,
+                    "seed": 1001,
                     "scenario_params": {"algo": "goal", "metadata": {"archetype": "crossing"}},
                     "metrics": {"success": 1.0, "collisions": 0.0, "near_misses": 0.0},
                     "algorithm_metadata": {"algorithm": "goal", "status": "ok"},
@@ -6841,7 +6857,7 @@ def test_run_campaign_fails_fast_on_missing_snqi_normalized_term(
     scenario_abs = (tmp_path / scenario_rel).resolve()
     scenario_abs.parent.mkdir(parents=True, exist_ok=True)
     scenario_abs.write_text(
-        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [111]\n",
+        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [1001]\n",
         encoding="utf-8",
     )
 
@@ -6856,7 +6872,7 @@ def test_run_campaign_fails_fast_on_missing_snqi_normalized_term(
                 "comparability_mapping: configs/benchmarks/alyassi_comparability_map_v1.yaml",
                 "seed_policy:",
                 "  mode: fixed-list",
-                "  seeds: [111]",
+                "  seeds: [1001]",
                 "snqi_contract:",
                 "  enabled: true",
                 "  enforcement: error",
@@ -6893,7 +6909,7 @@ def test_run_campaign_fails_fast_on_missing_snqi_normalized_term(
                 {
                     "episode_id": "e-goal-0",
                     "scenario_id": "mock",
-                    "seed": 111,
+                    "seed": 1001,
                     "scenario_params": {"algo": "goal", "metadata": {"archetype": "crossing"}},
                     "metrics": {
                         "success": 0.0,
@@ -7057,7 +7073,7 @@ def test_campaign_table_and_arm_identity_artifacts_published(  # noqa: PLR0915
     scenario_abs = (tmp_path / scenario_rel).resolve()
     scenario_abs.parent.mkdir(parents=True, exist_ok=True)
     scenario_abs.write_text(
-        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [111]\n",
+        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [1001]\n",
         encoding="utf-8",
     )
 
@@ -7102,7 +7118,7 @@ def test_campaign_table_and_arm_identity_artifacts_published(  # noqa: PLR0915
                 {
                     "episode_id": f"e-{algo}-0",
                     "scenario_id": "corridor_passing_30m_nominal",
-                    "seed": 111,
+                    "seed": 1001,
                     "scenario_params": {"algo": algo, "metadata": {"archetype": "crossing"}},
                     "metrics": {
                         "success": 1.0,

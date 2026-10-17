@@ -1,0 +1,155 @@
+schema: guardesc.diagnostic.v1
+question: Separate the guard and escape-bundle effects within one continuous hybrid
+  in confinement geometry and crowding control.
+evidence_tier: development-seed diagnostic
+execution_label: new current-version execution
+release_evidence: false
+repository: ll7/robot_sf_ll7
+release_base_commit: 373dbfde4f39667cf9e8732dabe7df5118bdeab1
+execution_commit: 0035fba05c9b679e39f58ec286f5d57b96bb9a0a
+branch: experiment/guardesc-2026-10-14
+code_change_reason: Release has escape switches but no independent collision-rejection
+  guard switch; opt-in ablation_disable_hard_guard leaves default False.
+controller: configs/policy_search/candidates/hybrid_rule_v4_fast_progress_static_escape_continuous_s30_h600_release_0_0_8_frozen.yaml
+controller_sha256: 044931a38f31a7b7c01ba8a750a1d34a79a58200309806e538761a94eff94888
+guard: Static/dynamic collision and static-clearance candidate rejection plus v4 pedestrian/wall
+  braking vetoes. Speed limits retained.
+escape:
+  bundle_switches:
+  - static_clearance_escape_enabled
+  - static_recenter_enabled
+  - static_corridor_transit_enabled
+  - corridor_subgoal_enabled
+  individual_component_attribution: false
+groups:
+  static_constriction:
+  - classic_bottleneck_low
+  - classic_bottleneck_medium
+  - classic_bottleneck_high
+  - classic_realworld_double_bottleneck_high
+  - classic_cross_trap_low
+  - classic_cross_trap_medium
+  - classic_cross_trap_high
+  - francis2023_narrow_hallway
+  portal:
+  - classic_doorway_low
+  - classic_doorway_medium
+  - classic_doorway_high
+  - francis2023_entering_room
+  - francis2023_exiting_room
+  - francis2023_entering_elevator
+  - francis2023_exiting_elevator
+  crowding_control:
+  - classic_station_platform_medium
+  - francis2023_crowd_navigation
+  - francis2023_robot_crowding
+portal_role: Confinement companion; historical release mapping has ORCA first, so
+  no portal hybrid-lead assumption.
+excluded_cells:
+  francis2023_narrow_doorway: Historical reconstructed mapping excludes infeasible
+    aperture; outside planned execution.
+seeds:
+- 1001
+- 1002
+- 1003
+- 1004
+- 1005
+- 1006
+- 1007
+- 1008
+- 1009
+- 1010
+- 1011
+- 1012
+- 1013
+- 1014
+- 1015
+- 1016
+- 1017
+- 1018
+- 1019
+- 1020
+- 1021
+- 1022
+- 1023
+- 1024
+- 1025
+- 1026
+- 1027
+- 1028
+- 1029
+- 1030
+smoke:
+  seed: 1001
+  cell: classic_bottleneck_medium
+  episodes: 4
+default_identity:
+  cells: 48
+  seeds:
+  - 1001
+  - 1002
+  episodes_per_source: 96
+  required: IEEE command/state trace parity, outcome and steps; no new empty-world
+    failure
+horizon:
+  mode: authored_per_cell
+  schedule: configs/benchmarks/horizon_schedules/release_0_0_8_authored_v1.yaml
+  sha256: 032bbf8ad354ea9394492659aa50188e2bc40078930975ef30cd3ba77208675e
+  selected_budgets:
+    classic_bottleneck_low: 500
+    classic_bottleneck_medium: 500
+    classic_bottleneck_high: 500
+    classic_realworld_double_bottleneck_high: 700
+    classic_station_platform_medium: 650
+    classic_cross_trap_low: 600
+    classic_cross_trap_medium: 600
+    classic_cross_trap_high: 600
+    classic_doorway_low: 500
+    classic_doorway_medium: 500
+    classic_doorway_high: 500
+    francis2023_narrow_hallway: 400
+    francis2023_entering_room: 400
+    francis2023_exiting_room: 400
+    francis2023_entering_elevator: 400
+    francis2023_exiting_elevator: 400
+    francis2023_crowd_navigation: 400
+    francis2023_robot_crowding: 400
+dt: 0.1
+workers: 4
+planned_full_episodes: 2160
+mode_column:
+- native
+- adapter
+- fallback
+- degraded
+statistics:
+  paired_unit: seed and cell
+  bootstrap_unit: seed block across all cells and arms
+  bootstrap_replicates: 10000
+  bootstrap_rng: 1001
+  interval: percentile 95%
+  main_effects: 'Guard: mean over escape states of on-minus-off; escape: mean over
+    guard states of on-minus-off'
+  interaction: Y11 - Y10 - Y01 + Y00
+  cell_weighting: equal; no outcome-driven exclusions
+  p_values: false
+hard_stops:
+- no dissertation edits
+- no merge or main push
+- no release/tag/publication
+- no frozen input mutation
+- no claim admission
+declared_controller_execution_mode: adapter
+fallback_or_degraded_success_evidence: false
+reader_amendment: Use source-defined nested planner_kinematics and runtime metadata.
+  Optional safety-wrapper metric and sample-trace route availability are separate
+  axes. No simulation input changed; completed baseline source rows reused after reader
+  controls.
+environment:
+  python: 3.13.14
+  numpy: 2.4.6
+  cpu_only: true
+  uv_lock_sha256: def82098b23281e7c49f1f05e052e412c2de54ae2da53f1708bc0ddc2a30d023
+packet_role: Retrospective custody copy; not a new preregistration or evidence admission.
+decision_rule_registration_limit: Original contract does not register the 5 pp/RQ-count
+  rule or define MIXED.

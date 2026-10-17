@@ -1,0 +1,111 @@
+{
+  "original": {
+    "overall": "EFFECT",
+    "factors": {
+      "guard": {
+        "groups": {
+          "static_constriction": {
+            "difference_pp": 46.04166666666667,
+            "ci_low_pp": 42.5,
+            "ci_high_pp": 49.99999999999999,
+            "qualifies": true,
+            "positive_hypothesis_supported": true
+          },
+          "portal": {
+            "difference_pp": 34.04761904761905,
+            "ci_low_pp": 30.714285714285715,
+            "ci_high_pp": 37.14285714285714,
+            "qualifies": true,
+            "positive_hypothesis_supported": true
+          }
+        },
+        "mixed": false,
+        "control_moves_as_much": false,
+        "qualifying_confinement_specific_effect": true,
+        "outcome": "EFFECT"
+      },
+      "escape": {
+        "groups": {
+          "static_constriction": {
+            "difference_pp": 3.9583333333333304,
+            "ci_low_pp": 1.2499999999999982,
+            "ci_high_pp": 6.874999999999998,
+            "qualifies": false,
+            "positive_hypothesis_supported": false,
+            "bounded_below_five_points": false
+          },
+          "portal": {
+            "difference_pp": 0.23809523809523725,
+            "ci_low_pp": -2.1428571428571406,
+            "ci_high_pp": 2.8571428571428523,
+            "qualifies": false,
+            "positive_hypothesis_supported": false,
+            "bounded_below_five_points": true
+          }
+        },
+        "mixed": false,
+        "control_moves_as_much": false,
+        "qualifying_confinement_specific_effect": false,
+        "outcome": "NO EFFECT"
+      }
+    }
+  },
+  "replication": {
+    "overall": "EFFECT",
+    "factors": {
+      "guard": {
+        "groups": {
+          "static_constriction": {
+            "difference_pp": 44.166666666666664,
+            "ci_low_pp": 38.958333333333336,
+            "ci_high_pp": 49.16666666666667,
+            "qualifies": true,
+            "positive_hypothesis_supported": true
+          },
+          "portal": {
+            "difference_pp": 34.761904761904766,
+            "ci_low_pp": 32.14285714285714,
+            "ci_high_pp": 37.38095238095237,
+            "qualifies": true,
+            "positive_hypothesis_supported": true
+          }
+        },
+        "mixed": false,
+        "control_moves_as_much": false,
+        "qualifying_confinement_specific_effect": true,
+        "outcome": "EFFECT"
+      },
+      "escape": {
+        "groups": {
+          "static_constriction": {
+            "difference_pp": 0.4166666666666624,
+            "ci_low_pp": -2.4999999999999964,
+            "ci_high_pp": 3.3333333333333326,
+            "qualifies": false,
+            "positive_hypothesis_supported": false,
+            "bounded_below_five_points": true
+          },
+          "portal": {
+            "difference_pp": -0.9523809523809545,
+            "ci_low_pp": -3.0952380952380953,
+            "ci_high_pp": 0.952380952380949,
+            "qualifies": false,
+            "positive_hypothesis_supported": false,
+            "bounded_below_five_points": true
+          }
+        },
+        "mixed": false,
+        "control_moves_as_much": false,
+        "qualifying_confinement_specific_effect": false,
+        "outcome": "NO EFFECT"
+      }
+    }
+  },
+  "replication_agrees_with_original": {
+    "overall": true,
+    "guard": true,
+    "escape": true
+  },
+  "independent_primary_max_absolute_error_proportion": 1.1102230246251565e-16,
+  "pooled_analysis_role": "Secondary; not preregistered as primary; never used to rescue primary outcome"
+}

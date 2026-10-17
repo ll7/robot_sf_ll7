@@ -1,0 +1,855 @@
+{
+  "passed": true,
+  "source_hashes": {
+    "out/raw/full/campaigns/exp_guardesc_full/runs/g0e0__differential_drive/episodes.jsonl": "2aa21fe4006ecd398518cb46a264b06cab76be370c055e0e1b26fefa16287637",
+    "out/raw/full/campaigns/exp_guardesc_full/runs/g0e1__differential_drive/episodes.jsonl": "e614f497d635bf12cf8ba56341dd9c8bcdb033f441eb880814b729459848d6db",
+    "out/raw/full/campaigns/exp_guardesc_full/runs/g1e0__differential_drive/episodes.jsonl": "4f9bf28ebc63e16e8d6c68dd955ed0d6da5e4d68d113da5e000271146a33189d",
+    "out/raw/full/campaigns/exp_guardesc_full/runs/g1e1__differential_drive/episodes.jsonl": "1118599c926059b6fbcc8de94583bb5e073ea9ff0afa8748c6115766fdf46762"
+  },
+  "rows": 2160,
+  "seed_blocks": 30,
+  "seeds": [
+    1001,
+    1002,
+    1003,
+    1004,
+    1005,
+    1006,
+    1007,
+    1008,
+    1009,
+    1010,
+    1011,
+    1012,
+    1013,
+    1014,
+    1015,
+    1016,
+    1017,
+    1018,
+    1019,
+    1020,
+    1021,
+    1022,
+    1023,
+    1024,
+    1025,
+    1026,
+    1027,
+    1028,
+    1029,
+    1030
+  ],
+  "rates_checked": 48,
+  "contrasts_checked": 36,
+  "intervals_checked": 84,
+  "maximum_csv_absolute_difference": 2.220446049250313e-16,
+  "behavior_pairs_equal": 96,
+  "identity_totals": {
+    "identity_base": {
+      "success": 84,
+      "collision": 0,
+      "max_steps": 12
+    },
+    "identity_branch": {
+      "success": 84,
+      "collision": 0,
+      "max_steps": 12
+    }
+  },
+  "config_fields_checked": [
+    "runtime_input_records",
+    "selected_map_identity",
+    "horizon",
+    "effective_budget_steps",
+    "observation_level",
+    "observation_mode",
+    "observation_noise",
+    "observation_noise_hash",
+    "tracking_precision",
+    "tracking_precision_hash",
+    "metric_parameters",
+    "pedestrian_model",
+    "development_pedestrian_model",
+    "evaluation_pedestrian_model"
+  ],
+  "metadata_fields_checked": [
+    "observation_spec",
+    "observation_level",
+    "observation_visibility",
+    "planner_contract",
+    "planner_kinematics"
+  ],
+  "rates": [
+    {
+      "group": "static_constriction",
+      "arm": "G0E0",
+      "endpoint": "success",
+      "count": 113,
+      "denominator": 240,
+      "rate": 0.4708333333333333,
+      "ci_low": 0.42916666666666664,
+      "ci_high": 0.5125
+    },
+    {
+      "group": "static_constriction",
+      "arm": "G0E1",
+      "endpoint": "success",
+      "count": 130,
+      "denominator": 240,
+      "rate": 0.5416666666666666,
+      "ci_low": 0.49166666666666664,
+      "ci_high": 0.5875
+    },
+    {
+      "group": "static_constriction",
+      "arm": "G1E0",
+      "endpoint": "success",
+      "count": 231,
+      "denominator": 240,
+      "rate": 0.9625,
+      "ci_low": 0.9375,
+      "ci_high": 0.9833333333333333
+    },
+    {
+      "group": "static_constriction",
+      "arm": "G1E1",
+      "endpoint": "success",
+      "count": 233,
+      "denominator": 240,
+      "rate": 0.9708333333333333,
+      "ci_low": 0.95,
+      "ci_high": 0.9875
+    },
+    {
+      "group": "static_constriction",
+      "arm": "G0E0",
+      "endpoint": "pedestrian_collision",
+      "count": 10,
+      "denominator": 240,
+      "rate": 0.041666666666666664,
+      "ci_low": 0.020833333333333332,
+      "ci_high": 0.06666666666666667
+    },
+    {
+      "group": "static_constriction",
+      "arm": "G0E1",
+      "endpoint": "pedestrian_collision",
+      "count": 18,
+      "denominator": 240,
+      "rate": 0.075,
+      "ci_low": 0.041666666666666664,
+      "ci_high": 0.1125
+    },
+    {
+      "group": "static_constriction",
+      "arm": "G1E0",
+      "endpoint": "pedestrian_collision",
+      "count": 0,
+      "denominator": 240,
+      "rate": 0.0,
+      "ci_low": 0.0,
+      "ci_high": 0.0
+    },
+    {
+      "group": "static_constriction",
+      "arm": "G1E1",
+      "endpoint": "pedestrian_collision",
+      "count": 0,
+      "denominator": 240,
+      "rate": 0.0,
+      "ci_low": 0.0,
+      "ci_high": 0.0
+    },
+    {
+      "group": "static_constriction",
+      "arm": "G0E0",
+      "endpoint": "wall_collision",
+      "count": 117,
+      "denominator": 240,
+      "rate": 0.4875,
+      "ci_low": 0.44583333333333336,
+      "ci_high": 0.5333333333333333
+    },
+    {
+      "group": "static_constriction",
+      "arm": "G0E1",
+      "endpoint": "wall_collision",
+      "count": 92,
+      "denominator": 240,
+      "rate": 0.38333333333333336,
+      "ci_low": 0.3458333333333333,
+      "ci_high": 0.425
+    },
+    {
+      "group": "static_constriction",
+      "arm": "G1E0",
+      "endpoint": "wall_collision",
+      "count": 0,
+      "denominator": 240,
+      "rate": 0.0,
+      "ci_low": 0.0,
+      "ci_high": 0.0
+    },
+    {
+      "group": "static_constriction",
+      "arm": "G1E1",
+      "endpoint": "wall_collision",
+      "count": 0,
+      "denominator": 240,
+      "rate": 0.0,
+      "ci_low": 0.0,
+      "ci_high": 0.0
+    },
+    {
+      "group": "static_constriction",
+      "arm": "G0E0",
+      "endpoint": "timeout",
+      "count": 0,
+      "denominator": 240,
+      "rate": 0.0,
+      "ci_low": 0.0,
+      "ci_high": 0.0
+    },
+    {
+      "group": "static_constriction",
+      "arm": "G0E1",
+      "endpoint": "timeout",
+      "count": 0,
+      "denominator": 240,
+      "rate": 0.0,
+      "ci_low": 0.0,
+      "ci_high": 0.0
+    },
+    {
+      "group": "static_constriction",
+      "arm": "G1E0",
+      "endpoint": "timeout",
+      "count": 9,
+      "denominator": 240,
+      "rate": 0.0375,
+      "ci_low": 0.016666666666666666,
+      "ci_high": 0.0625
+    },
+    {
+      "group": "static_constriction",
+      "arm": "G1E1",
+      "endpoint": "timeout",
+      "count": 7,
+      "denominator": 240,
+      "rate": 0.029166666666666667,
+      "ci_low": 0.0125,
+      "ci_high": 0.05
+    },
+    {
+      "group": "portal",
+      "arm": "G0E0",
+      "endpoint": "success",
+      "count": 134,
+      "denominator": 210,
+      "rate": 0.6380952380952383,
+      "ci_low": 0.6047619047619047,
+      "ci_high": 0.6761904761904763
+    },
+    {
+      "group": "portal",
+      "arm": "G0E1",
+      "endpoint": "success",
+      "count": 132,
+      "denominator": 210,
+      "rate": 0.6285714285714288,
+      "ci_low": 0.5904761904761905,
+      "ci_high": 0.6714285714285715
+    },
+    {
+      "group": "portal",
+      "arm": "G1E0",
+      "endpoint": "success",
+      "count": 203,
+      "denominator": 210,
+      "rate": 0.9666666666666667,
+      "ci_low": 0.9380952380952382,
+      "ci_high": 0.9904761904761905
+    },
+    {
+      "group": "portal",
+      "arm": "G1E1",
+      "endpoint": "success",
+      "count": 206,
+      "denominator": 210,
+      "rate": 0.980952380952381,
+      "ci_low": 0.9619047619047619,
+      "ci_high": 0.9952380952380953
+    },
+    {
+      "group": "portal",
+      "arm": "G0E0",
+      "endpoint": "pedestrian_collision",
+      "count": 1,
+      "denominator": 210,
+      "rate": 0.0047619047619047615,
+      "ci_low": 0.0,
+      "ci_high": 0.014285714285714285
+    },
+    {
+      "group": "portal",
+      "arm": "G0E1",
+      "endpoint": "pedestrian_collision",
+      "count": 0,
+      "denominator": 210,
+      "rate": 0.0,
+      "ci_low": 0.0,
+      "ci_high": 0.0
+    },
+    {
+      "group": "portal",
+      "arm": "G1E0",
+      "endpoint": "pedestrian_collision",
+      "count": 0,
+      "denominator": 210,
+      "rate": 0.0,
+      "ci_low": 0.0,
+      "ci_high": 0.0
+    },
+    {
+      "group": "portal",
+      "arm": "G1E1",
+      "endpoint": "pedestrian_collision",
+      "count": 0,
+      "denominator": 210,
+      "rate": 0.0,
+      "ci_low": 0.0,
+      "ci_high": 0.0
+    },
+    {
+      "group": "portal",
+      "arm": "G0E0",
+      "endpoint": "wall_collision",
+      "count": 73,
+      "denominator": 210,
+      "rate": 0.34761904761904766,
+      "ci_low": 0.3142857142857143,
+      "ci_high": 0.38095238095238104
+    },
+    {
+      "group": "portal",
+      "arm": "G0E1",
+      "endpoint": "wall_collision",
+      "count": 75,
+      "denominator": 210,
+      "rate": 0.35714285714285715,
+      "ci_low": 0.31428571428571433,
+      "ci_high": 0.3952380952380953
+    },
+    {
+      "group": "portal",
+      "arm": "G1E0",
+      "endpoint": "wall_collision",
+      "count": 0,
+      "denominator": 210,
+      "rate": 0.0,
+      "ci_low": 0.0,
+      "ci_high": 0.0
+    },
+    {
+      "group": "portal",
+      "arm": "G1E1",
+      "endpoint": "wall_collision",
+      "count": 0,
+      "denominator": 210,
+      "rate": 0.0,
+      "ci_low": 0.0,
+      "ci_high": 0.0
+    },
+    {
+      "group": "portal",
+      "arm": "G0E0",
+      "endpoint": "timeout",
+      "count": 2,
+      "denominator": 210,
+      "rate": 0.009523809523809523,
+      "ci_low": 0.0,
+      "ci_high": 0.023809523809523805
+    },
+    {
+      "group": "portal",
+      "arm": "G0E1",
+      "endpoint": "timeout",
+      "count": 3,
+      "denominator": 210,
+      "rate": 0.014285714285714285,
+      "ci_low": 0.0,
+      "ci_high": 0.033333333333333326
+    },
+    {
+      "group": "portal",
+      "arm": "G1E0",
+      "endpoint": "timeout",
+      "count": 7,
+      "denominator": 210,
+      "rate": 0.03333333333333333,
+      "ci_low": 0.009523809523809523,
+      "ci_high": 0.06190476190476189
+    },
+    {
+      "group": "portal",
+      "arm": "G1E1",
+      "endpoint": "timeout",
+      "count": 4,
+      "denominator": 210,
+      "rate": 0.019047619047619046,
+      "ci_low": 0.0047619047619047615,
+      "ci_high": 0.03809523809523809
+    },
+    {
+      "group": "crowding_control",
+      "arm": "G0E0",
+      "endpoint": "success",
+      "count": 51,
+      "denominator": 90,
+      "rate": 0.5666666666666667,
+      "ci_low": 0.4888888888888888,
+      "ci_high": 0.6444444444444444
+    },
+    {
+      "group": "crowding_control",
+      "arm": "G0E1",
+      "endpoint": "success",
+      "count": 44,
+      "denominator": 90,
+      "rate": 0.4888888888888889,
+      "ci_low": 0.4,
+      "ci_high": 0.5666666666666667
+    },
+    {
+      "group": "crowding_control",
+      "arm": "G1E0",
+      "endpoint": "success",
+      "count": 49,
+      "denominator": 90,
+      "rate": 0.5444444444444443,
+      "ci_low": 0.46666666666666673,
+      "ci_high": 0.6111111111111112
+    },
+    {
+      "group": "crowding_control",
+      "arm": "G1E1",
+      "endpoint": "success",
+      "count": 44,
+      "denominator": 90,
+      "rate": 0.48888888888888893,
+      "ci_low": 0.41111111111111115,
+      "ci_high": 0.5555555555555556
+    },
+    {
+      "group": "crowding_control",
+      "arm": "G0E0",
+      "endpoint": "pedestrian_collision",
+      "count": 3,
+      "denominator": 90,
+      "rate": 0.03333333333333333,
+      "ci_low": 0.0,
+      "ci_high": 0.07777777777777777
+    },
+    {
+      "group": "crowding_control",
+      "arm": "G0E1",
+      "endpoint": "pedestrian_collision",
+      "count": 6,
+      "denominator": 90,
+      "rate": 0.06666666666666667,
+      "ci_low": 0.02222222222222222,
+      "ci_high": 0.12222222222222222
+    },
+    {
+      "group": "crowding_control",
+      "arm": "G1E0",
+      "endpoint": "pedestrian_collision",
+      "count": 3,
+      "denominator": 90,
+      "rate": 0.03333333333333333,
+      "ci_low": 0.0,
+      "ci_high": 0.07777777777777777
+    },
+    {
+      "group": "crowding_control",
+      "arm": "G1E1",
+      "endpoint": "pedestrian_collision",
+      "count": 0,
+      "denominator": 90,
+      "rate": 0.0,
+      "ci_low": 0.0,
+      "ci_high": 0.0
+    },
+    {
+      "group": "crowding_control",
+      "arm": "G0E0",
+      "endpoint": "wall_collision",
+      "count": 0,
+      "denominator": 90,
+      "rate": 0.0,
+      "ci_low": 0.0,
+      "ci_high": 0.0
+    },
+    {
+      "group": "crowding_control",
+      "arm": "G0E1",
+      "endpoint": "wall_collision",
+      "count": 0,
+      "denominator": 90,
+      "rate": 0.0,
+      "ci_low": 0.0,
+      "ci_high": 0.0
+    },
+    {
+      "group": "crowding_control",
+      "arm": "G1E0",
+      "endpoint": "wall_collision",
+      "count": 0,
+      "denominator": 90,
+      "rate": 0.0,
+      "ci_low": 0.0,
+      "ci_high": 0.0
+    },
+    {
+      "group": "crowding_control",
+      "arm": "G1E1",
+      "endpoint": "wall_collision",
+      "count": 0,
+      "denominator": 90,
+      "rate": 0.0,
+      "ci_low": 0.0,
+      "ci_high": 0.0
+    },
+    {
+      "group": "crowding_control",
+      "arm": "G0E0",
+      "endpoint": "timeout",
+      "count": 36,
+      "denominator": 90,
+      "rate": 0.40000000000000013,
+      "ci_low": 0.33333333333333337,
+      "ci_high": 0.47777777777777786
+    },
+    {
+      "group": "crowding_control",
+      "arm": "G0E1",
+      "endpoint": "timeout",
+      "count": 40,
+      "denominator": 90,
+      "rate": 0.4444444444444445,
+      "ci_low": 0.36666666666666664,
+      "ci_high": 0.5333333333333333
+    },
+    {
+      "group": "crowding_control",
+      "arm": "G1E0",
+      "endpoint": "timeout",
+      "count": 38,
+      "denominator": 90,
+      "rate": 0.4222222222222223,
+      "ci_low": 0.35555555555555557,
+      "ci_high": 0.488888888888889
+    },
+    {
+      "group": "crowding_control",
+      "arm": "G1E1",
+      "endpoint": "timeout",
+      "count": 46,
+      "denominator": 90,
+      "rate": 0.5111111111111111,
+      "ci_low": 0.4444444444444444,
+      "ci_high": 0.5888888888888888
+    }
+  ],
+  "effects": [
+    {
+      "group": "static_constriction",
+      "endpoint": "success",
+      "effect": "guard",
+      "difference": 0.46041666666666664,
+      "ci_low": 0.425,
+      "ci_high": 0.5
+    },
+    {
+      "group": "static_constriction",
+      "endpoint": "success",
+      "effect": "escape",
+      "difference": 0.03958333333333333,
+      "ci_low": 0.0125,
+      "ci_high": 0.06875
+    },
+    {
+      "group": "static_constriction",
+      "endpoint": "success",
+      "effect": "interaction",
+      "difference": -0.0625,
+      "ci_low": -0.1125,
+      "ci_high": -0.0125
+    },
+    {
+      "group": "static_constriction",
+      "endpoint": "pedestrian_collision",
+      "effect": "guard",
+      "difference": -0.058333333333333334,
+      "ci_low": -0.0875,
+      "ci_high": -0.03333333333333333
+    },
+    {
+      "group": "static_constriction",
+      "endpoint": "pedestrian_collision",
+      "effect": "escape",
+      "difference": 0.016666666666666666,
+      "ci_low": 0.0020833333333333333,
+      "ci_high": 0.03125
+    },
+    {
+      "group": "static_constriction",
+      "endpoint": "pedestrian_collision",
+      "effect": "interaction",
+      "difference": -0.03333333333333333,
+      "ci_low": -0.0625,
+      "ci_high": -0.004166666666666667
+    },
+    {
+      "group": "static_constriction",
+      "endpoint": "wall_collision",
+      "effect": "guard",
+      "difference": -0.4354166666666667,
+      "ci_low": -0.47291666666666665,
+      "ci_high": -0.4
+    },
+    {
+      "group": "static_constriction",
+      "endpoint": "wall_collision",
+      "effect": "escape",
+      "difference": -0.052083333333333336,
+      "ci_low": -0.075,
+      "ci_high": -0.03125
+    },
+    {
+      "group": "static_constriction",
+      "endpoint": "wall_collision",
+      "effect": "interaction",
+      "difference": 0.10416666666666667,
+      "ci_low": 0.0625,
+      "ci_high": 0.15
+    },
+    {
+      "group": "static_constriction",
+      "endpoint": "timeout",
+      "effect": "guard",
+      "difference": 0.03333333333333333,
+      "ci_low": 0.01875,
+      "ci_high": 0.05
+    },
+    {
+      "group": "static_constriction",
+      "endpoint": "timeout",
+      "effect": "escape",
+      "difference": -0.004166666666666667,
+      "ci_low": -0.01875,
+      "ci_high": 0.008333333333333333
+    },
+    {
+      "group": "static_constriction",
+      "endpoint": "timeout",
+      "effect": "interaction",
+      "difference": -0.008333333333333333,
+      "ci_low": -0.0375,
+      "ci_high": 0.016666666666666666
+    },
+    {
+      "group": "portal",
+      "endpoint": "success",
+      "effect": "guard",
+      "difference": 0.34047619047619054,
+      "ci_low": 0.30714285714285716,
+      "ci_high": 0.3714285714285715
+    },
+    {
+      "group": "portal",
+      "endpoint": "success",
+      "effect": "escape",
+      "difference": 0.0023809523809523742,
+      "ci_low": -0.021428571428571443,
+      "ci_high": 0.028571428571428567
+    },
+    {
+      "group": "portal",
+      "endpoint": "success",
+      "effect": "interaction",
+      "difference": 0.023809523809523826,
+      "ci_low": -0.014285714285714275,
+      "ci_high": 0.06190476190476191
+    },
+    {
+      "group": "portal",
+      "endpoint": "pedestrian_collision",
+      "effect": "guard",
+      "difference": -0.0023809523809523807,
+      "ci_low": -0.007142857142857143,
+      "ci_high": 0.0
+    },
+    {
+      "group": "portal",
+      "endpoint": "pedestrian_collision",
+      "effect": "escape",
+      "difference": -0.0023809523809523807,
+      "ci_low": -0.007142857142857143,
+      "ci_high": 0.0
+    },
+    {
+      "group": "portal",
+      "endpoint": "pedestrian_collision",
+      "effect": "interaction",
+      "difference": 0.0047619047619047615,
+      "ci_low": 0.0,
+      "ci_high": 0.014285714285714285
+    },
+    {
+      "group": "portal",
+      "endpoint": "wall_collision",
+      "effect": "guard",
+      "difference": -0.3523809523809524,
+      "ci_low": -0.38333333333333336,
+      "ci_high": -0.3190476190476191
+    },
+    {
+      "group": "portal",
+      "endpoint": "wall_collision",
+      "effect": "escape",
+      "difference": 0.0047619047619047615,
+      "ci_low": -0.014285714285714285,
+      "ci_high": 0.021428571428571425
+    },
+    {
+      "group": "portal",
+      "endpoint": "wall_collision",
+      "effect": "interaction",
+      "difference": -0.009523809523809523,
+      "ci_low": -0.04285714285714285,
+      "ci_high": 0.02857142857142857
+    },
+    {
+      "group": "portal",
+      "endpoint": "timeout",
+      "effect": "guard",
+      "difference": 0.014285714285714285,
+      "ci_low": 0.0023809523809523807,
+      "ci_high": 0.028571428571428567
+    },
+    {
+      "group": "portal",
+      "endpoint": "timeout",
+      "effect": "escape",
+      "difference": -0.0047619047619047615,
+      "ci_low": -0.019047619047619046,
+      "ci_high": 0.009523809523809523
+    },
+    {
+      "group": "portal",
+      "endpoint": "timeout",
+      "effect": "interaction",
+      "difference": -0.019047619047619046,
+      "ci_low": -0.04285714285714285,
+      "ci_high": 0.0
+    },
+    {
+      "group": "crowding_control",
+      "endpoint": "success",
+      "effect": "guard",
+      "difference": -0.011111111111111098,
+      "ci_low": -0.06666666666666667,
+      "ci_high": 0.05000000000000002
+    },
+    {
+      "group": "crowding_control",
+      "endpoint": "success",
+      "effect": "escape",
+      "difference": -0.06666666666666665,
+      "ci_low": -0.15,
+      "ci_high": 0.011111111111111127
+    },
+    {
+      "group": "crowding_control",
+      "endpoint": "success",
+      "effect": "interaction",
+      "difference": 0.022222222222222216,
+      "ci_low": -0.055555555555555566,
+      "ci_high": 0.08888888888888889
+    },
+    {
+      "group": "crowding_control",
+      "endpoint": "pedestrian_collision",
+      "effect": "guard",
+      "difference": -0.03333333333333333,
+      "ci_low": -0.07222222222222222,
+      "ci_high": 0.0
+    },
+    {
+      "group": "crowding_control",
+      "endpoint": "pedestrian_collision",
+      "effect": "escape",
+      "difference": 0.0,
+      "ci_low": -0.02222222222222222,
+      "ci_high": 0.02222222222222222
+    },
+    {
+      "group": "crowding_control",
+      "endpoint": "pedestrian_collision",
+      "effect": "interaction",
+      "difference": -0.06666666666666667,
+      "ci_low": -0.13333333333333333,
+      "ci_high": -0.02222222222222222
+    },
+    {
+      "group": "crowding_control",
+      "endpoint": "wall_collision",
+      "effect": "guard",
+      "difference": 0.0,
+      "ci_low": 0.0,
+      "ci_high": 0.0
+    },
+    {
+      "group": "crowding_control",
+      "endpoint": "wall_collision",
+      "effect": "escape",
+      "difference": 0.0,
+      "ci_low": 0.0,
+      "ci_high": 0.0
+    },
+    {
+      "group": "crowding_control",
+      "endpoint": "wall_collision",
+      "effect": "interaction",
+      "difference": 0.0,
+      "ci_low": 0.0,
+      "ci_high": 0.0
+    },
+    {
+      "group": "crowding_control",
+      "endpoint": "timeout",
+      "effect": "guard",
+      "difference": 0.04444444444444447,
+      "ci_low": 7.401486830834377e-18,
+      "ci_high": 0.08888888888888889
+    },
+    {
+      "group": "crowding_control",
+      "endpoint": "timeout",
+      "effect": "escape",
+      "difference": 0.06666666666666668,
+      "ci_low": -0.011111111111111105,
+      "ci_high": 0.15
+    },
+    {
+      "group": "crowding_control",
+      "endpoint": "timeout",
+      "effect": "interaction",
+      "difference": 0.044444444444444446,
+      "ci_low": -0.03333333333333334,
+      "ci_high": 0.13333333333333333
+    }
+  ]
+}

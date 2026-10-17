@@ -44,8 +44,11 @@ def test_law_direction_cutoff_and_multiplier():
 
 def test_reductions_ignore_despawned_rows():
     forces = np.array([[[3, 4], [np.nan, np.nan]], [[0, 0], [0, 2]]])
-    result = robot_force_reductions(forces, dt=0.5, reference=3)
+    result = robot_force_reductions(
+        forces, dt=0.5, reference=3, presence=np.array([[True, False], [True, True]])
+    )
     assert result == {
+        "robot_force_invalid_present_samples": 0,
         "robot_force_impulse_total": 3.5,
         "robot_force_impulse_per_exposed_ped": 1.75,
         "robot_force_peak": 5,

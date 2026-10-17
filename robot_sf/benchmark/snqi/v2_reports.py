@@ -550,6 +550,12 @@ def compact_report_episode(
     scored = score_episode(episode, spec, expected_algorithm=expected_algorithm)
     compact_metrics = {source: scored["metrics"].get(source) for source in spec.sources.values()}
     compact_metrics["metric_schema_version"] = metric_schema_version(scored)
+    if "metric_definitions_sha256" in scored["metrics"]:
+        compact_metrics["metric_definitions_sha256"] = scored["metrics"][
+            "metric_definitions_sha256"
+        ]
+    validity_key = spec.force_source.removesuffix("_impulse_total") + "_invalid_present_samples"
+    compact_metrics[validity_key] = scored["metrics"][validity_key]
     compact_metrics["robot_force_metadata"] = compact_robot_force_metadata(
         scored["metrics"], spec.force_source
     )

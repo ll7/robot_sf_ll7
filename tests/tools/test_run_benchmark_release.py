@@ -31,11 +31,16 @@ _ASSERT_PUBLICATION_SPAWN_PREFLIGHT_IDENTITY = (
 )
 
 
+@pytest.fixture
+def synthetic_execution_admission(monkeypatch):
+    """Only named synthetic CLI tests waive real sealed source admission."""
+    monkeypatch.setattr(run_benchmark_release, "guard_manifest_execution", lambda *_a, **_kw: None)
+
+
 @pytest.fixture(autouse=True)
 def _default_spawn_matrix_preflight_passes(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Stub execution admission for synthetic publication/campaign test doubles."""
-    # Real-byte D-049 guard coverage is in test_sealed_execution_policy.py.
-    monkeypatch.setattr(run_benchmark_release, "guard_manifest_execution", lambda *_a, **_kw: None)
+    """Stub spawn/report preflight for synthetic publication/campaign test doubles."""
+    # Execution admission remains active unless a test explicitly requests its stub.
     monkeypatch.setattr(
         run_benchmark_release,
         "_campaign_id",
@@ -976,6 +981,7 @@ def test_local_stress_run_rejects_dirty_worktree(monkeypatch, capsys, tmp_path: 
     assert json.loads(capsys.readouterr().out)["status"] == "stress_smoke_source_rejected"
 
 
+@pytest.mark.usefixtures("synthetic_execution_admission")
 def test_release_run_rejects_historical_campaign_artifact_identity(
     monkeypatch, capsys, tmp_path: Path
 ) -> None:
@@ -1037,6 +1043,7 @@ def test_release_run_rejects_historical_campaign_artifact_identity(
     assert "historical release identity" in payload["status_reason"]
 
 
+@pytest.mark.usefixtures("synthetic_execution_admission")
 def test_publication_identity_rejection_does_not_log_campaign_paths(
     monkeypatch, capsys, tmp_path: Path
 ) -> None:
@@ -1124,6 +1131,7 @@ def test_publication_identity_rejection_does_not_log_campaign_paths(
     assert "campaign_root" not in persisted
 
 
+@pytest.mark.usefixtures("synthetic_execution_admission")
 def test_release_preflight_uses_camera_ready_preflight(monkeypatch, capsys, tmp_path: Path) -> None:
     """Preflight mode should validate the manifest and emit preflight artifact paths."""
     manifest = SimpleNamespace(
@@ -1200,6 +1208,7 @@ def test_release_preflight_uses_camera_ready_preflight(monkeypatch, capsys, tmp_
     assert payload["campaign_id"] == "cid"
 
 
+@pytest.mark.usefixtures("synthetic_execution_admission")
 def test_release_preflight_admits_staged_receipt_separately_from_metadata_diagnostic(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -1291,6 +1300,7 @@ def test_release_preflight_admits_staged_receipt_separately_from_metadata_diagno
     }
 
 
+@pytest.mark.usefixtures("synthetic_execution_admission")
 def test_release_preflight_rejects_invalid_staged_receipt_before_campaign_setup(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -1393,6 +1403,7 @@ def test_release_run_fails_closed_on_invalid_manifest(monkeypatch, capsys) -> No
     assert payload["evidence_status"] == "blocked"
 
 
+@pytest.mark.usefixtures("synthetic_execution_admission")
 def test_release_run_stops_before_campaign_when_spawn_matrix_is_blocked(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -1542,6 +1553,7 @@ def test_release_run_reports_orca_preflight_failure_as_structured_json(
     assert "rvo2" in payload["release_status_reason"]
 
 
+@pytest.mark.usefixtures("synthetic_execution_admission")
 def test_release_run_exports_publication_only_after_benchmark_success(
     monkeypatch,
     capsys,
@@ -1666,6 +1678,7 @@ def test_release_run_exports_publication_only_after_benchmark_success(
     assert publication_preflight_called["value"] is True
 
 
+@pytest.mark.usefixtures("synthetic_execution_admission")
 def test_release_run_preserves_campaign_status_for_accepted_unavailable_only(
     monkeypatch,
     capsys,
@@ -1775,6 +1788,7 @@ def test_release_run_preserves_campaign_status_for_accepted_unavailable_only(
     assert release_result["release_exit_code"] == 3
 
 
+@pytest.mark.usefixtures("synthetic_execution_admission")
 def test_runtime_smoke_skips_publication_when_config_disables_export(
     monkeypatch,
     capsys,
@@ -1834,6 +1848,7 @@ def test_runtime_smoke_skips_publication_when_config_disables_export(
     assert payload["publication_preflight_status"] == "not_requested"
 
 
+@pytest.mark.usefixtures("synthetic_execution_admission")
 def test_diagnostic_stress_success_is_never_release_success(
     monkeypatch,
     capsys,
@@ -1987,6 +2002,7 @@ def test_future_release_rejects_checkout_drift_from_manifest_source(monkeypatch,
     assert payload["release_benchmark_success"] is False
 
 
+@pytest.mark.usefixtures("synthetic_execution_admission")
 def test_full_release_acceptance_failure_blocks_publication(
     monkeypatch,
     capsys,
@@ -2224,6 +2240,7 @@ def test_public_campaign_result_rejects_nested_private_paths() -> None:
 @pytest.mark.parametrize(
     "gate", ["manifest", "runtime_smoke", "checkpoint_identity", "resume", "privacy"]
 )
+@pytest.mark.usefixtures("synthetic_execution_admission")
 def test_doorway_slice_retains_all_strict_runner_gates(monkeypatch, capsys, tmp_path, gate):
     """A slice kind cannot bypass any strict runner gate before accepting artifacts."""
     manifest, cfg, checkpoint, smoke = _rehearsal_fixture(tmp_path)
@@ -2543,3 +2560,55 @@ def test_development_identity_uses_shared_runner_without_release_success(
     assert (
         ("smoke", True) in calls if not smoke_run else not any(call[0] == "smoke" for call in calls)
     )
+
+
+def test_default_runner_fixture_keeps_execution_guard():
+    """Synthetic report defaults must not waive admission for unrelated tests."""
+    from robot_sf.benchmark.spawn_preflight import guard_manifest_execution
+
+    assert run_benchmark_release.guard_manifest_execution is guard_manifest_execution
+
+
+@pytest.mark.usefixtures("synthetic_execution_admission")
+@pytest.mark.parametrize("mode", ["preflight", "run"])
+def test_release_cli_reports_invalid_snqi_seeds_before_setup(monkeypatch, capsys, mode):
+    """Both modes reject the real seed commitment without a traceback or any campaign step."""
+    from robot_sf.benchmark.camera_ready import _config
+    from tests.unit.benchmark.test_snqi_v2 import fixture_spec
+
+    manifest = SimpleNamespace(canonical_campaign_config_path=Path("synthetic.yaml"))
+    cfg = SimpleNamespace(snqi_v2_spec=fixture_spec())
+    monkeypatch.setattr(run_benchmark_release, "load_release_manifest", lambda path: manifest)
+    monkeypatch.setattr(run_benchmark_release, "load_campaign_config", lambda path: cfg)
+    monkeypatch.setattr(run_benchmark_release, "check_orca_rvo2_preflight", lambda cfg: None)
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "validate_release_manifest",
+        lambda *args, **kwargs: {"status": "valid"},
+    )
+    monkeypatch.setattr(
+        run_benchmark_release, "build_resolved_release_manifest", lambda *args, **kwargs: {}
+    )
+    monkeypatch.setattr(
+        _config, "_load_campaign_scenarios", lambda cfg: [{"name": "synthetic", "seeds": [1001]}]
+    )
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("campaign setup must not run after a rejected seed commitment")
+
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "_preflight_checkpoint_admission",
+        lambda *args: {"status": "admitted"},
+    )
+    monkeypatch.setattr(run_benchmark_release, "prepare_campaign_preflight", forbidden)
+    monkeypatch.setattr(run_benchmark_release, "run_campaign", forbidden)
+    code = run_benchmark_release.main(["--manifest", "synthetic.yaml", "--mode", mode])
+    assert code == 2
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "snqi_v2_evaluation_seeds_rejected"
+    assert (
+        payload["status_reason"] == "SNQI-v2 evaluation seeds overlap calibration/development split"
+    )
+    assert payload["campaign_execution_status"] == "not_started"
+    assert payload["release_exit_code"] == 2

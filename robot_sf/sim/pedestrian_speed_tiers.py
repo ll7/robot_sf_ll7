@@ -89,6 +89,7 @@ def sample_desired_pedestrian_speeds(
     std: float | None = None,
     high: float = PED_SPEED_TIER_HIGH,
     seed: int | None = None,
+    sampling_metadata: dict | None = None,
 ) -> np.ndarray:
     """Sample per-pedestrian desired walking speeds from a truncated normal distribution.
 
@@ -103,13 +104,20 @@ def sample_desired_pedestrian_speeds(
             (0.2 m/s), matching the pysf ``DEFAULT_DESIRED_SPEED_STD`` constant.
         high: Inclusive upper-bound clip for the distribution (m/s).
         seed: Optional RNG seed for deterministic sampling.
+        sampling_metadata: Optional runtime receipt populated with the resolved sampler inputs.
 
     Returns:
         np.ndarray: Non-negative desired speeds, shape ``(num_peds,)``.
     """
-    if num_peds <= 0:
+    if num_peds <= 0 and sampling_metadata is None:
         return np.zeros(0, dtype=float)
     std_eff = PED_SPEED_TIER_STD if std is None else float(std)
+    if sampling_metadata is not None:
+        sampling_metadata.update(
+            mean_m_s=float(mean), sd_m_s=float(std_eff), cap_m_s=float(high), seed=seed
+        )
+    if num_peds <= 0:
+        return np.zeros(0, dtype=float)
     rng = np.random.default_rng(seed)
     if std_eff > 0.0:
         speeds = rng.normal(loc=float(mean), scale=std_eff, size=num_peds)

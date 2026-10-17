@@ -46,6 +46,8 @@ from pysocialforce.forces import Force as PySFForce
 from pysocialforce.forces import ObstacleForce, SocialForce
 from pysocialforce.simulator import make_forces as pysf_make_forces
 
+from robot_sf.benchmark.runtime_seed_guard import check_seed_config, check_simulation_seed
+
 if TYPE_CHECKING:
     from collections.abc import Callable
 
@@ -232,6 +234,7 @@ def _enforce_ped_desired_speeds(peds, settings: SimulationSettings) -> None:
     ``max_speeds = max_speed_multiplier * initial_speeds`` also yields the correct values
     on every subsequent ``_update_state`` call.
     """
+    peds.effective_desired_speed_parameters = {}
     if settings.desired_speed_mean is None:
         return
     desired_speeds = sample_desired_pedestrian_speeds(
@@ -239,6 +242,7 @@ def _enforce_ped_desired_speeds(peds, settings: SimulationSettings) -> None:
         mean=settings.desired_speed_mean,
         std=settings.desired_speed_std,
         seed=settings.desired_speed_seed,
+        sampling_metadata=peds.effective_desired_speed_parameters,
     )
     # Direct assignment: works with both new pysf (``assign_desired_speeds`` already ran,
     # this overwrites with identical values) and old pysf (no explicit-speed support).
@@ -514,6 +518,8 @@ def _build_pysf_simulation(  # noqa: PLR0913
         Tuple of ``(pysf_sim, pysf_state, groups, peds_behaviors,
         pedestrian_response_multipliers)`` for the caller to assign to its instance.
     """
+    check_seed_config(config, boundary="pedestrian seeding")
+    check_simulation_seed(response_law_seed, boundary="pedestrian response seeding")
     # Independent streams never inspect or mutate NumPy's process-global RNG.
     streams = np.random.SeedSequence(_pedestrian_stream_seed(config)).spawn(4)
     config = replace(
@@ -551,6 +557,8 @@ def _build_pysf_simulation(  # noqa: PLR0913
         config.peds_per_area_m2,
         config.max_peds_per_group,
         group_member_probs=_group_member_probabilities(config),
+        group_allocation_mode=config.group_allocation_mode,
+        group_fraction=config.groups,
         rng=np.random.default_rng(config.route_spawn_seed),
         route_spawn_distribution=config.route_spawn_distribution,
         route_spawn_jitter_frac=config.route_spawn_jitter_frac,
@@ -720,6 +728,7 @@ class Simulator:
         initializes robot navigation paths; and resets all agents to start state.
         Route spawning honors SimulationSettings route spawn options when provided.
         """
+        check_seed_config(self.config, boundary="simulator construction")
         # The ``peds_have_obstacle_forces is None`` warning-and-default-to-False guard
         # stays in Simulator (issue #6465): it mutates ``self`` before the shared
         # :func:`_build_pysf_simulation` factory reads the resolved value.
@@ -826,6 +835,8 @@ class Simulator:
         Robots and their navigators are left intact; the caller runs the normal
         reset flow afterwards.
         """
+        check_simulation_seed(seed, boundary="repopulate_crowd")
+        check_seed_config(self.config, boundary="repopulate_crowd")
         if not self._pysf_build_kwargs:
             raise RuntimeError("repopulate_crowd() requires construction-time build args")
         if seed is not None:
@@ -1841,6 +1852,7 @@ class Simulator:
         their destination goal. Updates are necessary for episodic reset
         or continuous replay scenarios.
         """
+        check_seed_config(self.config, boundary="simulator reset")
         self._reset_social_force_state()
         self._oracle_episode_index += 1
         self._oracle_episode_id = f"simulator-episode-{self._oracle_episode_index}"
@@ -2029,6 +2041,7 @@ class Simulator:
         Args:
             actions: Control actions for each robot (velocity, angular velocity, etc.).
         """
+        check_seed_config(self.config, boundary="simulator step")
         self._validate_robot_action_count(actions)
         trace_enabled = bool(
             getattr(getattr(self, "config", None), "oracle_force_trace_enabled", False)
@@ -2143,6 +2156,7 @@ def init_simulators(
     Returns:
         list[Simulator]: Simulator instances sized to cover ``num_robots`` robots.
     """
+    check_seed_config(env_config, boundary="init_simulators")
     if not isinstance(map_def, MapDefinition):
         raise TypeError(f"map_def should be of type MapDefinition, got {type(map_def)}")
 
@@ -2238,6 +2252,7 @@ class PedSimulator(Simulator):
         ego pedestrian state, initializes the physics simulator with pedestrian
         forces and robot interactions, and prepares robot navigation paths.
         """
+        check_seed_config(self.config, boundary="simulator construction")
         configured_policy = getattr(self.config, "goal_completion_policy", None)
         map_policy = getattr(self.map_def, "goal_completion_policy", None)
         self.goal_completion_policy = normalize_goal_completion_policy(
@@ -2374,6 +2389,7 @@ class PedSimulator(Simulator):
         the ego pedestrian at a random valid location 10-15 units away
         from the first robot.
         """
+        check_seed_config(self.config, boundary="simulator reset")
         if not hasattr(self, "_ego_rng"):
             self._ego_rng = np.random.default_rng(
                 np.random.SeedSequence(_pedestrian_stream_seed(self.config), spawn_key=(4,))
@@ -2437,6 +2453,7 @@ class PedSimulator(Simulator):
             actions: Control actions for each robot.
             ego_ped_actions: Control actions for the ego pedestrian.
         """
+        check_seed_config(self.config, boundary="simulator step")
         self._validate_robot_action_count(actions)
         self._validate_ego_ped_action_count(ego_ped_actions)
         trace_enabled = bool(
@@ -2569,6 +2586,7 @@ def init_ped_simulators(
     Returns:
         Single-element list containing initialized PedSimulator instance.
     """
+    check_seed_config(env_config, boundary="init_ped_simulators")
 
     # Calculate the proximity to the goal based on the robot radius and goal radius
     goal_proximity = env_config.robot_config.radius + env_config.sim_config.goal_radius

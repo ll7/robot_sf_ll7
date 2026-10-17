@@ -102,7 +102,22 @@ def bind_acquired_anchors(
         raise ValueError("SNQI-v2 acquisition requires development seeds 1001/1002")
     if derived != parse_v2_json(anchors_bytes):
         raise ValueError("SNQI-v2 supplied anchors differ from acquired custody")
-    spec = load_snqi_v2_spec(binding["weights_path"], anchors_path, binding["family_path"])
+    from robot_sf.benchmark.camera_ready._config import _load_campaign_scenarios  # noqa: PLC0415
+
+    schedule = (
+        {
+            scenario["name"]: scenario["simulation_config"]["max_episode_steps"]
+            for scenario in _load_campaign_scenarios(cfg)
+        }
+        if derived.get("metric_definitions_sha256") is not None
+        else None
+    )
+    spec = load_snqi_v2_spec(
+        binding["weights_path"],
+        anchors_path,
+        binding["family_path"],
+        evaluation_scenario_horizons=schedule,
+    )
     if any(spec.hashes[name] != binding[f"{name}_sha256"] for name in ("weights", "family")):
         raise ValueError("SNQI-v2 scoring assets changed after source binding")
     if sha256_file(anchors_path) != spec.hashes["anchors"]:

@@ -10,13 +10,31 @@ from tests.support.heldout_seed_guard import pytest_collection_modifyitems
 from tests.support.seedguard_boundaries import HeldoutSeedError, check_simulation_seed
 
 # seed-holdout: synthetic-fixture begin
+SENTINEL = 1030
+_PROBE_SETUP = (
+    "import sys\n"
+    "guard = sys.modules.get('tests.support.seedguard_boundaries')\n"
+    "if guard is None:\n    from tests.support import seedguard_boundaries as guard\n"
+    "guard.HELD_OUT_SEEDS = frozenset({1030})\n"
+    "guard.FALLBACK_HELD_OUT_SEEDS = frozenset({1030})\n"
+    "guard._POLICY_RESOLVED = True\n"
+)
+
 # Boundary probes abort before construction/reset/step; no evaluation episode is run.
 
 
 @pytest.fixture(autouse=True)
-def isolate_probe_audit(monkeypatch):
+def isolate_probe_audit(monkeypatch, request):
     """Expected rejections in these sentinel probes are not suite violations."""
     monkeypatch.delenv("ROBOT_SF_PYTEST_SEED_AUDIT", raising=False)
+    if request.node.name != "test_seed_bands_matches_canonical_policy_when_available":
+        from tests.support import seedguard_boundaries as guard
+
+        monkeypatch.setattr(guard, "HELD_OUT_SEEDS", guard.resolve_held_out_seeds() | {SENTINEL})
+        monkeypatch.setattr(
+            guard, "FALLBACK_HELD_OUT_SEEDS", guard.FALLBACK_HELD_OUT_SEEDS | {SENTINEL}
+        )
+        monkeypatch.setattr(guard, "_POLICY_RESOLVED", True)
 
 
 def test_factory_rejects_before_rng_or_construction(monkeypatch):
@@ -26,11 +44,11 @@ def test_factory_rejects_before_rng_or_construction(monkeypatch):
     calls = []
     monkeypatch.setattr(environment_factory.random, "seed", calls.append)
     with pytest.raises(HeldoutSeedError, match="environment_factory"):
-        environment_factory._apply_global_seed(111)
+        environment_factory._apply_global_seed(SENTINEL)
     assert calls == []
 
 
-@pytest.mark.parametrize("seed", [140, 50036])
+@pytest.mark.parametrize("seed", [SENTINEL])
 @pytest.mark.parametrize("kind", ["robot", "pedestrian"])
 def test_reset_rejects_before_reset_body_or_first_step(kind, seed, monkeypatch):
     """Uninitialized instances prove no reset work is reached; step is a spy."""
@@ -56,7 +74,7 @@ def test_simulator_rejects_before_population(field):
 
     with pytest.raises(HeldoutSeedError, match=f"simulator.{field}"):
         _build_pysf_simulation(
-            config=SimpleNamespace(**{field: 123}),
+            config=SimpleNamespace(**{field: SENTINEL}),
             map_def=None,
             robots=[],
             robot_pose_provider=lambda: [],
@@ -69,7 +87,7 @@ def test_map_runner_rejects_before_environment_factory():
     from robot_sf.benchmark.map_runner.map_runner_episode import _setup_and_run_step_loop
 
     with pytest.raises(HeldoutSeedError, match="map_runner.episode"):
-        _setup_and_run_step_loop(SimpleNamespace(seed=120))
+        _setup_and_run_step_loop(SimpleNamespace(seed=SENTINEL))
 
 
 def test_map_runner_rejects_before_policy_or_noise_setup():
@@ -77,10 +95,10 @@ def test_map_runner_rejects_before_policy_or_noise_setup():
     from robot_sf.benchmark.map_runner.map_runner_episode import run_map_episode
 
     with pytest.raises(HeldoutSeedError, match="map_runner.episode"):
-        run_map_episode({}, 50036)
+        run_map_episode({}, SENTINEL)
 
 
-@pytest.mark.parametrize("seed", [None, 110, 141, 1001, 1030])
+@pytest.mark.parametrize("seed", [None, 110, 141, 1001, 1029])
 def test_other_seeds_are_allowed(seed):
     check_simulation_seed(seed, boundary="probe")
 
@@ -101,7 +119,7 @@ def test_reasoned_marker_keeps_static_band_data_usable():
 def test_marker_cannot_allow_real_simulation(request):
     request.node.add_marker(pytest.mark.heldout_seed_ok(reason="Sentinel probe with no simulation"))
     with pytest.raises(HeldoutSeedError):
-        check_simulation_seed(111, boundary="probe")
+        check_simulation_seed(SENTINEL, boundary="probe")
 
 
 def test_child_process_inherits_guard_before_first_step(tmp_path):
@@ -113,11 +131,12 @@ def test_child_process_inherits_guard_before_first_step(tmp_path):
     code = (
         "from robot_sf.gym_env.environment_factory import make_robot_env, _apply_global_seed\n"
         "assert getattr(_apply_global_seed, '_seedguard_boundary', None) == 'environment_factory'\n"
-        "env = make_robot_env(seed=111)\n"
+        "env = make_robot_env(seed=1030)\n"
         "from pathlib import Path\nfrom robot_sf.evidence.writers import write_text\n"
         f"write_text(Path({str(stepped)!r}), '# AI-GENERATED NEEDS-REVIEW\\nstep reached')\n"
         "env.step(None)\n"
     )
+    code = _PROBE_SETUP + code
     result = subprocess.run(
         [sys.executable, "-c", code], capture_output=True, text=True, check=False
     )
@@ -137,7 +156,7 @@ def test_direct_physics_pedestrian_seed_rejects_before_sampling(monkeypatch):
         raise AssertionError("pedestrian sampler reached before guard")
 
     monkeypatch.setattr(np.random, "default_rng", forbidden_rng)
-    config = SceneConfig(desired_speed_mean=1.0, desired_speed_seed=123)
+    config = SceneConfig(desired_speed_mean=1.0, desired_speed_seed=SENTINEL)
     state = np.array([[0.0, 0.0, 0.5, 0.0, 1.0, 0.0]])
     pedestrian = object.__new__(PedState)
     with pytest.raises(HeldoutSeedError, match="pysocialforce.pedestrian_seed"):
@@ -154,8 +173,9 @@ def test_child_custom_environment_cannot_drop_guard():
         "import os\n"
         "assert os.environ.get('ROBOT_SF_PYTEST_SEED_GUARD') == '1', 'guard not propagated'\n"
         "from tests.support.seedguard_boundaries import check_simulation_seed\n"
-        "check_simulation_seed(111, boundary='child sentinel')\n"
+        "check_simulation_seed(1030, boundary='child sentinel')\n"
     )
+    code = _PROBE_SETUP + code
     result = subprocess.run(
         [sys.executable, "-c", code],
         env={},
@@ -207,10 +227,11 @@ def test_isolated_child_rejects_before_any_user_step(flag, tmp_path):
         "import sys\n"
         "assert 'robot_sf' not in sys.modules, 'project imported before pinned source setup'\n"
         "guard = sys.modules['tests.support.seedguard_boundaries']\n"
-        "guard.check_simulation_seed(50036, boundary='isolated child')\n"
+        "guard.check_simulation_seed(1030, boundary='isolated child')\n"
         "from pathlib import Path\nfrom robot_sf.evidence.writers import write_text\n"
         f"write_text(Path({str(stepped)!r}), '# AI-GENERATED NEEDS-REVIEW\\nfirst step reached')\n"
     )
+    code = _PROBE_SETUP + code
     result = subprocess.run(
         [sys.executable, flag, "-c", code], env={}, capture_output=True, text=True, check=False
     )
@@ -225,7 +246,7 @@ def test_session_guard_survives_environment_flag_mutation(monkeypatch):
     monkeypatch.delenv("ROBOT_SF_PYTEST_SEED_GUARD")
     reached = []
     with pytest.raises(HeldoutSeedError):
-        check_simulation_seed(50036, boundary="environment mutation sentinel")
+        check_simulation_seed(SENTINEL, boundary="environment mutation sentinel")
         reached.append("first step")
     assert reached == []
 
@@ -271,8 +292,8 @@ def test_static_seed_policy_marker_allows_rng_but_blocks_simulation():
 
     from robot_sf.gym_env.robot_env import RobotEnv
 
-    np.random.seed(111)
-    assert np.random.get_state()[1][0] == 111
+    np.random.seed(SENTINEL)
+    assert np.random.get_state()[1][0] == SENTINEL
     with pytest.raises(HeldoutSeedError, match="heldout_seed_ok cannot execute"):
         object.__new__(RobotEnv).reset(seed=1001)
 
@@ -283,8 +304,8 @@ def test_standalone_static_rng_only_rejects_at_simulation_boundary():
 
     from robot_sf.sim.simulator import init_simulators
 
-    np.random.seed(50036)
-    assert np.random.get_state()[1][0] == 50036
+    np.random.seed(SENTINEL)
+    assert np.random.get_state()[1][0] == SENTINEL
     with pytest.raises(HeldoutSeedError, match="legacy.numpy.random"):
         init_simulators(None, None)
 
@@ -299,6 +320,12 @@ def test_standalone_static_rng_only_rejects_at_simulation_boundary():
 def _multiprocessing_boundary_probe(connection):
     """Report missing protection before ever requesting a held-out reset."""
     import os
+
+    from tests.support import seedguard_boundaries as guard
+
+    guard.HELD_OUT_SEEDS = frozenset({SENTINEL})
+    guard.FALLBACK_HELD_OUT_SEEDS = frozenset({SENTINEL})
+    guard._POLICY_RESOLVED = True
 
     from robot_sf.gym_env.robot_env import RobotEnv
 
@@ -316,7 +343,7 @@ def _multiprocessing_boundary_probe(connection):
         RobotEnv.step = record_step
         env = object.__new__(RobotEnv)
         try:
-            env.reset(seed=50036)
+            env.reset(seed=SENTINEL)
             env.step(None)
         except HeldoutSeedError:
             result["blocked"] = True
@@ -373,7 +400,7 @@ def test_worker_guard_active(tmp_path):
     assert os.environ.get("ROBOT_SF_PYTEST_SEED_GUARD") == "1"
     assert RobotEnv.reset._seedguard_boundary == "RobotEnv.reset"
     with pytest.raises(HeldoutSeedError):
-        object.__new__(RobotEnv).reset(seed=50036)
+        object.__new__(RobotEnv).reset(seed=SENTINEL)
     proof = os.environ.get("SEEDGUARD_WORKER_PROOF")
     if proof:
         worker = os.environ.get("PYTEST_XDIST_WORKER", "main")

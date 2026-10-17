@@ -25,6 +25,7 @@ from robot_sf.benchmark.fallback_policy import (
 )
 from robot_sf.benchmark.identity.hash_utils import sha256_file
 from robot_sf.benchmark.metric_definitions import (
+    calibration_definitions_digest,
     metric_schema_version,
     require_uniform_metric_schema,
 )
@@ -55,7 +56,7 @@ class CalibrationGrid:
     """Independently declared budgets and split; diagnostics cannot become frozen assets."""
 
     scenario_horizons: Mapping[str, int]
-    seeds: tuple[int, ...] = (101, 102)
+    seeds: tuple[int, ...] = (1001, 1002)
     diagnostic: bool = False
 
 
@@ -91,7 +92,8 @@ def _validate_calibration_grid(
     return grid
 
 
-def derive_calibration_anchors(
+# Historical reconstruction is a separate explicit opt-in on this established public API.
+def derive_calibration_anchors(  # noqa: PLR0913
     episodes: Sequence[Mapping[str, Any]],
     *,
     arms: Sequence[str],
@@ -101,6 +103,7 @@ def derive_calibration_anchors(
     episodes_sha256: str,
     expected_algorithms: Mapping[str, str] | None = None,
     grid: CalibrationGrid | None = None,
+    allow_historical_unbound: bool = False,
 ) -> dict[str, Any]:
     """Derive the frozen asset only after complete source and split validation.
 
@@ -108,6 +111,11 @@ def derive_calibration_anchors(
         A JSON-serializable anchor document ready for review and commit.
     """
     metric_version = require_uniform_metric_schema(episodes)
+    definitions_digest = calibration_definitions_digest(
+        episodes, allow_historical_unbound=allow_historical_unbound
+    )
+    if definitions_digest is not None and grid is None:
+        raise ValueError("SNQI-v2 digest-bound derivation requires an explicit calibration grid")
     _validate_provenance(run_id, source_commit, episodes_sha256)
     grid = _validate_calibration_grid(scenarios, grid)
     seeds = grid.seeds
@@ -120,7 +128,9 @@ def derive_calibration_anchors(
         or len(set(scenarios)) != 48
         or len(episodes) != 14 * 48 * len(seeds)
     ):
-        raise ValueError("SNQI-v2 calibration requires 14 arms x48 scenarios x2 seeds =1344")
+        raise ValueError(
+            "SNQI-v2 calibration requires 14 distinct arms x48 distinct scenarios and the complete declared seed grid (1344 rows for two seeds)"
+        )
     observed = set()
     command_modes: dict[str, dict[str, int]] = {arm: {} for arm in arms}
     force, exposure, fractions = [], [], []
@@ -169,6 +179,7 @@ def derive_calibration_anchors(
         "version": "SNQI-v2.0",
         "evaluation_seeds_sha256": SEALED_EVALUATION_SEEDS_SHA256,
         "metric_schema_version": metric_version,
+        **({"metric_definitions_sha256": definitions_digest} if definitions_digest else {}),
         "status": "diagnostic_only" if grid.diagnostic else "derived_pending_custody",
         "anchors": anchors,
         "force_decision": {
@@ -615,7 +626,7 @@ def _validate_calibration_row_custody(
     source: str,
     *,
     identity_context: Any,
-    expected_seeds: tuple[int, ...] = (101, 102),
+    expected_seeds: tuple[int, ...] = (1001, 1002),
 ) -> None:
     """Reject a mismatched raw identity before assigning its verified containing arm."""
     from robot_sf.benchmark.map_runner.map_runner import (  # noqa: PLC0415
@@ -735,6 +746,11 @@ def _compact_calibration_record(
         },
         "metrics": {
             "metric_schema_version": metric_schema_version(record),
+            **(
+                {"metric_definitions_sha256": metrics["metric_definitions_sha256"]}
+                if "metric_definitions_sha256" in metrics
+                else {}
+            ),
             **{
                 key: metrics.get(key)
                 for key in (
@@ -743,6 +759,8 @@ def _compact_calibration_record(
                     "time_to_goal_ideal_ratio",
                     SIMULATED_FORCE,
                     PP_EQUIV_FORCE,
+                    "robot_force_invalid_present_samples",
+                    "robot_force_pp_equiv_invalid_present_samples",
                     "near_misses",
                     "jerk_mean",
                     "curvature_mean",

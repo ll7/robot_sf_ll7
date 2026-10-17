@@ -22,7 +22,7 @@ an exempted script into `scripts/dev/*.py` or `robot_sf.*` helpers.
 
 | Script | Plain-Python invokers | Reason | Duplicated helpers |
 | --- | --- | --- | --- |
-| `scripts/dev/check_docs_evidence_integrity.py` | `.github/workflows/docs-link-integrity.yml`, `.github/workflows/docs-evidence-integrity.yml` (hosted Python + only PyYAML installed) | Importing `scripts.*` raises `ModuleNotFoundError` without an editable install (regression #4926/#4929) | Local `_sha256` instead of `robot_sf.benchmark.identity.hash_utils` |
+| `scripts/dev/check_docs_evidence_integrity.py` | `.github/workflows/docs-evidence-integrity.yml` (changed-path and full-link modes; hosted Python + only PyYAML installed) | Importing `scripts.*` raises `ModuleNotFoundError` without an editable install (regression #4926/#4929) | Local `_sha256` instead of `robot_sf.benchmark.identity.hash_utils` |
 | `scripts/dev/pr_gate_lease.py` | Direct shebang execution; `test_script_is_executable_and_standalone` enforces the standalone contract | Must run via `./scripts/dev/pr_gate_lease.py --help` with stdlib only | Local `_git_common_dir`, `_repo_root` instead of `scripts/dev/git_common.py` |
 
 ## Rules for reuse authors

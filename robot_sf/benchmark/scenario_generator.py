@@ -43,6 +43,7 @@ from typing import Any
 
 import numpy as np
 
+from robot_sf.benchmark.runtime_seed_guard import check_simulation_seed
 from robot_sf.common.pysf_geometry import endpoint_segments_to_pysf
 
 try:  # Optional heavy import delayed until needed
@@ -586,6 +587,7 @@ def generate_scenario(params: dict[str, Any], seed: int) -> GeneratedScenario:
     GeneratedScenario
         Object containing generated state, map definition, and robot configuration.
     """
+    check_simulation_seed(seed, boundary="classic generate_scenario")
     normalized = normalize_generation_parameters(params)
     # Special preset for testing/validation: guaranteed contact at t=0
     # Places one pedestrian exactly at the default robot start (0.3, 3.0)

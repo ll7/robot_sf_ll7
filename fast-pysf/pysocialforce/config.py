@@ -131,9 +131,27 @@ def social_force_kernel_metadata(value: Any = None, *, site: str) -> dict[str, A
 
 LEGACY_SHIFTED_GRADIENT_V1 = "legacy_shifted_gradient_v1"
 SURFACE_DISTANCE_UNIT_NORMAL_V2 = "surface_distance_unit_normal_v2"
+BODY_EDGE_EXPONENTIAL_V3 = "body_edge_exponential_v3"
+BODY_EDGE_EXPONENTIAL_V3_RANGE_ONLY = "body_edge_exponential_v3_range_only"
+BODY_EDGE_EXPONENTIAL_V3_PHYSICAL_MARGIN = "body_edge_exponential_v3_physical_margin"
+BODY_EDGE_EXPONENTIAL_V3_CONTACT_STIFF = "body_edge_exponential_v3_contact_stiff"
+BODY_EDGE_EXPONENTIAL_V3_MULTI_SEGMENT = "body_edge_exponential_v3_multi_segment"
 DEFAULT_OBSTACLE_FORCE_LAW = LEGACY_SHIFTED_GRADIENT_V1
+BODY_EDGE_EXPONENTIAL_LAW_VERSIONS = frozenset(
+    {
+        BODY_EDGE_EXPONENTIAL_V3,
+        BODY_EDGE_EXPONENTIAL_V3_RANGE_ONLY,
+        BODY_EDGE_EXPONENTIAL_V3_PHYSICAL_MARGIN,
+        BODY_EDGE_EXPONENTIAL_V3_CONTACT_STIFF,
+        BODY_EDGE_EXPONENTIAL_V3_MULTI_SEGMENT,
+    }
+)
 OBSTACLE_FORCE_LAW_VERSIONS = frozenset(
-    {LEGACY_SHIFTED_GRADIENT_V1, SURFACE_DISTANCE_UNIT_NORMAL_V2}
+    {
+        LEGACY_SHIFTED_GRADIENT_V1,
+        SURFACE_DISTANCE_UNIT_NORMAL_V2,
+        *BODY_EDGE_EXPONENTIAL_LAW_VERSIONS,
+    }
 )
 OBSTACLE_FORCE_DISTANCE_FLOOR = 1e-5
 OBSTACLE_FORCE_LAW_METADATA_SCHEMA = "obstacle_force_law_metadata.v2"
@@ -187,7 +205,7 @@ def _resolve_obstacle_force_law_value(value: Any) -> tuple[str, str]:
 
     resolved = value.strip()
     if not resolved:
-        return DEFAULT_OBSTACLE_FORCE_LAW, "historical_unversioned"
+        return LEGACY_SHIFTED_GRADIENT_V1, "historical_unversioned"
     if resolved not in OBSTACLE_FORCE_LAW_VERSIONS:
         supported = ", ".join(sorted(OBSTACLE_FORCE_LAW_VERSIONS))
         raise ValueError(
@@ -217,8 +235,8 @@ def resolve_obstacle_force_law_with_mode(value: Any = None) -> tuple[str, str]:
 
     selectors = [(key, value[key]) for key in OBSTACLE_FORCE_LAW_SELECTOR_KEYS if key in value]
     if not selectors:
-        return _ResolvedObstacleForceLaw(DEFAULT_OBSTACLE_FORCE_LAW, "defaulted_missing"), (
-            "defaulted_missing"
+        return _ResolvedObstacleForceLaw(LEGACY_SHIFTED_GRADIENT_V1, "historical_unversioned"), (
+            "historical_unversioned"
         )
 
     resolved_selectors: list[tuple[str, Any, str, str]] = []
@@ -325,15 +343,18 @@ def obstacle_force_law_metadata(  # noqa: PLR0913
             f"{supported}"
         )
 
+    if resolved == LEGACY_SHIFTED_GRADIENT_V1:
+        compatibility_mode = "legacy_compatible"
+    else:
+        compatibility_mode = "corrected_opt_in"
+
     metadata: dict[str, Any] = {
         "schema_version": OBSTACLE_FORCE_LAW_METADATA_SCHEMA,
         "law_version": resolved,
         "site": site,
         "geometry_convention": geometry_convention,
         "radius_convention": radius_convention,
-        "compatibility_mode": (
-            "legacy_compatible" if resolved == LEGACY_SHIFTED_GRADIENT_V1 else "corrected_opt_in"
-        ),
+        "compatibility_mode": compatibility_mode,
         "enabled": bool(enabled),
         "applied": bool(enabled if applied is None else applied),
         "resolution_mode": selected_mode,
@@ -561,8 +582,9 @@ class ObstacleForceConfig:
         threshold: Additive distance offset (m), subtracted like a radius from
             the pedestrian-obstacle distance. Negative values inflate the
             effective distance and soften near-wall repulsion.
-        law_version: Versioned obstacle-force law. Missing historical configuration
-            resolves to ``legacy_shifted_gradient_v1``; the corrected law is opt-in.
+        law_version: Versioned obstacle-force law. Missing configuration retains
+            ``legacy_shifted_gradient_v1`` for 0.1.0; corrected laws require an
+            explicit selector.
     """
 
     factor: float = 10.0

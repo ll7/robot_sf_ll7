@@ -29,7 +29,7 @@ from robot_sf.benchmark.observation_noise import (
     normalize_observation_noise_spec,
 )
 from robot_sf.benchmark.utils import _git_hash_fallback
-from robot_sf.common.artifact_paths import get_repository_root
+from robot_sf.common.artifact_paths import get_artifact_category_path, get_repository_root
 
 if TYPE_CHECKING:
     from robot_sf.benchmark.camera_ready._config_types import CampaignConfig
@@ -540,6 +540,31 @@ def _campaign_id(cfg: CampaignConfig, *, label: str | None = None) -> str:
     return f"{base}_{stamp}"
 
 
+def _normalize_campaign_id(campaign_id: str) -> str:
+    """Return the canonical lowercase directory identifier for an explicit campaign."""
+    normalized = _sanitize_name(campaign_id)
+    if not normalized:
+        raise ValueError("campaign_id must contain at least one alphanumeric character")
+    return normalized
+
+
+def _resolve_campaign_root(*, output_root: Path | None, campaign_id: str) -> Path:
+    """Resolve the canonical campaign directory inside its output parent.
+
+    Returns:
+        Absolute campaign directory using the normalized identifier.
+    """
+    base = (
+        output_root.resolve()
+        if output_root is not None
+        else (get_artifact_category_path("benchmarks") / "camera_ready").resolve()
+    )
+    candidate = (base / _normalize_campaign_id(campaign_id)).resolve()
+    if not candidate.is_relative_to(base):
+        raise ValueError("campaign_id resolves outside the campaign output root")
+    return candidate
+
+
 def _resolve_campaign_id(
     cfg: CampaignConfig,
     *,
@@ -552,10 +577,7 @@ def _resolve_campaign_id(
         Explicit sanitized campaign id when provided, otherwise timestamped id.
     """
     if campaign_id is not None:
-        normalized = _sanitize_name(campaign_id)
-        if not normalized:
-            raise ValueError("campaign_id must contain at least one alphanumeric character")
-        return normalized
+        return _normalize_campaign_id(campaign_id)
     return _campaign_id(cfg, label=label)
 
 

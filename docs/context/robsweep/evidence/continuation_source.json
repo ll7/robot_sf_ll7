@@ -1,0 +1,18 @@
+{
+  "base_sha": "33a4735900153e742828227cc2171436ea09cd90",
+  "runtime_changes": false,
+  "reason": "Redistribute missing MPPI identities to released CPU capacity after 71 complete batches",
+  "original_controller_exit_verified": true,
+  "prefix_counts_at_transfer": {
+    "swap_predictive_mppi.jsonl": 35,
+    "legacy_predictive_mppi.jsonl": 38
+  },
+  "workers_per_arm": 4,
+  "total_episode_workers": 8,
+  "source_artifact": {
+    "artifact_path": "docs/context/robsweep/evidence/resume_driver.source.txt",
+    "sha256": "e381fc2baf56ce1c64f8686a93796225bd35d22b732fc9df3b5f65eff0f35d3c"
+  },
+  "inflight_without_completed_row": "Eligible for continuation; never counted as a completed observation",
+  "successful_prefix_rows": "Preserved exactly; never rerun"
+}

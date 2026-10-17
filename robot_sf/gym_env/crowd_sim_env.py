@@ -16,6 +16,7 @@ import numpy as np
 from gymnasium import spaces
 from loguru import logger
 
+from robot_sf.benchmark.runtime_seed_guard import check_seed_config, check_simulation_seed
 from robot_sf.gym_env.env_config import SimulationSettings
 from robot_sf.nav.map_config import MapDefinition, MapDefinitionPool
 from robot_sf.sim.simulator import Simulator
@@ -64,6 +65,8 @@ class CrowdSimEnv(gym.Env):
             environment-local generator and never consumes the process-wide NumPy generator.
             ``reset(seed=...)`` remains the canonical way to reseed an existing environment.
         """
+        check_simulation_seed(seed, boundary="CrowdSimEnv.__init__")
+        check_seed_config(config, boundary="CrowdSimEnv.__init__")
         super().__init__()
         self.config = config or CrowdSimulationConfig()
         if self.config.render_mode not in self.metadata["render_modes"]:
@@ -112,6 +115,7 @@ class CrowdSimEnv(gym.Env):
         tuple[dict[str, np.ndarray], dict[str, Any]]
             Initial compact pedestrian observation and episode metadata.
         """
+        check_simulation_seed(seed, boundary="CrowdSimEnv.reset")
         super().reset(seed=seed)
         if seed is not None:
             self.config.sim_config.pedestrian_seed = int(seed)

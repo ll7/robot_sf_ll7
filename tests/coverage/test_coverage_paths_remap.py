@@ -29,7 +29,10 @@ def test_paths_config_combines_self_hosted_and_github_hosted_roots(tmp_path: Pat
     for relative in ("robot_sf/__init__.py", "fast-pysf/pysocialforce/__init__.py"):
         source = canonical / relative
         source.parent.mkdir(parents=True, exist_ok=True)
-        source.write_text("# synthetic coverage source\n", encoding="utf-8")
+        source.write_text(
+            "# synthetic coverage source\nline_two = 2\nline_three = 3\n",
+            encoding="utf-8",
+        )
     shards = tmp_path / "shards"
     shards.mkdir()
     _write_shard(shards / ".coverage.a", SELF_HOSTED, "robot_sf/__init__.py", [1, 2])
@@ -66,3 +69,22 @@ def test_paths_config_combines_self_hosted_and_github_hosted_roots(tmp_path: Pat
         f.startswith((SELF_HOSTED + "/", GITHUB_HOSTED + "/")) for f in data.measured_files()
     )
     assert sorted(data.lines(str(init)) or []) == [1, 2, 3]
+
+    json_output = tmp_path / "coverage.json"
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "coverage",
+            "json",
+            f"--rcfile={REPO_ROOT / 'pyproject.toml'}",
+            f"--data-file={out}",
+            "-o",
+            str(json_output),
+        ],
+        cwd=canonical,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert json_output.is_file()

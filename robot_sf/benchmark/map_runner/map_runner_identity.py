@@ -85,19 +85,21 @@ def _select_seeds(
     suite_seeds: dict[str, list[int]],
     suite_key: str,
 ) -> list[int]:
-    """Resolve per-scenario seeds with suite and default fallbacks.
+    """Resolve per-scenario inventory for dispatch and historical identity readers.
 
     Returns:
         list[int]: Seeds to run for the scenario.
     """
     seeds = scenario.get("seeds")
     if isinstance(seeds, list) and seeds:
-        return [int(s) for s in seeds]
-    if suite_seeds.get(suite_key):
-        return list(suite_seeds[suite_key])
-    if suite_seeds.get("default"):
-        return list(suite_seeds["default"])
-    return [0]
+        resolved = list(seeds)
+    elif suite_seeds.get(suite_key):
+        resolved = list(suite_seeds[suite_key])
+    elif suite_seeds.get("default"):
+        resolved = list(suite_seeds["default"])
+    else:
+        raise ValueError("map seed dispatch requires an explicit seed inventory")
+    return resolved
 
 
 def _has_authored_horizon_schedule(scenario: dict[str, Any]) -> bool:

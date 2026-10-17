@@ -1,0 +1,330 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "bindings": {
+      "additionalProperties": false,
+      "properties": {
+        "catalog_entry": {
+          "additionalProperties": false,
+          "properties": {
+            "path": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "path",
+            "sha256"
+          ],
+          "type": "object"
+        },
+        "checkpoint": {
+          "additionalProperties": false,
+          "properties": {
+            "path": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "path",
+            "sha256"
+          ],
+          "type": "object"
+        },
+        "map": {
+          "additionalProperties": false,
+          "properties": {
+            "path": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "path",
+            "sha256"
+          ],
+          "type": "object"
+        },
+        "planner_config": {
+          "additionalProperties": false,
+          "properties": {
+            "path": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "resolved_path": {
+              "description": "Explicit repository artifact locator; must equal path. Optional for existing v1 receipts.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "path",
+            "sha256"
+          ],
+          "type": "object"
+        },
+        "replay_manifests": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "path": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "path",
+              "sha256"
+            ],
+            "type": "object"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": "array"
+        },
+        "replays": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "path": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "path",
+              "sha256"
+            ],
+            "type": "object"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": "array"
+        },
+        "scenario": {
+          "additionalProperties": false,
+          "properties": {
+            "path": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "path",
+            "sha256"
+          ],
+          "type": "object"
+        },
+        "source_episode": {
+          "additionalProperties": false,
+          "properties": {
+            "path": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "path",
+            "sha256"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "source_episode",
+        "catalog_entry",
+        "scenario",
+        "checkpoint",
+        "map",
+        "planner_config",
+        "replays",
+        "replay_manifests"
+      ],
+      "type": "object"
+    },
+    "parity_proof": {
+      "additionalProperties": false,
+      "properties": {
+        "position_tolerance_m": {
+          "maximum": 1e-09,
+          "minimum": 0,
+          "type": "number"
+        },
+        "replay_commits": {
+          "items": {
+            "pattern": "^[0-9a-f]{40}$",
+            "type": "string"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": "array"
+        },
+        "source_full_trace_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "source_window_trace_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "status": {
+          "const": "pass"
+        }
+      },
+      "required": [
+        "status",
+        "source_full_trace_sha256",
+        "source_window_trace_sha256",
+        "position_tolerance_m",
+        "replay_commits"
+      ],
+      "type": "object"
+    },
+    "planner": {
+      "additionalProperties": false,
+      "properties": {
+        "effective_config_hash": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "model": {
+          "additionalProperties": false,
+          "properties": {
+            "digest": {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "files": {
+              "additionalProperties": {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              },
+              "minProperties": 1,
+              "type": "object"
+            },
+            "kind": {
+              "enum": [
+                "analytic",
+                "learned"
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "digest",
+            "files"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "id",
+        "effective_config_hash",
+        "model"
+      ],
+      "type": "object"
+    },
+    "schema_version": {
+      "const": "source-bound-window-replay.v1"
+    },
+    "seed": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "source_commit": {
+      "pattern": "^[0-9a-f]{40}$",
+      "type": "string"
+    },
+    "source_config_hash": {
+      "pattern": "^[0-9a-f]{16,64}$",
+      "type": "string"
+    },
+    "window": {
+      "additionalProperties": false,
+      "properties": {
+        "dt_s": {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        "end_s": {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        "start_s": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "start_step": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "steps": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "stop_kind": {
+          "const": "window_censored"
+        }
+      },
+      "required": [
+        "start_step",
+        "steps",
+        "start_s",
+        "end_s",
+        "dt_s",
+        "stop_kind"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "schema_version",
+    "source_commit",
+    "source_config_hash",
+    "planner",
+    "seed",
+    "window",
+    "bindings",
+    "parity_proof"
+  ],
+  "type": "object"
+}

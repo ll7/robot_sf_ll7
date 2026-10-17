@@ -1,0 +1,45 @@
+{
+  "cases": [
+    {
+      "case_id": "case-2262754d91813c4ad7470ac4e8b535f1c1e7ea1f529263e93b65093b31528fdf",
+      "planner": {
+        "effective_config_hash": "a4913be8bee6f3f3",
+        "id": "social_force",
+        "model": {
+          "digest": "fe4e5b99c0a9f51ada80cfccbf1361bb4f1872c0c523e2b35ce89e94e7b32958",
+          "files": {
+            "robot_sf/baselines/social_force.py": "2857f8dc8468fd40c113020127ffbb6cb12f8b5ce1eba2aae9782b0b39e73817",
+            "robot_sf/planner/socnav.py": "6c44c3eb50b1af77c1f731e789bf9d1df2145d9684ed0fb1cdf6b586e3b234f7",
+            "robot_sf/planner/socnav_social_force.py": "0c172ef446a5ef74cbb7a6cfd8aa67a52f11b9466ae43f192397ab56b827035e"
+          },
+          "kind": "analytic"
+        }
+      },
+      "runner_options": {
+        "algo": "social_force",
+        "algo_config_path": "configs/algos/social_force_release_v0_0_8.yaml",
+        "benchmark_profile": "experimental",
+        "dt": 0.1,
+        "horizon": 600,
+        "record_forces": true,
+        "record_simulation_step_trace": true,
+        "resume": false,
+        "workers": 1
+      },
+      "scenario": {
+        "path": "docs/context/evidence/hardcase_positive_control/admission/packet/window.yaml",
+        "sha256": "907a80efb4863b89455c69ea590d487ad8c4664aa6d4397a8ce2ca7e2eea5cb5"
+      },
+      "seed": 1001,
+      "window": {
+        "dt_s": 0.1,
+        "end_s": 39.0,
+        "start_s": 37.0,
+        "start_step": 370,
+        "steps": 20,
+        "stop_kind": "window_censored"
+      }
+    }
+  ],
+  "schema_version": "counterexample-replay-slice.v1"
+}

@@ -1,0 +1,52 @@
+{
+  "note": "One real source capture and two fresh replays; complete configuration/input object captured before step370. Numeric oracle unchanged. Final gate-only stage resumed without restarting completed episodes.",
+  "producer_repository": "/home/luttkule/lanes/hardcase/admission", "_allow-abs-path:producer_repository": "Byte-exact original native-row prefix for offline reconstruction; no runtime dependency.",
+  "raw_artifacts": [
+    {
+      "location": "imech156-u:lanes/hardcase/round6_raw_f3787b5/window_replay_2.jsonl",
+      "path": "imech156-u:lanes/hardcase/round6_raw_f3787b5/window_replay_2.jsonl",
+      "sha256": "84b5e9581c90dd2b074f4d6f15780a1c7ea451979a2fb8ee7845e93a58eda9d0",
+      "size_bytes": 257805
+    },
+    {
+      "location": "imech156-u:lanes/hardcase/round6_raw_f3787b5/source.jsonl",
+      "path": "imech156-u:lanes/hardcase/round6_raw_f3787b5/source.jsonl",
+      "sha256": "82be5b07d1bbcae5d1c08fe2989276f99103608d319f72d889c6dac0c6ac6c8f",
+      "size_bytes": 4928161
+    },
+    {
+      "location": "imech156-u:lanes/hardcase/round6_raw_f3787b5/window_replay_1.jsonl",
+      "path": "imech156-u:lanes/hardcase/round6_raw_f3787b5/window_replay_1.jsonl",
+      "sha256": "d701f108d8bc9ff89d75e5fd12051dec80e3b0e9e1143f4d6af3a5c7c6cb7fb7",
+      "size_bytes": 257805
+    },
+    {
+      "location": "imech156-u:lanes/hardcase/round6_raw_f3787b5/gate_source.jsonl",
+      "path": "imech156-u:lanes/hardcase/round6_raw_f3787b5/gate_source.jsonl",
+      "sha256": "ad5b7b6f2823b4ecf36e166729da2bc22029b4438aa6a2c9be27c483cb92609c",
+      "size_bytes": 4928274
+    },
+    {
+      "location": "imech156-u:lanes/hardcase/round6_raw_f3787b5/gate_replay_results.json",
+      "path": "imech156-u:lanes/hardcase/round6_raw_f3787b5/gate_replay_results.json",
+      "sha256": "98a1122e887534f1783e07dcd59f0a8d0a73f6384257c4f0c887ce5ad2e67b2e",
+      "size_bytes": 472329
+    },
+    {
+      "location": "imech156-u:lanes/hardcase/round6_raw_f3787b5/window_replay_1.jsonl.provenance.json",
+      "path": "imech156-u:lanes/hardcase/round6_raw_f3787b5/window_replay_1.jsonl.provenance.json",
+      "sha256": "12aaf9d8da9642074059ba0d0c4f5fd3b6c5a4f6baabfea6a48bcac8d44a04a5",
+      "size_bytes": 28022
+    },
+    {
+      "location": "imech156-u:lanes/hardcase/round6_raw_f3787b5/window_replay_2.jsonl.provenance.json",
+      "path": "imech156-u:lanes/hardcase/round6_raw_f3787b5/window_replay_2.jsonl.provenance.json",
+      "sha256": "8be58958ecee69e99e7914da7bc6383b429f3f6953c6eaafdf30519cc05e2f9b",
+      "size_bytes": 28022
+    }
+  ],
+  "runtime_commit": "f3787b507ffd1af9755da86d85eeada34f816252",
+  "schema_version": "hardcase-configuration-owned-window.v1",
+  "seed": 1001,
+  "source_trace": "../../source.jsonl.gz"
+}

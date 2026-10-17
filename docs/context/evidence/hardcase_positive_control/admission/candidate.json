@@ -1,0 +1,28 @@
+{
+  "discovery": {
+    "budget": {
+      "new_search_evaluations": 0,
+      "source_episode_steps": 600,
+      "window_transitions": 20
+    },
+    "kind": "known_failure_positive_control",
+    "objective": "near_miss",
+    "parameters": {
+      "scenario": "classic_cross_trap_high",
+      "seed": 1001,
+      "window_end_s": 39.0,
+      "window_start_s": 37.0
+    },
+    "round": 0,
+    "source_manifest": {
+      "path": "docs/context/evidence/hardcase_positive_control/provenance.json",
+      "sha256": "4efdfe4a9401b03b011f47a56aba62274dc7d79000f275e785a768b37798d871"
+    }
+  },
+  "feasibility": {
+    "reason": "No independent feasibility oracle or alternate-planner proof was executed.",
+    "status": "unknown"
+  },
+  "schema_version": "counterexample-candidate.v1",
+  "window_receipt_sha256": "fb5715b19c9387afa15d895e7d611ad483926cd36ac2fba310ecc37dd7293ef4"
+}

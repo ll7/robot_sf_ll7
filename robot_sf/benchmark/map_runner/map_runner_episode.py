@@ -3895,6 +3895,10 @@ def _restore_generated_window(
             "original_budget_steps": checkpoint["original_budget_steps"],
             "restore_status": "restored_supported_subset",
         }
+        if "effective_inputs" in checkpoint:
+            args.algo_meta["generated_window_continuation"]["effective_inputs"] = checkpoint[
+                "effective_inputs"
+            ]
     return state, start_step, execution_steps
 
 
@@ -5305,6 +5309,11 @@ def _finalize_result_provenance_block(  # noqa: PLR0913
             {"step": "post_process_metrics", "status": "completed"},
         ],
     }
+    continuation = record.get("algorithm_metadata", {}).get("generated_window_continuation", {})
+    if "effective_inputs" in continuation:
+        inputs = continuation["effective_inputs"]
+        record["result_provenance"]["simulator_settings"]["window_effective_inputs"] = inputs
+        record["algorithm_metadata"]["simulation_step_trace"]["window_effective_inputs"] = inputs
 
 
 def _finalize_assembled_record_provenance(  # noqa: PLR0913

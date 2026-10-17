@@ -8333,6 +8333,54 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/hardcase_positive_control/admission/CHECKSUMS.sha256
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/hardcase_positive_control/admission/README.md
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/hardcase_positive_control/admission/admission_evidence.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/hardcase_positive_control/admission/benchmark_audit.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/hardcase_positive_control/admission/candidate.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/hardcase_positive_control/admission/corpus/.gitignore
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/hardcase_positive_control/admission/corpus/cases/case-2262754d91813c4ad7470ac4e8b535f1c1e7ea1f529263e93b65093b31528fdf.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/hardcase_positive_control/admission/corpus/corpus.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/hardcase_positive_control/admission/persistence/generated-54fdcdbc905bf047.persistence.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/hardcase_positive_control/admission/replay_slice.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/hardcase_positive_control/admission/report.md
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/hardcase_positive_control/admission/window_receipt.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
 
 - path: docs/context/evidence/ppo_wall_probe_dev_20261012
   status: evidence

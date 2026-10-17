@@ -1,0 +1,7 @@
+{
+  "artifact_path": "docs/context/evidence/hardcase_positive_control/admission/packet/gate_command.json",
+  "artifact_sha256": "e813f0d459cbadc7767ff417a9a4d084bd53b82b972869837bfcecdcb0e8e773",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "evidence-review-marker.v1"
+}

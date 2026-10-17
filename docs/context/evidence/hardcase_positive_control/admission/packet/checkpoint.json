@@ -1,0 +1,701 @@
+{
+  "aux_file": "checkpoint.npz",
+  "aux_sha256": "a069ed9561e749690da1060944341c06a918312b51c1fa02f7ab42bd3fb20e60",
+  "compatibility": {
+    "checkpoint_sha256": null,
+    "code_revision": "ffc7f5f6f0e817ded31e6ffdbf25530ad5f20632f7ba5fba94a0616422ea9fb9",
+    "config_sha256": "3e6a10bdcc89c477aa0cdfc1510564f6c0f04a7d2b6f1fd3a8b74dcbaeea5258",
+    "dt_s": 0.1,
+    "map_sha256": "d3bc9ad6205108a480469338282611730410787cc897abd4d71f3f0fbd47d6a8",
+    "planner_id": "social_force",
+    "platform_tag": "Linux-6.8.0-87-generic-x86_64-with-glibc2.39"
+  },
+  "effective_inputs": {
+    "configuration": {
+      "backend": "fast-pysf",
+      "enable_telemetry_panel": false,
+      "forecast_variant": "none",
+      "grid_config": {
+        "center_on_robot": true,
+        "channels": [
+          "GridChannel.OBSTACLES",
+          "GridChannel.PEDESTRIANS",
+          "GridChannel.COMBINED"
+        ],
+        "dtype": "<class 'numpy.float32'>",
+        "height": 32.0,
+        "max_distance": 0.5,
+        "resolution": 0.2,
+        "robot_radius": 0.3,
+        "use_ego_frame": true,
+        "width": 32.0
+      },
+      "grid_visualization_alpha": 0.5,
+      "include_goal_next_valid": false,
+      "include_grid_in_observation": true,
+      "include_route_waypoints": false,
+      "lidar_config": {
+        "angle_opening": [
+          -3.141592653589793,
+          3.141592653589793
+        ],
+        "detect_other_robots": true,
+        "max_scan_dist": 10.0,
+        "num_rays": 272,
+        "ray_offsets": "[-3.14159265 -3.11849271 -3.09539276 -3.07229282 -3.04919287 -3.02609292\n -3.00299298 -2.97989303 -2.95679309 -2.93369314 -2.91059319 -2.88749325\n -2.8643933  -2.84129336 -2.81819341 -2.79509346 -2.77199352 -2.74889357\n -2.72579363 -2.70269368 -2.67959373 -2.65649379 -2.63339384 -2.6102939\n -2.58719395 -2.564094   -2.54099406 -2.51789411 -2.49479417 -2.47169422\n -2.44859427 -2.42549433 -2.40239438 -2.37929444 -2.35619449 -2.33309454\n -2.3099946  -2.28689465 -2.26379471 -2.24069476 -2.21759481 -2.19449487\n -2.17139492 -2.14829498 -2.12519503 -2.10209508 -2.07899514 -2.05589519\n -2.03279525 -2.0096953  -1.98659535 -1.96349541 -1.94039546 -1.91729552\n -1.89419557 -1.87109562 -1.84799568 -1.82489573 -1.80179579 -1.77869584\n -1.75559589 -1.73249595 -1.709396   -1.68629606 -1.66319611 -1.64009616\n -1.61699622 -1.59389627 -1.57079633 -1.54769638 -1.52459643 -1.50149649\n -1.47839654 -1.4552966  -1.43219665 -1.4090967  -1.38599676 -1.36289681\n -1.33979687 -1.31669692 -1.29359698 -1.27049703 -1.24739708 -1.22429714\n -1.20119719 -1.17809725 -1.1549973  -1.13189735 -1.10879741 -1.08569746\n -1.06259752 -1.03949757 -1.01639762 -0.99329768 -0.97019773 -0.94709779\n -0.92399784 -0.90089789 -0.87779795 -0.854698   -0.83159806 -0.80849811\n -0.78539816 -0.76229822 -0.73919827 -0.71609833 -0.69299838 -0.66989843\n -0.64679849 -0.62369854 -0.6005986  -0.57749865 -0.5543987  -0.53129876\n -0.50819881 -0.48509887 -0.46199892 -0.43889897 -0.41579903 -0.39269908\n -0.36959914 -0.34649919 -0.32339924 -0.3002993  -0.27719935 -0.25409941\n -0.23099946 -0.20789951 -0.18479957 -0.16169962 -0.13859968 -0.11549973\n -0.09239978 -0.06929984 -0.04619989 -0.02309995  0.          0.02309995\n  0.04619989  0.06929984  0.09239978  0.11549973  0.13859968  0.16169962\n  0.18479957  0.20789951  0.23099946  0.25409941  0.27719935  0.3002993\n  0.32339924  0.34649919  0.36959914  0.39269908  0.41579903  0.43889897\n  0.46199892  0.48509887  0.50819881  0.53129876  0.5543987   0.57749865\n  0.6005986   0.62369854  0.64679849  0.66989843  0.69299838  0.71609833\n  0.73919827  0.76229822  0.78539816  0.80849811  0.83159806  0.854698\n  0.87779795  0.90089789  0.92399784  0.94709779  0.97019773  0.99329768\n  1.01639762  1.03949757  1.06259752  1.08569746  1.10879741  1.13189735\n  1.1549973   1.17809725  1.20119719  1.22429714  1.24739708  1.27049703\n  1.29359698  1.31669692  1.33979687  1.36289681  1.38599676  1.4090967\n  1.43219665  1.4552966   1.47839654  1.50149649  1.52459643  1.54769638\n  1.57079633  1.59389627  1.61699622  1.64009616  1.66319611  1.68629606\n  1.709396    1.73249595  1.75559589  1.77869584  1.80179579  1.82489573\n  1.84799568  1.87109562  1.89419557  1.91729552  1.94039546  1.96349541\n  1.98659535  2.0096953   2.03279525  2.05589519  2.07899514  2.10209508\n  2.12519503  2.14829498  2.17139492  2.19449487  2.21759481  2.24069476\n  2.26379471  2.28689465  2.3099946   2.33309454  2.35619449  2.37929444\n  2.40239438  2.42549433  2.44859427  2.47169422  2.49479417  2.51789411\n  2.54099406  2.564094    2.58719395  2.6102939   2.63339384  2.65649379\n  2.67959373  2.70269368  2.72579363  2.74889357  2.77199352  2.79509346\n  2.81819341  2.84129336  2.8643933   2.88749325  2.91059319  2.93369314\n  2.95679309  2.97989303  3.00299298  3.02609292  3.04919287  3.07229282\n  3.09539276  3.11849271]",
+        "scan_noise": [
+          0.005,
+          0.002
+        ],
+        "scan_noise_array": "[0.005 0.002]",
+        "visual_angle_portion": 1.0
+      },
+      "map_id": "issue_9762_classic_crossing_goal_zone_entry_v2",
+      "navigation_settings": {
+        "waypoint_noise_enabled": false,
+        "waypoint_noise_std": 0.0
+      },
+      "observation_mode": "socnav_struct",
+      "observation_stack": {
+        "stack_steps": 3
+      },
+      "observation_visibility": {
+        "dynamic_occlusion": false,
+        "enabled": false,
+        "fov_degrees": 360.0,
+        "include_track_ids": false,
+        "lost_pedestrian_memory_horizon_s": 0.0,
+        "max_range_m": null,
+        "memory_for_lost_pedestrians": false,
+        "ordering_tie_break": "legacy",
+        "static_occlusion": false,
+        "tracking_config": null,
+        "tracking_noise_std_m": 0.0
+      },
+      "peds_have_obstacle_forces": true,
+      "peds_have_robot_repulsion": true,
+      "peds_have_static_obstacle_forces": true,
+      "planner": {
+        "angular_gain": 1.0,
+        "forecast_variant": "none",
+        "forecast_variant_dt_s": 0.1,
+        "forecast_variant_horizons_s": [
+          0.5,
+          1.0,
+          2.0
+        ],
+        "forecast_variant_risk_distance_m": 3.0,
+        "goal_tolerance": 0.25,
+        "hrvo_max_neighbors": 8,
+        "hrvo_neighbor_dist": 8.0,
+        "hrvo_time_horizon": 4.0,
+        "hrvo_uncertainty_offset": 0.05,
+        "max_angular_speed": 1.0,
+        "max_linear_speed": 2.0,
+        "occupancy_angle_weight": 0.3,
+        "occupancy_candidates": 7,
+        "occupancy_heading_sweep": 2.0943951023931953,
+        "occupancy_lookahead": 2.5,
+        "occupancy_weight": 2.0,
+        "orca_adapter_trace_enabled": false,
+        "orca_avoidance_weight": 1.2,
+        "orca_commit_distance": 1.6,
+        "orca_commit_lateral_gain": 0.45,
+        "orca_commit_persistence_steps": 10,
+        "orca_corner_clearance_scale": 1.35,
+        "orca_corner_probe_forward_scale": 1.5,
+        "orca_corner_probe_side_scale": 1.5,
+        "orca_forward_probe_distance": 1.1,
+        "orca_head_on_bias": 0.32,
+        "orca_head_on_probe_side_scale": 1.5,
+        "orca_heading_slowdown": 0.2,
+        "orca_max_neighbors": 10,
+        "orca_neighbor_dist": 10.0,
+        "orca_obstacle_margin": 0.12,
+        "orca_obstacle_max_points": 80,
+        "orca_obstacle_radius_scale": 1.0,
+        "orca_obstacle_range": 6.0,
+        "orca_obstacle_threshold": 0.5,
+        "orca_side_probe_offset": 0.45,
+        "orca_stall_cycles_before_commit": 3,
+        "orca_stall_nudge_factor": 0.15,
+        "orca_stall_progress_epsilon": 0.03,
+        "orca_stall_speed_threshold": 0.12,
+        "orca_symmetry_bias": 0.22,
+        "orca_time_horizon": 6.0,
+        "orca_time_horizon_obst": 3.0,
+        "predictive_adaptive_horizon_enabled": true,
+        "predictive_allow_reverse_candidates": false,
+        "predictive_candidate_heading_deltas": [
+          -0.7853981633974483,
+          -0.39269908169872414,
+          0.0,
+          0.39269908169872414,
+          0.7853981633974483
+        ],
+        "predictive_candidate_speeds": [
+          0.0,
+          0.5,
+          1.0
+        ],
+        "predictive_checkpoint_path": null,
+        "predictive_collision_weight": 6.0,
+        "predictive_device": "cpu",
+        "predictive_ego_conditioning": false,
+        "predictive_feature_schema_name": "predictive_legacy_v1",
+        "predictive_goal_weight": 1.0,
+        "predictive_hard_clearance_distance": 0.75,
+        "predictive_hard_clearance_weight": 2.5,
+        "predictive_horizon_boost_steps": 4,
+        "predictive_horizon_steps": 8,
+        "predictive_max_agents": 16,
+        "predictive_mcts_branch_factor": 4,
+        "predictive_mcts_enabled": false,
+        "predictive_mcts_exploration_weight": 0.8,
+        "predictive_mcts_iterations": 48,
+        "predictive_mcts_rollout_count": 2,
+        "predictive_model_id": "predictive_proxy_selected_v1",
+        "predictive_near_distance": 1.0,
+        "predictive_near_field_distance": 2.4,
+        "predictive_near_field_heading_deltas": [
+          -1.5707963267948966,
+          -1.0471975511965976,
+          -0.7853981633974483,
+          -0.5235987755982988,
+          0.0,
+          0.5235987755982988,
+          0.7853981633974483,
+          1.0471975511965976,
+          1.5707963267948966
+        ],
+        "predictive_near_field_speed_cap": 0.75,
+        "predictive_near_field_speed_samples": [
+          0.1,
+          0.2,
+          0.35,
+          0.5
+        ],
+        "predictive_near_miss_weight": 1.5,
+        "predictive_pedestrian_radius": 0.3,
+        "predictive_phase_align_weight": 0.4,
+        "predictive_phase_commit_clearance": 1.4,
+        "predictive_phase_commit_weight": 1.4,
+        "predictive_phase_logic_enabled": true,
+        "predictive_phase_recover_clearance": 1.8,
+        "predictive_phase_recover_progress": 0.25,
+        "predictive_phase_recover_weight": 1.5,
+        "predictive_phase_yield_clearance": 0.95,
+        "predictive_phase_yield_weight": 2.0,
+        "predictive_progress_escape_clearance_margin": 0.2,
+        "predictive_progress_escape_distance": 1.2,
+        "predictive_progress_escape_enabled": false,
+        "predictive_progress_escape_heading_gain": 1.4,
+        "predictive_progress_escape_min_speed_ratio": 0.35,
+        "predictive_progress_risk_distance": 1.2,
+        "predictive_progress_risk_weight": 1.0,
+        "predictive_reverse_candidate_speeds": [
+          -0.15,
+          -0.3
+        ],
+        "predictive_reverse_near_field_only": true,
+        "predictive_risk_cvar_alpha": 0.25,
+        "predictive_risk_objective": "mean",
+        "predictive_risk_sample_count": 1,
+        "predictive_risk_seed": 7,
+        "predictive_robot_radius": 0.3,
+        "predictive_rollout_dt": 0.2,
+        "predictive_safe_distance": 0.6,
+        "predictive_sequence_beam_width": 8,
+        "predictive_sequence_branch_factor": 5,
+        "predictive_sequence_search_enabled": false,
+        "predictive_sequence_segments": 3,
+        "predictive_speed_clearance_gain": 0.0,
+        "predictive_ttc_distance": 0.8,
+        "predictive_ttc_weight": 0.0,
+        "predictive_turn_weight": 0.15,
+        "predictive_uncertainty_base_std": 0.05,
+        "predictive_uncertainty_density_scale": 0.02,
+        "predictive_uncertainty_growth_per_step": 0.03,
+        "predictive_uncertainty_mode": "deterministic",
+        "predictive_uncertainty_speed_scale": 0.1,
+        "predictive_velocity_weight": 0.05,
+        "sacadrl_bias_weight": 0.6,
+        "sacadrl_checkpoint_path": null,
+        "sacadrl_max_other_agents": 3,
+        "sacadrl_model_id": "ga3c_cadrl_iros18",
+        "sacadrl_neighbors": 3,
+        "sacadrl_pref_speed": 1.0,
+        "sacadrl_sorting_method": "closest_first",
+        "sampling_braking_envelope": false,
+        "sampling_braking_margin": 0.1,
+        "sampling_footprint_margin": 0.1,
+        "sampling_heading_candidates": 13,
+        "sampling_horizon_s": 2.0,
+        "sampling_max_repulsion_ratio": 0.75,
+        "sampling_near_field_surface_distance": 1.6,
+        "sampling_path_distance": true,
+        "sampling_path_lookahead": 2.0,
+        "sampling_path_resolution": 0.2,
+        "sampling_pedestrian_prediction": false,
+        "sampling_speed_fractions": [
+          1.0,
+          0.5,
+          0.25,
+          0.0
+        ],
+        "sampling_speed_weight": 0.5,
+        "social_force_clip_force": true,
+        "social_force_desired_speed": 1.0,
+        "social_force_factor": 5.1,
+        "social_force_gamma": 0.35,
+        "social_force_goal_approach_clearance": 0.25,
+        "social_force_goal_approach_max_speed": 0.75,
+        "social_force_goal_approach_radius": 4.0,
+        "social_force_goal_approach_stop_distance": 1.75,
+        "social_force_goal_approach_version": "legacy_v1",
+        "social_force_lambda_importance": 2.0,
+        "social_force_max_force": 100.0,
+        "social_force_n": 2,
+        "social_force_n_prime": 3,
+        "social_force_obstacle_factor": 10.0,
+        "social_force_obstacle_law": "legacy_shifted_gradient_v1",
+        "social_force_obstacle_max_points": 80,
+        "social_force_obstacle_radius_scale": 1.0,
+        "social_force_obstacle_range": 6.0,
+        "social_force_obstacle_threshold": 0.5,
+        "social_force_obstacle_v2_length": 0.6,
+        "social_force_obstacle_v2_max_terms": 8,
+        "social_force_obstacle_v2_min_separation_deg": 30.0,
+        "social_force_obstacle_v2_strength": 5.0,
+        "social_force_ped_v3_default_ped_radius": 0.4,
+        "social_force_ped_v3_length": 0.5,
+        "social_force_ped_v3_strength": 6.0,
+        "social_force_ped_version": "surface_v3",
+        "social_force_planner_version": "resolution_independent_v2",
+        "social_force_repulsion_weight": 0.8,
+        "social_force_tau": 0.5,
+        "socnav_sampling_version": "legacy_v1"
+      },
+      "planner_backend": "classic",
+      "planner_classic_config": null,
+      "planner_clearance_margin": 0.3,
+      "planner_drive_settings": {
+        "allow_backwards": false,
+        "interaxis_length": 0.3,
+        "max_angular_accel": 1.0,
+        "max_angular_speed": 1.0,
+        "max_linear_accel": 1.0,
+        "max_linear_decel": 1.0,
+        "max_linear_speed": 2.0,
+        "radius": 1.0,
+        "wheel_radius": 0.05
+      },
+      "ppo_action_semantics": "acceleration",
+      "predictive_foresight_checkpoint_path": null,
+      "predictive_foresight_device": "cpu",
+      "predictive_foresight_ego_conditioning": false,
+      "predictive_foresight_enabled": false,
+      "predictive_foresight_front_corridor_half_width": 1.0,
+      "predictive_foresight_front_corridor_length": 3.0,
+      "predictive_foresight_horizon_steps": 8,
+      "predictive_foresight_max_agents": 16,
+      "predictive_foresight_model_id": "predictive_proxy_selected_v2_full",
+      "predictive_foresight_near_distance": 0.7,
+      "predictive_foresight_rollout_dt": 0.2,
+      "render_scaling": null,
+      "robot_config": {
+        "allow_backwards": false,
+        "interaxis_length": 0.3,
+        "max_angular_accel": 1.0,
+        "max_angular_speed": 1.0,
+        "max_linear_accel": 1.0,
+        "max_linear_decel": 1.0,
+        "max_linear_speed": 2.0,
+        "radius": 1.0,
+        "wheel_radius": 0.05
+      },
+      "rollover_proxy_enabled": false,
+      "rollover_proxy_params": {
+        "cog_height_m": 0.6,
+        "gravity_m_s2": 9.81,
+        "schema_version": "rollover_proxy.v1",
+        "single_wheel_axle_to_cog_m": 0.5,
+        "two_wheel_axle_track_m": 0.8,
+        "wheelbase_m": 1.2
+      },
+      "rollover_proxy_penalty": 0.0,
+      "sample_positions_globally": false,
+      "sensors": [],
+      "show_occupancy_grid": false,
+      "sim_config": {
+        "action_latency_ms": null,
+        "action_latency_steps": 0,
+        "alignment_torque": {
+          "enabled": false,
+          "k_omega": 4.0,
+          "k_theta": 4.0,
+          "max_angular_speed_rad_s": 3.141592653589793
+        },
+        "anisotropic_fov": {
+          "cone_half_angle_rad": 1.5707963267948966,
+          "enabled": false,
+          "rear_weight": 0.1
+        },
+        "apf_config": {
+          "activation_threshold": 50.0,
+          "force_multiplier": 4.0,
+          "is_active": false,
+          "offset": 3.0,
+          "relaxation_time": 0.5,
+          "robot_radius": 1.0,
+          "target_ped_idx": -1
+        },
+        "archetype_composition": null,
+        "archetype_seed": null,
+        "archetype_speed_factors": null,
+        "debug_without_robot_movement": false,
+        "desired_speed_mean": null,
+        "desired_speed_seed": null,
+        "desired_speed_std": null,
+        "difficulty": 0,
+        "goal_completion_policy": "goal_zone_entry_v1",
+        "goal_radius": 1.0,
+        "groups": null,
+        "hesitating_response_multiplier": 1.0,
+        "max_peds_per_group": 3,
+        "max_total_pedestrians": null,
+        "non_reactive_response_multiplier": 0.0,
+        "obstacle_force_law": "legacy_shifted_gradient_v1",
+        "oracle_force_trace_enabled": false,
+        "ped_density_by_difficulty": [
+          0.08,
+          0.02,
+          0.04,
+          0.08
+        ],
+        "ped_radius": 0.4,
+        "ped_speed_tier": null,
+        "pedestrian_control_trace_labels": null,
+        "pedestrian_integration_scheme": "semi_implicit_euler",
+        "pedestrian_model": "social_force_default",
+        "pedestrian_seed": 1001,
+        "pedestrian_uncertainty_alpha_mps": 0.0,
+        "pedestrian_uncertainty_envelope_enabled": false,
+        "peds_reset_follow_route_at_start": false,
+        "peds_speed_mult": 1.3,
+        "population_size": null,
+        "prf_config": {
+          "activation_threshold": 2.0,
+          "force_multiplier": 10.0,
+          "is_active": true,
+          "robot_radius": 1.0
+        },
+        "residual_adversary": {
+          "is_active": false,
+          "macro_action_dt_s": 0.5,
+          "max_heading_change_per_macro_rad": 0.7853981633974483,
+          "max_jerk_mps3": 7.5,
+          "max_residual_accel_mps2": 1.5,
+          "max_route_deviation_m": 1.5,
+          "max_speed_delta_mps": 0.5,
+          "min_separation_m": 0.6,
+          "obstacle_projection_margin_m": 0.1,
+          "seed": null,
+          "target_ped_idx": -1
+        },
+        "response_law_composition": null,
+        "response_law_seed": null,
+        "robot_goal_sampling_policy": "footprint_clearance_v1",
+        "route_spawn_distribution": "cluster",
+        "route_spawn_jitter_frac": 0.0,
+        "route_spawn_seed": 1001,
+        "sampler_capture_enabled": false,
+        "sim_time_in_secs": 60.0,
+        "stack_steps": 3,
+        "time_per_step_in_secs": 0.1,
+        "ttc_predictive_force": {
+          "enabled": false,
+          "force_scale": 1.0,
+          "horizon_s": 3.0,
+          "include_ped_ped": true,
+          "include_robot_proxy": false,
+          "max_force": 5.0,
+          "tau0_s": 1.0
+        },
+        "use_next_goal": true,
+        "zanlungo_collision_prediction": {
+          "angle_threshold_rad": 0.7853981633974483,
+          "anisotropy_lambda": 0.29,
+          "enabled": false,
+          "include_ped_ped": true,
+          "interaction_range_m": 0.71,
+          "interaction_strength": 1.13,
+          "max_force": 5.0
+        }
+      },
+      "telemetry_decimation": 1,
+      "telemetry_metrics": [
+        "reward",
+        "collisions",
+        "min_ped_distance",
+        "action_norm"
+      ],
+      "telemetry_pane_layout": "vertical_split",
+      "telemetry_record": false,
+      "telemetry_refresh_hz": 1.0,
+      "use_image_obs": false,
+      "use_occupancy_grid": true,
+      "use_planner": false
+    },
+    "map": {
+      "path": "maps/successor_svg_maps/issue_9762_classic_crossing_goal_zone_entry_v2.svg",
+      "sha256": "d3bc9ad6205108a480469338282611730410787cc897abd4d71f3f0fbd47d6a8"
+    },
+    "run": {
+      "observation_noise": {
+        "enabled": false,
+        "heading_noise_std_rad": 0.0,
+        "interpretation": "non_calibrated_benchmark_robustness_noise_not_a_real_sensor_model",
+        "lidar_dropout_prob": 0.0,
+        "lidar_dropout_value": 0.0,
+        "observation_delay_steps": 0,
+        "pedestrian_false_negative_prob": 0.0,
+        "pedestrian_false_positive_prob": 0.0,
+        "pedestrian_false_positive_radius": 0.35,
+        "pedestrian_false_positive_radius_m": 4.0,
+        "pedestrian_occlusion_max_range_m": null,
+        "pedestrian_position_noise_std_m": 0.0,
+        "pose_noise_std_m": 0.0,
+        "profile": "none",
+        "seed": null
+      },
+      "record_planner_decision_trace": false,
+      "record_simulation_step_trace": true,
+      "simulator_settings": {
+        "dt": 0.1,
+        "horizon": 600,
+        "observation_level": "tracked_agents_no_noise",
+        "observation_mode": "socnav_state",
+        "observation_noise_hash": "0a5609f0b2b1",
+        "record_forces": true,
+        "tracking_precision_hash": "d06cee655fee"
+      },
+      "tracking_precision": {
+        "enabled": false,
+        "interpretation": "internal_non_hardware_tracking_precision_proxy_not_a_real_sensor_model",
+        "schema_version": "tracking_precision_contract.v1",
+        "seed_salt": 0,
+        "speed_contract": {
+          "default_speed": 2.0,
+          "defensive_speed": 0.5,
+          "mode": "diagnostic",
+          "threshold_m": 2.5
+        },
+        "target_motp_m": 0.0
+      }
+    },
+    "seed": 1001,
+    "window": {
+      "start_step": 370,
+      "steps": 20
+    }
+  },
+  "effective_inputs_sha256": "3d1cd78966c491daff9096c74276124eca2910c7d0441a2c2c16e9d35972b894",
+  "original_budget_steps": 600,
+  "schema_version": "robot_sf.generated_continuation.v2",
+  "simulator_file": "checkpoint.simulator.json",
+  "simulator_payload_sha256": "21c40d4406eb534cb462deb9bcf70fb871c6dfef54c0872f28b6c5b338a49f88",
+  "simulator_sha256": "bbfc3e837011293e97d1eb7712f2de80b8ecb11014a8239f5ac3d94eccd6403c",
+  "source_episode_id": "classic_cross_trap_high--1001--f330dd29077077ac",
+  "source_scenario": {
+    "map_file": "../../maps/successor_svg_maps/issue_9762_classic_crossing_goal_zone_entry_v2.svg",
+    "map_id": null,
+    "metadata": {
+      "archetype": "cross_trap",
+      "density": "high",
+      "flow": "bi",
+      "groups": 0.0,
+      "label": "cross-trap local-minimum circulation",
+      "plausibility": {
+        "method": null,
+        "metrics": {
+          "force_q95": 0.739349157779526,
+          "mean_distance": 10.02981557058951,
+          "min_distance": 2.8766785893771702,
+          "ped_force_mean": 0.19881092600791625,
+          "robot_ped_within_5m_frac": 0.17466666666666666
+        },
+        "metrics_updated_on": "2026-01-30T14:19:28.225110+01:00",
+        "notes": null,
+        "status": "verified",
+        "verified_by": "ll7",
+        "verified_on": "2026-01-29"
+      }
+    },
+    "name": "classic_cross_trap_high",
+    "robot_config": {},
+    "seeds": [
+      1001
+    ],
+    "simulation_config": {
+      "goal_completion_policy": "goal_zone_entry_v1",
+      "max_episode_steps": 600,
+      "ped_density": 0.08,
+      "robot_goal_sampling_policy": "footprint_clearance_v1",
+      "social_force_kernel_version": "wrapped_v2"
+    }
+  },
+  "source_seed": 1001,
+  "start_step": 370,
+  "state": {
+    "clock": {
+      "d_t": 0.1,
+      "distance_to_goal": 25.3176531069352,
+      "episode": 1,
+      "episode_step_limit": null,
+      "is_collision_with_obst": false,
+      "is_collision_with_ped": false,
+      "is_collision_with_robot": false,
+      "is_timeout": false,
+      "prev_distance_to_goal": 25.34923039687487,
+      "sim_time_elapsed": 37.000000000000256,
+      "sim_time_limit": 60.0,
+      "timestep": 370
+    },
+    "last_action": {
+      "$tuple": [
+        0.24175889376593762,
+        -0.4245390225211665
+      ]
+    },
+    "observation": {
+      "goal_current": {
+        "$array": "continuation_observation_goal_current"
+      },
+      "goal_next": {
+        "$array": "continuation_observation_goal_next"
+      },
+      "map_size": {
+        "$array": "continuation_observation_map_size"
+      },
+      "occupancy_grid": {
+        "$array": "continuation_observation_occupancy_grid"
+      },
+      "occupancy_grid_meta_center_on_robot": {
+        "$array": "continuation_observation_occupancy_grid_meta_center_on_robot"
+      },
+      "occupancy_grid_meta_channel_indices": {
+        "$array": "continuation_observation_occupancy_grid_meta_channel_indices"
+      },
+      "occupancy_grid_meta_origin": {
+        "$array": "continuation_observation_occupancy_grid_meta_origin"
+      },
+      "occupancy_grid_meta_resolution": {
+        "$array": "continuation_observation_occupancy_grid_meta_resolution"
+      },
+      "occupancy_grid_meta_robot_pose": {
+        "$array": "continuation_observation_occupancy_grid_meta_robot_pose"
+      },
+      "occupancy_grid_meta_size": {
+        "$array": "continuation_observation_occupancy_grid_meta_size"
+      },
+      "occupancy_grid_meta_use_ego_frame": {
+        "$array": "continuation_observation_occupancy_grid_meta_use_ego_frame"
+      },
+      "pedestrians_count": {
+        "$array": "continuation_observation_pedestrians_count"
+      },
+      "pedestrians_positions": {
+        "$array": "continuation_observation_pedestrians_positions"
+      },
+      "pedestrians_radius": {
+        "$array": "continuation_observation_pedestrians_radius"
+      },
+      "pedestrians_velocities": {
+        "$array": "continuation_observation_pedestrians_velocities"
+      },
+      "robot_angular_velocity": {
+        "$array": "continuation_observation_robot_angular_velocity"
+      },
+      "robot_heading": {
+        "$array": "continuation_observation_robot_heading"
+      },
+      "robot_position": {
+        "$array": "continuation_observation_robot_position"
+      },
+      "robot_radius": {
+        "$array": "continuation_observation_robot_radius"
+      },
+      "robot_speed": {
+        "$array": "continuation_observation_robot_speed"
+      },
+      "robot_velocity_xy": {
+        "$array": "continuation_observation_robot_velocity_xy"
+      },
+      "sim_timestep": {
+        "$array": "continuation_observation_sim_timestep"
+      }
+    },
+    "planner": {
+      "_avoid_side": 0.0,
+      "_blocked_latched": false,
+      "_filtered_target": {
+        "$array": "continuation_planner__filtered_target"
+      },
+      "_goal_approach_applied": false,
+      "_goal_approach_runtime_parameters": {},
+      "_last_simulation_timestep": {
+        "seconds": 0.10000000149011612,
+        "source": "observation.sim_timestep"
+      },
+      "_last_turn_sign": 1.0,
+      "_obstacle_force_applied": true,
+      "_obstacle_force_runtime_parameters": {
+        "grid_frame": "ego",
+        "grid_origin": [
+          -16.0,
+          -16.0
+        ],
+        "grid_resolution": 0.20000000298023224,
+        "obstacle_channel_index": 0,
+        "robot_radius": 1.0,
+        "visible_obstacle_terms": 1
+      },
+      "_sampling_drive_limits": {
+        "allow_backwards": false,
+        "interaxis_length": 0.3,
+        "limited_reverse": false,
+        "max_angular_accel": 1.0,
+        "max_angular_speed": 1.0,
+        "max_linear_accel": 1.0,
+        "max_linear_decel": 1.0,
+        "max_linear_speed": 2.0,
+        "max_reverse_speed": 0.5,
+        "radius": 1.0,
+        "wheel_radius": 0.05
+      },
+      "_sampling_obstacle_segments": null,
+      "_sampling_path_fields": {},
+      "_surface_v3_contact": false,
+      "_target_speed": 0.39171312763547284,
+      "_target_velocity": {
+        "$array": "continuation_planner__target_velocity"
+      }
+    },
+    "sensor_heading": null,
+    "snqi_history": {
+      "jerk_count": 368,
+      "jerk_sum": 182.850963216639,
+      "prev_robot_acc": {
+        "$array": "continuation_snqi_history_prev_robot_acc"
+      },
+      "prev_robot_pos": {
+        "$array": "continuation_snqi_history_prev_robot_pos"
+      },
+      "prev_robot_vel": {
+        "$array": "continuation_snqi_history_prev_robot_vel"
+      }
+    }
+  },
+  "window_steps": 20
+}

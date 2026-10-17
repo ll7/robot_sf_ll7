@@ -1,0 +1,7 @@
+{
+  "artifact_path": "docs/context/evidence/hardcase_positive_control/admission/CHECKSUMS.sha256",
+  "artifact_sha256": "8f5a61685b1a4b4ccbce0a94e8c6af2a387bb4eacb3e19abcdeb682fbd4b0c5c",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "evidence-review-marker.v1"
+}

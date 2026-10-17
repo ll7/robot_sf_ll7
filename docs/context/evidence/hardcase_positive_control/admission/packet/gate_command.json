@@ -1,0 +1,22 @@
+{
+  "argv": [
+    "python3",
+    "scripts/tools/evaluate_pipeline_persistence_gate.py",
+    "--candidate",
+    "<repository_root>/docs/context/evidence/hardcase_positive_control/admission/packet/entry.json",
+    "--episodes",
+    "<repository_root>/docs/context/evidence/hardcase_positive_control/admission/packet/gate_source.jsonl",
+    "--config",
+    "configs/analysis/issue_5600_persistence_gate.yaml",
+    "--output",
+    "<repository_root>/docs/context/evidence/hardcase_positive_control/admission/packet/persistence",
+    "--replay-results",
+    "<repository_root>/docs/context/evidence/hardcase_positive_control/admission/packet/gate_replay_results.json",
+    "--commit-hash",
+    "f3787b507ffd1af9755da86d85eeada34f816252"
+  ],
+  "interpreter_note": "Original command used the shared-venv sys.executable. Stored argv uses a portable interpreter token; source/frame artifacts and CLI verdict are unchanged.",
+  "returncode": 0,
+  "stderr": "",
+  "stdout": "REJECT <repository_root>/docs/context/evidence/hardcase_positive_control/admission/packet/persistence/generated-54fdcdbc905bf047.persistence.json :: exact_replay:fail:replay digest mismatch: source=3d65f640214911d7f6ad8c02f0ffeb1d38bd4ac76f0310819f090641132b110a replay=c978349b8382c8aa1c687511fe2fa538e0e850e9e1609d90f720a1b43779bedc; perturbation_cell:-0.25:-0.2:unknown; perturbation_cell:-0.25:0.0:unknown; perturbation_cell:-0.25:0.2:unknown; perturbation_cell:0.0:-0.2:unknown; perturbation_cell:0.0:0.0:unknown; perturbation_cell:0.0:0.2:unknown; perturbation_cell:0.25:-0.2:unknown; perturbation_cell:0.25:0.0:unknown; perturbation_cell:0.25:0.2:unknown\n\nSummary: 0 promoted, 1 rejected, 1 total\n"
+}

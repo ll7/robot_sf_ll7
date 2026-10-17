@@ -1,0 +1,11 @@
+{
+  "cases": [
+    {
+      "canonical_record_sha256": "8be24087664e8186d402e2eea3217957096244c7f867229019c4f04d91474434",
+      "case_id": "case-2262754d91813c4ad7470ac4e8b535f1c1e7ea1f529263e93b65093b31528fdf",
+      "path": "cases/case-2262754d91813c4ad7470ac4e8b535f1c1e7ea1f529263e93b65093b31528fdf.json"
+    }
+  ],
+  "claim_boundary": "observed simulator regression cases only",
+  "schema_version": "counterexample-corpus.v1"
+}

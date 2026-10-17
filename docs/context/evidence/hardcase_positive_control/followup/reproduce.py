@@ -16,6 +16,7 @@ import json
 import math
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 FIX = "1baaa3eb08cfbc1866f18702eb939c1f60b400fd"
@@ -92,6 +93,7 @@ def main() -> int:  # noqa: PLR0915 - explicit one-case stage order
                 seed=1001,
                 source_map=root / MAP,
                 window_steps=20,
+                source_scenario=scenario,
             )
 
     source = run_map_episode(
@@ -220,7 +222,7 @@ def main() -> int:  # noqa: PLR0915 - explicit one-case stage order
         {entry["scenario_id"]: {"episode": replays[0], "cells": cells}},
     )
     command = [
-        ".venv/bin/python",
+        sys.executable,
         "scripts/tools/evaluate_pipeline_persistence_gate.py",
         "--candidate",
         str(out / "entry.json"),

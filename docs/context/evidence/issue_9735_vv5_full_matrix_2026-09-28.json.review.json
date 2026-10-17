@@ -1,0 +1,7 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/issue_9735_vv5_full_matrix_2026-09-28.json",
+  "artifact_sha256": "1b9b111a187e523ef98527a28713c11c5dd992b56f1a996ee945832119f7bffb",
+  "preserved_exact_bytes": true,
+  "review_marker": ["AI-GENERATED", "NEEDS-REVIEW"]
+}

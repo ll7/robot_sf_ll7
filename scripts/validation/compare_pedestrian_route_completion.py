@@ -18,6 +18,7 @@ import subprocess
 import sys
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
+from typing import Any, cast
 
 import numpy as np
 from loguru import logger
@@ -46,7 +47,10 @@ def _arm(scenario_name: str, seed: int, ordered: bool) -> dict:
     logger.remove()
     random.seed(seed)
     np.random.seed(seed)
-    scenario = next(s for s in load_scenarios(MATRIX) if s["name"] == scenario_name)
+    # The manifest loader materializes mutable YAML dictionaries.
+    scenario = cast(
+        "dict[str, Any]", next(s for s in load_scenarios(MATRIX) if s["name"] == scenario_name)
+    )
     scenario["seeds"] = [seed]
     config = build_robot_config_from_scenario(scenario, scenario_path=MATRIX)
     config.sim_config.pedestrian_seed = seed
@@ -71,7 +75,8 @@ def _arm(scenario_name: str, seed: int, ordered: bool) -> dict:
             counts["premature_group_respawns"] += nav.waypoint_id < len(nav.waypoints) - 1
             return original(gid, guard_robot=guard_robot)
 
-        behavior.respawn_group_at_start = count_respawn
+        # This diagnostic intentionally installs an instance-level counting wrapper.
+        cast("Any", behavior).respawn_group_at_start = count_respawn
     initial = _frame(sim)
     digest = hashlib.sha256(initial)
     steps = round(config.sim_config.sim_time_in_secs / config.sim_config.time_per_step_in_secs)

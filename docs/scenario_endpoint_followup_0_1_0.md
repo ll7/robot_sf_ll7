@@ -68,3 +68,10 @@ The backend imported as `pysocialforce.Simulator` is the lightweight force/integ
 ## Delivery boundary
 
 The follow-up targets main. On 2026-10-17 it was merged with main `4f4c82eecabd6bb6c10a00364ff171dc76fce388`, which contains #10220. The six snapshot, footprint and route-order integration tests pass; the snapshot test also passes when copied to that main. A deliberate fingerprint mutation is rejected for the intended evidence-drift reason. There is no new production behaviour change or fail-on-main runtime fix in this follow-up. The paired live-crowd results above remain bound to their original source, and are not relabelled as current-head execution. Full readiness is reported separately in the PR takeover note. Domain approval and certification remain author decisions under #10225.
+
+
+The 2026-10-17 typing cleanup states the loader’s materialized dictionary type
+and the diagnostic’s dynamic instance-method instrumentation. The historical
+paired JSON keeps the original runner binding from #10240 source
+`5204dae56672a9719f3312bfbc42af2e6a2757b0`; no new live-crowd measurement is
+claimed from these annotation changes.

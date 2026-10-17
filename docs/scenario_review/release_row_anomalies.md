@@ -331,7 +331,11 @@ The candidate manifest and receipt must pin the config hash and show
 against both the verified bundle source and the committed #9751 template, then
 checks every admitted row's
 five collision-count fields and blocks missing or inconsistent values. It also
-checks equivalent fields in a typed event ledger. Exact contact-event records
+checks equivalent fields in a typed event ledger. For future checker runs, a typed
+ledger must also retain its producing row's scenario, exact integer seed, runtime
+algorithm and software commit. The runtime algorithm can differ from the release
+arm label; a borrowed ledger blocks even when its collision numbers agree.
+Exact contact-event records
 and sampled collision counts use different collection semantics, so the gate
 does not equate their counts. Missing or unversioned ledgers are reported as
 `typed_collision_ledger_unavailable`; a separate provenance gate must establish

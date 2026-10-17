@@ -1,0 +1,148 @@
+"""Prespecified paired seed-block analysis; no p-values or outcome-driven selection."""
+
+import argparse
+import csv
+import json
+from pathlib import Path
+
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import numpy as np
+import yaml
+
+LANE = Path(__file__).resolve().parent
+OUT = LANE / "out"
+ARMS = ["G0E0", "G0E1", "G1E0", "G1E1"]
+ENDPOINTS = ["success", "pedestrian_collision", "wall_collision", "timeout"]
+
+
+def contrasts(values):
+    guard = ((values[..., 1, 0] - values[..., 0, 0]) + (values[..., 1, 1] - values[..., 0, 1])) / 2
+    escape = ((values[..., 0, 1] - values[..., 0, 0]) + (values[..., 1, 1] - values[..., 1, 0])) / 2
+    interaction = values[..., 1, 1] - values[..., 1, 0] - values[..., 0, 1] + values[..., 0, 0]
+    return {"guard": guard, "escape": escape, "interaction": interaction}
+
+
+def self_check():
+    for matrix, expected in [([[0, 0], [1, 1]], (1, 0, 0)),
+                             ([[0, 1], [0, 1]], (0, 1, 0)),
+                             ([[0, 0], [0, 1]], (0.5, 0.5, 1))]:
+        actual = contrasts(np.array(matrix, dtype=float))
+        assert tuple(actual.values()) == expected
+    (OUT / "analysis-validation.json").write_text(json.dumps({"passed": True,
+        "purpose": "Hand-calculated contrast fixtures only; no campaign data", "fixtures": 3,
+        "bootstrap_unit": "One draw indexes the seed dimension, retaining every cell and all four arms"}, indent=2) + "\n")
+
+
+def write_csv(path, records, columns):
+    with path.open("w", newline="") as stream:
+        writer = csv.DictWriter(stream, fieldnames=columns)
+        writer.writeheader()
+        writer.writerows(records)
+
+
+def render(table, blocked):
+    groups = list(dict.fromkeys(r["group"] for r in table))
+    fig, axes = plt.subplots(1, len(groups), figsize=(10, 3.6), squeeze=False)
+    for axis, group in zip(axes[0], groups, strict=True):
+        values = np.full((2, 2), np.nan)
+        group_rows = [r for r in table if r["group"] == group and r["endpoint"] == "success"]
+        for row in group_rows:
+            guard, escape = int(row["arm"][1]), int(row["arm"][3])
+            if not blocked:
+                values[guard, escape] = row["rate"]
+        image = axis.imshow(np.ma.masked_invalid(values), vmin=0, vmax=1, cmap="Blues")
+        axis.set_facecolor("#eeeeee")
+        axis.set_xticks([0, 1], ["Escape off", "Escape on"])
+        axis.set_yticks([0, 1], ["Guard off", "Guard on"])
+        axis.set_title(group.replace("_", " "))
+        for row in group_rows:
+            label = "Not run\nn=0" if blocked else f"{row['count']}/{row['denominator']}\n{row['rate']:.1%}\n[{row['ci_low']:.1%}, {row['ci_high']:.1%}]"
+            axis.text(int(row["arm"][3]), int(row["arm"][1]), label, ha="center", va="center", fontsize=8)
+    fig.suptitle("NOT EXECUTED — preservation gate blocked" if blocked else "New current-version execution: collision-free completion", fontsize=12)
+    if not blocked:
+        fig.colorbar(image, ax=list(axes[0]), label="Success fraction", shrink=.7)
+    fig.subplots_adjust(top=.79, bottom=.2, left=.1, right=.96, wspace=.5)
+    fig.savefig(OUT / "figure_draft.png", dpi=180)
+    fig.savefig(OUT / "figure_draft.pdf")
+    plt.close(fig)
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--input", type=Path)
+    args = parser.parse_args()
+    self_check()
+    groups = yaml.safe_load((LANE / "configs/groups.yaml").read_text())
+    table, effects = [], []
+    if args.input is None:
+        for group, cells in groups.items():
+            for arm in ARMS:
+                for endpoint in ENDPOINTS:
+                    table.append({"group": group, "arm": arm, "endpoint": endpoint,
+                        "status": "not_run", "mode": "not_run", "planned_denominator": len(cells) * 30,
+                        "denominator": 0, "count": "", "rate": "", "ci_low": "", "ci_high": ""})
+            for endpoint in ENDPOINTS:
+                for effect in ("guard", "escape", "interaction"):
+                    effects.append({"group": group, "endpoint": endpoint, "effect": effect,
+                        "status": "not_run", "mode": "not_run", "planned_denominator_per_arm": len(cells) * 30,
+                        "paired_denominator_per_arm": 0, "seed_blocks": 0,
+                        "difference": "", "ci_low": "", "ci_high": ""})
+    else:
+        records = [json.loads(line) for line in args.input.read_text().splitlines() if line.strip()]
+        slots = {(r["planner_key"], r["scenario_id"], int(r["seed"])): r for r in records}
+        expected = {(arm, cell, seed) for arm in ARMS for cells in groups.values() for cell in cells for seed in range(1001, 1031)}
+        assert len(slots) == len(records) == 2160 and set(slots) == expected, "Incomplete or duplicate paired design"
+        assert all(r["mode"] in {"native", "adapter"} for r in records), "Report fallback/degraded census; no main-effect inference"
+        execution_modes = {r["mode"] for r in records}
+        assert len(execution_modes) == 1, "Execution mode differs across factorial arms"
+        execution_mode = next(iter(execution_modes))
+        rng = np.random.default_rng(1001)
+        draws = rng.integers(0, 30, size=(10000, 30))
+        for group, cells in groups.items():
+            values = np.zeros((30, len(cells), 2, 2, 4), dtype=float)
+            for si, seed in enumerate(range(1001, 1031)):
+                for ci, cell in enumerate(cells):
+                    for gi in (0, 1):
+                        for ei in (0, 1):
+                            r = slots[(f"G{gi}E{ei}", cell, seed)]
+                            m, o = r["metrics"], r["outcome"]
+                            assert {"ped_collision_count", "obstacle_collision_count", "success"} <= set(m)
+                            ped, wall = m["ped_collision_count"] > 0, m["obstacle_collision_count"] > 0
+                            collision = bool(o["collision_event"])
+                            success = bool(o["route_complete"]) and not collision
+                            assert bool(m["success"]) == success, "Success/outcome contradiction"
+                            timeout = bool(o["timeout_event"]) and not collision and not success
+                            values[si, ci, gi, ei] = [success, ped, wall, timeout]
+            # Indexing draws resamples seed blocks while retaining all cells/arms/endpoints.
+            boot = values[draws].mean(axis=(1, 2))
+            point = values.mean(axis=(0, 1))
+            for gi in (0, 1):
+                for ei in (0, 1):
+                    for mi, endpoint in enumerate(ENDPOINTS):
+                        lo, hi = np.quantile(boot[:, gi, ei, mi], [.025, .975])
+                        table.append({"group": group, "arm": f"G{gi}E{ei}", "endpoint": endpoint,
+                            "status": "valid_diagnostic", "mode": execution_mode, "planned_denominator": len(cells) * 30,
+                            "denominator": len(cells) * 30, "count": int(values[:, :, gi, ei, mi].sum()),
+                            "rate": point[gi, ei, mi], "ci_low": lo, "ci_high": hi})
+            for mi, endpoint in enumerate(ENDPOINTS):
+                observed = contrasts(point[:, :, mi])
+                bootstrap = contrasts(boot[:, :, :, mi])
+                for effect in ("guard", "escape", "interaction"):
+                    lo, hi = np.quantile(bootstrap[effect], [.025, .975])
+                    effects.append({"group": group, "endpoint": endpoint, "effect": effect,
+                        "status": "valid_diagnostic", "mode": execution_mode, "planned_denominator_per_arm": len(cells) * 30,
+                        "paired_denominator_per_arm": len(cells) * 30, "seed_blocks": 30,
+                        "difference": float(observed[effect]), "ci_low": lo, "ci_high": hi})
+        (OUT / "paired-validation.json").write_text(json.dumps({"passed": True, "rows": 2160,
+            "seed_blocks": 30, "native": sum(r["mode"] == "native" for r in records),
+            "adapter": sum(r["mode"] == "adapter" for r in records), "fallback": 0, "degraded": 0,
+            "duplicates": 0, "missing_slots": 0, "bootstrap_replicates": 10000}, indent=2) + "\n")
+    write_csv(OUT / "figure_data.csv", table, ["group", "arm", "endpoint", "status", "mode", "planned_denominator", "denominator", "count", "rate", "ci_low", "ci_high"])
+    write_csv(OUT / "paired_effects.csv", effects, ["group", "endpoint", "effect", "status", "mode", "planned_denominator_per_arm", "paired_denominator_per_arm", "seed_blocks", "difference", "ci_low", "ci_high"])
+    render(table, blocked=args.input is None)
+
+
+if __name__ == "__main__":
+    main()

@@ -253,6 +253,7 @@ def _run_single_arm_subprocess(params: _SubprocessArmParams) -> dict[str, Any]:
             record_simulation_step_trace=params.record_simulation_step_trace,
             snqi_weights=params.snqi_weights,
             snqi_baseline=params.snqi_baseline,
+            planner_key=params.planner_key,
             algo=params.planner_algo,
             algo_config_path=(
                 str(params.algo_config_path) if params.algo_config_path is not None else None

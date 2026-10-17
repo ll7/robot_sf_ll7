@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import sys
 from pathlib import Path
 
 import pytest
@@ -19,7 +20,21 @@ def test_offline_verifier_ignores_review_sidecar_first(
     spec = importlib.util.spec_from_file_location("hardcase_offline_verifier", path)
     assert spec is not None and spec.loader is not None
     verifier = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(verifier)
+    packet_files_before = {
+        item.relative_to(path.parent) for item in path.parent.rglob("*") if item.is_file()
+    }
+    previous_bytecode_setting = sys.dont_write_bytecode
+    try:
+        sys.dont_write_bytecode = True
+        spec.loader.exec_module(verifier)
+    finally:
+        sys.dont_write_bytecode = previous_bytecode_setting
+    packet_files_after = {
+        item.relative_to(path.parent) for item in path.parent.rglob("*") if item.is_file()
+    }
+    assert packet_files_after == packet_files_before, (
+        "verifier import changed immutable packet inventory"
+    )
     original_glob = Path.glob
 
     def review_first(folder: Path, pattern: str):

@@ -1,0 +1,401 @@
+{
+  "repository": "ll7/robot_sf_ll7",
+  "pr": 10166,
+  "failed_head": "74fe911c38c41ae5dd67d6db4f69ef20e0cba017",
+  "run": 37933794870,
+  "main": "6d94c56b613b7067ba6dd4998941ee8c5dd48893",
+  "main_merge": "1a75c8dbc133e8e1907f0603bc5e089a448ba7dd",
+  "unique_failed_tests": 29,
+  "failed_test_occurrences": 93,
+  "failures": [
+    {
+      "node": "tests/analysis/test_compare_release_0_0_7_to_0_0_8.py::test_real_rows_refuse_self_consistent_config_mutations[goal-extra_parameter]",
+      "classification": "a",
+      "cause": "Pinned successor identity reconstruction always uses ambient current defaults instead of the producer source policy.",
+      "observed_failure": "ValueError: 0.0.8 row scenario config_hash differs from effective scenario at ('goal', 'differential_drive', 'classic_bottleneck_low', 1001, '')",
+      "resolution": "Select the verified algorithm source or config-less released matrix; retain support for older identity-builder signatures. Unchanged archived row must pass before each mutation refusal.",
+      "jobs": [
+        "fast-feedback (6)"
+      ]
+    },
+    {
+      "node": "tests/analysis/test_compare_release_0_0_7_to_0_0_8.py::test_real_rows_refuse_self_consistent_config_mutations[goal-missing_algo_hash]",
+      "classification": "a",
+      "cause": "Pinned successor identity reconstruction always uses ambient current defaults instead of the producer source policy.",
+      "observed_failure": "ValueError: 0.0.8 row scenario config_hash differs from effective scenario at ('goal', 'differential_drive', 'classic_bottleneck_low', 1001, '')",
+      "resolution": "Select the verified algorithm source or config-less released matrix; retain support for older identity-builder signatures. Unchanged archived row must pass before each mutation refusal.",
+      "jobs": [
+        "fast-feedback (2)"
+      ]
+    },
+    {
+      "node": "tests/analysis/test_compare_release_0_0_7_to_0_0_8.py::test_real_rows_refuse_self_consistent_config_mutations[guarded_ppo-missing_algo_hash]",
+      "classification": "a",
+      "cause": "Pinned successor identity reconstruction always uses ambient current defaults instead of the producer source policy.",
+      "observed_failure": "ValueError: 0.0.8 row scenario config_hash differs from effective scenario at ('guarded_ppo', 'differential_drive', 'classic_bottleneck_low', 1001, '')",
+      "resolution": "Select the verified algorithm source or config-less released matrix; retain support for older identity-builder signatures. Unchanged archived row must pass before each mutation refusal.",
+      "jobs": [
+        "fast-feedback (5)"
+      ]
+    },
+    {
+      "node": "tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_main_oracle[benchmark_data_2026_08-classic_realworld_double_bottleneck_high-social_force-1001-600-max_steps-0.21944634296423818-308.0]",
+      "classification": "a",
+      "cause": "Historical golden test supplies an unregistered scoped_scenarios.json placeholder, so the PR adds a current identity discriminator and the first ID assertion fails.",
+      "observed_failure": "AssertionError: assert 'classic_real...4a212990ae479' == 'classic_real...9b00227cecdfe'",
+      "resolution": "Imported main #10227 replaces obsolete moving native goldens with five paired same-revision tests; no local repair of a golden value or snapshot.",
+      "jobs": [
+        "fast-feedback (6)"
+      ]
+    },
+    {
+      "node": "tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_main_oracle[benchmark_data_2026_08-francis2023_narrow_doorway-orca-1001-400-terminated-0.24059849301207314-232.0]",
+      "classification": "a",
+      "cause": "Historical golden test supplies an unregistered scoped_scenarios.json placeholder, so the PR adds a current identity discriminator and the first ID assertion fails.",
+      "observed_failure": "AssertionError: assert 'francis2023_...e8e643869a867' == 'francis2023_...63c0bd8131283'",
+      "resolution": "Imported main #10227 replaces obsolete moving native goldens with five paired same-revision tests; no local repair of a golden value or snapshot.",
+      "jobs": [
+        "fast-feedback (4)"
+      ]
+    },
+    {
+      "node": "tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_main_oracle[benchmark_data_2026_08-francis2023_narrow_doorway-orca-1002-400-terminated-0.23017620618943224-241.0]",
+      "classification": "a",
+      "cause": "Historical golden test supplies an unregistered scoped_scenarios.json placeholder, so the PR adds a current identity discriminator and the first ID assertion fails.",
+      "observed_failure": "AssertionError: assert 'francis2023_...c187e833774ea' == 'francis2023_...8a96935d88b5e'",
+      "resolution": "Imported main #10227 replaces obsolete moving native goldens with five paired same-revision tests; no local repair of a golden value or snapshot.",
+      "jobs": [
+        "fast-feedback (3)"
+      ]
+    },
+    {
+      "node": "tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_main_oracle[runtime_smoke_v0_3-francis2023_blind_corner-goal-1001-263-collision-0.94991463368817-0.0]",
+      "classification": "a",
+      "cause": "Historical golden test supplies an unregistered scoped_scenarios.json placeholder, so the PR adds a current identity discriminator and the first ID assertion fails.",
+      "observed_failure": "AssertionError: assert 'francis2023_...394db75bbb5a7' == 'francis2023_...660886afe757a'",
+      "resolution": "Imported main #10227 replaces obsolete moving native goldens with five paired same-revision tests; no local repair of a golden value or snapshot.",
+      "jobs": [
+        "fast-feedback (6)"
+      ]
+    },
+    {
+      "node": "tests/benchmark/test_campaign_horizon_authority.py::test_historical_runner_cap_matches_main_oracle[runtime_smoke_v0_3-francis2023_blind_corner-goal-1002-262-collision-0.9490333775512672-0.0]",
+      "classification": "a",
+      "cause": "Historical golden test supplies an unregistered scoped_scenarios.json placeholder, so the PR adds a current identity discriminator and the first ID assertion fails.",
+      "observed_failure": "AssertionError: assert 'francis2023_...26f9ab39617d5' == 'francis2023_...a60737c43cf9b'",
+      "resolution": "Imported main #10227 replaces obsolete moving native goldens with five paired same-revision tests; no local repair of a golden value or snapshot.",
+      "jobs": [
+        "fast-feedback (5)"
+      ]
+    },
+    {
+      "node": "tests/benchmark/test_campaign_horizon_compatibility.py::test_unversioned_smoke_identity_equals_literal_main_oracle",
+      "classification": "a",
+      "cause": "Historical native fixture supplies unregistered scoped_scenarios.json instead of the actual registered campaign matrix.",
+      "observed_failure": "AssertionError: assert '733eaa7bd740d475' == 'cfd4afbfb80f7d05'",
+      "resolution": "Keep the normalized map lookup path and forward cfg.scenario_matrix_path separately as provenance_scenario_path; preserve literal historical IDs, hashes and scenario bytes.",
+      "jobs": [
+        "fast-feedback (4)"
+      ]
+    },
+    {
+      "node": "tests/benchmark/test_scheduled_campaign_compatibility.py::test_historical_scheduled_episode_matches_main_row_contract[classic_cross_trap_low-0.0.7]",
+      "classification": "a",
+      "cause": "Historical native fixture supplies unregistered scoped_scenarios.json instead of the actual registered campaign matrix.",
+      "observed_failure": "AssertionError: assert '600920d5df80632c' == '9a5290224b87eee1'",
+      "resolution": "Keep the normalized map lookup path and forward cfg.scenario_matrix_path separately as provenance_scenario_path; preserve literal historical IDs, hashes and scenario bytes.",
+      "jobs": [
+        "fast-feedback (4)"
+      ]
+    },
+    {
+      "node": "tests/benchmark/test_scheduled_campaign_compatibility.py::test_historical_scheduled_episode_matches_main_row_contract[classic_cross_trap_low-None]",
+      "classification": "a",
+      "cause": "Historical native fixture supplies unregistered scoped_scenarios.json instead of the actual registered campaign matrix.",
+      "observed_failure": "AssertionError: assert '600920d5df80632c' == '9a5290224b87eee1'",
+      "resolution": "Keep the normalized map lookup path and forward cfg.scenario_matrix_path separately as provenance_scenario_path; preserve literal historical IDs, hashes and scenario bytes.",
+      "jobs": [
+        "fast-feedback (4)"
+      ]
+    },
+    {
+      "node": "tests/benchmark/test_scheduled_campaign_compatibility.py::test_historical_scheduled_episode_matches_main_row_contract[francis2023_blind_corner-0.0.7]",
+      "classification": "a",
+      "cause": "Historical native fixture supplies unregistered scoped_scenarios.json instead of the actual registered campaign matrix.",
+      "observed_failure": "AssertionError: assert '8f4eeb1d3a4339ab' == 'feadeed0621c6e04'",
+      "resolution": "Keep the normalized map lookup path and forward cfg.scenario_matrix_path separately as provenance_scenario_path; preserve literal historical IDs, hashes and scenario bytes.",
+      "jobs": [
+        "fast-feedback (2)"
+      ]
+    },
+    {
+      "node": "tests/benchmark/test_scheduled_campaign_compatibility.py::test_historical_scheduled_episode_matches_main_row_contract[francis2023_blind_corner-None]",
+      "classification": "a",
+      "cause": "Historical native fixture supplies unregistered scoped_scenarios.json instead of the actual registered campaign matrix.",
+      "observed_failure": "AssertionError: assert '8f4eeb1d3a4339ab' == 'feadeed0621c6e04'",
+      "resolution": "Keep the normalized map lookup path and forward cfg.scenario_matrix_path separately as provenance_scenario_path; preserve literal historical IDs, hashes and scenario bytes.",
+      "jobs": [
+        "fast-feedback (3)"
+      ]
+    },
+    {
+      "node": "tests/unit/benchmark/test_snqi_v2.py::test_calibration_freeze_rejects_acquisition_source_race[before_publish]",
+      "classification": "a",
+      "cause": "Calibration custody adapter omits scenario_path now required by the source-aware resume identity builder.",
+      "observed_failure": "AttributeError: 'types.SimpleNamespace' object has no attribute 'scenario_path'",
+      "resolution": "Carry config.scenario_matrix_path in the production adapter; new registered/current-source regression plus the existing custody tests.",
+      "jobs": [
+        "compat-matrix (ubuntu-latest, 3.13)",
+        "compat-matrix (ubuntu-latest, 3.11)",
+        "fast-feedback (2)",
+        "compat-matrix (macos-latest, 3.11)",
+        "compat-matrix (macos-latest, 3.13)"
+      ]
+    },
+    {
+      "node": "tests/unit/benchmark/test_snqi_v2.py::test_calibration_freeze_rejects_coherent_identity_forgery[algo_config_hash]",
+      "classification": "a",
+      "cause": "Calibration custody adapter omits scenario_path now required by the source-aware resume identity builder.",
+      "observed_failure": "AttributeError: 'types.SimpleNamespace' object has no attribute 'scenario_path'",
+      "resolution": "Carry config.scenario_matrix_path in the production adapter; new registered/current-source regression plus the existing custody tests.",
+      "jobs": [
+        "compat-matrix (ubuntu-latest, 3.13)",
+        "compat-matrix (ubuntu-latest, 3.11)",
+        "compat-matrix (macos-latest, 3.11)",
+        "compat-matrix (macos-latest, 3.13)",
+        "fast-feedback (5)"
+      ]
+    },
+    {
+      "node": "tests/unit/benchmark/test_snqi_v2.py::test_calibration_freeze_rejects_coherent_identity_forgery[cbf_safety_filter]",
+      "classification": "a",
+      "cause": "Calibration custody adapter omits scenario_path now required by the source-aware resume identity builder.",
+      "observed_failure": "AttributeError: 'types.SimpleNamespace' object has no attribute 'scenario_path'",
+      "resolution": "Carry config.scenario_matrix_path in the production adapter; new registered/current-source regression plus the existing custody tests.",
+      "jobs": [
+        "compat-matrix (ubuntu-latest, 3.13)",
+        "compat-matrix (ubuntu-latest, 3.11)",
+        "compat-matrix (macos-latest, 3.11)",
+        "compat-matrix (macos-latest, 3.13)",
+        "fast-feedback (6)"
+      ]
+    },
+    {
+      "node": "tests/unit/benchmark/test_snqi_v2.py::test_calibration_freeze_rejects_coherent_identity_forgery[duplicate_id]",
+      "classification": "a",
+      "cause": "Calibration custody adapter omits scenario_path now required by the source-aware resume identity builder.",
+      "observed_failure": "AttributeError: 'types.SimpleNamespace' object has no attribute 'scenario_path'",
+      "resolution": "Carry config.scenario_matrix_path in the production adapter; new registered/current-source regression plus the existing custody tests.",
+      "jobs": [
+        "compat-matrix (ubuntu-latest, 3.13)",
+        "compat-matrix (ubuntu-latest, 3.11)",
+        "compat-matrix (macos-latest, 3.11)",
+        "compat-matrix (macos-latest, 3.13)",
+        "fast-feedback (6)"
+      ]
+    },
+    {
+      "node": "tests/unit/benchmark/test_snqi_v2.py::test_calibration_freeze_rejects_coherent_identity_forgery[extra]",
+      "classification": "a",
+      "cause": "Calibration custody adapter omits scenario_path now required by the source-aware resume identity builder.",
+      "observed_failure": "AttributeError: 'types.SimpleNamespace' object has no attribute 'scenario_path'",
+      "resolution": "Carry config.scenario_matrix_path in the production adapter; new registered/current-source regression plus the existing custody tests.",
+      "jobs": [
+        "compat-matrix (ubuntu-latest, 3.13)",
+        "compat-matrix (ubuntu-latest, 3.11)",
+        "compat-matrix (macos-latest, 3.11)",
+        "fast-feedback (1)",
+        "compat-matrix (macos-latest, 3.13)"
+      ]
+    },
+    {
+      "node": "tests/unit/benchmark/test_snqi_v2.py::test_calibration_freeze_rejects_coherent_identity_forgery[observation_mode]",
+      "classification": "a",
+      "cause": "Calibration custody adapter omits scenario_path now required by the source-aware resume identity builder.",
+      "observed_failure": "AttributeError: 'types.SimpleNamespace' object has no attribute 'scenario_path'",
+      "resolution": "Carry config.scenario_matrix_path in the production adapter; new registered/current-source regression plus the existing custody tests.",
+      "jobs": [
+        "compat-matrix (ubuntu-latest, 3.13)",
+        "compat-matrix (ubuntu-latest, 3.11)",
+        "compat-matrix (macos-latest, 3.11)",
+        "fast-feedback (1)",
+        "compat-matrix (macos-latest, 3.13)"
+      ]
+    },
+    {
+      "node": "tests/unit/benchmark/test_snqi_v2.py::test_calibration_freeze_rejects_coherent_identity_forgery[safety_wrapper]",
+      "classification": "a",
+      "cause": "Calibration custody adapter omits scenario_path now required by the source-aware resume identity builder.",
+      "observed_failure": "AttributeError: 'types.SimpleNamespace' object has no attribute 'scenario_path'",
+      "resolution": "Carry config.scenario_matrix_path in the production adapter; new registered/current-source regression plus the existing custody tests.",
+      "jobs": [
+        "compat-matrix (ubuntu-latest, 3.13)",
+        "compat-matrix (ubuntu-latest, 3.11)",
+        "compat-matrix (macos-latest, 3.11)",
+        "compat-matrix (macos-latest, 3.13)",
+        "fast-feedback (5)"
+      ]
+    },
+    {
+      "node": "tests/unit/benchmark/test_snqi_v2.py::test_calibration_freeze_rejects_spawn_validity_before_projection[None]",
+      "classification": "a",
+      "cause": "Calibration custody adapter omits scenario_path now required by the source-aware resume identity builder.",
+      "observed_failure": "AttributeError: 'types.SimpleNamespace' object has no attribute 'scenario_path'",
+      "resolution": "Carry config.scenario_matrix_path in the production adapter; new registered/current-source regression plus the existing custody tests.",
+      "jobs": [
+        "compat-matrix (ubuntu-latest, 3.13)",
+        "compat-matrix (ubuntu-latest, 3.11)",
+        "compat-matrix (macos-latest, 3.11)",
+        "compat-matrix (macos-latest, 3.13)",
+        "fast-feedback (6)"
+      ]
+    },
+    {
+      "node": "tests/unit/benchmark/test_snqi_v2.py::test_calibration_freeze_rejects_spawn_validity_before_projection[block0]",
+      "classification": "a",
+      "cause": "Calibration custody adapter omits scenario_path now required by the source-aware resume identity builder.",
+      "observed_failure": "AttributeError: 'types.SimpleNamespace' object has no attribute 'scenario_path'",
+      "resolution": "Carry config.scenario_matrix_path in the production adapter; new registered/current-source regression plus the existing custody tests.",
+      "jobs": [
+        "compat-matrix (ubuntu-latest, 3.13)",
+        "compat-matrix (ubuntu-latest, 3.11)",
+        "compat-matrix (macos-latest, 3.11)",
+        "compat-matrix (macos-latest, 3.13)",
+        "fast-feedback (5)"
+      ]
+    },
+    {
+      "node": "tests/unit/benchmark/test_snqi_v2.py::test_calibration_freeze_rejects_spawn_validity_before_projection[block1]",
+      "classification": "a",
+      "cause": "Calibration custody adapter omits scenario_path now required by the source-aware resume identity builder.",
+      "observed_failure": "AttributeError: 'types.SimpleNamespace' object has no attribute 'scenario_path'",
+      "resolution": "Carry config.scenario_matrix_path in the production adapter; new registered/current-source regression plus the existing custody tests.",
+      "jobs": [
+        "compat-matrix (ubuntu-latest, 3.13)",
+        "compat-matrix (ubuntu-latest, 3.11)",
+        "compat-matrix (macos-latest, 3.11)",
+        "fast-feedback (3)",
+        "compat-matrix (macos-latest, 3.13)"
+      ]
+    },
+    {
+      "node": "tests/unit/benchmark/test_snqi_v2.py::test_calibration_freeze_rejects_unbound_custody[coherent_scenario_config]",
+      "classification": "a",
+      "cause": "Calibration custody adapter omits scenario_path now required by the source-aware resume identity builder.",
+      "observed_failure": "AttributeError: 'types.SimpleNamespace' object has no attribute 'scenario_path'",
+      "resolution": "Carry config.scenario_matrix_path in the production adapter; new registered/current-source regression plus the existing custody tests.",
+      "jobs": [
+        "compat-matrix (ubuntu-latest, 3.13)",
+        "compat-matrix (ubuntu-latest, 3.11)",
+        "compat-matrix (macos-latest, 3.11)",
+        "compat-matrix (macos-latest, 3.13)",
+        "fast-feedback (6)"
+      ]
+    },
+    {
+      "node": "tests/unit/benchmark/test_snqi_v2.py::test_calibration_freeze_rejects_unbound_custody[nested_fallback]",
+      "classification": "a",
+      "cause": "Calibration custody adapter omits scenario_path now required by the source-aware resume identity builder.",
+      "observed_failure": "AttributeError: 'types.SimpleNamespace' object has no attribute 'scenario_path'",
+      "resolution": "Carry config.scenario_matrix_path in the production adapter; new registered/current-source regression plus the existing custody tests.",
+      "jobs": [
+        "compat-matrix (ubuntu-latest, 3.13)",
+        "compat-matrix (ubuntu-latest, 3.11)",
+        "compat-matrix (macos-latest, 3.11)",
+        "fast-feedback (3)",
+        "compat-matrix (macos-latest, 3.13)"
+      ]
+    },
+    {
+      "node": "tests/unit/benchmark/test_snqi_v2.py::test_calibration_freeze_rejects_unbound_custody[sidecar_row]",
+      "classification": "a",
+      "cause": "Calibration custody adapter omits scenario_path now required by the source-aware resume identity builder.",
+      "observed_failure": "AttributeError: 'types.SimpleNamespace' object has no attribute 'scenario_path'",
+      "resolution": "Carry config.scenario_matrix_path in the production adapter; new registered/current-source regression plus the existing custody tests.",
+      "jobs": [
+        "compat-matrix (ubuntu-latest, 3.13)",
+        "compat-matrix (ubuntu-latest, 3.11)",
+        "compat-matrix (macos-latest, 3.11)",
+        "compat-matrix (macos-latest, 3.13)",
+        "fast-feedback (5)"
+      ]
+    },
+    {
+      "node": "tests/unit/benchmark/test_snqi_v2.py::test_freeze_calibration_archive_binds_files_and_source[calibration_archive0]",
+      "classification": "a",
+      "cause": "Calibration custody adapter omits scenario_path now required by the source-aware resume identity builder.",
+      "observed_failure": "AttributeError: 'types.SimpleNamespace' object has no attribute 'scenario_path'",
+      "resolution": "Carry config.scenario_matrix_path in the production adapter; new registered/current-source regression plus the existing custody tests.",
+      "jobs": [
+        "compat-matrix (ubuntu-latest, 3.13)",
+        "compat-matrix (ubuntu-latest, 3.11)",
+        "compat-matrix (macos-latest, 3.11)",
+        "compat-matrix (macos-latest, 3.13)",
+        "fast-feedback (6)"
+      ]
+    },
+    {
+      "node": "tests/unit/benchmark/test_snqi_v2.py::test_freeze_calibration_archive_binds_files_and_source[calibration_archive1]",
+      "classification": "a",
+      "cause": "Calibration custody adapter omits scenario_path now required by the source-aware resume identity builder.",
+      "observed_failure": "AttributeError: 'types.SimpleNamespace' object has no attribute 'scenario_path'",
+      "resolution": "Carry config.scenario_matrix_path in the production adapter; new registered/current-source regression plus the existing custody tests.",
+      "jobs": [
+        "compat-matrix (ubuntu-latest, 3.13)",
+        "compat-matrix (ubuntu-latest, 3.11)",
+        "compat-matrix (macos-latest, 3.11)",
+        "fast-feedback (1)",
+        "compat-matrix (macos-latest, 3.13)"
+      ]
+    },
+    {
+      "node": "tests/unit/benchmark/test_snqi_v2.py::test_snqifix_freeze_mixed_budgets_and_dev_split[calibration_archive0]",
+      "classification": "a",
+      "cause": "Calibration custody adapter omits scenario_path now required by the source-aware resume identity builder.",
+      "observed_failure": "AttributeError: 'types.SimpleNamespace' object has no attribute 'scenario_path'",
+      "resolution": "Carry config.scenario_matrix_path in the production adapter; new registered/current-source regression plus the existing custody tests.",
+      "jobs": [
+        "compat-matrix (ubuntu-latest, 3.13)",
+        "compat-matrix (ubuntu-latest, 3.11)",
+        "compat-matrix (macos-latest, 3.11)",
+        "compat-matrix (macos-latest, 3.13)",
+        "fast-feedback (4)"
+      ]
+    }
+  ],
+  "aggregate_ci": "Failed because the six fast-feedback shards and four compatibility cells failed; no additional root failure.",
+  "main_comparison": {
+    "moving_goldens": "#10227/ad86a8440 imported; the logs here fail at identity before reaching metric values. In the CI lane #10219 logs the inherited failure was avg_speed drift.",
+    "timeout": "facc818e2 already an ancestor of 74fe911c; no timeout failure in this run.",
+    "event_fixture": "#10288 is a separate draft, absent from main. CI lane #10219 needed it under an inherited benchmark-title event; no such test failed here, so not copied.",
+    "pr10282": "CI lane fixed a collector fixture lacking pedestrian IDs. Its main repair is imported; not an observed failure in this run."
+  },
+  "secondary_log_noise": "Closed-stream logging errors during pytest teardown; not a separate failed test or infrastructure root cause. No primary flaky/infra failure found.",
+  "failed_jobs": {
+    "compat-matrix (ubuntu-latest, 3.13)": 16,
+    "compat-matrix (ubuntu-latest, 3.11)": 16,
+    "fast-feedback (2)": 3,
+    "compat-matrix (macos-latest, 3.11)": 16,
+    "fast-feedback (1)": 3,
+    "fast-feedback (3)": 4,
+    "compat-matrix (macos-latest, 3.13)": 16,
+    "fast-feedback (5)": 6,
+    "fast-feedback (6)": 8,
+    "fast-feedback (4)": 5
+  },
+  "additional_local_findings": [
+    {
+      "classification": "a",
+      "cause": "Camera-ready already passes provenance_scenario_path to run_map_batch, but source identity was not forwarded through serialized workers or used by resume filtering. Normalized repository-relative map paths cannot use the original YAML directory as their lookup base.",
+      "regression": "test_normalized_batch_preserves_released_default_source_and_resume",
+      "base_failure": "current != legacy-0.0.8 on a real one-step batch from a registered original source",
+      "fix": "Carry original provenance_scenario_path separately to episode default selection and resume; do not alter map lookup, mappings or current defaults. Forward the optional argument through the compatibility facade as well as the serialized worker."
+    },
+    {
+      "classification": "a",
+      "cause": "Three real-matrix horizon fixture variants constructed a synthetic producer row with ambient current defaults after the pinned worker correctly selected registered legacy defaults.",
+      "tests": "test_pinned_runtime_rebinds_real_scenario_for_arm_horizon with budget None and protocols None, 0.0.7, 0.0.8",
+      "fix": "Construct fixture row under its independently verified original matrix policy; retain full identity/horizon/refusal assertions."
+    }
+  ]
+}

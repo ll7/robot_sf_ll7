@@ -59,6 +59,11 @@ def execute_map_job(
         algo_config=params.get("algo_config"),
         algo_config_path=params.get("algo_config_path"),
         scenario_path=_required_path_param(params, "scenario_path"),
+        **(
+            {"provenance_scenario_path": Path(params["provenance_scenario_path"])}
+            if params.get("provenance_scenario_path") is not None
+            else {}
+        ),
         adapter_impact_eval=bool(params.get("adapter_impact_eval", False)),
         experimental_ped_impact=bool(params.get("experimental_ped_impact", False)),
         ped_impact_radius_m=ped_impact_radius_m,

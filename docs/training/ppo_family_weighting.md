@@ -1,7 +1,10 @@
 # Optional training-family oversampling
 
 Use `python -m scripts.training.train_ppo_with_family_weights --config <config>`
-with the canonical trainer's CLI options. This additive entry point expands
+with the canonical trainer's configuration and training options. Logging setup
+is separate: `--log-file` is rejected and `--log-level` does not configure this
+entry point. Use shell redirection and Loguru environment settings for logging.
+This additive entry point expands
 `scenario_sampling.family_weights` into the existing per-scenario `weights`
 before workers start; it delegates training, selection and manifests to the
 canonical trainer. Without `family_weights`, behavior is unchanged. The separate

@@ -13,11 +13,17 @@ classifies direct packages from the canonical policy, and rejects mixed
 material direct-risk lanes. It also checks changed workflow action pins for
 stale exact references elsewhere in the tracked HEAD tree. Unknown direct
 packages are rejected until the policy is deliberately extended.
+
+An opt-in sync mode rewrites those coupled stale pins without hand-editing
+fixtures: ``--sync-action-pins`` previews the per-file diffs, and adding
+``--apply`` writes them after the same fail-closed checks. The default stays
+report-only and the guard keeps rejecting stale references.
 """
 
 from __future__ import annotations
 
 import argparse
+import difflib
 import fnmatch
 import json
 import re
@@ -1210,6 +1216,157 @@ def check_workflow_action_pin_guard(
     return report
 
 
+class WorkflowActionPinSyncError(PolicyError):
+    """Raised when a coupled action-pin sync cannot proceed fail-closed."""
+
+    def __init__(self, message: str, report: Mapping[str, Any]) -> None:
+        """Keep the structured sync report alongside the actionable error."""
+        super().__init__(message)
+        self.report = dict(report)
+
+
+def _exact_pin_pattern(action_ref: str) -> re.Pattern[str]:
+    """Match an exact tracked action pin, mirroring the guard search."""
+    return re.compile(r"(?<![A-Za-z0-9_./-])" + re.escape(action_ref) + r"(?![0-9a-fA-F])")
+
+
+def _rewrite_pin_file(
+    repo_root: Path,
+    relative_path: str,
+    rows: list[dict[str, Any]],
+    report: dict[str, Any],
+) -> tuple[dict[str, Any], str]:
+    """Rewrite exact pins in one working-tree file; return (file_row, new_text)."""
+    target = repo_root / relative_path
+    if not target.is_file():
+        raise WorkflowActionPinSyncError(
+            f"cannot sync action pins: target file missing: {relative_path}",
+            report,
+        )
+    original = target.read_text(encoding="utf-8")
+    updated = original
+    replacements: list[dict[str, Any]] = []
+    for row in rows:
+        pattern = _exact_pin_pattern(row["old_ref"])
+        occurrences = len(pattern.findall(updated))
+        if occurrences == 0:
+            if row["old_ref"] in updated:
+                raise WorkflowActionPinSyncError(
+                    f"cannot sync {row['old_ref']} -> {row['new_ref']}: "
+                    f"{relative_path} contains the pin only as a non-exact "
+                    "substring; manual review required",
+                    report,
+                )
+            raise WorkflowActionPinSyncError(
+                f"cannot sync {row['old_ref']} -> {row['new_ref']}: "
+                f"pin occurs zero times in {relative_path}",
+                report,
+            )
+        updated = pattern.sub(row["new_ref"], updated)
+        replacements.append(
+            {
+                "old_ref": row["old_ref"],
+                "new_ref": row["new_ref"],
+                "occurrences": occurrences,
+            }
+        )
+    diff = "".join(
+        difflib.unified_diff(
+            original.splitlines(keepends=True),
+            updated.splitlines(keepends=True),
+            fromfile=f"a/{relative_path}",
+            tofile=f"b/{relative_path}",
+        )
+    )
+    return {"path": relative_path, "replacements": replacements, "diff": diff}, updated
+
+
+def _verify_sync_applied(
+    repo_root: Path, stale_rows: list[dict[str, Any]], report: dict[str, Any]
+) -> None:
+    """Fail closed when an old pin survives the applied sync."""
+    for row in stale_rows:
+        leftover_pattern = _exact_pin_pattern(row["old_ref"])
+        for relative_path in row["matching_paths"]:
+            current = (repo_root / relative_path).read_text(encoding="utf-8")
+            if leftover_pattern.search(current):
+                raise WorkflowActionPinSyncError(
+                    f"sync incomplete: {row['old_ref']} still present in {relative_path}",
+                    report,
+                )
+
+
+def sync_workflow_action_pins(
+    repo_root: Path = REPO_ROOT,
+    base_ref: str = "origin/main",
+    changed_files: Iterable[str] = (),
+    apply: bool = False,
+) -> dict[str, Any]:
+    """Dry-run (or apply) the coupled action-pin sync the pin guard reports.
+
+    Derives old_ref -> new_ref pairs through check_workflow_action_pin_guard
+    so the sync can never disagree with the guard, then rewrites only those
+    exact pins inside the reported matching_paths files. Without apply=True
+    nothing is written and the per-file diffs are returned for review.
+    Fail-closed: missing target files, zero exact occurrences, non-exact
+    substring occurrences, and leftover pins after apply all raise
+    WorkflowActionPinSyncError.
+    """
+    try:
+        check_workflow_action_pin_guard(
+            repo_root=repo_root,
+            base_ref=base_ref,
+            changed_files=tuple(changed_files),
+        )
+    except WorkflowActionPinError as exc:
+        stale_rows = exc.report.get("stale_references", [])
+    else:
+        stale_rows = []
+    report: dict[str, Any] = {
+        "schema_version": "robot-sf.workflow-action-pin-sync.v1",
+        "base_ref": base_ref,
+        "status": "in_sync",
+        "applied": False,
+        "files": [],
+    }
+    if not stale_rows:
+        report["message"] = "no stale workflow action pins to sync"
+        return report
+
+    rows_by_file: dict[str, dict[str, dict[str, Any]]] = {}
+    for row in stale_rows:
+        for relative_path in row["matching_paths"]:
+            file_replacements = rows_by_file.setdefault(relative_path, {})
+            previous = file_replacements.get(row["old_ref"])
+            if previous is not None and previous["new_ref"] != row["new_ref"]:
+                raise WorkflowActionPinSyncError(
+                    f"cannot sync {row['old_ref']} in {relative_path}: conflicting destinations "
+                    f"{previous['new_ref']} and {row['new_ref']}; manual review required",
+                    report,
+                )
+            file_replacements[row["old_ref"]] = row
+    file_rows: list[dict[str, Any]] = []
+    new_texts: dict[str, str] = {}
+    for relative_path in sorted(rows_by_file):
+        file_row, updated = _rewrite_pin_file(
+            repo_root, relative_path, list(rows_by_file[relative_path].values()), report
+        )
+        file_rows.append(file_row)
+        new_texts[relative_path] = updated
+    report["files"] = file_rows
+    if not apply:
+        report["status"] = "dry_run"
+        report["message"] = "sync preview only; rerun with --apply to write"
+        return report
+    for relative_path, updated in new_texts.items():
+        (repo_root / relative_path).write_text(updated, encoding="utf-8")
+    _verify_sync_applied(repo_root, stale_rows, report)
+    report["status"] = "applied"
+    report["applied"] = True
+    report["message"] = "coupled action pins synced"
+    return report
+
+
 def _changed_project_names(
     repo_root: Path,
     base_ref: str,
@@ -1523,14 +1680,44 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--dependabot-config", type=Path, default=DEFAULT_DEPENDABOT_CONFIG)
     parser.add_argument("--ci-workflow", type=Path, default=DEFAULT_CI_WORKFLOW)
     parser.add_argument("--changed-files-file", type=Path)
+    parser.add_argument("--sync-action-pins", action="store_true")
+    parser.add_argument(
+        "--apply",
+        action="store_true",
+        help="Write sync results (only meaningful with --sync-action-pins).",
+    )
     parser.add_argument("--json", action="store_true", dest="as_json")
     return parser
+
+
+def _report_sync_result(report: dict[str, Any], as_json: bool) -> int:
+    """Print a sync report and map its status to a process exit code."""
+    if as_json:
+        print(json.dumps(report, indent=2, sort_keys=True))
+    elif report["status"] == "in_sync":
+        print("DEPENDABOT POLICY SYNC: IN SYNC")
+    else:
+        print(f"DEPENDABOT POLICY SYNC: {report['status'].upper()}")
+        for file_row in report["files"]:
+            print(f"--- {file_row['path']}")
+            print(file_row["diff"], end="")
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
     """Run structural and exact-base dependency update validation."""
     args = _build_parser().parse_args(argv)
+    if args.apply and not args.sync_action_pins:
+        _build_parser().error("--apply requires --sync-action-pins")
     try:
+        if args.sync_action_pins:
+            files = changed_files(REPO_ROOT, args.base_ref, args.changed_files_file)
+            report = sync_workflow_action_pins(
+                base_ref=args.base_ref,
+                changed_files=files,
+                apply=args.apply,
+            )
+            return _report_sync_result(report, args.as_json)
         policy = validate_repository_structure(
             policy_path=args.policy,
             dependabot_path=args.dependabot_config,
@@ -1546,6 +1733,8 @@ def main(argv: list[str] | None = None) -> int:
             report = {"status": "blocked", "error": str(exc)}
             if isinstance(exc, WorkflowActionPinError):
                 report["workflow_action_pin_guard"] = exc.report
+            if isinstance(exc, WorkflowActionPinSyncError):
+                report["workflow_action_pin_sync"] = exc.report
             print(json.dumps(report, indent=2, sort_keys=True))
         else:
             print(f"DEPENDABOT POLICY: BLOCKED: {exc}", file=sys.stderr)

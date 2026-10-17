@@ -1,0 +1,371 @@
+{
+  "workers": 8,
+  "seed_count": 30,
+  "jobs": [
+    {
+      "treatment": "legacy",
+      "planner": "prediction_planner",
+      "requested": 300
+    },
+    {
+      "treatment": "swap",
+      "planner": "prediction_planner",
+      "requested": 300
+    },
+    {
+      "treatment": "legacy",
+      "planner": "goal",
+      "requested": 300
+    },
+    {
+      "treatment": "swap",
+      "planner": "goal",
+      "requested": 300
+    },
+    {
+      "treatment": "r0.3_v0.65",
+      "planner": "goal",
+      "requested": 300
+    },
+    {
+      "treatment": "r0.3_v1",
+      "planner": "goal",
+      "requested": 300
+    },
+    {
+      "treatment": "r0.3_v1.3",
+      "planner": "goal",
+      "requested": 300
+    },
+    {
+      "treatment": "r0.5_v0.65",
+      "planner": "goal",
+      "requested": 300
+    },
+    {
+      "treatment": "r0.5_v1",
+      "planner": "goal",
+      "requested": 300
+    },
+    {
+      "treatment": "r0.5_v1.3",
+      "planner": "goal",
+      "requested": 300
+    },
+    {
+      "treatment": "r1_v0.65",
+      "planner": "goal",
+      "requested": 300
+    },
+    {
+      "treatment": "r1_v1",
+      "planner": "goal",
+      "requested": 300
+    },
+    {
+      "treatment": "r1_v1.3",
+      "planner": "goal",
+      "requested": 300
+    },
+    {
+      "treatment": "legacy",
+      "planner": "social_force",
+      "requested": 300
+    },
+    {
+      "treatment": "swap",
+      "planner": "social_force",
+      "requested": 300
+    },
+    {
+      "treatment": "r0.3_v0.65",
+      "planner": "social_force",
+      "requested": 300
+    },
+    {
+      "treatment": "r0.3_v1",
+      "planner": "social_force",
+      "requested": 300
+    },
+    {
+      "treatment": "r0.3_v1.3",
+      "planner": "social_force",
+      "requested": 300
+    },
+    {
+      "treatment": "r0.5_v0.65",
+      "planner": "social_force",
+      "requested": 300
+    },
+    {
+      "treatment": "r0.5_v1",
+      "planner": "social_force",
+      "requested": 300
+    },
+    {
+      "treatment": "r0.5_v1.3",
+      "planner": "social_force",
+      "requested": 300
+    },
+    {
+      "treatment": "r1_v0.65",
+      "planner": "social_force",
+      "requested": 300
+    },
+    {
+      "treatment": "r1_v1",
+      "planner": "social_force",
+      "requested": 300
+    },
+    {
+      "treatment": "r1_v1.3",
+      "planner": "social_force",
+      "requested": 300
+    },
+    {
+      "treatment": "legacy",
+      "planner": "orca",
+      "requested": 300
+    },
+    {
+      "treatment": "swap",
+      "planner": "orca",
+      "requested": 300
+    },
+    {
+      "treatment": "r0.3_v0.65",
+      "planner": "orca",
+      "requested": 300
+    },
+    {
+      "treatment": "r0.3_v1",
+      "planner": "orca",
+      "requested": 300
+    },
+    {
+      "treatment": "r0.3_v1.3",
+      "planner": "orca",
+      "requested": 300
+    },
+    {
+      "treatment": "r0.5_v0.65",
+      "planner": "orca",
+      "requested": 300
+    },
+    {
+      "treatment": "r0.5_v1",
+      "planner": "orca",
+      "requested": 300
+    },
+    {
+      "treatment": "r0.5_v1.3",
+      "planner": "orca",
+      "requested": 300
+    },
+    {
+      "treatment": "r1_v0.65",
+      "planner": "orca",
+      "requested": 300
+    },
+    {
+      "treatment": "r1_v1",
+      "planner": "orca",
+      "requested": 300
+    },
+    {
+      "treatment": "r1_v1.3",
+      "planner": "orca",
+      "requested": 300
+    },
+    {
+      "treatment": "legacy",
+      "planner": "ppo",
+      "requested": 300
+    },
+    {
+      "treatment": "swap",
+      "planner": "ppo",
+      "requested": 300
+    },
+    {
+      "treatment": "r0.3_v0.65",
+      "planner": "ppo",
+      "requested": 300
+    },
+    {
+      "treatment": "r0.3_v1",
+      "planner": "ppo",
+      "requested": 300
+    },
+    {
+      "treatment": "r0.3_v1.3",
+      "planner": "ppo",
+      "requested": 300
+    },
+    {
+      "treatment": "r0.5_v0.65",
+      "planner": "ppo",
+      "requested": 300
+    },
+    {
+      "treatment": "r0.5_v1",
+      "planner": "ppo",
+      "requested": 300
+    },
+    {
+      "treatment": "r0.5_v1.3",
+      "planner": "ppo",
+      "requested": 300
+    },
+    {
+      "treatment": "r1_v0.65",
+      "planner": "ppo",
+      "requested": 300
+    },
+    {
+      "treatment": "r1_v1",
+      "planner": "ppo",
+      "requested": 300
+    },
+    {
+      "treatment": "r1_v1.3",
+      "planner": "ppo",
+      "requested": 300
+    },
+    {
+      "treatment": "legacy",
+      "planner": "socnav_sampling",
+      "requested": 300
+    },
+    {
+      "treatment": "swap",
+      "planner": "socnav_sampling",
+      "requested": 300
+    },
+    {
+      "treatment": "legacy",
+      "planner": "sacadrl",
+      "requested": 300
+    },
+    {
+      "treatment": "swap",
+      "planner": "sacadrl",
+      "requested": 300
+    },
+    {
+      "treatment": "legacy",
+      "planner": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+      "requested": 300
+    },
+    {
+      "treatment": "swap",
+      "planner": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+      "requested": 300
+    },
+    {
+      "treatment": "legacy",
+      "planner": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+      "requested": 300
+    },
+    {
+      "treatment": "swap",
+      "planner": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+      "requested": 300
+    },
+    {
+      "treatment": "legacy",
+      "planner": "hybrid_rule_v4_fast_progress_static_escape",
+      "requested": 300
+    },
+    {
+      "treatment": "swap",
+      "planner": "hybrid_rule_v4_fast_progress_static_escape",
+      "requested": 300
+    },
+    {
+      "treatment": "r0.3_v0.65",
+      "planner": "hybrid_rule_v4_fast_progress_static_escape",
+      "requested": 300
+    },
+    {
+      "treatment": "r0.3_v1",
+      "planner": "hybrid_rule_v4_fast_progress_static_escape",
+      "requested": 300
+    },
+    {
+      "treatment": "r0.3_v1.3",
+      "planner": "hybrid_rule_v4_fast_progress_static_escape",
+      "requested": 300
+    },
+    {
+      "treatment": "r0.5_v0.65",
+      "planner": "hybrid_rule_v4_fast_progress_static_escape",
+      "requested": 300
+    },
+    {
+      "treatment": "r0.5_v1",
+      "planner": "hybrid_rule_v4_fast_progress_static_escape",
+      "requested": 300
+    },
+    {
+      "treatment": "r0.5_v1.3",
+      "planner": "hybrid_rule_v4_fast_progress_static_escape",
+      "requested": 300
+    },
+    {
+      "treatment": "r1_v0.65",
+      "planner": "hybrid_rule_v4_fast_progress_static_escape",
+      "requested": 300
+    },
+    {
+      "treatment": "r1_v1",
+      "planner": "hybrid_rule_v4_fast_progress_static_escape",
+      "requested": 300
+    },
+    {
+      "treatment": "r1_v1.3",
+      "planner": "hybrid_rule_v4_fast_progress_static_escape",
+      "requested": 300
+    },
+    {
+      "treatment": "legacy",
+      "planner": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+      "requested": 300
+    },
+    {
+      "treatment": "swap",
+      "planner": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+      "requested": 300
+    },
+    {
+      "treatment": "legacy",
+      "planner": "guarded_ppo",
+      "requested": 300
+    },
+    {
+      "treatment": "swap",
+      "planner": "guarded_ppo",
+      "requested": 300
+    },
+    {
+      "treatment": "legacy",
+      "planner": "predictive_mppi",
+      "requested": 300
+    },
+    {
+      "treatment": "swap",
+      "planner": "predictive_mppi",
+      "requested": 300
+    },
+    {
+      "treatment": "legacy",
+      "planner": "risk_dwa",
+      "requested": 300
+    },
+    {
+      "treatment": "swap",
+      "planner": "risk_dwa",
+      "requested": 300
+    }
+  ]
+}

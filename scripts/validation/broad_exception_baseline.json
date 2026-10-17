@@ -99,6 +99,7 @@
       "scripts/validate_snqi_scripts.py": 2,
       "scripts/validation/check_docstring_todos.py": 1,
       "scripts/validation/check_issue_6158_topology_parallel_nmpc_offline_verdict.py": 1,
+      "scripts/validation/cross_cpu_20261013/sitecustomize.py": 1,
       "scripts/validation/extended_osm_validation.py": 12,
       "scripts/validation/measure_pedfix_planners.py": 1,
       "scripts/validation/performance_smoke_test.py": 2,
@@ -116,7 +117,7 @@
       "scripts/validation/verify_maps.py": 1,
       "scripts/validation/verify_sf_implementation.py": 4
     },
-    "total": 206
+    "total": 207
   },
   "description": "Broad exception handler baseline for benchmark/script surfaces. Run scripts/validation/check_broad_exceptions.py --write-baseline to refresh after intentionally removing or approving entries.",
   "entries": [
@@ -1676,6 +1677,16 @@
       "lineno": 1139,
       "path": "scripts/validation/check_issue_6158_topology_parallel_nmpc_offline_verdict.py",
       "source": "except Exception as exc:  # noqa: BLE001 - evidence collection must record any gate failure."
+    },
+    {
+      "col_offset": 4,
+      "context": "initialize",
+      "fingerprint": "d791f216aa28b0b7",
+      "handler": "Exception",
+      "lineno": 55,
+      "path": "scripts/validation/cross_cpu_20261013/sitecustomize.py",
+      "review_reason": "Fatal interpreter-startup boundary for the explicitly marked cross-CPU diagnostic. Python catches ordinary sitecustomize exceptions and continues startup, so narrowing to known dependency types would admit an unpinned run after an unexpected Torch/threadpool/config/recording error. Log the traceback and terminate immediately with os._exit(70); no fallback, recovery or success substitution. BaseException propagates. Subprocess fault-injection controls verify exit 70 before user code for both marked modes. Registered in response to independent PR #10371 P2 review.",
+      "source": "except Exception:  # noqa: BLE001 - sitecustomize must fail closed on every startup error."
     },
     {
       "col_offset": 4,

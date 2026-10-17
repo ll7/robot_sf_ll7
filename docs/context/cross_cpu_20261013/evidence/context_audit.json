@@ -1,0 +1,84 @@
+{
+  "amd/default-r1": {
+    "process_snapshots": 32,
+    "blas_states": [
+      [
+        "openblas",
+        "SkylakeX",
+        1
+      ],
+      [
+        "openblas",
+        "Zen",
+        1
+      ]
+    ]
+  },
+  "amd/default-r2": {
+    "process_snapshots": 32,
+    "blas_states": [
+      [
+        "openblas",
+        "SkylakeX",
+        1
+      ],
+      [
+        "openblas",
+        "Zen",
+        1
+      ]
+    ]
+  },
+  "amd/pinned-r1": {
+    "process_snapshots": 32,
+    "blas_states": [
+      [
+        "openblas",
+        "Haswell",
+        1
+      ]
+    ]
+  },
+  "intel/default-r1": {
+    "process_snapshots": 32,
+    "blas_states": [
+      [
+        "openblas",
+        "Prescott",
+        1
+      ],
+      [
+        "openblas",
+        "SkylakeX",
+        1
+      ]
+    ]
+  },
+  "intel/default-r2": {
+    "process_snapshots": 32,
+    "blas_states": [
+      [
+        "openblas",
+        "Prescott",
+        1
+      ],
+      [
+        "openblas",
+        "SkylakeX",
+        1
+      ]
+    ]
+  },
+  "intel/pinned-r1": {
+    "process_snapshots": 32,
+    "blas_states": [
+      [
+        "openblas",
+        "Haswell",
+        1
+      ]
+    ]
+  },
+  "float64_learned_records": 1200,
+  "violations": []
+}

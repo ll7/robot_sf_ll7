@@ -4,13 +4,18 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 from unittest.mock import patch
 
 import numpy as np
 import pytest
 from gymnasium import Env, spaces
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 _REPO_ROOT = Path(__file__).parent.parent.parent.resolve()
 
@@ -37,6 +42,22 @@ _SMOKE_CONFIG = _REPO_ROOT / "configs/training/lidar/lidar_ppo_mlp_smoke_issue_1
 # ---------------------------------------------------------------------------
 # Unit tests for config helpers
 # ---------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def clean_comparator_loguru_sinks() -> Iterator[None]:
+    """Release CLI-installed capture sinks at the end of every comparator test.
+
+    The comparator replaces the global Loguru handlers, including a DEBUG
+    stderr sink under --verbose. That sink belongs to this test's capsys stream
+    and must not survive into another test after pytest closes the stream.
+    """
+    from loguru import logger
+
+    try:
+        yield
+    finally:
+        logger.remove()
 
 
 class TestResolveNumEnvs:
@@ -686,3 +707,29 @@ def test_silence_third_party_loggers_verbose_sets_tf_l0(monkeypatch):
     monkeypatch.delitem(os.environ, "TF_CPP_MIN_LOG_LEVEL", raising=False)
     _silence_third_party_loggers(verbose=True)
     assert os.environ["TF_CPP_MIN_LOG_LEVEL"] == "0"
+
+
+def test_verbose_diagnostics_do_not_leak_into_later_json_protocol():
+    """A comparator test must release its capture sink before another CLI logs."""
+    child_env = os.environ.copy()
+    child_env.pop("PYTEST_ADDOPTS", None)
+    child_env.pop("PYTEST_DEBUG_TEMPROOT", None)
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            "-p",
+            "no:randomly",
+            "-q",
+            "tests/validation/test_run_vecenv_worker_mode_throughput.py::test_verbose_restores_debug_diagnostics",
+            "tests/benchmark/test_sipp_native_command.py::test_native_sipp_emits_structured_failure_for_unexpected_request_errors",
+        ],
+        cwd=_REPO_ROOT,
+        env=child_env,
+        text=True,
+        capture_output=True,
+        check=False,
+        timeout=120,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr

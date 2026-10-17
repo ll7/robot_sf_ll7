@@ -38,12 +38,14 @@ RUFF_PRE_COMMIT_REPO = "https://github.com/astral-sh/ruff-pre-commit"
 RUFF_PIN_PATTERN = re.compile(r"^ruff\s*==\s*(?P<version>\S+)$")
 # Deliberately small, whole-line grammar, not a shell parser. Any Ruff mention
 # outside this grammar fails closed under every shell. Arguments are literal
-# words only: no quoting, expansion, command chaining, comments or redirection.
+# words only (optionally quoted): no expansion, command chaining, comments or
+# redirection. Quoted literal config overrides preserve ``--config 'lint.ignore=[]'``
+# in the security workflow without mistaking the override for a config-file path.
 # New supported forms require an explicit policy change with regression tests.
 RUFF_WORKFLOW_PIN_PATTERN = re.compile(
     r"[ \t]*uvx[ \t]+--from[ \t]+ruff==(?P<version>[0-9]+\.[0-9]+\.[0-9]+)"
     r"[ \t]+ruff[ \t]+(?:check|format)"
-    r"(?P<args>(?:[ \t]+[-a-zA-Z0-9_./=,\[\]]+)*)[ \t]*"
+    r"""(?P<args>(?:[ \t]+(?:[-a-zA-Z0-9_./=,\[\]]+|'[-a-zA-Z0-9_./=,\[\]]*'|"[-a-zA-Z0-9_./=,\[\]]*"))*)[ \t]*"""
 )
 
 

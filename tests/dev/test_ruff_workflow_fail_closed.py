@@ -165,3 +165,19 @@ def test_known_launchers_after_backslash_joining_pass(
         "          uvx --from ruff==0.17.0 ruff format --check .\n"
     )
     assert guard.main(args) == 0
+
+
+@pytest.mark.parametrize("config", ["'lint.ignore=[]'", '"lint.ignore=[]"'])
+@pytest.mark.parametrize("version", ["0.17.0", "9.9.9"])
+def test_literal_quoted_config_keeps_pin_enforcement(
+    parity_inputs: tuple[Path, list[str]], config: str, version: str
+) -> None:
+    """Literal quoted config overrides work without admitting shell expansion or stale pins."""
+    workflows, args = parity_inputs
+    (workflows / "ci.yml").write_text(
+        "jobs:\n  lint:\n    steps:\n"
+        "      - run: uvx --from ruff==0.17.0 ruff check .\n"
+        "      - run: |\n"
+        f"          uvx --from ruff=={version} ruff check --config {config} --select S .\n"
+    )
+    assert guard.main(args) == (0 if version == "0.17.0" else 1)

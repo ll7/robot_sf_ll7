@@ -25,6 +25,14 @@ SNAPSHOTS = json.loads(
 PLANNER_SWITCHES = ("physical_static_exclusion_enabled", "goal_next_validity_enabled")
 
 
+def _current_rollover_snapshot(snapshot):
+    """Map historical rollover field names while preserving every snapshot value."""
+    rollover = snapshot["rollover_proxy_params"].copy()
+    rollover["two_wheel_axle_track_m"] = rollover.pop("track_width_m")
+    rollover["single_wheel_axle_to_cog_m"] = rollover.pop("front_axle_to_cog_m")
+    return {**snapshot, "rollover_proxy_params": rollover}
+
+
 def test_010_defaults_follow_author_ruling_20261008():
     """New inputs enable validity and its sensor while static exclusion stays opt-in."""
     cfg = build_hybrid_rule_local_planner_config({})
@@ -114,7 +122,9 @@ def test_registered_release_full_dataclasses_and_mapping_match_base(source):
         sort_keys=True,
     ) == json.dumps(expected_planner, sort_keys=True)
     env_dump = json.dumps(_json_ready(asdict(env)), sort_keys=True).replace(str(ROOT), "<repo>")
-    assert env_dump == json.dumps(SNAPSHOTS["environment"], sort_keys=True)
+    assert env_dump == json.dumps(
+        _current_rollover_snapshot(SNAPSHOTS["environment"]), sort_keys=True
+    )
     assert json.dumps(raw, sort_keys=True, separators=(",", ":"), allow_nan=False) == before
     registry = json.loads((ROOT / "robot_sf/common/legacy_hybrid_defaults.json").read_text())
     assert (
@@ -202,7 +212,9 @@ def test_release_scenario_environment_dataclasses_match_full_base_dumps():
         full_dump = json.dumps(_json_ready(asdict(config)), sort_keys=True).replace(
             str(ROOT), "<repo>"
         )
-        assert full_dump == json.dumps(baseline[scenario["name"]], sort_keys=True)
+        assert full_dump == json.dumps(
+            _current_rollover_snapshot(baseline[scenario["name"]]), sort_keys=True
+        )
 
 
 def test_native_episode_records_legacy_and_current_builder_default_sets():

@@ -1,0 +1,119 @@
+{
+  "schema_version": "benchmark_result_provenance.v1",
+  "input_binding_schema_version": "benchmark_result_provenance.input_binding.v2",
+  "run": {
+    "run_id": "46ea477bd9a04e6e913d3821248f6079",
+    "repo_commit": "22172f6cacc8b3e63825793db604c820ff21080a",
+    "python_version": "3.13.14",
+    "invocation": "scripts/validation/resume_examiner_mppi_20261012.py --arm legacy --parallel-canary",
+    "benchmark_profile": "experimental",
+    "runner": "map_runner.run_map_batch",
+    "protocol_version": "0.1.0",
+    "execution_context": {
+      "hostname": "auxme-imech039",
+      "schema_version": "benchmark_execution_context.v1",
+      "cpu_model": "12th Gen Intel(R) Core(TM) i7-12700KF",
+      "platform": "Linux-7.0.0-38-generic-x86_64-with-glibc2.39",
+      "python_version": "3.13.14",
+      "thread_env": {
+        "OMP_NUM_THREADS": "1",
+        "OPENBLAS_NUM_THREADS": "1",
+        "MKL_NUM_THREADS": "1"
+      },
+      "numpy_version": "2.4.6",
+      "numba_version": "0.67.0",
+      "torch_version": "2.13.0+cu130",
+      "stable_baselines3_version": "2.9.0",
+      "execution_context_sha256": "821fd4e27767ecdc3095fa1612d2b09b5472e48167763d4f3769b40ad7d3dd65"
+    }
+  },
+  "inputs": {
+    "schema_path": {
+      "path": "robot_sf/benchmark/schemas/episode.schema.v1.json",
+      "sha256": "180d6bb952811535ec3b2182bb4e21d47eb7679c8daa238abf9eef41958fd162",
+      "artifact_status": "available"
+    },
+    "scenario_matrix": {
+      "path": "docs/context/robsweep/inputs/legacy.yaml",
+      "sha256": "a27b50ae04e482b7ff6663045cdd981e2d21e3c5e03ad6486bcf2d6af2a88396",
+      "artifact_status": "available"
+    },
+    "algo_config": {
+      "path": "docs/context/robsweep/inputs/predictive_mppi_legacy.yaml",
+      "sha256": "5c9fef531d4f27b5c11ba2c5eb24fec0c0042acbe6daaa081f3d4c504ca14a82",
+      "artifact_status": "available"
+    }
+  },
+  "campaign_identity": {
+    "scenario_matrix_hash": "0dbe57927bc6f632",
+    "input_bundle_sha256": "10fbf1eec9800a844299cc033d72acd773d82e2b470a9a4a89dbfae3672f9953",
+    "algorithm": "predictive_mppi",
+    "config_hash": "ad35adc111e435ee",
+    "suite_key": "default",
+    "total_jobs": 1,
+    "written": 1
+  },
+  "raw_artifacts": [
+    {
+      "kind": "portable_episodes_jsonl_gzip",
+      "path": "docs/context/robsweep/evidence/resume/canary/legacy_w2.jsonl.gz",
+      "sha256": "b01cbdbb5aafafec119cb51622e0a91973d2bdc16cbcc010a93ab0575d41452f",
+      "artifact_status": "available"
+    }
+  ],
+  "rows": [
+    {
+      "episode_id": "classic_bottleneck_medium--1061--bc38f04a71536ef8",
+      "scenario_id": "classic_bottleneck_medium",
+      "seed": 1061,
+      "config_hash": "bc38f04a71536ef8",
+      "repo_commit": "22172f6cacc8b3e63825793db604c820ff21080a",
+      "raw_artifact": "docs/context/robsweep/evidence/resume/canary/legacy_w2.jsonl.gz",
+      "jsonl_line": 0,
+      "simulator_settings": {
+        "horizon": 5,
+        "dt": 0.1,
+        "record_forces": true,
+        "observation_mode": "socnav_state",
+        "observation_level": "tracked_agents_no_noise",
+        "observation_noise_hash": "0a5609f0b2b1",
+        "tracking_precision_hash": "d06cee655fee"
+      },
+      "postprocessing": [
+        {
+          "step": "compute_all_metrics",
+          "status": "completed"
+        },
+        {
+          "step": "post_process_metrics",
+          "status": "completed"
+        }
+      ]
+    }
+  ],
+  "derived_artifacts": [],
+  "completeness": {
+    "status": "complete",
+    "required_fields_checked": [
+      "algorithm",
+      "campaign_identity",
+      "completeness",
+      "config_hash",
+      "episode_id",
+      "input_binding_schema_version",
+      "input_bundle_sha256",
+      "inputs",
+      "repo_commit",
+      "repo_commit",
+      "run",
+      "run_id",
+      "runner",
+      "scenario_id",
+      "scenario_matrix_hash",
+      "schema_version",
+      "seed",
+      "total_jobs",
+      "written"
+    ]
+  }
+}

@@ -1729,6 +1729,9 @@ def build_robot_config_from_scenario(
     # Scenario assets do not choose defaults. Both typed builders use the same
     # explicit execution-source scope, or current defaults outside that scope.
     config = RobotSimulationConfig()
+    # Authored packets without a selector predate #10017. Preserve their
+    # historical identity; an explicit override below can opt into the 0.1.0 law.
+    config.sim_config.obstacle_force_law = {}
     env_overrides = scenario.get("env_overrides", {})
     if isinstance(env_overrides, Mapping) and "include_goal_next_valid" in env_overrides:
         value = env_overrides["include_goal_next_valid"]
@@ -3028,6 +3031,7 @@ _SIMULATION_OVERRIDE_ATTRS = (
     "goal_completion_policy",
     "robot_goal_sampling_policy",
     "pedestrian_model",
+    "obstacle_force_law",
     "social_force_kernel_version",
     "ttc_predictive_force",
     "zanlungo_collision_prediction",

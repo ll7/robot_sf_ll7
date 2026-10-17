@@ -1,0 +1,98 @@
+{
+  "producer_commit": "83b16e720e348ed794062b35dfd0772ad8d5763a",
+  "original_submission_preserved": "submission.json",
+  "replacements": {
+    "31594": "31600",
+    "31598": "31601"
+  },
+  "jobs": [
+    {
+      "cpu": "amd",
+      "campaign": "default-r1",
+      "job_id": "31591",
+      "state": "COMPLETED",
+      "elapsed": "00:53:01",
+      "allocated_cpus": "4",
+      "allocated_cpu_seconds": "12724",
+      "exit_code": "0:0",
+      "node": "auxme-imech091"
+    },
+    {
+      "cpu": "amd",
+      "campaign": "default-r2",
+      "job_id": "31592",
+      "state": "COMPLETED",
+      "elapsed": "00:52:45",
+      "allocated_cpus": "4",
+      "allocated_cpu_seconds": "12660",
+      "exit_code": "0:0",
+      "node": "auxme-imech091"
+    },
+    {
+      "cpu": "amd",
+      "campaign": "pinned-r1",
+      "job_id": "31593",
+      "state": "COMPLETED",
+      "elapsed": "00:58:18",
+      "allocated_cpus": "4",
+      "allocated_cpu_seconds": "13992",
+      "exit_code": "0:0",
+      "node": "auxme-imech091"
+    },
+    {
+      "cpu": "amd",
+      "campaign": "float64-r1",
+      "job_id": "31600",
+      "state": "COMPLETED",
+      "elapsed": "00:58:24",
+      "allocated_cpus": "4",
+      "allocated_cpu_seconds": "14016",
+      "exit_code": "0:0",
+      "node": "auxme-imech091"
+    },
+    {
+      "cpu": "intel",
+      "campaign": "default-r1",
+      "job_id": "31595",
+      "state": "COMPLETED",
+      "elapsed": "01:28:34",
+      "allocated_cpus": "4",
+      "allocated_cpu_seconds": "21256",
+      "exit_code": "0:0",
+      "node": "auxme-imech172"
+    },
+    {
+      "cpu": "intel",
+      "campaign": "default-r2",
+      "job_id": "31596",
+      "state": "COMPLETED",
+      "elapsed": "01:26:22",
+      "allocated_cpus": "4",
+      "allocated_cpu_seconds": "20728",
+      "exit_code": "0:0",
+      "node": "auxme-imech172"
+    },
+    {
+      "cpu": "intel",
+      "campaign": "pinned-r1",
+      "job_id": "31597",
+      "state": "COMPLETED",
+      "elapsed": "01:36:08",
+      "allocated_cpus": "4",
+      "allocated_cpu_seconds": "23072",
+      "exit_code": "0:0",
+      "node": "auxme-imech172"
+    },
+    {
+      "cpu": "intel",
+      "campaign": "float64-r1",
+      "job_id": "31601",
+      "state": "COMPLETED",
+      "elapsed": "01:32:01",
+      "allocated_cpus": "4",
+      "allocated_cpu_seconds": "22084",
+      "exit_code": "0:0",
+      "node": "auxme-imech172"
+    }
+  ]
+}

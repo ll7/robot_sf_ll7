@@ -14,7 +14,7 @@ def test_physical_static_rollout_reflects_without_raster_score_bias(monkeypatch,
         "hybrid_rule_local_planner", harness.HYBRID_V4_DIAGNOSTIC_CONFIG, "metamorphic"
     )
     raw.update(physical_static_exclusion_enabled=True, goal_next_validity_enabled=False)
-    monkeypatch.setattr(harness, "release_arm", lambda _: (algo, dict(raw)))
+    monkeypatch.setattr(harness, "release_arm", lambda _, **__: (algo, dict(raw)))
     original_env = harness.robot_env_config
 
     def config(*args, **kwargs):

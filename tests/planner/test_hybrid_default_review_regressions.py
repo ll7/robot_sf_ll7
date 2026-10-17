@@ -38,6 +38,14 @@ ROOT = Path(__file__).resolve().parents[2]
 MATRIX = ROOT / "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml"
 
 
+def _current_rollover_snapshot(snapshot):
+    """Map historical rollover field names while preserving every snapshot value."""
+    rollover = snapshot["rollover_proxy_params"].copy()
+    rollover["two_wheel_axle_track_m"] = rollover.pop("track_width_m")
+    rollover["single_wheel_axle_to_cog_m"] = rollover.pop("front_axle_to_cog_m")
+    return {**snapshot, "rollover_proxy_params": rollover}
+
+
 def _validity_planner(enabled=True):
     return HybridRuleLocalPlannerAdapter(
         build_hybrid_rule_local_planner_config(
@@ -179,7 +187,7 @@ def test_every_release_arm_keeps_full_base_environment_and_mapping_dumps():
         with defaults_for_source(ROOT / source):
             constructor = json.dumps(_json_ready(asdict(RobotSimulationConfig())), sort_keys=True)
             assert constructor.replace(str(ROOT), "<repo>") == json.dumps(
-                baseline["constructor"], sort_keys=True
+                _current_rollover_snapshot(baseline["constructor"]), sort_keys=True
             )
             env = build_env_config(scenario, scenario_path=matrix)
             if expected["runtime_status"] == "blocked-unfrozen-source":
@@ -204,7 +212,9 @@ def test_every_release_arm_keeps_full_base_environment_and_mapping_dumps():
                 )
                 apply_policy_env_observation_overrides(env, raw)
             dump = json.dumps(_json_ready(asdict(env)), sort_keys=True).replace(str(ROOT), "<repo>")
-            assert dump == json.dumps(expected["environment"], sort_keys=True), arm["id"]
+            assert dump == json.dumps(
+                _current_rollover_snapshot(expected["environment"]), sort_keys=True
+            ), arm["id"]
         observed.add(arm["id"])
     assert observed == set(baseline["arms"])
 

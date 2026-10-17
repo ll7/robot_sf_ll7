@@ -1,0 +1,141 @@
+{
+  "markers": [
+    "AI-GENERATED",
+    "NEEDS-REVIEW"
+  ],
+  "evidence_tier": "diagnostic-only",
+  "base_sha": "77f61d9aaef935f39e848963d36ae25587041a5e",
+  "inputs_sha256": "43fb7096a4ffb4324685065dbe274bf0b1d50f5528087fc86339737691af537d",
+  "warmup": 20,
+  "blocks": 5,
+  "calls_per_block": 100,
+  "default_kernel_context": {
+    "mode": "default",
+    "blas": [
+      {
+        "internal_api": "openblas",
+        "version": "0.3.31.188.0",
+        "architecture": "Haswell",
+        "num_threads": 1
+      },
+      {
+        "internal_api": "openblas",
+        "version": "0.3.30",
+        "architecture": "Haswell",
+        "num_threads": 1
+      },
+      {
+        "internal_api": "openblas",
+        "version": "0.3.15",
+        "architecture": "Haswell",
+        "num_threads": 1
+      },
+      {
+        "internal_api": "openblas",
+        "version": "0.3.15",
+        "architecture": "Haswell",
+        "num_threads": 1
+      }
+    ],
+    "kernel_env": {
+      "ATEN_CPU_CAPABILITY": null,
+      "MKL_CBWR": null,
+      "OPENBLAS_CORETYPE": null,
+      "ONEDNN_MAX_CPU_ISA": null,
+      "OMP_NUM_THREADS": "1",
+      "MKL_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1"
+    },
+    "torch_cpu_capability": "AVX2",
+    "mkldnn_enabled": true,
+    "deterministic_algorithms": false
+  },
+  "pinned_kernel_context": {
+    "mode": "pinned_float64_v1",
+    "blas": [
+      {
+        "internal_api": "openblas",
+        "version": "0.3.31.188.0",
+        "architecture": "Haswell",
+        "num_threads": 1
+      },
+      {
+        "internal_api": "openblas",
+        "version": "0.3.30",
+        "architecture": "Haswell",
+        "num_threads": 1
+      },
+      {
+        "internal_api": "openblas",
+        "version": "0.3.15",
+        "architecture": "Haswell",
+        "num_threads": 1
+      },
+      {
+        "internal_api": "openblas",
+        "version": "0.3.15",
+        "architecture": "Haswell",
+        "num_threads": 1
+      }
+    ],
+    "kernel_env": {
+      "ATEN_CPU_CAPABILITY": "default",
+      "MKL_CBWR": "COMPATIBLE",
+      "OPENBLAS_CORETYPE": "Haswell",
+      "ONEDNN_MAX_CPU_ISA": "AVX2",
+      "OMP_NUM_THREADS": "1",
+      "MKL_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1"
+    },
+    "torch_cpu_capability": "DEFAULT",
+    "mkldnn_enabled": false,
+    "deterministic_algorithms": true
+  },
+  "source_sha256": {
+    "robot_sf/_numerical_mode.py": "e74bf733007e2a11bfe72bb591975dc2eaa15ec482d681ea55a537185b43723d",
+    "robot_sf/baselines/pinned_actor.py": "76efb7e2d6c7198e68983e8e969ddd5ff9b439b267d08a85d3965a6eb32b5b32",
+    "robot_sf/baselines/ppo.py": "8bbea1fc5f5a688176248ae1d9cd3712871f59fda52da7e80bec31259ed97327",
+    "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_1_0.yaml": "1a1914260eed088ded603b6f9e92104f161534d73f1c6b5b9c13c048f30ef29c"
+  },
+  "checkpoint_sha256": {
+    "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200": "8367af109a27e8879ced0c8913f6eff26df7ec59c31ea88f9a297bb2c141eb09",
+    "ppo_release_robot_b1002_last_20261001": "764a7d88f5b608237641d973634899e05a67b25e65f8b1607cfca025459824bc"
+  },
+  "source_note": "The measurement source digest precedes final fail-closed None checks in the PPO adapter; the cached actor forward path is unchanged.",
+  "host_context": {
+    "cpu_model": "12th Gen Intel(R) Core(TM) i7-12700KF",
+    "python": "3.13.14",
+    "numpy": "2.4.6",
+    "torch_distribution": "2.13.0",
+    "stable_baselines3": "2.9.0"
+  },
+  "rows": [
+    {"default_blocks_ms": [2.6589546800005337, 2.7144449100069323, 2.5621345299987297, 2.6286528399941744, 2.5313641000047937], "default_ms": 2.619110212001033, "float64_reference_max_abs_error": 2.6645352591003757e-15, "input_sha256": "55063228b16317b34ba7b8fba768a2fa7f1d78f6a6f481ed768ef161ef4ed581", "pinned_blocks_ms": [6.548292520001269, 6.5533218500058865, 6.8309955800032185, 6.797828759999902, 6.527902000007089], "pinned_ms": 6.651668142003473, "planner": "ppo", "scenario": "classic_cross_trap_medium", "seed": 1001},
+    {"default_blocks_ms": [2.477083379999385, 2.4576813200019387, 2.4752465700021276, 2.4540060799972707, 2.4168014299993956], "default_ms": 2.4561637560000236, "float64_reference_max_abs_error": 3.552713678800501e-15, "input_sha256": "7cf9e48adfa112522d429d983089b14dad2351f1cef256bd37d36feb35ff567a", "pinned_blocks_ms": [6.247415249999904, 6.53717983000206, 6.509775849999642, 6.424893319999683, 6.464671339999768], "pinned_ms": 6.436787118000211, "planner": "ppo", "scenario": "classic_cross_trap_medium", "seed": 1002},
+    {"default_blocks_ms": [2.4472628199964674, 2.503660359998321, 2.6018145099988033, 2.5707079600033467, 2.5043270900005155], "default_ms": 2.5255545479994908, "float64_reference_max_abs_error": 6.661338147750939e-16, "input_sha256": "9f4709c6dc4f9d29090d12aeb7ecaad547227e8a2fe50e16207d18a87e9c29c7", "pinned_blocks_ms": [6.5807753900026, 6.378169970003, 6.049526830001923, 6.047510960006548, 6.363639310002327], "pinned_ms": 6.28392449200328, "planner": "ppo", "scenario": "classic_cross_trap_medium", "seed": 1003},
+    {"default_blocks_ms": [2.396856260002096, 2.4218981099966186, 2.406599269997969, 2.3961371400037024, 2.4860713799989753], "default_ms": 2.421512431999872, "float64_reference_max_abs_error": 2.6645352591003757e-15, "input_sha256": "d8f21e5154a87f84f7cc47bf37deacd2793a0fdd5734bedbcf2e1dd5ea21ac34", "pinned_blocks_ms": [6.291157550003845, 6.200558499995168, 6.350495579999915, 6.164074709995475, 6.117340659993715], "pinned_ms": 6.224725399997624, "planner": "ppo", "scenario": "francis2023_narrow_doorway", "seed": 1001},
+    {"default_blocks_ms": [2.5751716300055705, 2.436831800005166, 2.4465139799940516, 2.5415343400072743, 2.4752089199955662], "default_ms": 2.4950521340015257, "float64_reference_max_abs_error": 8.881784197001252e-16, "input_sha256": "035956ec4008152f778bb0b90ee7c6f06c072195e3c31079dafe8a9a1f375841", "pinned_blocks_ms": [6.233721560001868, 6.420011430000159, 6.1392324499956885, 6.208334339999055, 6.0938694499964186], "pinned_ms": 6.219033845998638, "planner": "ppo", "scenario": "francis2023_narrow_doorway", "seed": 1002},
+    {"default_blocks_ms": [2.611074220003502, 2.613844159996006, 2.6123377600015374, 2.567073430000164, 2.5045584999952553], "default_ms": 2.581777613999293, "float64_reference_max_abs_error": 4.996003610813204e-16, "input_sha256": "253bc2f0a1e52a315cb48e65c82d094b2c564dd47008fd74b4bd5a96ce9fe5af", "pinned_blocks_ms": [6.483383909999247, 6.4519947999997385, 6.230918960000054, 6.117003589997694, 6.0889058700013265], "pinned_ms": 6.274441425999612, "planner": "ppo", "scenario": "francis2023_narrow_doorway", "seed": 1003},
+    {"default_blocks_ms": [2.5395922399911797, 2.564140159993258, 2.5670055099999445, 2.52795258000333, 2.6375922199986235], "default_ms": 2.567256541997267, "float64_reference_max_abs_error": 8.881784197001252e-16, "input_sha256": "04eed97f4a1b2e01ce2101dd9e5e3704b36981b18bf3d9198623f2a083284bb3", "pinned_blocks_ms": [6.184177589993851, 6.260097889999088, 6.215675620005641, 6.20869849999508, 6.55214481999792], "pinned_ms": 6.284158883998316, "planner": "ppo", "scenario": "francis2023_circular_crossing", "seed": 1001},
+    {"default_blocks_ms": [2.572236639998664, 2.708480499995858, 2.6016350999998394, 2.6588004699988232, 2.5547234899931937], "default_ms": 2.6191752399972756, "float64_reference_max_abs_error": 8.881784197001252e-16, "input_sha256": "f86191c050fcf74204553854b495937050a08b694bda9580bfab8a65b0db9fa9", "pinned_blocks_ms": [6.1112691199923574, 6.164200599996548, 6.199742199996763, 6.391857480002727, 6.280297269995572], "pinned_ms": 6.229473333996793, "planner": "ppo", "scenario": "francis2023_circular_crossing", "seed": 1002},
+    {"default_blocks_ms": [2.5100791100067, 2.507507609998356, 2.6503542399950675, 2.472392639992904, 2.60232802000246], "default_ms": 2.5485323239990976, "float64_reference_max_abs_error": 8.881784197001252e-16, "input_sha256": "1f4fda9dca3a1d2939fc1cf205af498bb91efd441b45dc9e5325d5a6e1a1d53a", "pinned_blocks_ms": [6.176233520000096, 6.218389589994331, 6.213266359991394, 6.241655170006197, 6.530229199997848], "pinned_ms": 6.275954767997973, "planner": "ppo", "scenario": "francis2023_circular_crossing", "seed": 1003},
+    {"default_blocks_ms": [2.4485272800029634, 2.5129421899964655, 2.54489590999583, 2.7393479500005924, 2.685162149991811], "default_ms": 2.5861750959975325, "float64_reference_max_abs_error": 4.440892098500626e-16, "input_sha256": "a12a86da78a7ce7e2a938535a67e65d3b275c609c08afa01d62f0166b55311de", "pinned_blocks_ms": [6.175827800007028, 6.280109400004221, 6.2087056300060794, 6.449611620000724, 6.860031329997582], "pinned_ms": 6.394857156003127, "planner": "ppo_expert", "scenario": "classic_cross_trap_medium", "seed": 1001},
+    {"default_blocks_ms": [2.7159994500016182, 2.7298357499967096, 2.528781400005755, 2.4699222599974746, 2.4696215499989194], "default_ms": 2.5828320820000954, "float64_reference_max_abs_error": 8.881784197001252e-16, "input_sha256": "2794599236f32223942da5667b7410a1d7ef1f9cf54b89afb286a32baca0c820", "pinned_blocks_ms": [6.480494309998903, 6.637990749995879, 6.223508229995787, 6.1088524800015875, 6.190753709997807], "pinned_ms": 6.328319895997993, "planner": "ppo_expert", "scenario": "classic_cross_trap_medium", "seed": 1002},
+    {"default_blocks_ms": [2.469949340002131, 2.4749865099965973, 2.4802762200033612, 2.4520218199995725, 2.434643740007232], "default_ms": 2.462375526001779, "float64_reference_max_abs_error": 1.3322676295501878e-15, "input_sha256": "6e947a685fe5458cae8e10cb80938e41d8974a006c67b3cb153eb3dac8f1ee00", "pinned_blocks_ms": [6.2168929999916145, 6.10709957999461, 5.97542735999923, 6.086167089997616, 6.212049249998017], "pinned_ms": 6.119527255996218, "planner": "ppo_expert", "scenario": "classic_cross_trap_medium", "seed": 1003},
+    {"default_blocks_ms": [2.410655140001836, 2.3939123500076676, 2.4174465099986264, 2.3522825599957287, 2.3613978599951224], "default_ms": 2.3871388839997962, "float64_reference_max_abs_error": 8.881784197001252e-16, "input_sha256": "90d2ef3ceb4d3b45ab8c0f22116c148a9704f9704178e33e3b5e95948113997a", "pinned_blocks_ms": [6.439255859995683, 6.381305169998086, 6.099885109997558, 6.079193330006092, 6.015447409999979], "pinned_ms": 6.2030173759994796, "planner": "ppo_expert", "scenario": "francis2023_narrow_doorway", "seed": 1001},
+    {"default_blocks_ms": [2.402379879995351, 2.337816629997178, 2.3447613200005435, 2.320932550001089, 2.3367759299981117], "default_ms": 2.3485332619984547, "float64_reference_max_abs_error": 2.220446049250313e-16, "input_sha256": "ff56a4ab48487d33aa23b510cd993eacb41c143c73178652e6e0022bae57f28d", "pinned_blocks_ms": [6.059536589991694, 6.076284860000669, 6.146026359992902, 6.104956580002181, 6.020481820005443], "pinned_ms": 6.081457241998578, "planner": "ppo_expert", "scenario": "francis2023_narrow_doorway", "seed": 1002},
+    {"default_blocks_ms": [2.3578058000020974, 2.370821499998783, 2.365308010002991, 2.387496219998866, 2.3861719900014577], "default_ms": 2.373520704000839, "float64_reference_max_abs_error": 8.881784197001252e-16, "input_sha256": "4f974fc9fb7c8d29cb40c4e8ab47a1f18c7609328836c03a0f24534757fd3d1d", "pinned_blocks_ms": [6.076644719996693, 6.233414649996121, 6.433566549994794, 6.380683510005838, 6.226637640002082], "pinned_ms": 6.2701894139991055, "planner": "ppo_expert", "scenario": "francis2023_narrow_doorway", "seed": 1003},
+    {"default_blocks_ms": [2.4084602600032667, 2.555782139997973, 2.4320665000050212, 2.4381682199964416, 2.495065020002585], "default_ms": 2.4659084280010575, "float64_reference_max_abs_error": 1.7763568394002505e-15, "input_sha256": "b451d7a42041bdd6312e485d77ae86c37fb89976af73b0e99fb3d3d9a8e5049c", "pinned_blocks_ms": [6.09030487000382, 6.227517889992669, 6.2666047500079, 6.286803240000154, 6.398104580002837], "pinned_ms": 6.253867066001476, "planner": "ppo_expert", "scenario": "francis2023_circular_crossing", "seed": 1001},
+    {"default_blocks_ms": [2.5159729899951344, 2.8367659200011985, 3.0035346500062587, 2.8808010700049635, 2.7775909200045135], "default_ms": 2.8029331100024137, "float64_reference_max_abs_error": 8.881784197001252e-16, "input_sha256": "2a1354b0553c3262350356aee9447262d6d9ec08581dde512cbf5da940bd9674", "pinned_blocks_ms": [6.462736089997634, 6.40188470000794, 6.3609407899912185, 6.339590799998405, 6.617649939998955], "pinned_ms": 6.4365604639988305, "planner": "ppo_expert", "scenario": "francis2023_circular_crossing", "seed": 1002},
+    {"default_blocks_ms": [2.794359949994032, 2.8090750299998035, 2.789847379999628, 2.8061913999954413, 2.7480098599971825], "default_ms": 2.7894967239972175, "float64_reference_max_abs_error": 1.1102230246251565e-15, "input_sha256": "da32eb705300d87acf75d00c826139d4d5e1252e80de625bdd514a90a35e46d1", "pinned_blocks_ms": [6.438713340003233, 6.156082279994735, 6.13139871000385, 6.162129120002646, 6.104479819996413], "pinned_ms": 6.198560654000175, "planner": "ppo_expert", "scenario": "francis2023_circular_crossing", "seed": 1003},
+    {"default_blocks_ms": [2.7737095300017245, 2.682780750001257, 2.7884579300007317, 2.665763880004306, 2.7862373100015247], "default_ms": 2.7393898800019088, "float64_reference_max_abs_error": 4.440892098500626e-16, "input_sha256": "a12a86da78a7ce7e2a938535a67e65d3b275c609c08afa01d62f0166b55311de", "pinned_blocks_ms": [6.321234340002775, 6.333734270001514, 6.113416629996209, 6.127460659999997, 6.396439210002427], "pinned_ms": 6.258457022000584, "planner": "guarded_ppo", "scenario": "classic_cross_trap_medium", "seed": 1001},
+    {"default_blocks_ms": [2.6014912400023604, 3.057312710006954, 2.6639441799943597, 2.7170334000038565, 2.657062420003058], "default_ms": 2.7393687900021177, "float64_reference_max_abs_error": 8.881784197001252e-16, "input_sha256": "2794599236f32223942da5667b7410a1d7ef1f9cf54b89afb286a32baca0c820", "pinned_blocks_ms": [6.357353290004539, 6.114729040000384, 6.258631559994683, 6.207356650002112, 6.275504160003038], "pinned_ms": 6.242714940000951, "planner": "guarded_ppo", "scenario": "classic_cross_trap_medium", "seed": 1002},
+    {"default_blocks_ms": [2.6416791700012254, 2.680005140000503, 2.5647912499971426, 2.594390519998342, 2.6129951600069035], "default_ms": 2.6187722480008233, "float64_reference_max_abs_error": 1.3322676295501878e-15, "input_sha256": "6e947a685fe5458cae8e10cb80938e41d8974a006c67b3cb153eb3dac8f1ee00", "pinned_blocks_ms": [6.354940390001502, 6.379833089995373, 6.37243856999703, 6.304429259998869, 6.228714139997464], "pinned_ms": 6.328071089998048, "planner": "guarded_ppo", "scenario": "classic_cross_trap_medium", "seed": 1003},
+    {"default_blocks_ms": [2.6177108000047156, 2.5348461300018243, 2.611498650003341, 2.547550509998473, 2.498154179993435], "default_ms": 2.5619520540003577, "float64_reference_max_abs_error": 8.881784197001252e-16, "input_sha256": "90d2ef3ceb4d3b45ab8c0f22116c148a9704f9704178e33e3b5e95948113997a", "pinned_blocks_ms": [6.267319909993603, 6.313106219995461, 6.446672660003969, 6.289843600006861, 6.170834610002203], "pinned_ms": 6.2975554000004195, "planner": "guarded_ppo", "scenario": "francis2023_narrow_doorway", "seed": 1001},
+    {"default_blocks_ms": [2.4705956199977663, 2.5129268000000593, 2.4776832799943804, 2.50826466000035, 2.5568603700048698], "default_ms": 2.505266145999485, "float64_reference_max_abs_error": 2.220446049250313e-16, "input_sha256": "ff56a4ab48487d33aa23b510cd993eacb41c143c73178652e6e0022bae57f28d", "pinned_blocks_ms": [6.384525530002065, 6.351347150002766, 6.327655860004597, 6.396733209994636, 6.349410220000209], "pinned_ms": 6.361934394000855, "planner": "guarded_ppo", "scenario": "francis2023_narrow_doorway", "seed": 1002},
+    {"default_blocks_ms": [2.544849020005131, 2.5359077300072386, 2.5507260199992743, 2.613841760003197, 2.6026470299984794], "default_ms": 2.569594312002664, "float64_reference_max_abs_error": 8.881784197001252e-16, "input_sha256": "4f974fc9fb7c8d29cb40c4e8ab47a1f18c7609328836c03a0f24534757fd3d1d", "pinned_blocks_ms": [6.2400416400032555, 6.288067979994594, 6.693027330002224, 6.791971470001954, 6.691011930006425], "pinned_ms": 6.54082407000169, "planner": "guarded_ppo", "scenario": "francis2023_narrow_doorway", "seed": 1003},
+    {"default_blocks_ms": [2.6010627300001943, 2.599083899995094, 2.5581339899963496, 2.605857359994843, 2.569274540001061], "default_ms": 2.5866825039975083, "float64_reference_max_abs_error": 1.7763568394002505e-15, "input_sha256": "b451d7a42041bdd6312e485d77ae86c37fb89976af73b0e99fb3d3d9a8e5049c", "pinned_blocks_ms": [6.426245909997306, 6.4783730399994965, 6.623585790002835, 6.618093779998162, 6.458706720004557], "pinned_ms": 6.521001048000471, "planner": "guarded_ppo", "scenario": "francis2023_circular_crossing", "seed": 1001},
+    {"default_blocks_ms": [2.5489916500009713, 2.506644229997619, 2.503905540006599, 2.5547165800071525, 2.456964490002065], "default_ms": 2.5142444980028813, "float64_reference_max_abs_error": 8.881784197001252e-16, "input_sha256": "2a1354b0553c3262350356aee9447262d6d9ec08581dde512cbf5da940bd9674", "pinned_blocks_ms": [6.524529829994208, 6.5117534099954355, 6.586689830000978, 6.407869810000193, 6.513082659994325], "pinned_ms": 6.508785107997028, "planner": "guarded_ppo", "scenario": "francis2023_circular_crossing", "seed": 1002},
+    {"default_blocks_ms": [2.5226874300005875, 2.481482949997371, 2.57504408999921, 2.6399945200046204, 2.6302720500007126], "default_ms": 2.5698962080005003, "float64_reference_max_abs_error": 1.1102230246251565e-15, "input_sha256": "da32eb705300d87acf75d00c826139d4d5e1252e80de625bdd514a90a35e46d1", "pinned_blocks_ms": [6.864823900004922, 6.520578760000717, 6.458718650001174, 6.432999640001071, 6.3953928999944765], "pinned_ms": 6.534502770000472, "planner": "guarded_ppo", "scenario": "francis2023_circular_crossing", "seed": 1003}
+  ]
+}

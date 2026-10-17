@@ -1,0 +1,1996 @@
+{
+  "evidence_tier": "diagnostic-only",
+  "requested": 21900,
+  "recorded": 21900,
+  "eligible": 21900,
+  "missing": 0,
+  "excluded": [],
+  "record_git_hashes": [
+    "22172f6cacc8b3e63825793db604c820ff21080a",
+    "33a4735900153e742828227cc2171436ea09cd90"
+  ],
+  "rankings": [
+    {
+      "treatment": "legacy",
+      "planners": [
+        "prediction_planner",
+        "goal",
+        "social_force",
+        "orca",
+        "ppo",
+        "socnav_sampling",
+        "sacadrl",
+        "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+        "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+        "hybrid_rule_v4_fast_progress_static_escape",
+        "hybrid_rule_v4_fast_progress_static_escape_continuous",
+        "guarded_ppo",
+        "predictive_mppi",
+        "risk_dwa"
+      ],
+      "complete_matched_roster": true,
+      "success_tau_b": 1.0,
+      "collision_tau_b": 1.0,
+      "success_tau_ci95": [
+        0.9999999999999998,
+        1.0
+      ],
+      "collision_tau_ci95": [
+        0.9999999999999998,
+        1.0
+      ],
+      "success_tau_bootstrap": {
+        "ci95": [
+          0.9999999999999998,
+          1.0
+        ],
+        "defined": 1000,
+        "requested": 1000
+      },
+      "collision_tau_bootstrap": {
+        "ci95": [
+          0.9999999999999998,
+          1.0
+        ],
+        "defined": 1000,
+        "requested": 1000
+      },
+      "planner_outcomes": [
+        {
+          "planner": "prediction_planner",
+          "baseline_success": 0.4966666666666667,
+          "success": 0.4966666666666667,
+          "baseline_collision": 0.006666666666666666,
+          "collision": 0.006666666666666666
+        },
+        {
+          "planner": "goal",
+          "baseline_success": 0.4666666666666667,
+          "success": 0.4666666666666667,
+          "baseline_collision": 0.5333333333333333,
+          "collision": 0.5333333333333333
+        },
+        {
+          "planner": "social_force",
+          "baseline_success": 0.6266666666666667,
+          "success": 0.6266666666666667,
+          "baseline_collision": 0.003333333333333333,
+          "collision": 0.003333333333333333
+        },
+        {
+          "planner": "orca",
+          "baseline_success": 0.9266666666666667,
+          "success": 0.9266666666666667,
+          "baseline_collision": 0.06666666666666667,
+          "collision": 0.06666666666666667
+        },
+        {
+          "planner": "ppo",
+          "baseline_success": 0.5833333333333333,
+          "success": 0.5833333333333333,
+          "baseline_collision": 0.4166666666666667,
+          "collision": 0.4166666666666667
+        },
+        {
+          "planner": "socnav_sampling",
+          "baseline_success": 0.9133333333333333,
+          "success": 0.9133333333333333,
+          "baseline_collision": 0.023333333333333334,
+          "collision": 0.023333333333333334
+        },
+        {
+          "planner": "sacadrl",
+          "baseline_success": 0.37333333333333335,
+          "success": 0.37333333333333335,
+          "baseline_collision": 0.6266666666666667,
+          "collision": 0.6266666666666667
+        },
+        {
+          "planner": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+          "baseline_success": 0.9433333333333334,
+          "success": 0.9433333333333334,
+          "baseline_collision": 0.006666666666666666,
+          "collision": 0.006666666666666666
+        },
+        {
+          "planner": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+          "baseline_success": 0.9433333333333334,
+          "success": 0.9433333333333334,
+          "baseline_collision": 0.006666666666666666,
+          "collision": 0.006666666666666666
+        },
+        {
+          "planner": "hybrid_rule_v4_fast_progress_static_escape",
+          "baseline_success": 0.9433333333333334,
+          "success": 0.9433333333333334,
+          "baseline_collision": 0.006666666666666666,
+          "collision": 0.006666666666666666
+        },
+        {
+          "planner": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+          "baseline_success": 0.9099999999999999,
+          "success": 0.9099999999999999,
+          "baseline_collision": 0.01,
+          "collision": 0.01
+        },
+        {
+          "planner": "guarded_ppo",
+          "baseline_success": 0.65,
+          "success": 0.65,
+          "baseline_collision": 0.003333333333333333,
+          "collision": 0.003333333333333333
+        },
+        {
+          "planner": "predictive_mppi",
+          "baseline_success": 0.63,
+          "success": 0.63,
+          "baseline_collision": 0.006666666666666666,
+          "collision": 0.006666666666666666
+        },
+        {
+          "planner": "risk_dwa",
+          "baseline_success": 0.8099999999999999,
+          "success": 0.8099999999999999,
+          "baseline_collision": 0.0,
+          "collision": 0.0
+        }
+      ],
+      "family_outcomes": [
+        {
+          "family": "bottleneck",
+          "baseline_success": 0.46904761904761905,
+          "success": 0.46904761904761905,
+          "baseline_collision": 0.21666666666666667,
+          "collision": 0.21666666666666667,
+          "planner_success_tau_b": 0.9999999999999998,
+          "planner_collision_tau_b": 1.0
+        },
+        {
+          "family": "cross_trap",
+          "baseline_success": 0.6,
+          "success": 0.6,
+          "baseline_collision": 0.16428571428571428,
+          "collision": 0.16428571428571428,
+          "planner_success_tau_b": 0.9999999999999998,
+          "planner_collision_tau_b": 1.0
+        },
+        {
+          "family": "doorway",
+          "baseline_success": 0.680952380952381,
+          "success": 0.680952380952381,
+          "baseline_collision": 0.17142857142857143,
+          "collision": 0.17142857142857143,
+          "planner_success_tau_b": 1.0,
+          "planner_collision_tau_b": 1.0
+        },
+        {
+          "family": "group_crossing",
+          "baseline_success": 0.9523809523809523,
+          "success": 0.9523809523809523,
+          "baseline_collision": 0.047619047619047616,
+          "collision": 0.047619047619047616,
+          "planner_success_tau_b": 0.9999999999999999,
+          "planner_collision_tau_b": 0.9999999999999999
+        },
+        {
+          "family": "head_on_corridor",
+          "baseline_success": 0.8738095238095238,
+          "success": 0.8738095238095238,
+          "baseline_collision": 0.09523809523809523,
+          "collision": 0.09523809523809523,
+          "planner_success_tau_b": 1.0,
+          "planner_collision_tau_b": 0.9999999999999999
+        },
+        {
+          "family": "entering_room",
+          "baseline_success": 0.888095238095238,
+          "success": 0.888095238095238,
+          "baseline_collision": 0.07380952380952381,
+          "collision": 0.07380952380952381,
+          "planner_success_tau_b": 1.0,
+          "planner_collision_tau_b": 1.0
+        },
+        {
+          "family": "exiting_room",
+          "baseline_success": 0.9976190476190476,
+          "success": 0.9976190476190476,
+          "baseline_collision": 0.0,
+          "collision": 0.0,
+          "planner_success_tau_b": 1.0,
+          "planner_collision_tau_b": null
+        },
+        {
+          "family": "circular_crossing",
+          "baseline_success": 0.9619047619047619,
+          "success": 0.9619047619047619,
+          "baseline_collision": 0.002380952380952381,
+          "collision": 0.002380952380952381,
+          "planner_success_tau_b": 1.0,
+          "planner_collision_tau_b": 1.0
+        },
+        {
+          "family": "robot_crowding",
+          "baseline_success": 0.3047619047619048,
+          "success": 0.3047619047619048,
+          "baseline_collision": 0.2714285714285714,
+          "collision": 0.2714285714285714,
+          "planner_success_tau_b": 1.0,
+          "planner_collision_tau_b": 1.0
+        },
+        {
+          "family": "crowd_navigation",
+          "baseline_success": 0.569047619047619,
+          "success": 0.569047619047619,
+          "baseline_collision": 0.18333333333333332,
+          "collision": 0.18333333333333332,
+          "planner_success_tau_b": 1.0,
+          "planner_collision_tau_b": 0.9999999999999999
+        }
+      ],
+      "family_success_tau_b": 0.9999999999999999
+    },
+    {
+      "treatment": "swap",
+      "planners": [
+        "prediction_planner",
+        "goal",
+        "social_force",
+        "orca",
+        "ppo",
+        "socnav_sampling",
+        "sacadrl",
+        "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+        "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+        "hybrid_rule_v4_fast_progress_static_escape",
+        "hybrid_rule_v4_fast_progress_static_escape_continuous",
+        "guarded_ppo",
+        "predictive_mppi",
+        "risk_dwa"
+      ],
+      "complete_matched_roster": true,
+      "success_tau_b": 0.8342993356105523,
+      "collision_tau_b": 0.738933506665334,
+      "success_tau_ci95": [
+        0.6222222222222222,
+        0.8989331499509895
+      ],
+      "collision_tau_ci95": [
+        0.5481600354820864,
+        0.921423615790601
+      ],
+      "success_tau_bootstrap": {
+        "ci95": [
+          0.6222222222222222,
+          0.8989331499509895
+        ],
+        "defined": 1000,
+        "requested": 1000
+      },
+      "collision_tau_bootstrap": {
+        "ci95": [
+          0.5481600354820864,
+          0.921423615790601
+        ],
+        "defined": 1000,
+        "requested": 1000
+      },
+      "planner_outcomes": [
+        {
+          "planner": "prediction_planner",
+          "baseline_success": 0.4966666666666667,
+          "success": 0.53,
+          "baseline_collision": 0.006666666666666666,
+          "collision": 0.013333333333333332
+        },
+        {
+          "planner": "goal",
+          "baseline_success": 0.4666666666666667,
+          "success": 0.41,
+          "baseline_collision": 0.5333333333333333,
+          "collision": 0.5900000000000001
+        },
+        {
+          "planner": "social_force",
+          "baseline_success": 0.6266666666666667,
+          "success": 0.6266666666666667,
+          "baseline_collision": 0.003333333333333333,
+          "collision": 0.003333333333333333
+        },
+        {
+          "planner": "orca",
+          "baseline_success": 0.9266666666666667,
+          "success": 0.9066666666666666,
+          "baseline_collision": 0.06666666666666667,
+          "collision": 0.08333333333333334
+        },
+        {
+          "planner": "ppo",
+          "baseline_success": 0.5833333333333333,
+          "success": 0.6266666666666667,
+          "baseline_collision": 0.4166666666666667,
+          "collision": 0.35333333333333333
+        },
+        {
+          "planner": "socnav_sampling",
+          "baseline_success": 0.9133333333333333,
+          "success": 0.93,
+          "baseline_collision": 0.023333333333333334,
+          "collision": 0.023333333333333334
+        },
+        {
+          "planner": "sacadrl",
+          "baseline_success": 0.37333333333333335,
+          "success": 0.37333333333333335,
+          "baseline_collision": 0.6266666666666667,
+          "collision": 0.6266666666666667
+        },
+        {
+          "planner": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+          "baseline_success": 0.9433333333333334,
+          "success": 0.9099999999999999,
+          "baseline_collision": 0.006666666666666666,
+          "collision": 0.016666666666666666
+        },
+        {
+          "planner": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+          "baseline_success": 0.9433333333333334,
+          "success": 0.9099999999999999,
+          "baseline_collision": 0.006666666666666666,
+          "collision": 0.016666666666666666
+        },
+        {
+          "planner": "hybrid_rule_v4_fast_progress_static_escape",
+          "baseline_success": 0.9433333333333334,
+          "success": 0.9099999999999999,
+          "baseline_collision": 0.006666666666666666,
+          "collision": 0.01
+        },
+        {
+          "planner": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+          "baseline_success": 0.9099999999999999,
+          "success": 0.9033333333333333,
+          "baseline_collision": 0.01,
+          "collision": 0.006666666666666666
+        },
+        {
+          "planner": "guarded_ppo",
+          "baseline_success": 0.65,
+          "success": 0.5666666666666667,
+          "baseline_collision": 0.003333333333333333,
+          "collision": 0.0
+        },
+        {
+          "planner": "predictive_mppi",
+          "baseline_success": 0.63,
+          "success": 0.71,
+          "baseline_collision": 0.006666666666666666,
+          "collision": 0.0
+        },
+        {
+          "planner": "risk_dwa",
+          "baseline_success": 0.8099999999999999,
+          "success": 0.8833333333333334,
+          "baseline_collision": 0.0,
+          "collision": 0.006666666666666666
+        }
+      ],
+      "family_outcomes": [
+        {
+          "family": "bottleneck",
+          "baseline_success": 0.46904761904761905,
+          "success": 0.5666666666666667,
+          "baseline_collision": 0.21666666666666667,
+          "collision": 0.19523809523809524,
+          "planner_success_tau_b": 0.7675225788801975,
+          "planner_collision_tau_b": 0.8923543557893895
+        },
+        {
+          "family": "cross_trap",
+          "baseline_success": 0.6,
+          "success": 0.6095238095238096,
+          "baseline_collision": 0.16428571428571428,
+          "collision": 0.16904761904761906,
+          "planner_success_tau_b": 0.8071417672951359,
+          "planner_collision_tau_b": 1.0
+        },
+        {
+          "family": "doorway",
+          "baseline_success": 0.680952380952381,
+          "success": 0.680952380952381,
+          "baseline_collision": 0.17142857142857143,
+          "collision": 0.17857142857142858,
+          "planner_success_tau_b": 0.8707910352243109,
+          "planner_collision_tau_b": 0.7608695652173914
+        },
+        {
+          "family": "group_crossing",
+          "baseline_success": 0.9523809523809523,
+          "success": 0.9,
+          "baseline_collision": 0.047619047619047616,
+          "collision": 0.07857142857142857,
+          "planner_success_tau_b": 0.7194183233796154,
+          "planner_collision_tau_b": 0.9333333333333332
+        },
+        {
+          "family": "head_on_corridor",
+          "baseline_success": 0.8738095238095238,
+          "success": 0.8738095238095238,
+          "baseline_collision": 0.09523809523809523,
+          "collision": 0.1,
+          "planner_success_tau_b": 0.729368739248302,
+          "planner_collision_tau_b": 0.8695819912499182
+        },
+        {
+          "family": "entering_room",
+          "baseline_success": 0.888095238095238,
+          "success": 0.8904761904761904,
+          "baseline_collision": 0.07380952380952381,
+          "collision": 0.07142857142857142,
+          "planner_success_tau_b": 0.8299511768424959,
+          "planner_collision_tau_b": 1.0
+        },
+        {
+          "family": "exiting_room",
+          "baseline_success": 0.9976190476190476,
+          "success": 0.9952380952380953,
+          "baseline_collision": 0.0,
+          "collision": 0.0,
+          "planner_success_tau_b": 1.0,
+          "planner_collision_tau_b": null
+        },
+        {
+          "family": "circular_crossing",
+          "baseline_success": 0.9619047619047619,
+          "success": 0.9428571428571428,
+          "baseline_collision": 0.002380952380952381,
+          "collision": 0.002380952380952381,
+          "planner_success_tau_b": 0.8633316946034313,
+          "planner_collision_tau_b": 1.0
+        },
+        {
+          "family": "robot_crowding",
+          "baseline_success": 0.3047619047619048,
+          "success": 0.29523809523809524,
+          "baseline_collision": 0.2714285714285714,
+          "collision": 0.2785714285714286,
+          "planner_success_tau_b": 0.7711403083390078,
+          "planner_collision_tau_b": 0.6894417895253628
+        },
+        {
+          "family": "crowd_navigation",
+          "baseline_success": 0.569047619047619,
+          "success": 0.5285714285714286,
+          "baseline_collision": 0.18333333333333332,
+          "collision": 0.1761904761904762,
+          "planner_success_tau_b": 0.6363636363636362,
+          "planner_collision_tau_b": 0.8073734277593311
+        }
+      ],
+      "family_success_tau_b": 0.9555555555555554
+    },
+    {
+      "treatment": "r0.3_v0.65",
+      "planners": [
+        "goal",
+        "social_force",
+        "orca",
+        "ppo",
+        "hybrid_rule_v4_fast_progress_static_escape"
+      ],
+      "complete_matched_roster": true,
+      "success_tau_b": 0.7999999999999999,
+      "collision_tau_b": 0.9486832980505137,
+      "success_tau_ci95": [
+        0.39999999999999997,
+        0.7999999999999999
+      ],
+      "collision_tau_ci95": [
+        0.7378647873726218,
+        1.0
+      ],
+      "success_tau_bootstrap": {
+        "ci95": [
+          0.39999999999999997,
+          0.7999999999999999
+        ],
+        "defined": 1000,
+        "requested": 1000
+      },
+      "collision_tau_bootstrap": {
+        "ci95": [
+          0.7378647873726218,
+          1.0
+        ],
+        "defined": 1000,
+        "requested": 1000
+      },
+      "planner_outcomes": [
+        {
+          "planner": "goal",
+          "baseline_success": 0.4666666666666667,
+          "success": 0.8133333333333332,
+          "baseline_collision": 0.5333333333333333,
+          "collision": 0.18666666666666668
+        },
+        {
+          "planner": "social_force",
+          "baseline_success": 0.6266666666666667,
+          "success": 0.9933333333333334,
+          "baseline_collision": 0.003333333333333333,
+          "collision": 0.0
+        },
+        {
+          "planner": "orca",
+          "baseline_success": 0.9266666666666667,
+          "success": 0.9366666666666668,
+          "baseline_collision": 0.06666666666666667,
+          "collision": 0.06
+        },
+        {
+          "planner": "ppo",
+          "baseline_success": 0.5833333333333333,
+          "success": 0.82,
+          "baseline_collision": 0.4166666666666667,
+          "collision": 0.17333333333333334
+        },
+        {
+          "planner": "hybrid_rule_v4_fast_progress_static_escape",
+          "baseline_success": 0.9433333333333334,
+          "success": 1.0,
+          "baseline_collision": 0.006666666666666666,
+          "collision": 0.0
+        }
+      ],
+      "family_outcomes": [
+        {
+          "family": "bottleneck",
+          "baseline_success": 0.3933333333333333,
+          "success": 0.8,
+          "baseline_collision": 0.4066666666666667,
+          "collision": 0.2,
+          "planner_success_tau_b": 0.3779644730092272,
+          "planner_collision_tau_b": 0.5303300858899106
+        },
+        {
+          "family": "cross_trap",
+          "baseline_success": 0.5266666666666666,
+          "success": 0.9066666666666666,
+          "baseline_collision": 0.31333333333333335,
+          "collision": 0.09333333333333334,
+          "planner_success_tau_b": 0.35856858280031806,
+          "planner_collision_tau_b": 0.629940788348712
+        },
+        {
+          "family": "doorway",
+          "baseline_success": 0.7066666666666667,
+          "success": 0.98,
+          "baseline_collision": 0.2733333333333333,
+          "collision": 0.02,
+          "planner_success_tau_b": 0.6666666666666666,
+          "planner_collision_tau_b": 0.7559289460184544
+        },
+        {
+          "family": "group_crossing",
+          "baseline_success": 0.9266666666666666,
+          "success": 0.9533333333333334,
+          "baseline_collision": 0.07333333333333333,
+          "collision": 0.04,
+          "planner_success_tau_b": 0.0,
+          "planner_collision_tau_b": 0.0
+        },
+        {
+          "family": "head_on_corridor",
+          "baseline_success": 0.8266666666666667,
+          "success": 0.98,
+          "baseline_collision": 0.14666666666666667,
+          "collision": 0.02,
+          "planner_success_tau_b": 0.5976143046671968,
+          "planner_collision_tau_b": 0.8819171036881969
+        },
+        {
+          "family": "entering_room",
+          "baseline_success": 0.92,
+          "success": 0.94,
+          "baseline_collision": 0.06,
+          "collision": 0.06,
+          "planner_success_tau_b": 0.7559289460184544,
+          "planner_collision_tau_b": 1.0
+        },
+        {
+          "family": "exiting_room",
+          "baseline_success": 1.0,
+          "success": 1.0,
+          "baseline_collision": 0.0,
+          "collision": 0.0,
+          "planner_success_tau_b": null,
+          "planner_collision_tau_b": null
+        },
+        {
+          "family": "circular_crossing",
+          "baseline_success": 0.98,
+          "success": 1.0,
+          "baseline_collision": 0.006666666666666667,
+          "collision": 0.0,
+          "planner_success_tau_b": null,
+          "planner_collision_tau_b": null
+        },
+        {
+          "family": "robot_crowding",
+          "baseline_success": 0.2866666666666667,
+          "success": 0.72,
+          "baseline_collision": 0.4666666666666667,
+          "collision": 0.25333333333333335,
+          "planner_success_tau_b": 0.31622776601683794,
+          "planner_collision_tau_b": 0.7378647873726218
+        },
+        {
+          "family": "crowd_navigation",
+          "baseline_success": 0.5266666666666666,
+          "success": 0.8466666666666667,
+          "baseline_collision": 0.30666666666666664,
+          "collision": 0.15333333333333332,
+          "planner_success_tau_b": 0.5270462766947298,
+          "planner_collision_tau_b": 1.0
+        }
+      ],
+      "family_success_tau_b": 0.7816608327818949
+    },
+    {
+      "treatment": "r0.3_v1",
+      "planners": [
+        "goal",
+        "social_force",
+        "orca",
+        "ppo",
+        "hybrid_rule_v4_fast_progress_static_escape"
+      ],
+      "complete_matched_roster": true,
+      "success_tau_b": 0.10540925533894598,
+      "collision_tau_b": 0.35856858280031806,
+      "success_tau_ci95": [
+        -0.11952286093343936,
+        0.317286286436424
+      ],
+      "collision_tau_ci95": [
+        0.3333333333333333,
+        0.3779644730092272
+      ],
+      "success_tau_bootstrap": {
+        "ci95": [
+          -0.11952286093343936,
+          0.317286286436424
+        ],
+        "defined": 1000,
+        "requested": 1000
+      },
+      "collision_tau_bootstrap": {
+        "ci95": [
+          0.3333333333333333,
+          0.3779644730092272
+        ],
+        "defined": 1000,
+        "requested": 1000
+      },
+      "planner_outcomes": [
+        {
+          "planner": "goal",
+          "baseline_success": 0.4666666666666667,
+          "success": 1.0,
+          "baseline_collision": 0.5333333333333333,
+          "collision": 0.0
+        },
+        {
+          "planner": "social_force",
+          "baseline_success": 0.6266666666666667,
+          "success": 0.9933333333333334,
+          "baseline_collision": 0.003333333333333333,
+          "collision": 0.0
+        },
+        {
+          "planner": "orca",
+          "baseline_success": 0.9266666666666667,
+          "success": 0.9866666666666667,
+          "baseline_collision": 0.06666666666666667,
+          "collision": 0.013333333333333332
+        },
+        {
+          "planner": "ppo",
+          "baseline_success": 0.5833333333333333,
+          "success": 0.8133333333333332,
+          "baseline_collision": 0.4166666666666667,
+          "collision": 0.18333333333333332
+        },
+        {
+          "planner": "hybrid_rule_v4_fast_progress_static_escape",
+          "baseline_success": 0.9433333333333334,
+          "success": 1.0,
+          "baseline_collision": 0.006666666666666666,
+          "collision": 0.0
+        }
+      ],
+      "family_outcomes": [
+        {
+          "family": "bottleneck",
+          "baseline_success": 0.3933333333333333,
+          "success": 1.0,
+          "baseline_collision": 0.4066666666666667,
+          "collision": 0.0,
+          "planner_success_tau_b": null,
+          "planner_collision_tau_b": null
+        },
+        {
+          "family": "cross_trap",
+          "baseline_success": 0.5266666666666666,
+          "success": 0.9066666666666666,
+          "baseline_collision": 0.31333333333333335,
+          "collision": 0.09333333333333334,
+          "planner_success_tau_b": 0.0,
+          "planner_collision_tau_b": 0.3333333333333333
+        },
+        {
+          "family": "doorway",
+          "baseline_success": 0.7066666666666667,
+          "success": 0.94,
+          "baseline_collision": 0.2733333333333333,
+          "collision": 0.06,
+          "planner_success_tau_b": 0.6666666666666666,
+          "planner_collision_tau_b": 0.7559289460184544
+        },
+        {
+          "family": "group_crossing",
+          "baseline_success": 0.9266666666666666,
+          "success": 0.9933333333333333,
+          "baseline_collision": 0.07333333333333333,
+          "collision": 0.006666666666666667,
+          "planner_success_tau_b": 0.0,
+          "planner_collision_tau_b": 0.0
+        },
+        {
+          "family": "head_on_corridor",
+          "baseline_success": 0.8266666666666667,
+          "success": 1.0,
+          "baseline_collision": 0.14666666666666667,
+          "collision": 0.0,
+          "planner_success_tau_b": null,
+          "planner_collision_tau_b": null
+        },
+        {
+          "family": "entering_room",
+          "baseline_success": 0.92,
+          "success": 0.9466666666666667,
+          "baseline_collision": 0.06,
+          "collision": 0.05333333333333334,
+          "planner_success_tau_b": 0.7559289460184544,
+          "planner_collision_tau_b": 1.0
+        },
+        {
+          "family": "exiting_room",
+          "baseline_success": 1.0,
+          "success": 1.0,
+          "baseline_collision": 0.0,
+          "collision": 0.0,
+          "planner_success_tau_b": null,
+          "planner_collision_tau_b": null
+        },
+        {
+          "family": "circular_crossing",
+          "baseline_success": 0.98,
+          "success": 1.0,
+          "baseline_collision": 0.006666666666666667,
+          "collision": 0.0,
+          "planner_success_tau_b": null,
+          "planner_collision_tau_b": null
+        },
+        {
+          "family": "robot_crowding",
+          "baseline_success": 0.2866666666666667,
+          "success": 0.8466666666666667,
+          "baseline_collision": 0.4666666666666667,
+          "collision": 0.13333333333333333,
+          "planner_success_tau_b": 0.1178511301977579,
+          "planner_collision_tau_b": 0.35856858280031806
+        },
+        {
+          "family": "crowd_navigation",
+          "baseline_success": 0.5266666666666666,
+          "success": 0.9533333333333334,
+          "baseline_collision": 0.30666666666666664,
+          "collision": 0.04666666666666667,
+          "planner_success_tau_b": -0.11952286093343936,
+          "planner_collision_tau_b": 0.3779644730092272
+        }
+      ],
+      "family_success_tau_b": 0.48280454958526753
+    },
+    {
+      "treatment": "r0.3_v1.3",
+      "planners": [
+        "goal",
+        "social_force",
+        "orca",
+        "ppo",
+        "hybrid_rule_v4_fast_progress_static_escape"
+      ],
+      "complete_matched_roster": true,
+      "success_tau_b": 0.31622776601683794,
+      "collision_tau_b": 0.31622776601683794,
+      "success_tau_ci95": [
+        0.10540925533894598,
+        0.35856858280031806
+      ],
+      "collision_tau_ci95": [
+        0.31622776601683794,
+        0.3333333333333333
+      ],
+      "success_tau_bootstrap": {
+        "ci95": [
+          0.10540925533894598,
+          0.35856858280031806
+        ],
+        "defined": 1000,
+        "requested": 1000
+      },
+      "collision_tau_bootstrap": {
+        "ci95": [
+          0.31622776601683794,
+          0.3333333333333333
+        ],
+        "defined": 1000,
+        "requested": 1000
+      },
+      "planner_outcomes": [
+        {
+          "planner": "goal",
+          "baseline_success": 0.4666666666666667,
+          "success": 1.0,
+          "baseline_collision": 0.5333333333333333,
+          "collision": 0.0
+        },
+        {
+          "planner": "social_force",
+          "baseline_success": 0.6266666666666667,
+          "success": 0.9766666666666668,
+          "baseline_collision": 0.003333333333333333,
+          "collision": 0.0
+        },
+        {
+          "planner": "orca",
+          "baseline_success": 0.9266666666666667,
+          "success": 0.9966666666666667,
+          "baseline_collision": 0.06666666666666667,
+          "collision": 0.0
+        },
+        {
+          "planner": "ppo",
+          "baseline_success": 0.5833333333333333,
+          "success": 0.79,
+          "baseline_collision": 0.4166666666666667,
+          "collision": 0.2066666666666667
+        },
+        {
+          "planner": "hybrid_rule_v4_fast_progress_static_escape",
+          "baseline_success": 0.9433333333333334,
+          "success": 1.0,
+          "baseline_collision": 0.006666666666666666,
+          "collision": 0.0
+        }
+      ],
+      "family_outcomes": [
+        {
+          "family": "bottleneck",
+          "baseline_success": 0.3933333333333333,
+          "success": 0.9733333333333334,
+          "baseline_collision": 0.4066666666666667,
+          "collision": 0.02666666666666667,
+          "planner_success_tau_b": 0.3779644730092272,
+          "planner_collision_tau_b": 0.5303300858899106
+        },
+        {
+          "family": "cross_trap",
+          "baseline_success": 0.5266666666666666,
+          "success": 0.8866666666666667,
+          "baseline_collision": 0.31333333333333335,
+          "collision": 0.11333333333333333,
+          "planner_success_tau_b": 0.0,
+          "planner_collision_tau_b": 0.3333333333333333
+        },
+        {
+          "family": "doorway",
+          "baseline_success": 0.7066666666666667,
+          "success": 0.92,
+          "baseline_collision": 0.2733333333333333,
+          "collision": 0.07333333333333333,
+          "planner_success_tau_b": 0.2519763153394848,
+          "planner_collision_tau_b": 0.7559289460184544
+        },
+        {
+          "family": "group_crossing",
+          "baseline_success": 0.9266666666666666,
+          "success": 0.98,
+          "baseline_collision": 0.07333333333333333,
+          "collision": 0.02,
+          "planner_success_tau_b": 0.5303300858899106,
+          "planner_collision_tau_b": 0.5303300858899106
+        },
+        {
+          "family": "head_on_corridor",
+          "baseline_success": 0.8266666666666667,
+          "success": 1.0,
+          "baseline_collision": 0.14666666666666667,
+          "collision": 0.0,
+          "planner_success_tau_b": null,
+          "planner_collision_tau_b": null
+        },
+        {
+          "family": "entering_room",
+          "baseline_success": 0.92,
+          "success": 0.9666666666666667,
+          "baseline_collision": 0.06,
+          "collision": 0.03333333333333333,
+          "planner_success_tau_b": 0.7559289460184544,
+          "planner_collision_tau_b": 1.0
+        },
+        {
+          "family": "exiting_room",
+          "baseline_success": 1.0,
+          "success": 1.0,
+          "baseline_collision": 0.0,
+          "collision": 0.0,
+          "planner_success_tau_b": null,
+          "planner_collision_tau_b": null
+        },
+        {
+          "family": "circular_crossing",
+          "baseline_success": 0.98,
+          "success": 1.0,
+          "baseline_collision": 0.006666666666666667,
+          "collision": 0.0,
+          "planner_success_tau_b": null,
+          "planner_collision_tau_b": null
+        },
+        {
+          "family": "robot_crowding",
+          "baseline_success": 0.2866666666666667,
+          "success": 0.8866666666666667,
+          "baseline_collision": 0.4666666666666667,
+          "collision": 0.08,
+          "planner_success_tau_b": 0.2519763153394848,
+          "planner_collision_tau_b": 0.31622776601683794
+        },
+        {
+          "family": "crowd_navigation",
+          "baseline_success": 0.5266666666666666,
+          "success": 0.9133333333333333,
+          "baseline_collision": 0.30666666666666664,
+          "collision": 0.06666666666666667,
+          "planner_success_tau_b": 0.11952286093343936,
+          "planner_collision_tau_b": 0.3333333333333333
+        }
+      ],
+      "family_success_tau_b": 0.6592342530872155
+    },
+    {
+      "treatment": "r0.5_v0.65",
+      "planners": [
+        "goal",
+        "social_force",
+        "orca",
+        "ppo",
+        "hybrid_rule_v4_fast_progress_static_escape"
+      ],
+      "complete_matched_roster": true,
+      "success_tau_b": 0.9999999999999999,
+      "collision_tau_b": 0.9486832980505137,
+      "success_tau_ci95": [
+        0.7344181676883065,
+        0.9999999999999999
+      ],
+      "collision_tau_ci95": [
+        0.8915109556693626,
+        1.0
+      ],
+      "success_tau_bootstrap": {
+        "ci95": [
+          0.7344181676883065,
+          0.9999999999999999
+        ],
+        "defined": 1000,
+        "requested": 1000
+      },
+      "collision_tau_bootstrap": {
+        "ci95": [
+          0.8915109556693626,
+          1.0
+        ],
+        "defined": 1000,
+        "requested": 1000
+      },
+      "planner_outcomes": [
+        {
+          "planner": "goal",
+          "baseline_success": 0.4666666666666667,
+          "success": 0.7433333333333334,
+          "baseline_collision": 0.5333333333333333,
+          "collision": 0.2566666666666667
+        },
+        {
+          "planner": "social_force",
+          "baseline_success": 0.6266666666666667,
+          "success": 0.9166666666666666,
+          "baseline_collision": 0.003333333333333333,
+          "collision": 0.0
+        },
+        {
+          "planner": "orca",
+          "baseline_success": 0.9266666666666667,
+          "success": 0.9466666666666667,
+          "baseline_collision": 0.06666666666666667,
+          "collision": 0.05333333333333333
+        },
+        {
+          "planner": "ppo",
+          "baseline_success": 0.5833333333333333,
+          "success": 0.7733333333333333,
+          "baseline_collision": 0.4166666666666667,
+          "collision": 0.21666666666666665
+        },
+        {
+          "planner": "hybrid_rule_v4_fast_progress_static_escape",
+          "baseline_success": 0.9433333333333334,
+          "success": 1.0,
+          "baseline_collision": 0.006666666666666666,
+          "collision": 0.0
+        }
+      ],
+      "family_outcomes": [
+        {
+          "family": "bottleneck",
+          "baseline_success": 0.3933333333333333,
+          "success": 0.8,
+          "baseline_collision": 0.4066666666666667,
+          "collision": 0.2,
+          "planner_success_tau_b": 0.3779644730092272,
+          "planner_collision_tau_b": 0.5303300858899106
+        },
+        {
+          "family": "cross_trap",
+          "baseline_success": 0.5266666666666666,
+          "success": 0.8933333333333333,
+          "baseline_collision": 0.31333333333333335,
+          "collision": 0.1,
+          "planner_success_tau_b": 0.4472135954999579,
+          "planner_collision_tau_b": 0.629940788348712
+        },
+        {
+          "family": "doorway",
+          "baseline_success": 0.7066666666666667,
+          "success": 0.9333333333333333,
+          "baseline_collision": 0.2733333333333333,
+          "collision": 0.06666666666666667,
+          "planner_success_tau_b": 0.8819171036881969,
+          "planner_collision_tau_b": 0.9999999999999998
+        },
+        {
+          "family": "group_crossing",
+          "baseline_success": 0.9266666666666666,
+          "success": 0.94,
+          "baseline_collision": 0.07333333333333333,
+          "collision": 0.06,
+          "planner_success_tau_b": 0.4714045207910316,
+          "planner_collision_tau_b": 0.4714045207910316
+        },
+        {
+          "family": "head_on_corridor",
+          "baseline_success": 0.8266666666666667,
+          "success": 0.9666666666666667,
+          "baseline_collision": 0.14666666666666667,
+          "collision": 0.03333333333333333,
+          "planner_success_tau_b": 0.5976143046671968,
+          "planner_collision_tau_b": 0.8819171036881969
+        },
+        {
+          "family": "entering_room",
+          "baseline_success": 0.92,
+          "success": 0.9533333333333334,
+          "baseline_collision": 0.06,
+          "collision": 0.04666666666666667,
+          "planner_success_tau_b": 0.7559289460184544,
+          "planner_collision_tau_b": 1.0
+        },
+        {
+          "family": "exiting_room",
+          "baseline_success": 1.0,
+          "success": 1.0,
+          "baseline_collision": 0.0,
+          "collision": 0.0,
+          "planner_success_tau_b": null,
+          "planner_collision_tau_b": null
+        },
+        {
+          "family": "circular_crossing",
+          "baseline_success": 0.98,
+          "success": 0.9866666666666667,
+          "baseline_collision": 0.006666666666666667,
+          "collision": 0.013333333333333334,
+          "planner_success_tau_b": 0.3779644730092272,
+          "planner_collision_tau_b": 1.0
+        },
+        {
+          "family": "robot_crowding",
+          "baseline_success": 0.2866666666666667,
+          "success": 0.5266666666666666,
+          "baseline_collision": 0.4666666666666667,
+          "collision": 0.34,
+          "planner_success_tau_b": 0.5270462766947299,
+          "planner_collision_tau_b": 0.7378647873726218
+        },
+        {
+          "family": "crowd_navigation",
+          "baseline_success": 0.5266666666666666,
+          "success": 0.76,
+          "baseline_collision": 0.30666666666666664,
+          "collision": 0.19333333333333333,
+          "planner_success_tau_b": 0.7999999999999999,
+          "planner_collision_tau_b": 1.0
+        }
+      ],
+      "family_success_tau_b": 0.8090398349558905
+    },
+    {
+      "treatment": "r0.5_v1",
+      "planners": [
+        "goal",
+        "social_force",
+        "orca",
+        "ppo",
+        "hybrid_rule_v4_fast_progress_static_escape"
+      ],
+      "complete_matched_roster": true,
+      "success_tau_b": 0.39999999999999997,
+      "collision_tau_b": 0.5270462766947298,
+      "success_tau_ci95": [
+        0.19999999999999998,
+        0.5270462766947298
+      ],
+      "collision_tau_ci95": [
+        0.3779644730092272,
+        0.7071067811865475
+      ],
+      "success_tau_bootstrap": {
+        "ci95": [
+          0.19999999999999998,
+          0.5270462766947298
+        ],
+        "defined": 1000,
+        "requested": 1000
+      },
+      "collision_tau_bootstrap": {
+        "ci95": [
+          0.3779644730092272,
+          0.7071067811865475
+        ],
+        "defined": 1000,
+        "requested": 1000
+      },
+      "planner_outcomes": [
+        {
+          "planner": "goal",
+          "baseline_success": 0.4666666666666667,
+          "success": 0.99,
+          "baseline_collision": 0.5333333333333333,
+          "collision": 0.01
+        },
+        {
+          "planner": "social_force",
+          "baseline_success": 0.6266666666666667,
+          "success": 0.9033333333333333,
+          "baseline_collision": 0.003333333333333333,
+          "collision": 0.0
+        },
+        {
+          "planner": "orca",
+          "baseline_success": 0.9266666666666667,
+          "success": 0.9733333333333333,
+          "baseline_collision": 0.06666666666666667,
+          "collision": 0.026666666666666665
+        },
+        {
+          "planner": "ppo",
+          "baseline_success": 0.5833333333333333,
+          "success": 0.78,
+          "baseline_collision": 0.4166666666666667,
+          "collision": 0.21666666666666665
+        },
+        {
+          "planner": "hybrid_rule_v4_fast_progress_static_escape",
+          "baseline_success": 0.9433333333333334,
+          "success": 1.0,
+          "baseline_collision": 0.006666666666666666,
+          "collision": 0.0
+        }
+      ],
+      "family_outcomes": [
+        {
+          "family": "bottleneck",
+          "baseline_success": 0.3933333333333333,
+          "success": 1.0,
+          "baseline_collision": 0.4066666666666667,
+          "collision": 0.0,
+          "planner_success_tau_b": null,
+          "planner_collision_tau_b": null
+        },
+        {
+          "family": "cross_trap",
+          "baseline_success": 0.5266666666666666,
+          "success": 0.8933333333333333,
+          "baseline_collision": 0.31333333333333335,
+          "collision": 0.10666666666666667,
+          "planner_success_tau_b": 0.0,
+          "planner_collision_tau_b": 0.3333333333333333
+        },
+        {
+          "family": "doorway",
+          "baseline_success": 0.7066666666666667,
+          "success": 0.88,
+          "baseline_collision": 0.2733333333333333,
+          "collision": 0.09333333333333334,
+          "planner_success_tau_b": 0.629940788348712,
+          "planner_collision_tau_b": 0.7559289460184544
+        },
+        {
+          "family": "group_crossing",
+          "baseline_success": 0.9266666666666666,
+          "success": 0.9933333333333333,
+          "baseline_collision": 0.07333333333333333,
+          "collision": 0.006666666666666667,
+          "planner_success_tau_b": 0.0,
+          "planner_collision_tau_b": 0.0
+        },
+        {
+          "family": "head_on_corridor",
+          "baseline_success": 0.8266666666666667,
+          "success": 0.9933333333333333,
+          "baseline_collision": 0.14666666666666667,
+          "collision": 0.006666666666666667,
+          "planner_success_tau_b": 0.0,
+          "planner_collision_tau_b": 0.3333333333333333
+        },
+        {
+          "family": "entering_room",
+          "baseline_success": 0.92,
+          "success": 0.9533333333333334,
+          "baseline_collision": 0.06,
+          "collision": 0.04666666666666667,
+          "planner_success_tau_b": 0.7559289460184544,
+          "planner_collision_tau_b": 1.0
+        },
+        {
+          "family": "exiting_room",
+          "baseline_success": 1.0,
+          "success": 1.0,
+          "baseline_collision": 0.0,
+          "collision": 0.0,
+          "planner_success_tau_b": null,
+          "planner_collision_tau_b": null
+        },
+        {
+          "family": "circular_crossing",
+          "baseline_success": 0.98,
+          "success": 1.0,
+          "baseline_collision": 0.006666666666666667,
+          "collision": 0.0,
+          "planner_success_tau_b": null,
+          "planner_collision_tau_b": null
+        },
+        {
+          "family": "robot_crowding",
+          "baseline_success": 0.2866666666666667,
+          "success": 0.6733333333333333,
+          "baseline_collision": 0.4666666666666667,
+          "collision": 0.18666666666666668,
+          "planner_success_tau_b": 0.31622776601683794,
+          "planner_collision_tau_b": 0.5270462766947298
+        },
+        {
+          "family": "crowd_navigation",
+          "baseline_success": 0.5266666666666666,
+          "success": 0.9066666666666666,
+          "baseline_collision": 0.30666666666666664,
+          "collision": 0.06,
+          "planner_success_tau_b": 0.10540925533894598,
+          "planner_collision_tau_b": 0.3779644730092272
+        }
+      ],
+      "family_success_tau_b": 0.5179697702828122
+    },
+    {
+      "treatment": "r0.5_v1.3",
+      "planners": [
+        "goal",
+        "social_force",
+        "orca",
+        "ppo",
+        "hybrid_rule_v4_fast_progress_static_escape"
+      ],
+      "complete_matched_roster": true,
+      "success_tau_b": 0.19999999999999998,
+      "collision_tau_b": 0.35856858280031806,
+      "success_tau_ci95": [
+        0.0,
+        0.31622776601683794
+      ],
+      "collision_tau_ci95": [
+        0.35856858280031806,
+        0.3779644730092272
+      ],
+      "success_tau_bootstrap": {
+        "ci95": [
+          0.0,
+          0.31622776601683794
+        ],
+        "defined": 1000,
+        "requested": 1000
+      },
+      "collision_tau_bootstrap": {
+        "ci95": [
+          0.35856858280031806,
+          0.3779644730092272
+        ],
+        "defined": 1000,
+        "requested": 1000
+      },
+      "planner_outcomes": [
+        {
+          "planner": "goal",
+          "baseline_success": 0.4666666666666667,
+          "success": 1.0,
+          "baseline_collision": 0.5333333333333333,
+          "collision": 0.0
+        },
+        {
+          "planner": "social_force",
+          "baseline_success": 0.6266666666666667,
+          "success": 0.8300000000000001,
+          "baseline_collision": 0.003333333333333333,
+          "collision": 0.0
+        },
+        {
+          "planner": "orca",
+          "baseline_success": 0.9266666666666667,
+          "success": 0.9766666666666668,
+          "baseline_collision": 0.06666666666666667,
+          "collision": 0.02
+        },
+        {
+          "planner": "ppo",
+          "baseline_success": 0.5833333333333333,
+          "success": 0.7166666666666667,
+          "baseline_collision": 0.4166666666666667,
+          "collision": 0.27999999999999997
+        },
+        {
+          "planner": "hybrid_rule_v4_fast_progress_static_escape",
+          "baseline_success": 0.9433333333333334,
+          "success": 0.9966666666666667,
+          "baseline_collision": 0.006666666666666666,
+          "collision": 0.0
+        }
+      ],
+      "family_outcomes": [
+        {
+          "family": "bottleneck",
+          "baseline_success": 0.3933333333333333,
+          "success": 0.9266666666666666,
+          "baseline_collision": 0.4066666666666667,
+          "collision": 0.07333333333333333,
+          "planner_success_tau_b": 0.3779644730092272,
+          "planner_collision_tau_b": 0.5303300858899106
+        },
+        {
+          "family": "cross_trap",
+          "baseline_success": 0.5266666666666666,
+          "success": 0.8866666666666667,
+          "baseline_collision": 0.31333333333333335,
+          "collision": 0.11333333333333333,
+          "planner_success_tau_b": 0.0,
+          "planner_collision_tau_b": 0.3333333333333333
+        },
+        {
+          "family": "doorway",
+          "baseline_success": 0.7066666666666667,
+          "success": 0.7533333333333333,
+          "baseline_collision": 0.2733333333333333,
+          "collision": 0.1,
+          "planner_success_tau_b": 0.2222222222222222,
+          "planner_collision_tau_b": 0.7559289460184544
+        },
+        {
+          "family": "group_crossing",
+          "baseline_success": 0.9266666666666666,
+          "success": 0.98,
+          "baseline_collision": 0.07333333333333333,
+          "collision": 0.02,
+          "planner_success_tau_b": 0.5303300858899106,
+          "planner_collision_tau_b": 0.5303300858899106
+        },
+        {
+          "family": "head_on_corridor",
+          "baseline_success": 0.8266666666666667,
+          "success": 0.9866666666666667,
+          "baseline_collision": 0.14666666666666667,
+          "collision": 0.006666666666666667,
+          "planner_success_tau_b": 0.0,
+          "planner_collision_tau_b": 0.0
+        },
+        {
+          "family": "entering_room",
+          "baseline_success": 0.92,
+          "success": 0.98,
+          "baseline_collision": 0.06,
+          "collision": 0.02,
+          "planner_success_tau_b": 0.7559289460184544,
+          "planner_collision_tau_b": 1.0
+        },
+        {
+          "family": "exiting_room",
+          "baseline_success": 1.0,
+          "success": 1.0,
+          "baseline_collision": 0.0,
+          "collision": 0.0,
+          "planner_success_tau_b": null,
+          "planner_collision_tau_b": null
+        },
+        {
+          "family": "circular_crossing",
+          "baseline_success": 0.98,
+          "success": 1.0,
+          "baseline_collision": 0.006666666666666667,
+          "collision": 0.0,
+          "planner_success_tau_b": null,
+          "planner_collision_tau_b": null
+        },
+        {
+          "family": "robot_crowding",
+          "baseline_success": 0.2866666666666667,
+          "success": 0.7066666666666667,
+          "baseline_collision": 0.4666666666666667,
+          "collision": 0.16666666666666666,
+          "planner_success_tau_b": 0.2222222222222222,
+          "planner_collision_tau_b": 0.35856858280031806
+        },
+        {
+          "family": "crowd_navigation",
+          "baseline_success": 0.5266666666666666,
+          "success": 0.82,
+          "baseline_collision": 0.30666666666666664,
+          "collision": 0.1,
+          "planner_success_tau_b": 0.0,
+          "planner_collision_tau_b": 0.3779644730092272
+        }
+      ],
+      "family_success_tau_b": 0.643720685820384
+    },
+    {
+      "treatment": "r1_v0.65",
+      "planners": [
+        "goal",
+        "social_force",
+        "orca",
+        "ppo",
+        "hybrid_rule_v4_fast_progress_static_escape"
+      ],
+      "complete_matched_roster": true,
+      "success_tau_b": 0.9999999999999999,
+      "collision_tau_b": 0.9999999999999999,
+      "success_tau_ci95": [
+        0.9999999999999999,
+        1.0
+      ],
+      "collision_tau_ci95": [
+        0.9999999999999999,
+        1.0
+      ],
+      "success_tau_bootstrap": {
+        "ci95": [
+          0.9999999999999999,
+          1.0
+        ],
+        "defined": 1000,
+        "requested": 1000
+      },
+      "collision_tau_bootstrap": {
+        "ci95": [
+          0.9999999999999999,
+          1.0
+        ],
+        "defined": 1000,
+        "requested": 1000
+      },
+      "planner_outcomes": [
+        {
+          "planner": "goal",
+          "baseline_success": 0.4666666666666667,
+          "success": 0.4666666666666667,
+          "baseline_collision": 0.5333333333333333,
+          "collision": 0.5333333333333333
+        },
+        {
+          "planner": "social_force",
+          "baseline_success": 0.6266666666666667,
+          "success": 0.6266666666666667,
+          "baseline_collision": 0.003333333333333333,
+          "collision": 0.003333333333333333
+        },
+        {
+          "planner": "orca",
+          "baseline_success": 0.9266666666666667,
+          "success": 0.9266666666666667,
+          "baseline_collision": 0.06666666666666667,
+          "collision": 0.06666666666666667
+        },
+        {
+          "planner": "ppo",
+          "baseline_success": 0.5833333333333333,
+          "success": 0.5833333333333333,
+          "baseline_collision": 0.4166666666666667,
+          "collision": 0.4166666666666667
+        },
+        {
+          "planner": "hybrid_rule_v4_fast_progress_static_escape",
+          "baseline_success": 0.9433333333333334,
+          "success": 0.9433333333333334,
+          "baseline_collision": 0.006666666666666666,
+          "collision": 0.006666666666666666
+        }
+      ],
+      "family_outcomes": [
+        {
+          "family": "bottleneck",
+          "baseline_success": 0.3933333333333333,
+          "success": 0.3933333333333333,
+          "baseline_collision": 0.4066666666666667,
+          "collision": 0.4066666666666667,
+          "planner_success_tau_b": 0.9999999999999998,
+          "planner_collision_tau_b": 0.9999999999999999
+        },
+        {
+          "family": "cross_trap",
+          "baseline_success": 0.5266666666666666,
+          "success": 0.5266666666666666,
+          "baseline_collision": 0.31333333333333335,
+          "collision": 0.31333333333333335,
+          "planner_success_tau_b": 0.9999999999999999,
+          "planner_collision_tau_b": 1.0
+        },
+        {
+          "family": "doorway",
+          "baseline_success": 0.7066666666666667,
+          "success": 0.7066666666666667,
+          "baseline_collision": 0.2733333333333333,
+          "collision": 0.2733333333333333,
+          "planner_success_tau_b": 1.0,
+          "planner_collision_tau_b": 0.9999999999999998
+        },
+        {
+          "family": "group_crossing",
+          "baseline_success": 0.9266666666666666,
+          "success": 0.9266666666666666,
+          "baseline_collision": 0.07333333333333333,
+          "collision": 0.07333333333333333,
+          "planner_success_tau_b": 0.9999999999999999,
+          "planner_collision_tau_b": 0.9999999999999999
+        },
+        {
+          "family": "head_on_corridor",
+          "baseline_success": 0.8266666666666667,
+          "success": 0.8266666666666667,
+          "baseline_collision": 0.14666666666666667,
+          "collision": 0.14666666666666667,
+          "planner_success_tau_b": 0.9999999999999999,
+          "planner_collision_tau_b": 1.0
+        },
+        {
+          "family": "entering_room",
+          "baseline_success": 0.92,
+          "success": 0.92,
+          "baseline_collision": 0.06,
+          "collision": 0.06,
+          "planner_success_tau_b": 0.9999999999999998,
+          "planner_collision_tau_b": 1.0
+        },
+        {
+          "family": "exiting_room",
+          "baseline_success": 1.0,
+          "success": 1.0,
+          "baseline_collision": 0.0,
+          "collision": 0.0,
+          "planner_success_tau_b": null,
+          "planner_collision_tau_b": null
+        },
+        {
+          "family": "circular_crossing",
+          "baseline_success": 0.98,
+          "success": 0.98,
+          "baseline_collision": 0.006666666666666667,
+          "collision": 0.006666666666666667,
+          "planner_success_tau_b": 0.9999999999999998,
+          "planner_collision_tau_b": 1.0
+        },
+        {
+          "family": "robot_crowding",
+          "baseline_success": 0.2866666666666667,
+          "success": 0.2866666666666667,
+          "baseline_collision": 0.4666666666666667,
+          "collision": 0.4666666666666667,
+          "planner_success_tau_b": 1.0,
+          "planner_collision_tau_b": 0.9999999999999999
+        },
+        {
+          "family": "crowd_navigation",
+          "baseline_success": 0.5266666666666666,
+          "success": 0.5266666666666666,
+          "baseline_collision": 0.30666666666666664,
+          "collision": 0.30666666666666664,
+          "planner_success_tau_b": 0.9999999999999999,
+          "planner_collision_tau_b": 1.0
+        }
+      ],
+      "family_success_tau_b": 1.0
+    },
+    {
+      "treatment": "r1_v1",
+      "planners": [
+        "goal",
+        "social_force",
+        "orca",
+        "ppo",
+        "hybrid_rule_v4_fast_progress_static_escape"
+      ],
+      "complete_matched_roster": true,
+      "success_tau_b": 0.9999999999999999,
+      "collision_tau_b": 0.9999999999999999,
+      "success_tau_ci95": [
+        0.6,
+        0.9999999999999999
+      ],
+      "collision_tau_ci95": [
+        0.7999999999999999,
+        0.9999999999999999
+      ],
+      "success_tau_bootstrap": {
+        "ci95": [
+          0.6,
+          0.9999999999999999
+        ],
+        "defined": 1000,
+        "requested": 1000
+      },
+      "collision_tau_bootstrap": {
+        "ci95": [
+          0.7999999999999999,
+          0.9999999999999999
+        ],
+        "defined": 1000,
+        "requested": 1000
+      },
+      "planner_outcomes": [
+        {
+          "planner": "goal",
+          "baseline_success": 0.4666666666666667,
+          "success": 0.42333333333333334,
+          "baseline_collision": 0.5333333333333333,
+          "collision": 0.5766666666666667
+        },
+        {
+          "planner": "social_force",
+          "baseline_success": 0.6266666666666667,
+          "success": 0.5866666666666667,
+          "baseline_collision": 0.003333333333333333,
+          "collision": 0.04
+        },
+        {
+          "planner": "orca",
+          "baseline_success": 0.9266666666666667,
+          "success": 0.8033333333333333,
+          "baseline_collision": 0.06666666666666667,
+          "collision": 0.12333333333333334
+        },
+        {
+          "planner": "ppo",
+          "baseline_success": 0.5833333333333333,
+          "success": 0.5833333333333333,
+          "baseline_collision": 0.4166666666666667,
+          "collision": 0.4166666666666667
+        },
+        {
+          "planner": "hybrid_rule_v4_fast_progress_static_escape",
+          "baseline_success": 0.9433333333333334,
+          "success": 0.8566666666666667,
+          "baseline_collision": 0.006666666666666666,
+          "collision": 0.09666666666666666
+        }
+      ],
+      "family_outcomes": [
+        {
+          "family": "bottleneck",
+          "baseline_success": 0.3933333333333333,
+          "success": 0.4066666666666667,
+          "baseline_collision": 0.4066666666666667,
+          "collision": 0.4,
+          "planner_success_tau_b": 0.8017837257372731,
+          "planner_collision_tau_b": 0.8660254037844386
+        },
+        {
+          "family": "cross_trap",
+          "baseline_success": 0.5266666666666666,
+          "success": 0.6666666666666666,
+          "baseline_collision": 0.31333333333333335,
+          "collision": 0.3333333333333333,
+          "planner_success_tau_b": 0.6,
+          "planner_collision_tau_b": 0.9486832980505138
+        },
+        {
+          "family": "doorway",
+          "baseline_success": 0.7066666666666667,
+          "success": 0.22,
+          "baseline_collision": 0.2733333333333333,
+          "collision": 0.44,
+          "planner_success_tau_b": 0.0,
+          "planner_collision_tau_b": 0.8819171036881968
+        },
+        {
+          "family": "group_crossing",
+          "baseline_success": 0.9266666666666666,
+          "success": 0.86,
+          "baseline_collision": 0.07333333333333333,
+          "collision": 0.08666666666666667,
+          "planner_success_tau_b": 0.22360679774997894,
+          "planner_collision_tau_b": 0.9428090415820632
+        },
+        {
+          "family": "head_on_corridor",
+          "baseline_success": 0.8266666666666667,
+          "success": 0.8,
+          "baseline_collision": 0.14666666666666667,
+          "collision": 0.16666666666666666,
+          "planner_success_tau_b": 0.7999999999999999,
+          "planner_collision_tau_b": 0.7777777777777778
+        },
+        {
+          "family": "entering_room",
+          "baseline_success": 0.92,
+          "success": 0.94,
+          "baseline_collision": 0.06,
+          "collision": 0.04,
+          "planner_success_tau_b": 0.9999999999999998,
+          "planner_collision_tau_b": 1.0
+        },
+        {
+          "family": "exiting_room",
+          "baseline_success": 1.0,
+          "success": 0.9933333333333333,
+          "baseline_collision": 0.0,
+          "collision": 0.006666666666666667,
+          "planner_success_tau_b": null,
+          "planner_collision_tau_b": null
+        },
+        {
+          "family": "circular_crossing",
+          "baseline_success": 0.98,
+          "success": 0.9866666666666667,
+          "baseline_collision": 0.006666666666666667,
+          "collision": 0.0,
+          "planner_success_tau_b": 0.7559289460184544,
+          "planner_collision_tau_b": null
+        },
+        {
+          "family": "robot_crowding",
+          "baseline_success": 0.2866666666666667,
+          "success": 0.14666666666666667,
+          "baseline_collision": 0.4666666666666667,
+          "collision": 0.6933333333333334,
+          "planner_success_tau_b": 0.4444444444444444,
+          "planner_collision_tau_b": 0.6
+        },
+        {
+          "family": "crowd_navigation",
+          "baseline_success": 0.5266666666666666,
+          "success": 0.4866666666666667,
+          "baseline_collision": 0.30666666666666664,
+          "collision": 0.34,
+          "planner_success_tau_b": 0.7999999999999999,
+          "planner_collision_tau_b": 1.0
+        }
+      ],
+      "family_success_tau_b": 0.8090398349558905
+    },
+    {
+      "treatment": "r1_v1.3",
+      "planners": [
+        "goal",
+        "social_force",
+        "orca",
+        "ppo",
+        "hybrid_rule_v4_fast_progress_static_escape"
+      ],
+      "complete_matched_roster": true,
+      "success_tau_b": 0.7999999999999999,
+      "collision_tau_b": 0.6,
+      "success_tau_ci95": [
+        0.6,
+        0.9499662155992498
+      ],
+      "collision_tau_ci95": [
+        0.6,
+        0.7378647873726218
+      ],
+      "success_tau_bootstrap": {
+        "ci95": [
+          0.6,
+          0.9499662155992498
+        ],
+        "defined": 1000,
+        "requested": 1000
+      },
+      "collision_tau_bootstrap": {
+        "ci95": [
+          0.6,
+          0.7378647873726218
+        ],
+        "defined": 1000,
+        "requested": 1000
+      },
+      "planner_outcomes": [
+        {
+          "planner": "goal",
+          "baseline_success": 0.4666666666666667,
+          "success": 0.36666666666666664,
+          "baseline_collision": 0.5333333333333333,
+          "collision": 0.6333333333333333
+        },
+        {
+          "planner": "social_force",
+          "baseline_success": 0.6266666666666667,
+          "success": 0.47000000000000003,
+          "baseline_collision": 0.003333333333333333,
+          "collision": 0.37666666666666665
+        },
+        {
+          "planner": "orca",
+          "baseline_success": 0.9266666666666667,
+          "success": 0.7066666666666667,
+          "baseline_collision": 0.06666666666666667,
+          "collision": 0.27666666666666667
+        },
+        {
+          "planner": "ppo",
+          "baseline_success": 0.5833333333333333,
+          "success": 0.5433333333333333,
+          "baseline_collision": 0.4166666666666667,
+          "collision": 0.45666666666666667
+        },
+        {
+          "planner": "hybrid_rule_v4_fast_progress_static_escape",
+          "baseline_success": 0.9433333333333334,
+          "success": 0.74,
+          "baseline_collision": 0.006666666666666666,
+          "collision": 0.21666666666666665
+        }
+      ],
+      "family_outcomes": [
+        {
+          "family": "bottleneck",
+          "baseline_success": 0.3933333333333333,
+          "success": 0.3466666666666667,
+          "baseline_collision": 0.4066666666666667,
+          "collision": 0.6533333333333333,
+          "planner_success_tau_b": 0.9999999999999998,
+          "planner_collision_tau_b": 0.5345224838248487
+        },
+        {
+          "family": "cross_trap",
+          "baseline_success": 0.5266666666666666,
+          "success": 0.58,
+          "baseline_collision": 0.31333333333333335,
+          "collision": 0.4066666666666667,
+          "planner_success_tau_b": 0.6,
+          "planner_collision_tau_b": 0.9486832980505138
+        },
+        {
+          "family": "doorway",
+          "baseline_success": 0.7066666666666667,
+          "success": 0.1,
+          "baseline_collision": 0.2733333333333333,
+          "collision": 0.78,
+          "planner_success_tau_b": 0.35355339059327373,
+          "planner_collision_tau_b": 0.5976143046671968
+        },
+        {
+          "family": "group_crossing",
+          "baseline_success": 0.9266666666666666,
+          "success": 0.7733333333333333,
+          "baseline_collision": 0.07333333333333333,
+          "collision": 0.14,
+          "planner_success_tau_b": 0.1178511301977579,
+          "planner_collision_tau_b": 0.8017837257372731
+        },
+        {
+          "family": "head_on_corridor",
+          "baseline_success": 0.8266666666666667,
+          "success": 0.6266666666666667,
+          "baseline_collision": 0.14666666666666667,
+          "collision": 0.35333333333333333,
+          "planner_success_tau_b": 0.7378647873726218,
+          "planner_collision_tau_b": 0.2222222222222222
+        },
+        {
+          "family": "entering_room",
+          "baseline_success": 0.92,
+          "success": 0.9733333333333334,
+          "baseline_collision": 0.06,
+          "collision": 0.006666666666666667,
+          "planner_success_tau_b": 0.7142857142857142,
+          "planner_collision_tau_b": 1.0
+        },
+        {
+          "family": "exiting_room",
+          "baseline_success": 1.0,
+          "success": 0.9933333333333333,
+          "baseline_collision": 0.0,
+          "collision": 0.006666666666666667,
+          "planner_success_tau_b": null,
+          "planner_collision_tau_b": null
+        },
+        {
+          "family": "circular_crossing",
+          "baseline_success": 0.98,
+          "success": 0.96,
+          "baseline_collision": 0.006666666666666667,
+          "collision": 0.02666666666666667,
+          "planner_success_tau_b": 0.7142857142857142,
+          "planner_collision_tau_b": 0.17677669529663687
+        },
+        {
+          "family": "robot_crowding",
+          "baseline_success": 0.2866666666666667,
+          "success": 0.06,
+          "baseline_collision": 0.4666666666666667,
+          "collision": 0.9066666666666666,
+          "planner_success_tau_b": 0.3779644730092272,
+          "planner_collision_tau_b": 0.31622776601683794
+        },
+        {
+          "family": "crowd_navigation",
+          "baseline_success": 0.5266666666666666,
+          "success": 0.24,
+          "baseline_collision": 0.30666666666666664,
+          "collision": 0.64,
+          "planner_success_tau_b": 0.39999999999999997,
+          "planner_collision_tau_b": 0.7378647873726218
+        }
+      ],
+      "family_success_tau_b": 0.7191465199607915
+    }
+  ],
+  "ranking_definition": "Success and collision incidence ranked separately; Kendall tau-b retains ties; paired resampling of 30 seeds shared across all cells and planners."
+}

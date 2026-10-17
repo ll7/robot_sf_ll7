@@ -1,0 +1,184 @@
+{
+  "roster": [
+    {
+      "key": "prediction_planner",
+      "algo": "prediction_planner",
+      "planner_group": "experimental",
+      "algo_config": "configs/algos/prediction_planner_release_v0_0_8.yaml",
+      "benchmark_profile": "experimental",
+      "diagnostic_release_cap": 1.6,
+      "diagnostic_config": "docs/context/robsweep/inputs/prediction_planner_legacy.yaml"
+    },
+    {
+      "key": "goal",
+      "algo": "goal",
+      "planner_group": "core",
+      "benchmark_profile": "baseline-safe",
+      "diagnostic_release_cap": 1.0,
+      "diagnostic_config": "docs/context/robsweep/inputs/goal_legacy.yaml"
+    },
+    {
+      "key": "social_force",
+      "algo": "social_force",
+      "planner_group": "core",
+      "algo_config": "configs/algos/social_force_release_v0_0_8.yaml",
+      "benchmark_profile": "baseline-safe",
+      "diagnostic_release_cap": 2.0,
+      "diagnostic_config": "docs/context/robsweep/inputs/social_force_legacy.yaml"
+    },
+    {
+      "key": "orca",
+      "algo": "orca",
+      "planner_group": "core",
+      "benchmark_profile": "baseline-safe",
+      "algo_config": "configs/algos/orca_release_v0_0_8.yaml",
+      "socnav_missing_prereq_policy": "fail-fast",
+      "diagnostic_release_cap": 2.0,
+      "diagnostic_config": "docs/context/robsweep/inputs/orca_legacy.yaml"
+    },
+    {
+      "key": "ppo",
+      "algo": "ppo",
+      "planner_group": "experimental",
+      "algo_config": "configs/baselines/ppo_release_robot_0_0_8_cpu.yaml",
+      "benchmark_profile": "experimental",
+      "adapter_impact_eval": true,
+      "diagnostic_release_cap": 2.0,
+      "diagnostic_config": "docs/context/robsweep/inputs/ppo_legacy.yaml"
+    },
+    {
+      "key": "socnav_sampling",
+      "algo": "socnav_sampling",
+      "planner_group": "experimental",
+      "algo_config": "configs/algos/socnav_sampling_release_v0_0_8.yaml",
+      "benchmark_profile": "experimental",
+      "socnav_missing_prereq_policy": "fail-fast",
+      "diagnostic_release_cap": 2.0,
+      "diagnostic_config": "docs/context/robsweep/inputs/socnav_sampling_legacy.yaml"
+    },
+    {
+      "key": "sacadrl",
+      "algo": "sacadrl",
+      "planner_group": "experimental",
+      "algo_config": "configs/algos/socnav_release_v0_0_8.yaml",
+      "benchmark_profile": "experimental",
+      "socnav_missing_prereq_policy": "fail-fast",
+      "diagnostic_release_cap": 2.0,
+      "diagnostic_config": "docs/context/robsweep/inputs/sacadrl_legacy.yaml"
+    },
+    {
+      "key": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+      "algo": "hybrid_rule_local_planner",
+      "planner_group": "experimental",
+      "algo_config": "configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4_s30_h600_release_0_0_8_frozen.yaml",
+      "benchmark_profile": "experimental",
+      "diagnostic_release_cap": 2.0,
+      "diagnostic_config": "docs/context/robsweep/inputs/scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4_legacy.yaml"
+    },
+    {
+      "key": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+      "algo": "hybrid_rule_local_planner",
+      "planner_group": "experimental",
+      "algo_config": "configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard_v4_s30_h600_release_0_0_8_frozen.yaml",
+      "benchmark_profile": "experimental",
+      "diagnostic_release_cap": 2.0,
+      "diagnostic_config": "docs/context/robsweep/inputs/scenario_adaptive_hybrid_orca_v2_collision_guard_v4_legacy.yaml"
+    },
+    {
+      "key": "hybrid_rule_v4_fast_progress_static_escape",
+      "algo": "hybrid_rule_local_planner",
+      "planner_group": "experimental",
+      "algo_config": "configs/policy_search/candidates/hybrid_rule_v4_fast_progress_static_escape_s30_h600_release_0_0_8_frozen.yaml",
+      "benchmark_profile": "experimental",
+      "diagnostic_release_cap": 2.0,
+      "diagnostic_config": "docs/context/robsweep/inputs/hybrid_rule_v4_fast_progress_static_escape_legacy.yaml"
+    },
+    {
+      "key": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+      "algo": "hybrid_rule_local_planner",
+      "planner_group": "experimental",
+      "algo_config": "configs/policy_search/candidates/hybrid_rule_v4_fast_progress_static_escape_continuous_s30_h600_release_0_0_8_frozen.yaml",
+      "benchmark_profile": "experimental",
+      "diagnostic_release_cap": 2.0,
+      "diagnostic_config": "docs/context/robsweep/inputs/hybrid_rule_v4_fast_progress_static_escape_continuous_legacy.yaml"
+    },
+    {
+      "key": "guarded_ppo",
+      "algo": "guarded_ppo",
+      "planner_group": "experimental",
+      "algo_config": "configs/algos/guarded_ppo_release_v0_0_8.yaml",
+      "benchmark_profile": "experimental",
+      "diagnostic_release_cap": 2.0,
+      "diagnostic_config": "docs/context/robsweep/inputs/guarded_ppo_legacy.yaml"
+    },
+    {
+      "key": "predictive_mppi",
+      "algo": "predictive_mppi",
+      "planner_group": "experimental",
+      "algo_config": "configs/algos/predictive_mppi_release_v0_0_8.yaml",
+      "benchmark_profile": "experimental",
+      "diagnostic_release_cap": 1.5,
+      "diagnostic_config": "docs/context/robsweep/inputs/predictive_mppi_legacy.yaml"
+    },
+    {
+      "key": "risk_dwa",
+      "algo": "risk_dwa",
+      "planner_group": "experimental",
+      "algo_config": "configs/algos/risk_dwa_release_v0_0_8.yaml",
+      "benchmark_profile": "experimental",
+      "diagnostic_release_cap": 1.2,
+      "diagnostic_config": "docs/context/robsweep/inputs/risk_dwa_legacy.yaml"
+    }
+  ],
+  "families": {
+    "bottleneck": "classic_bottleneck_medium",
+    "cross_trap": "classic_cross_trap_medium",
+    "doorway": "classic_doorway_medium",
+    "group_crossing": "classic_group_crossing_medium",
+    "head_on_corridor": "classic_head_on_corridor_medium",
+    "entering_room": "francis2023_entering_room",
+    "exiting_room": "francis2023_exiting_room",
+    "circular_crossing": "francis2023_circular_crossing",
+    "robot_crowding": "francis2023_robot_crowding",
+    "crowd_navigation": "francis2023_crowd_navigation"
+  },
+  "seeds": [
+    1061,
+    1062,
+    1063,
+    1064,
+    1065,
+    1066,
+    1067,
+    1068,
+    1069,
+    1070,
+    1071,
+    1072,
+    1073,
+    1074,
+    1075,
+    1076,
+    1077,
+    1078,
+    1079,
+    1080,
+    1081,
+    1082,
+    1083,
+    1084,
+    1085,
+    1086,
+    1087,
+    1088,
+    1089,
+    1090
+  ],
+  "sweep": [
+    "goal",
+    "hybrid_rule_v4_fast_progress_static_escape",
+    "orca",
+    "ppo",
+    "social_force"
+  ]
+}

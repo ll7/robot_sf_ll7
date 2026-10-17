@@ -1,0 +1,5 @@
+{
+  "base": "33a4735900153e742828227cc2171436ea09cd90",
+  "release_template": "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate_authored.yaml",
+  "evidence_tier": "diagnostic-only"
+}

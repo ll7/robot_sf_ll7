@@ -29,6 +29,7 @@ from tests.benchmark.test_snqi_execution_context import (
     ENV,
     EVIDENCE,
     complete_context_asset_binding,
+    single_thread_context,  # noqa: F401
 )
 from tests.tools.test_run_benchmark_release import synthetic_execution_admission  # noqa: F401
 from tests.unit.benchmark.test_snqi_v2 import spec_files as _spec_files

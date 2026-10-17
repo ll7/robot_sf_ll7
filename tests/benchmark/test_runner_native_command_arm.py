@@ -345,13 +345,13 @@ def test_native_command_missing_argv_fails_closed():
         runner_mod._NativeCommandPolicy(argv=[], env={}, timeout_s=1.0, persistent=False)
 
 
-def test_native_command_parser_accepts_holonomic_response():
-    """The standard runner accepts the documented world-frame velocity response."""
+def test_native_command_parser_rejects_holonomic_response():
+    """World-frame velocity keys cannot be silently interpreted as a turn command."""
     policy = runner_mod._NativeCommandPolicy(
         argv=[sys.executable], env={}, timeout_s=1.0, persistent=False
     )
-    command = policy._parse_response('{"vx": 0.5, "vy": -0.25}')
-    assert command.tolist() == [0.5, -0.25]
+    with pytest.raises(ValueError, match="unknown or ambiguous"):
+        policy._parse_response('{"vx": 0.5, "vy": -0.25}')
 
 
 def test_native_command_parser_rejects_nonfinite_response():

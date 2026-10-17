@@ -475,11 +475,30 @@ branch = true  # Measure if/else branches taken
 
 ```bash
 # Only measure coverage for integration tests
-uv run pytest tests/test_gymnasium_env_contracts.py --cov=robot_sf.gym_env
+uv run pytest tests/test_gymnasium_env_contracts.py --cov=robot_sf/gym_env
 
-# Measure coverage for single module
-uv run pytest tests --cov=robot_sf.benchmark
+# Measure one package directory; run `coverage report -m <file>` to focus the readout
+uv run pytest tests --cov=robot_sf/benchmark
 ```
+
+When the selected module imports a native extension package during initialization (for example,
+NumPy from `tests/conftest.py`), prefer a filesystem directory as the `--cov` source instead of a
+dotted module name. Coverage.py imports dotted source names while resolving their location, as its
+[source selection documentation](https://coverage.readthedocs.io/en/latest/source.html) describes;
+a later import by pytest can then try to initialize the native extension again. A directory source
+avoids that import probe. For a focused branch-coverage run of the GitHub audit module, collect its
+parent directory and report the target file separately:
+
+```bash
+scripts/dev/run_worktree_shared_venv.sh -- uv run pytest -q \
+  tests/analysis_workbench/test_audit_github.py \
+  --cov=robot_sf/analysis_workbench --cov-branch --cov-report=term
+scripts/dev/run_worktree_shared_venv.sh -- uv run coverage report -m \
+  robot_sf/analysis_workbench/audit_github.py
+```
+
+The collection report covers files in `robot_sf/analysis_workbench`; the second command narrows the
+readout to `audit_github.py`.
 
 ### Programmatic access
 

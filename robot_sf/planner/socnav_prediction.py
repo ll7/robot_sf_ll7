@@ -1337,6 +1337,24 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         settings = self._prediction_drive_settings
         if settings is None:
             return cover
+        if isinstance(settings, BicycleDriveSettings):
+            # The bicycle plant advances along a straight segment per control
+            # tick. Bound its deviation from the prediction chord at every tick;
+            # between ticks the relative deviation is linear, so its norm cannot
+            # exceed the endpoint maximum. Reuse the executed adapter/plant.
+            dt = max(float(self.config.predictive_rollout_dt), 1e-3)
+            control_dt = self._simulation_timestep(observation)
+            ticks = round(dt / control_dt)
+            positions, _ = self._bound_drive_rollout(
+                np.repeat(commands, ticks, axis=0), control_dt, observation
+            )
+            points = np.vstack([np.zeros(2), positions])
+            fractions = np.arange(ticks + 1)[:, None] / ticks
+            for i in range(len(commands)):
+                interval = points[i * ticks : (i + 1) * ticks + 1]
+                chord = interval[0] + fractions * (interval[-1] - interval[0])
+                cover[i] = np.max(np.linalg.norm(interval - chord, axis=1))
+            return cover
         linear_decel = (
             settings.max_linear_accel
             if settings.max_linear_decel is None
@@ -1423,7 +1441,7 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             return True
         horizon = min(len(local_traj), future_peds.shape[1])
         center_margin = (
-            float(self.config.predictive_robot_radius)
+            self._robot_radius
             + float(self.config.predictive_pedestrian_radius)
             + float(self.config.predictive_safe_distance)
         )

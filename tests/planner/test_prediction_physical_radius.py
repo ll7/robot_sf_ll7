@@ -54,6 +54,8 @@ def test_prediction_scores_use_bound_radius_without_mutating_config(model, searc
         PredictionPlannerAdapter(
             SocNavPlannerConfig(
                 predictive_clearance_model=model,
+                # Keep this finite-score witness outside the new admission veto.
+                predictive_safe_distance=0.35,
                 predictive_robot_radius=radius,
                 predictive_pedestrian_radius=0.4,
             )

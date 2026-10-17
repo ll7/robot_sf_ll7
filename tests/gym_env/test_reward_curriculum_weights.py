@@ -1,6 +1,9 @@
 """Curriculum stages must explicitly inherit or replace top-level reward weights."""
 
+import ast
+
 import pytest
+from loguru import logger
 
 from robot_sf.gym_env.reward import build_reward_curriculum_function
 
@@ -68,3 +71,48 @@ def test_leader_config_stages_resolve_the_declared_top_level_weight_table():
     }
     for stage in curriculum.stage_callables:
         assert stage.keywords["weights"] == expected
+
+
+def test_leader_startup_logs_every_fully_resolved_stage_weight_map():
+    """Startup audit logs expose inherited weights for both real leader stages."""
+    from pathlib import Path
+
+    import yaml
+
+    source = (
+        Path(__file__).resolve().parents[2]
+        / "configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_base.yaml"
+    )
+    kwargs = yaml.safe_load(source.read_text())["env_factory_kwargs"]
+    messages = []
+    sink = logger.add(lambda message: messages.append(message.record["message"]), level="INFO")
+    try:
+        curriculum = build_reward_curriculum_function(
+            kwargs["reward_curriculum"],
+            default_reward_name=kwargs["reward_name"],
+            default_reward_kwargs=kwargs["reward_kwargs"],
+        )
+    finally:
+        logger.remove(sink)
+    stages = [message for message in messages if message.startswith("Reward curriculum stage=")]
+    assert len(stages) == 2
+    expected = {
+        "progress": 1.1,
+        "living": -0.015,
+        "collision": -15.0,
+        "near_miss": -1.5,
+        "ttc_risk": -1.2,
+        "comfort": -0.5,
+        "smoothness": -0.18,
+        "timeout": -6.5,
+        "stagnation": -0.8,
+        "terminal_bonus": 20.0,
+    }
+    for index, message in enumerate(stages):
+        prefix, weights = message.split(" weights=", 1)
+        assert prefix == f"Reward curriculum stage={index} stage_weight_merge=merge"
+        logged = ast.literal_eval(weights)
+        assert {name: logged[name] for name in expected} == expected
+        meta = {}
+        curriculum.stage_callables[index](meta)
+        assert set(logged) == set(meta["reward_terms"])

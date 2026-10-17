@@ -136,12 +136,14 @@ BODY_EDGE_EXPONENTIAL_V3_RANGE_ONLY = "body_edge_exponential_v3_range_only"
 BODY_EDGE_EXPONENTIAL_V3_PHYSICAL_MARGIN = "body_edge_exponential_v3_physical_margin"
 BODY_EDGE_EXPONENTIAL_V3_CONTACT_STIFF = "body_edge_exponential_v3_contact_stiff"
 BODY_EDGE_EXPONENTIAL_V3_MULTI_SEGMENT = "body_edge_exponential_v3_multi_segment"
-DEFAULT_OBSTACLE_FORCE_LAW = LEGACY_SHIFTED_GRADIENT_V1
+BODY_EDGE_EXPONENTIAL_V3_PHYSICAL_MARGIN10X = "body_edge_exponential_v3_physical_margin10x"
+DEFAULT_OBSTACLE_FORCE_LAW = BODY_EDGE_EXPONENTIAL_V3_PHYSICAL_MARGIN10X
 BODY_EDGE_EXPONENTIAL_LAW_VERSIONS = frozenset(
     {
         BODY_EDGE_EXPONENTIAL_V3,
         BODY_EDGE_EXPONENTIAL_V3_RANGE_ONLY,
         BODY_EDGE_EXPONENTIAL_V3_PHYSICAL_MARGIN,
+        BODY_EDGE_EXPONENTIAL_V3_PHYSICAL_MARGIN10X,
         BODY_EDGE_EXPONENTIAL_V3_CONTACT_STIFF,
         BODY_EDGE_EXPONENTIAL_V3_MULTI_SEGMENT,
     }
@@ -260,7 +262,7 @@ def resolve_obstacle_force_law_with_mode(value: Any = None) -> tuple[str, str]:
 def resolve_obstacle_force_law(value: Any = None) -> str:
     """Resolve an obstacle-force law identifier with legacy compatibility.
 
-    Missing, empty, and unversioned metadata intentionally resolve to the historical
+    Missing selectors use the current default; empty and unversioned metadata use the historical
     law.  Unknown explicit identifiers fail closed so a caller cannot silently run a
     different force law than the one recorded in its configuration.
 
@@ -582,9 +584,9 @@ class ObstacleForceConfig:
         threshold: Additive distance offset (m), subtracted like a radius from
             the pedestrian-obstacle distance. Negative values inflate the
             effective distance and soften near-wall repulsion.
-        law_version: Versioned obstacle-force law. Missing configuration retains
-            ``legacy_shifted_gradient_v1`` for 0.1.0; corrected laws require an
-            explicit selector.
+        law_version: Versioned obstacle-force law. Missing configuration uses
+            radius-aligned physical-margin x10 for 0.1.0. Historical unversioned
+            mappings retain legacy; its name remains explicitly selectable.
     """
 
     factor: float = 10.0

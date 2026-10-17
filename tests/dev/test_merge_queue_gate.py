@@ -10,6 +10,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+import yaml
 
 from scripts.dev import check_pr_ci_status as ci_status
 from scripts.dev import merge_queue_gate as merge_queue_gate_module
@@ -1150,11 +1151,18 @@ def test_workflow_evaluates_rapid_label_promotion_events() -> None:
 
 
 def test_docs_only_bypass_matches_ci_workflow_path_filters() -> None:
-    """The gate's exemption cannot drift from the workflow that skips CI."""
-    workflow = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
-
-    for pattern in CI_PATHS_IGNORE_PATTERNS:
-        assert f'      - "{pattern}"' in workflow
+    """Coverage exemptions share the workflow's internal docs-only admission policy."""
+    workflow = yaml.safe_load(Path(".github/workflows/ci.yml").read_text(encoding="utf-8"))
+    triggers = workflow.get(True, workflow.get("on", {}))
+    for event in ("push", "pull_request"):
+        assert "paths-ignore" not in triggers[event]
+    detector = next(
+        step for step in workflow["jobs"]["dispatch-ownership"]["steps"] if step.get("id") == "docs"
+    )
+    # Binding the executing workflow to the same helper prevents two path policies.
+    assert "from scripts.dev.check_ci_needs import docs_only_changed_files" in detector["run"]
+    assert "docs_only_changed_files(paths, complete=True)" in detector["run"]
+    assert CI_PATHS_IGNORE_PATTERNS == ("**/*.md", "docs/**")
 
 
 @pytest.mark.parametrize("carrier", ["comments", "reviews"])

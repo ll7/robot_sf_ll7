@@ -120,6 +120,24 @@ def _embedded_metadata(
     }
 
 
+def _export_metadata(
+    provenance: dict[str, Any],
+    figure_name: str,
+    fmt: str,
+    timestamp: Any = None,
+) -> dict[str, Any]:
+    """Build format metadata and apply a fixed timestamp to PDF date fields.
+
+    Returns:
+        Format-specific metadata accepted by ``Figure.savefig``.
+    """
+    metadata = _embedded_metadata(provenance, figure_name, fmt)
+    if fmt == "pdf" and timestamp is not None:
+        metadata["CreationDate"] = timestamp
+        metadata["ModDate"] = timestamp
+    return metadata
+
+
 def save_publication_figure(
     fig,
     output_base: Path,
@@ -137,7 +155,9 @@ def save_publication_figure(
         formats: Tuple of output formats ("pdf", "png", "svg").
         provenance: Optional provenance metadata dictionary.
         caption_fragment: Optional LaTeX-ready caption fragment.
-        timestamp: Optional timestamp override for deterministic testing.
+        timestamp: Optional timestamp override. When supplied, it is used for the
+            provenance sidecar and as the PDF CreationDate and ModDate so repeated
+            exports can be byte-stable.
 
     Returns:
         List of paths to generated files (including sidecar).
@@ -183,7 +203,9 @@ def save_publication_figure(
         # Embed provenance in PDF/PNG metadata (best-effort; sidecar is canonical).
         # SVG has no comparable metadata channel here, so it relies on the sidecar.
         if fmt == "pdf":
-            save_kwargs["metadata"] = _embedded_metadata(provenance, output_base.name, "pdf")
+            save_kwargs["metadata"] = _export_metadata(
+                provenance, output_base.name, "pdf", timestamp
+            )
         elif fmt == "png":
             save_kwargs["dpi"] = 300
             save_kwargs["metadata"] = _embedded_metadata(provenance, output_base.name, "png")

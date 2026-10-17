@@ -1,0 +1,34 @@
+{
+  "schema": "guard-escape-ablation.verification.v1",
+  "status": "diagnostic-only",
+  "episodes": 2160,
+  "rates_byte_identical": 48,
+  "contrasts_byte_identical": 36,
+  "interval_pairs": 84,
+  "portable_analyzer_matches_original_reviewed_csvs": true,
+  "archived_original_analyzer_matches_reviewed_csvs": true,
+  "producer_file_digests_match_independent_review": 4,
+  "negative_controls_rejected_for_expected_reason": [
+    "missing_pair",
+    "duplicate_pair",
+    "fallback",
+    "factor_binding",
+    "contradictory_success"
+  ],
+  "source_patch_reconstruction": {
+    "public_release": "373dbfde4f39667cf9e8732dabe7df5118bdeab1",
+    "execution_commit": "0035fba05c9b679e39f58ec286f5d57b96bb9a0a",
+    "exact_changed_files": [
+      "robot_sf/planner/hybrid_rule_local_planner.py",
+      "tests/planner/test_guardesc_ablation.py"
+    ]
+  },
+  "new_simulation_run": false,
+  "fresh_remote_archive_readback": false,
+  "manuscript_admission": false,
+  "not_run": [
+    "Full simulation replay (custody task; original reviewed episodes retained)",
+    "Full runtime test suite (no runtime change)",
+    "Fresh remote archive cold readback (compact packet does not depend on it)"
+  ]
+}

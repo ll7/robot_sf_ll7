@@ -1,0 +1,342 @@
+{
+  "cpu-default-r1": {
+    "controls_identical": 900,
+    "learned_identical": 63,
+    "outcome_differences": 12,
+    "per_arm": {
+      "goal": {
+        "outcome_differences": 0,
+        "scientific_identical": 300,
+        "total": 300
+      },
+      "guarded_ppo": {
+        "outcome_differences": 5,
+        "scientific_identical": 56,
+        "total": 300
+      },
+      "orca": {
+        "outcome_differences": 0,
+        "scientific_identical": 300,
+        "total": 300
+      },
+      "ppo": {
+        "outcome_differences": 7,
+        "scientific_identical": 7,
+        "total": 300
+      },
+      "social_force": {
+        "outcome_differences": 0,
+        "scientific_identical": 300,
+        "total": 300
+      }
+    },
+    "scientific_identical": 963,
+    "total": 1500
+  },
+  "cpu-default-r2": {
+    "controls_identical": 900,
+    "learned_identical": 63,
+    "outcome_differences": 12,
+    "per_arm": {
+      "goal": {
+        "outcome_differences": 0,
+        "scientific_identical": 300,
+        "total": 300
+      },
+      "guarded_ppo": {
+        "outcome_differences": 5,
+        "scientific_identical": 56,
+        "total": 300
+      },
+      "orca": {
+        "outcome_differences": 0,
+        "scientific_identical": 300,
+        "total": 300
+      },
+      "ppo": {
+        "outcome_differences": 7,
+        "scientific_identical": 7,
+        "total": 300
+      },
+      "social_force": {
+        "outcome_differences": 0,
+        "scientific_identical": 300,
+        "total": 300
+      }
+    },
+    "scientific_identical": 963,
+    "total": 1500
+  },
+  "cpu-float64-r1": {
+    "controls_identical": 900,
+    "learned_identical": 600,
+    "outcome_differences": 0,
+    "per_arm": {
+      "goal": {
+        "outcome_differences": 0,
+        "scientific_identical": 300,
+        "total": 300
+      },
+      "guarded_ppo": {
+        "outcome_differences": 0,
+        "scientific_identical": 300,
+        "total": 300
+      },
+      "orca": {
+        "outcome_differences": 0,
+        "scientific_identical": 300,
+        "total": 300
+      },
+      "ppo": {
+        "outcome_differences": 0,
+        "scientific_identical": 300,
+        "total": 300
+      },
+      "social_force": {
+        "outcome_differences": 0,
+        "scientific_identical": 300,
+        "total": 300
+      }
+    },
+    "scientific_identical": 1500,
+    "total": 1500
+  },
+  "cpu-pinned-r1": {
+    "controls_identical": 900,
+    "learned_identical": 600,
+    "outcome_differences": 0,
+    "per_arm": {
+      "goal": {
+        "outcome_differences": 0,
+        "scientific_identical": 300,
+        "total": 300
+      },
+      "guarded_ppo": {
+        "outcome_differences": 0,
+        "scientific_identical": 300,
+        "total": 300
+      },
+      "orca": {
+        "outcome_differences": 0,
+        "scientific_identical": 300,
+        "total": 300
+      },
+      "ppo": {
+        "outcome_differences": 0,
+        "scientific_identical": 300,
+        "total": 300
+      },
+      "social_force": {
+        "outcome_differences": 0,
+        "scientific_identical": 300,
+        "total": 300
+      }
+    },
+    "scientific_identical": 1500,
+    "total": 1500
+  },
+  "default-vs-float64-a": {
+    "controls_identical": 729,
+    "learned_identical": 57,
+    "outcome_differences": 14,
+    "per_arm": {
+      "goal": {
+        "outcome_differences": 0,
+        "scientific_identical": 291,
+        "total": 300
+      },
+      "guarded_ppo": {
+        "outcome_differences": 8,
+        "scientific_identical": 50,
+        "total": 300
+      },
+      "orca": {
+        "outcome_differences": 0,
+        "scientific_identical": 281,
+        "total": 300
+      },
+      "ppo": {
+        "outcome_differences": 6,
+        "scientific_identical": 7,
+        "total": 300
+      },
+      "social_force": {
+        "outcome_differences": 0,
+        "scientific_identical": 157,
+        "total": 300
+      }
+    },
+    "scientific_identical": 786,
+    "total": 1500
+  },
+  "default-vs-float64-b": {
+    "controls_identical": 729,
+    "learned_identical": 57,
+    "outcome_differences": 14,
+    "per_arm": {
+      "goal": {
+        "outcome_differences": 0,
+        "scientific_identical": 291,
+        "total": 300
+      },
+      "guarded_ppo": {
+        "outcome_differences": 7,
+        "scientific_identical": 50,
+        "total": 300
+      },
+      "orca": {
+        "outcome_differences": 0,
+        "scientific_identical": 281,
+        "total": 300
+      },
+      "ppo": {
+        "outcome_differences": 7,
+        "scientific_identical": 7,
+        "total": 300
+      },
+      "social_force": {
+        "outcome_differences": 0,
+        "scientific_identical": 157,
+        "total": 300
+      }
+    },
+    "scientific_identical": 786,
+    "total": 1500
+  },
+  "default-vs-pinned-a": {
+    "controls_identical": 729,
+    "learned_identical": 60,
+    "outcome_differences": 17,
+    "per_arm": {
+      "goal": {
+        "outcome_differences": 0,
+        "scientific_identical": 291,
+        "total": 300
+      },
+      "guarded_ppo": {
+        "outcome_differences": 11,
+        "scientific_identical": 53,
+        "total": 300
+      },
+      "orca": {
+        "outcome_differences": 0,
+        "scientific_identical": 281,
+        "total": 300
+      },
+      "ppo": {
+        "outcome_differences": 6,
+        "scientific_identical": 7,
+        "total": 300
+      },
+      "social_force": {
+        "outcome_differences": 0,
+        "scientific_identical": 157,
+        "total": 300
+      }
+    },
+    "scientific_identical": 789,
+    "total": 1500
+  },
+  "default-vs-pinned-b": {
+    "controls_identical": 729,
+    "learned_identical": 57,
+    "outcome_differences": 15,
+    "per_arm": {
+      "goal": {
+        "outcome_differences": 0,
+        "scientific_identical": 291,
+        "total": 300
+      },
+      "guarded_ppo": {
+        "outcome_differences": 10,
+        "scientific_identical": 50,
+        "total": 300
+      },
+      "orca": {
+        "outcome_differences": 0,
+        "scientific_identical": 281,
+        "total": 300
+      },
+      "ppo": {
+        "outcome_differences": 5,
+        "scientific_identical": 7,
+        "total": 300
+      },
+      "social_force": {
+        "outcome_differences": 0,
+        "scientific_identical": 157,
+        "total": 300
+      }
+    },
+    "scientific_identical": 786,
+    "total": 1500
+  },
+  "noise-a": {
+    "controls_identical": 900,
+    "learned_identical": 600,
+    "outcome_differences": 0,
+    "per_arm": {
+      "goal": {
+        "outcome_differences": 0,
+        "scientific_identical": 300,
+        "total": 300
+      },
+      "guarded_ppo": {
+        "outcome_differences": 0,
+        "scientific_identical": 300,
+        "total": 300
+      },
+      "orca": {
+        "outcome_differences": 0,
+        "scientific_identical": 300,
+        "total": 300
+      },
+      "ppo": {
+        "outcome_differences": 0,
+        "scientific_identical": 300,
+        "total": 300
+      },
+      "social_force": {
+        "outcome_differences": 0,
+        "scientific_identical": 300,
+        "total": 300
+      }
+    },
+    "scientific_identical": 1500,
+    "total": 1500
+  },
+  "noise-b": {
+    "controls_identical": 900,
+    "learned_identical": 600,
+    "outcome_differences": 0,
+    "per_arm": {
+      "goal": {
+        "outcome_differences": 0,
+        "scientific_identical": 300,
+        "total": 300
+      },
+      "guarded_ppo": {
+        "outcome_differences": 0,
+        "scientific_identical": 300,
+        "total": 300
+      },
+      "orca": {
+        "outcome_differences": 0,
+        "scientific_identical": 300,
+        "total": 300
+      },
+      "ppo": {
+        "outcome_differences": 0,
+        "scientific_identical": 300,
+        "total": 300
+      },
+      "social_force": {
+        "outcome_differences": 0,
+        "scientific_identical": 300,
+        "total": 300
+      }
+    },
+    "scientific_identical": 1500,
+    "total": 1500
+  }
+}

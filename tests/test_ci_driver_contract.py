@@ -323,8 +323,8 @@ def _pyproject() -> dict[str, Any]:
     return tomllib.loads(PYPROJECT.read_text(encoding="utf-8"))
 
 
-def test_torch_213_constraint_is_shared_by_training_and_gpu_extras() -> None:
-    """Keep both Torch installation paths on the tested 2.13 release line (issue #5556)."""
+def test_torch_214_constraint_is_shared_by_training_and_gpu_extras() -> None:
+    """Keep both Torch installation paths on the declared 2.13/2.14 release range."""
     project = _pyproject()["project"]
     optional_dependencies = project["optional-dependencies"]
     training_requirement = next(
@@ -337,11 +337,11 @@ def test_torch_213_constraint_is_shared_by_training_and_gpu_extras() -> None:
         for value in optional_dependencies["gpu"]
         if (requirement := Requirement(value)).name == "torch"
     )
-    expected = Requirement("torch>=2.13.0,<2.14.0").specifier
+    expected = Requirement("torch>=2.13.0,<2.15.0").specifier
 
     assert training_requirement.specifier == expected
     assert gpu_requirement.specifier == expected
-    assert gpu_requirement.extras == {"cuda"}
+    assert gpu_requirement.extras == set()
 
     lock_data = tomllib.loads((ROOT / "uv.lock").read_text(encoding="utf-8"))
     locked_project = next(item for item in lock_data["package"] if item["name"] == "robot-sf")
@@ -356,11 +356,11 @@ def test_torch_213_constraint_is_shared_by_training_and_gpu_extras() -> None:
     }
 
     training_lock = locked_torch.get(("extra == 'training'", ()))
-    gpu_lock = locked_torch.get(("extra == 'gpu'", ("cuda",)))
+    gpu_lock = locked_torch.get(("extra == 'gpu'", ()))
     assert training_lock is not None, "uv.lock is missing the training Torch entry"
     assert gpu_lock is not None, "uv.lock is missing the gpu Torch entry"
-    assert training_lock.get("specifier") == ">=2.13.0,<2.14.0"
-    assert gpu_lock.get("specifier") == ">=2.13.0,<2.14.0"
+    assert training_lock.get("specifier") == ">=2.13.0,<2.15.0"
+    assert gpu_lock.get("specifier") == ">=2.13.0,<2.15.0"
 
 
 def test_extract_workflow_phases_handles_multiple_phase_args() -> None:
@@ -596,7 +596,7 @@ def test_examples_smoke_uses_narrow_lock_backed_dependency_group() -> None:
         "robot_sf[viz,benchmark]",
         "scikit-learn>=1.9.0",
         "stable-baselines3>=2.9.0",
-        "torch>=2.13.0,<2.14.0",
+        "torch>=2.13.0,<2.15.0",
     ]
     optional_dependencies = _pyproject()["project"]["optional-dependencies"]
     all_extras = (

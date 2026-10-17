@@ -149,7 +149,7 @@ def assign_archetype_labels(
     if n <= 0:
         return np.empty(0, dtype=str)
     counts = allocate_archetype_counts(n, composition)
-    labels = np.concatenate([np.full(count, name, dtype=object) for name, count in counts.items()])
+    labels = np.concatenate([np.full(counts[name], name, dtype=object) for name in sorted(counts)])
     rng = np.random.default_rng(seed)
     rng.shuffle(labels)
     return labels.astype(str)

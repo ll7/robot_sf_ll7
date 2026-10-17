@@ -1900,7 +1900,7 @@ def _prepare_policy_and_observation_contract(  # noqa: PLR0913
         ),
     )
     if algo == "stand_still":
-        _stand_still_builder.apply_observation_contract(algo_meta)
+        _stand_still_builder.apply_observation_contract(cast("dict[str, Any]", algo_meta))
     # Latency instrumentation resolves the planner configuration hash from the callable so
     # cached policies remain provenance-bound when a new harness is activated per episode.
     policy_fn._meta = algo_meta
@@ -2324,7 +2324,7 @@ def _prepare_episode_env(  # noqa: C901
         if scenario is None:
             raise ValueError("population-size validation requires the episode scenario")
         instantiated_count = int(
-            np.asarray(cast("Any", env.simulator).ped_pos).reshape(-1, 2).shape[0]
+            np.asarray(env.simulator.ped_pos).reshape(-1, 2).shape[0]
         )
         # Issue #5666 acceptance: a forced population must instantiate exactly
         # the declared count. A silent divergence is what wasted a full compute
@@ -2340,7 +2340,7 @@ def _prepare_episode_env(  # noqa: C901
             raise ValueError("runtime trace label building requires the episode scenario")
         if instantiated_count is None:
             instantiated_count = int(
-                np.asarray(cast("Any", env.simulator).ped_pos).reshape(-1, 2).shape[0]
+                np.asarray(env.simulator.ped_pos).reshape(-1, 2).shape[0]
             )
         runtime_labels = pedestrian_control_trace_label_builder(instantiated_count)
         if len(runtime_labels) != instantiated_count:

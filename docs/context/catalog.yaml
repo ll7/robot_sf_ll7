@@ -24,6 +24,14 @@ entries:
   status: proposal
   freshness: maintained
   area: benchmark_evidence
+- path: docs/context/guard_escape_ablation/README.md
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/guard_escape_ablation/SHA256SUMS
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
 - path: docs/context/robsweep/README.md
   status: evidence
   freshness: evidence

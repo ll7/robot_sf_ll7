@@ -130,6 +130,17 @@ class RetirementProjection:
 
 
 @dataclass(frozen=True, slots=True)
+class PrimaryCheckoutState:
+    """Identity and staleness of the checkout a command was run from."""
+
+    head_sha: str | None
+    origin_main_sha: str | None
+    head_behind_origin_main: int | None
+    head_attached: bool
+    stale_primary_checkout: bool
+
+
+@dataclass(frozen=True, slots=True)
 class RepoStatus:
     """Optional status for the current checkout."""
 
@@ -137,6 +148,11 @@ class RepoStatus:
     dirty_entries: int
     ahead: int | None
     behind: int | None
+    head_sha: str | None = None
+    origin_main_sha: str | None = None
+    head_behind_origin_main: int | None = None
+    head_attached: bool = False
+    stale_primary_checkout: bool | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -766,6 +782,50 @@ def _build_bounded_worktrees(
     return built, skipped
 
 
+def _resolve_sha(ref: str) -> str | None:
+    """Resolve a ref to a full commit SHA, or return None when it cannot be read."""
+    result = _run_command(["git", "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}"])
+    if result.returncode != 0:
+        return None
+    value = result.stdout.strip()
+    return value or None
+
+
+def _behind_origin_main() -> int | None:
+    """Count commits the current HEAD lacks relative to the local origin/main ref."""
+    result = _run_command(
+        ["git", "rev-list", "--count", "HEAD..origin/main"],
+    )
+    if result.returncode != 0:
+        return None
+    value = result.stdout.strip()
+    return int(value) if value.isdigit() else None
+
+
+def primary_checkout_staleness() -> PrimaryCheckoutState:
+    """Describe whether the primary checkout is detached and behind ``origin/main``.
+
+    ``stale_primary_checkout`` is ``True`` only for a detached HEAD that is behind the
+    local ``origin/main`` ref, ``False`` when the checkout is attached or current, and
+    ``None`` when ``origin/main`` cannot be resolved. ``None`` never counts as healthy:
+    callers must fail closed rather than treat an unreadable ref as up to date.
+    """
+    head_attached = (
+        _run_command(["git", "symbolic-ref", "--quiet", "--short", "HEAD"]).returncode == 0
+    )
+    origin_main_sha = _resolve_sha("origin/main")
+    head_sha = _resolve_sha("HEAD")
+    behind = _behind_origin_main() if origin_main_sha else None
+    stale = bool(not head_attached and behind is not None and behind > 0)
+    return PrimaryCheckoutState(
+        head_sha=head_sha,
+        origin_main_sha=origin_main_sha,
+        head_behind_origin_main=behind,
+        head_attached=head_attached,
+        stale_primary_checkout=stale,
+    )
+
+
 def _repo_status() -> RepoStatus | None:
     """Build optional status for the current checkout."""
     status = _run_command(["git", "status", "--short", "--branch"])
@@ -775,11 +835,17 @@ def _repo_status() -> RepoStatus | None:
     branch_status = lines[0] if lines else ""
     upstream = _upstream(".")
     ahead, behind = _ahead_behind(".", upstream)
+    primary = primary_checkout_staleness()
     return RepoStatus(
         branch_status=branch_status,
         dirty_entries=max(0, len(lines) - 1),
         ahead=ahead,
         behind=behind,
+        head_sha=primary.head_sha,
+        origin_main_sha=primary.origin_main_sha,
+        head_behind_origin_main=primary.head_behind_origin_main,
+        head_attached=primary.head_attached,
+        stale_primary_checkout=primary.stale_primary_checkout,
     )
 
 
@@ -1675,6 +1741,17 @@ def format_human(snapshot: HygieneSnapshot) -> str:
             "  Repo status: "
             f"{repo.branch_status}; dirty={repo.dirty_entries}; ahead={repo.ahead}; behind={repo.behind}"
         )
+        lines.append(
+            "  Primary checkout: "
+            f"head={repo.head_sha or 'unresolved'}; origin_main={repo.origin_main_sha or 'unresolved'}; "
+            f"attached={repo.head_attached}; behind_origin_main={repo.head_behind_origin_main}; "
+            f"stale_primary_checkout={repo.stale_primary_checkout}"
+        )
+        if repo.stale_primary_checkout:
+            lines.append(
+                "  Repair: git fetch origin main && git checkout --detach origin/main "
+                "(clean tree, no local branch, HEAD is an ancestor of origin/main)"
+            )
     if snapshot.worktrees:
         lines.append("  Worktrees:")
         for row in snapshot.worktrees:

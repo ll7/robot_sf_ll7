@@ -14,6 +14,7 @@ from robot_sf.planner.obstacle_features import (
     PREDICTIVE_EGO_MOTION_PRODUCER_STANDALONE,
     predictive_feature_schema_metadata,
 )
+from robot_sf.training.predictive_supervision import supervision_metadata
 from scripts.training import build_predictive_mixed_dataset as mixed_builder
 
 if TYPE_CHECKING:
@@ -26,6 +27,7 @@ def _write_dataset(
     input_dim: int,
     feature_schema: dict[str, object] | None = None,
     sample_offset: int = 0,
+    legacy_supervision: bool = False,
 ) -> None:
     """Write a compact predictive dataset fixture with optional embedded schema metadata."""
     state = np.zeros((2, 3, input_dim), dtype=np.float32)
@@ -39,6 +41,10 @@ def _write_dataset(
     }
     if feature_schema is not None:
         payload["feature_schema_json"] = np.asarray(json.dumps(feature_schema, sort_keys=True))
+    if not legacy_supervision:
+        payload["supervision_metadata_json"] = np.asarray(
+            json.dumps(supervision_metadata("base"), sort_keys=True)
+        )
     np.savez_compressed(path, **payload)
 
 
@@ -60,6 +66,7 @@ def _run_builder(
     hardcase_repeat: int | None = 2,
     shuffle_seed: int | None = 7,
     weighting_spec: Path | None = None,
+    allow_legacy_supervision: bool = False,
 ) -> None:
     """Run the mixed-dataset builder through a compact monkeypatched CLI namespace."""
     monkeypatch.setattr(
@@ -72,6 +79,7 @@ def _run_builder(
             output=output_path,
             shuffle_seed=shuffle_seed,
             weighting_spec=weighting_spec,
+            allow_legacy_supervision=allow_legacy_supervision,
         ),
     )
 
@@ -180,14 +188,15 @@ def test_mixed_builder_preserves_legacy_compatibility_without_schema(
     base_path = tmp_path / "predictive_rollouts_base.npz"
     hardcase_path = tmp_path / "predictive_rollouts_hardcase.npz"
     output_path = tmp_path / "predictive_rollouts_mixed.npz"
-    _write_dataset(base_path, input_dim=4, feature_schema=None)
-    _write_dataset(hardcase_path, input_dim=4, feature_schema=None)
+    _write_dataset(base_path, input_dim=4, feature_schema=None, legacy_supervision=True)
+    _write_dataset(hardcase_path, input_dim=4, feature_schema=None, legacy_supervision=True)
 
     _run_builder(
         monkeypatch,
         base_path=base_path,
         hardcase_path=hardcase_path,
         output_path=output_path,
+        allow_legacy_supervision=True,
     )
     with np.load(output_path) as raw:
         assert "feature_schema_json" not in raw

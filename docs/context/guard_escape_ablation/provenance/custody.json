@@ -1,0 +1,188 @@
+{
+  "schema": "guard-escape-ablation.custody.v1",
+  "source_artifacts": [
+    {
+      "source_role": "out/contract.yaml",
+      "source_sha256": "2c11395f5a3bebe5c5be408c7e25a2fcd994d6fb4914edc10740e629a29c6b69",
+      "packet_path": "inputs/study.yaml",
+      "packet_sha256": "4c343d0c7dbf0dad5d4c8e09074064e2f4196d3020c003f695c72221415c4bde",
+      "transformation": "Scientific contract retained; private custody paths omitted and schedule made portable; package note and registration limit added."
+    },
+    {
+      "source_role": "G0E0.yaml",
+      "source_sha256": "7a461aa76fdb36091df69e2a90a14220bd9fbf20ed784f2657f8c2b7bb6fdf0f",
+      "packet_path": "inputs/G0E0.yaml",
+      "packet_sha256": "7a461aa76fdb36091df69e2a90a14220bd9fbf20ed784f2657f8c2b7bb6fdf0f",
+      "transformation": "byte-exact",
+      "source_area": "original study configuration directory"
+    },
+    {
+      "source_role": "G0E1.yaml",
+      "source_sha256": "4c2de4927a7181b71a6d0f1327b125e651973dd1e2775ddf53b4760fe1202002",
+      "packet_path": "inputs/G0E1.yaml",
+      "packet_sha256": "4c2de4927a7181b71a6d0f1327b125e651973dd1e2775ddf53b4760fe1202002",
+      "transformation": "byte-exact",
+      "source_area": "original study configuration directory"
+    },
+    {
+      "source_role": "G1E0.yaml",
+      "source_sha256": "be55c42c4a280607f3610462f85a393082863666fa1bd98f054ae7c733977e33",
+      "packet_path": "inputs/G1E0.yaml",
+      "packet_sha256": "be55c42c4a280607f3610462f85a393082863666fa1bd98f054ae7c733977e33",
+      "transformation": "byte-exact",
+      "source_area": "original study configuration directory"
+    },
+    {
+      "source_role": "G1E1.yaml",
+      "source_sha256": "7de5ff05990548382592d4276256ef11519e924cadbc4aeb32d872a855ae719f",
+      "packet_path": "inputs/G1E1.yaml",
+      "packet_sha256": "7de5ff05990548382592d4276256ef11519e924cadbc4aeb32d872a855ae719f",
+      "transformation": "byte-exact",
+      "source_area": "original study configuration directory"
+    },
+    {
+      "source_role": "groups.yaml",
+      "source_sha256": "955d161ae6fa849c2c9cf54d899e0da8fea4e8b5c8a2c254bb93f3c0a624fa16",
+      "packet_path": "inputs/groups.yaml",
+      "packet_sha256": "955d161ae6fa849c2c9cf54d899e0da8fea4e8b5c8a2c254bb93f3c0a624fa16",
+      "transformation": "byte-exact",
+      "source_area": "original study configuration directory"
+    },
+    {
+      "source_role": "full_scenarios.yaml",
+      "source_sha256": "b0b66a10a251d48eea6ad7fe3d3f33a2d6990553c50e8b6cb9fa06570158bf92",
+      "packet_path": "inputs/full_scenarios.yaml",
+      "packet_sha256": "6ce7ec0d6076cfbba01a0ef066eb934a60b27eeeaa6af3b65f706ff3934810a4",
+      "transformation": "portable path references; seed masking if needed",
+      "source_area": "original study configuration directory"
+    },
+    {
+      "source_role": "full.yaml",
+      "source_sha256": "9a5912a65374baee7ba69478ed8cdf7991844b412699eaff050c8abf9f60cefb",
+      "packet_path": "inputs/full.yaml",
+      "packet_sha256": "cae053117c53e5b09ca22c5114e66de66152fca4bd86d9cad316a4dba9bce1aa",
+      "transformation": "portable path references; seed masking if needed",
+      "source_area": "original study configuration directory"
+    },
+    {
+      "source_role": "out/runtime.patch",
+      "source_sha256": "c52337603e7905a866b6236adfa5a3caca9efed5eb14221918f1bc6ae699be00",
+      "packet_path": "provenance/runtime.patch.gz",
+      "packet_sha256": "1314f3c896c2cb6f45180ba5ffa0c062ab597e329a1b4d6cd58148989a1dfca2",
+      "transformation": "deterministic gzip; decompressed bytes exactly equal original"
+    },
+    {
+      "source_role": "analyze.py",
+      "source_sha256": "2f7748e476291519da782295a7c459e90ddd19ee3da271c33ca7ea738d045b68",
+      "packet_path": "provenance/original_analyze.py.source.txt",
+      "packet_sha256": "2f7748e476291519da782295a7c459e90ddd19ee3da271c33ca7ea738d045b68",
+      "transformation": "byte-exact"
+    },
+    {
+      "source_role": "out/figure_data.csv",
+      "source_sha256": "0d0020f519f8e029b88079ce7efe4032c8b71eb445069f7b47b1f47aa249f157",
+      "packet_path": "evidence/figure_data.csv",
+      "packet_sha256": "0d0020f519f8e029b88079ce7efe4032c8b71eb445069f7b47b1f47aa249f157",
+      "transformation": "byte-exact"
+    },
+    {
+      "source_role": "out/paired_effects.csv",
+      "source_sha256": "84dc61a0c8e46ccaf84c625bee9da845ec598305ce0fb615d5a7cc62566cfdb1",
+      "packet_path": "evidence/paired_effects.csv",
+      "packet_sha256": "84dc61a0c8e46ccaf84c625bee9da845ec598305ce0fb615d5a7cc62566cfdb1",
+      "transformation": "byte-exact"
+    },
+    {
+      "source_role": "independent-review/review.md",
+      "source_sha256": "3dddf8f55ad045e900030fdaad3e7fbee96aa9de6f1a6cfbb7f3aa047dec08e4",
+      "packet_path": "provenance/independent_review.md",
+      "packet_sha256": "6f9938c1d6d3343c462311880f2a4a95f225018b25e1a021a0b02476336d598a",
+      "transformation": "private path roots replaced; historical hyperlinks rebound to packet copies or documentary text"
+    },
+    {
+      "source_role": "independent-review/independent-results.json",
+      "source_sha256": "fbf63138e3d8398bebff07872c037e16ef7363346fa02dc9a761e7952fb7aad9",
+      "packet_path": "provenance/independent-results.json",
+      "packet_sha256": "fbf63138e3d8398bebff07872c037e16ef7363346fa02dc9a761e7952fb7aad9",
+      "transformation": "portable path references; seed masking if needed"
+    },
+    {
+      "source_role": "out/bundle/MANIFEST.sha256",
+      "source_sha256": "22ab003db1e2dd138e2830ca088d88fe45296f7fa2f4934b7fd4e7cbebf7316d",
+      "packet_path": "provenance/original_bundle_MANIFEST.sha256",
+      "packet_sha256": "22ab003db1e2dd138e2830ca088d88fe45296f7fa2f4934b7fd4e7cbebf7316d",
+      "transformation": "byte-exact"
+    },
+    {
+      "source_role": "out/behavior-receipt.json",
+      "source_sha256": "a3490ecb146cf305e4e191b4d58ee95bc3aad3bb9c7352aea738902fd79346d6",
+      "packet_path": "provenance/behavior-receipt.json",
+      "packet_sha256": "a3490ecb146cf305e4e191b4d58ee95bc3aad3bb9c7352aea738902fd79346d6",
+      "transformation": "portable path references; seed masking if needed"
+    },
+    {
+      "source_role": "out/config-validation.json",
+      "source_sha256": "32372d5bf45086f39bc87a3547ff706230c0081086e4139d2476572e2401744e",
+      "packet_path": "provenance/config-validation.json",
+      "packet_sha256": "32372d5bf45086f39bc87a3547ff706230c0081086e4139d2476572e2401744e",
+      "transformation": "portable path references; seed masking if needed"
+    },
+    {
+      "source_role": "out/grouping_provenance.json",
+      "source_sha256": "f074e7932a4b546a1d38a0a982d5b1ef5e3efef71c26562785f3e8854af93227",
+      "packet_path": "provenance/grouping_provenance.json",
+      "packet_sha256": "30c22b0deb80d76c4d3734fb5a873cd8aa04f394b0054fbc28ec9344b834cf4d",
+      "transformation": "portable path references; seed masking if needed"
+    },
+    {
+      "source_role": "out/final-validation.json",
+      "source_sha256": "c158484bf838a9396d8373d31f50cc84119c7623edf24144867bbdffa16c8399",
+      "packet_path": "provenance/final-validation.json",
+      "packet_sha256": "c158484bf838a9396d8373d31f50cc84119c7623edf24144867bbdffa16c8399",
+      "transformation": "portable path references; seed masking if needed"
+    }
+  ],
+  "receipts": [
+    {
+      "source_role": "out/full-preservation.json",
+      "source_sha256": "aeb3b0b21419b6ea335ce9e4520268ba1bfbc41a3f9910d22826e0c160f94266",
+      "schema": "guardesc.two-host-custody.v1",
+      "checked_at": "2026-10-14T20:38:22.250262+00:00",
+      "verified": true,
+      "files": 58,
+      "payload_bytes": 201980066,
+      "manifest_sha256": "53407ad75168c970f7586f3135abdb23de9023648a5c9560f90020a0814a37ec",
+      "local_readback_verified": true,
+      "remote_cold_readback_verified": true,
+      "locators": "Private custody locators retained in task report; not needed for compact recomputation.",
+      "wandb": "pending follow-up; no retry attempted"
+    },
+    {
+      "source_role": "out/final-preservation.json",
+      "source_sha256": "d4a205de114edb4170ed93f99bf993dfc96df2ef9a0f431872cece2834e24e86",
+      "schema": "guardesc.final-two-host-custody.v1",
+      "checked_at": "2026-10-14T20:43:16.827156+00:00",
+      "verified": true,
+      "files": 349,
+      "payload_bytes": 400026566,
+      "manifest_sha256": "22ab003db1e2dd138e2830ca088d88fe45296f7fa2f4934b7fd4e7cbebf7316d",
+      "local_readback_verified": true,
+      "remote_cold_readback_verified": true,
+      "locators": "Private custody locators retained in task report; not needed for compact recomputation.",
+      "wandb": "pending follow-up; no retry attempted"
+    }
+  ],
+  "bundle_verification": {
+    "files_checked": 349,
+    "all_sha256_match": true,
+    "manifest_sha256": "22ab003db1e2dd138e2830ca088d88fe45296f7fa2f4934b7fd4e7cbebf7316d"
+  },
+  "source_delta": {
+    "public_release_commit": "373dbfde4f39667cf9e8732dabe7df5118bdeab1",
+    "execution_commit": "0035fba05c9b679e39f58ec286f5d57b96bb9a0a",
+    "path": "provenance/acquisition-source.patch.gz",
+    "sha256": "1314f3c896c2cb6f45180ba5ffa0c062ab597e329a1b4d6cd58148989a1dfca2"
+  },
+  "review_note": "CONFIRMED numerical result; review copy replaces private paths with symbolic roots. Original review digest is retained above.",
+  "large_artifact_policy": "Tracked compact evidence only; full producer logs and bundle remain in the existing checksum-verified archives, not Git. No new publication or release."
+}

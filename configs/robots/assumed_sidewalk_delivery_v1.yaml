@@ -1,0 +1,13 @@
+# Opt-in diagnostic profile: assumed sidewalk delivery robot (issue #10189).
+# Every simulator value below is an assumption, not a measured robot specification.
+# Width provenance and limitations: docs/robots/assumed_sidewalk_delivery.md.
+robot_config:
+  type: differential_drive  # assumption: drive model
+  radius: 0.31  # assumption: half of manufacturer-attributed 0.62 m width; not a covering disc
+  max_linear_speed: 1.2  # assumption: m/s operational cap
+  max_linear_accel: 0.5  # assumption: m/s^2 forward acceleration
+  max_linear_decel: 0.8  # assumption: m/s^2 braking magnitude
+  max_angular_speed: 1.0  # assumption: rad/s yaw cap
+  allow_backwards: false  # assumption: no reverse
+  limited_reverse: false  # assumption: no limited reverse either
+  control_latency_s: 0.2  # assumption: seconds; mapped to simulator action latency

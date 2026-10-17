@@ -109,7 +109,7 @@ def test_explicit_desired_speed_decouples_deterministically():
             population_size=12,
             desired_speed_mean=1.5,
             desired_speed_std=0.0,
-            desired_speed_seed=0,
+            desired_speed_seed=1001,
         )
     )
     peds = sim.pysf_sim.peds

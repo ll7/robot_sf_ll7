@@ -2879,6 +2879,7 @@ def _set_simulation_override_attr(
         "pedestrian_uncertainty_envelope_enabled",
         "oracle_force_trace_enabled",
         "sampler_capture_enabled",
+        "desired_speed_truncated",
     }:
         setattr(
             config.sim_config,
@@ -3017,6 +3018,12 @@ _SIMULATION_OVERRIDE_ATTRS = (
     "oracle_force_trace_enabled",
     "sampler_capture_enabled",
     "ped_radius",
+    "ped_force_radius",
+    "ped_speed_tier",
+    "desired_speed_mean",
+    "desired_speed_std",
+    "desired_speed_seed",
+    "desired_speed_truncated",
     "pedestrian_uncertainty_envelope_enabled",
     "pedestrian_uncertainty_alpha_mps",
     "goal_radius",
@@ -3056,7 +3063,7 @@ def _apply_group_allocation_mode(
         config.sim_config.group_allocation_mode = mode
 
 
-def _apply_simulation_overrides(  # noqa: C901
+def _apply_simulation_overrides(  # noqa: C901, PLR0912
     config: RobotSimulationConfig,
     overrides: Mapping[str, Any] | None,
 ) -> None:
@@ -3111,6 +3118,10 @@ def _apply_simulation_overrides(  # noqa: C901
         if attr in overrides:
             _set_simulation_override_attr(config, attr, overrides)
     _normalize_desired_speed_overrides(config, overrides)
+    if "ped_force_radius" in overrides:
+        value = config.sim_config.ped_force_radius
+        if value is not None and (not math.isfinite(value) or value <= 0):
+            raise ValueError("ped_force_radius must be finite and positive")
     # Expose the pedestrian-robot force as a calibration surface (issue #4974):
     # coefficient (force_multiplier), effective radius (robot_radius), activation
     # distance, and active flag can be tuned per-scenario without touching defaults.

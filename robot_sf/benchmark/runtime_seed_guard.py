@@ -49,9 +49,13 @@ def validate_sealed_authorization(identity_path: Path) -> Any:
     return identity
 
 
-def check_simulation_seed(seed: Any, *, boundary: str, authorization: Path | None = None) -> None:
+def check_simulation_seed(
+    seed: Any, *, boundary: str, authorization: Path | None = None, dev_only: bool = False
+) -> None:
     """Check before seeding/reset/step. Environment variables confer no permission."""
     if seed is None:
+        if dev_only:
+            raise ValueError(f"development seed required at {boundary}; use 1001..1030")
         return
     try:
         if isinstance(seed, bool):
@@ -59,6 +63,8 @@ def check_simulation_seed(seed: Any, *, boundary: str, authorization: Path | Non
         value = operator.index(seed)
     except TypeError as exc:
         raise ValueError(f"simulation seed must be an integer at {boundary}") from exc
+    if dev_only and not 1001 <= value <= 1030:
+        raise ValueError(f"non-development seed {value} at {boundary}; use 1001..1030")
     if value not in seed_bands.HELD_OUT_SEEDS:
         return
     if authorization is not None:

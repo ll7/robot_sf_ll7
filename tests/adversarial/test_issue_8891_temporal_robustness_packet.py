@@ -119,7 +119,8 @@ def test_historical_validation_uses_committed_inputs(
             "input_id": input_id,
             "path": item["path"],
             "source_commit": packet["source"]["base_commit"],
-            "message": f"stale since {packet['source']['base_commit']}",
+            "message": f"{'unreadable' if change == 'deleted' else 'stale'} "
+            f"since {packet['source']['base_commit']}",
         }
     ]
 
@@ -147,6 +148,91 @@ def test_pinned_path_rejects_malformed_spelling(packet: dict, tmp_path: Path, va
     packet["source"]["inputs"]["runner"]["path"] = value
     with pytest.raises(PacketError, match=r"source.inputs.runner.path.*(repo-relative|path)"):
         validate_packet(packet, repo_root=root)
+
+
+@pytest.mark.parametrize("length", [128 * 1024, 1024 * 1024], ids=["128KiB", "1MiB"])
+def test_oversized_pinned_paths_refused_with_packet_error(
+    packet: dict, tmp_path: Path, length: int
+) -> None:
+    """Retain the reviewer's public-interface subprocess argument-size regressions."""
+    root = _historical_checkout(packet, tmp_path)
+    assert validate_packet(packet, repo_root=root)["status"] == "ok"
+    packet["source"]["inputs"]["runner"]["path"] = "a" * length
+    with pytest.raises(PacketError, match=r"source.inputs.runner.path.*path") as exc:
+        validate_packet(packet, repo_root=root)
+    assert len(str(exc.value)) < 200
+
+
+@pytest.mark.parametrize(
+    "value",
+    ["a" * 256, "é" * 128, "/".join(["a" * 255] * 16) + "/a", "/".join(["é" * 127] * 17)],
+    ids=["segment-256-bytes", "utf8-segment-256-bytes", "path-4097-bytes", "utf8-path-over-limit"],
+)
+def test_oversized_pinned_paths_checked_before_lookup(
+    packet: dict, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, value: str
+) -> None:
+    """All pins obey encoded byte limits before any immutable or checkout lookup."""
+    root = _historical_checkout(packet, tmp_path)
+    packet["source"]["inputs"]["scenario_template"]["path"] = value
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("lookup preceded oversized pinned path rejection")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(packet_module, "_git_output", forbidden)
+        patch.setattr(Path, "lstat", forbidden)
+        with pytest.raises(PacketError, match=r"source.inputs.scenario_template.path.*path") as exc:
+            validate_packet(packet, repo_root=root)
+    assert len(str(exc.value)) < 200
+
+
+@pytest.mark.parametrize("failure", ["lstat", "digest"])
+def test_current_oserror_is_informational_unreadable(
+    packet: dict, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failure: str
+) -> None:
+    """Unavailable drift cannot crash or grant execution after historical validation."""
+    root = _historical_checkout(packet, tmp_path)
+    relative_path = packet["source"]["inputs"]["runner"]["path"]
+    if failure == "lstat":
+        original = Path.lstat
+
+        def unreadable(path, *args, **kwargs):
+            if path == root / relative_path:
+                raise OSError("injected current-tree failure")
+            return original(path, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "lstat", unreadable)
+    else:
+        original = packet_module._current_source_digest
+
+        def unreadable(current_root, path):
+            if path == relative_path:
+                raise OSError("injected remaining drift failure")
+            return original(current_root, path)
+
+        monkeypatch.setattr(packet_module, "_current_source_digest", unreadable)
+    result = validate_packet(packet, repo_root=root)
+    assert result["status"] == "ok"
+    assert result["claim_eligible"] is False
+    assert result["campaign_execution_allowed"] is False
+    assert result["source_staleness"] == [
+        {
+            "input_id": "runner",
+            "path": relative_path,
+            "source_commit": packet["source"]["base_commit"],
+            "message": f"unreadable since {packet['source']['base_commit']}",
+        }
+    ]
+
+
+@pytest.mark.parametrize(
+    "value",
+    ["a" * 255, "é" * 127 + "a", "/".join(["a" * 255] * 15 + ["a" * 254, "a"])],
+    ids=["segment-255-bytes", "utf8-segment-255-bytes", "path-4096-bytes"],
+)
+def test_pinned_path_byte_limits_are_inclusive(value: str) -> None:
+    """Exact byte limits remain valid lexical paths, independent of tree membership."""
+    assert packet_module._pinned_path(value, "source.inputs.runner.path") == value
 
 
 def test_all_pinned_paths_checked_before_any_git_lookup(

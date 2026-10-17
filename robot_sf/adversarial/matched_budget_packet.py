@@ -55,6 +55,9 @@ EXPECTED_PACKET_STATUS = "diagnostic_only_preflight"
 EXPECTED_EVIDENCE_TIER = "preflight_valid"
 CONFIRMATION_THRESHOLD = 3
 
+_PINNED_PATH_MAX_BYTES = 4096
+_PINNED_SEGMENT_MAX_BYTES = 255
+
 _REQUIRED_INPUTS = set(
     "parent_manifest scenario_template search_space objective_registry robustness samplers runner benchmark_runner certification replay confirmation".split()
 )
@@ -343,6 +346,15 @@ def canonical_sha256(value: Any) -> str:
 def _pinned_path(value: Any, name: str) -> str:
     """Validate canonical Git tree paths lexically, without consulting the checkout."""
     _require(isinstance(value, str) and bool(value), f"{name} must be a path")
+    encoded = value.encode("utf-8")
+    _require(
+        len(encoded) <= _PINNED_PATH_MAX_BYTES,
+        f"{name} path exceeds {_PINNED_PATH_MAX_BYTES} bytes",
+    )
+    _require(
+        all(len(segment) <= _PINNED_SEGMENT_MAX_BYTES for segment in encoded.split(b"/")),
+        f"{name} path segment exceeds {_PINNED_SEGMENT_MAX_BYTES} bytes",
+    )
     _require(
         not value.startswith("/")
         and "\\" not in value
@@ -411,17 +423,24 @@ def _source_staleness(
     root: Path, paths: Mapping[str, str], snapshots: Mapping[str, bytes], *, source_commit: str
 ) -> list[dict[str, str]]:
     """Inspect the current tree only after the historical audit has passed all gates."""
-    return [
-        {
-            "input_id": input_id,
-            "path": relative_path,
-            "source_commit": source_commit,
-            "message": f"stale since {source_commit}",
-        }
-        for input_id, relative_path in paths.items()
-        if _current_source_digest(root, relative_path)
-        != hashlib.sha256(snapshots[input_id]).hexdigest()
-    ]
+    entries = []
+    for input_id, relative_path in paths.items():
+        try:
+            current_digest = _current_source_digest(root, relative_path)
+        except OSError:
+            current_digest = None
+        if current_digest == hashlib.sha256(snapshots[input_id]).hexdigest():
+            continue
+        state = "unreadable" if current_digest is None else "stale"
+        entries.append(
+            {
+                "input_id": input_id,
+                "path": relative_path,
+                "source_commit": source_commit,
+                "message": f"{state} since {source_commit}",
+            }
+        )
+    return entries
 
 
 def _forbid_outcomes(value: Any) -> None:

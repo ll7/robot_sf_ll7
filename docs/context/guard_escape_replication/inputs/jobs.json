@@ -1,0 +1,77 @@
+{
+  "schema": "guard-escape-ablation.jobs.v1",
+  "campaign": "exp_guardesc_replication",
+  "execution_commit": "0035fba05c9b679e39f58ec286f5d57b96bb9a0a",
+  "campaign_config": "inputs/full.yaml",
+  "scenarios": "inputs/full_scenarios.yaml",
+  "workers": 4,
+  "dt": 0.1,
+  "development_seeds": [
+    1031,
+    1032,
+    1033,
+    1034,
+    1035,
+    1036,
+    1037,
+    1038,
+    1039,
+    1040,
+    1041,
+    1042,
+    1043,
+    1044,
+    1045,
+    1046,
+    1047,
+    1048,
+    1049,
+    1050,
+    1051,
+    1052,
+    1053,
+    1054,
+    1055,
+    1056,
+    1057,
+    1058,
+    1059,
+    1060
+  ],
+  "command": "uv run python scripts/tools/run_camera_ready_benchmark.py --config docs/context/guard_escape_replication/inputs/full.yaml --output-root <fresh-output> --label exp_guardesc_replication --log-level INFO",
+  "command_boundary": "Run only after pushed preregistration; pinned execution worktree and registered inputs.",
+  "jobs": [
+    {
+      "arm": "G0E0",
+      "guard_on": false,
+      "escape_on": false,
+      "episodes": 540,
+      "config": "inputs/G0E0.yaml",
+      "producer_path": "runs/g0e0__differential_drive/episodes.jsonl"
+    },
+    {
+      "arm": "G0E1",
+      "guard_on": false,
+      "escape_on": true,
+      "episodes": 540,
+      "config": "inputs/G0E1.yaml",
+      "producer_path": "runs/g0e1__differential_drive/episodes.jsonl"
+    },
+    {
+      "arm": "G1E0",
+      "guard_on": true,
+      "escape_on": false,
+      "episodes": 540,
+      "config": "inputs/G1E0.yaml",
+      "producer_path": "runs/g1e0__differential_drive/episodes.jsonl"
+    },
+    {
+      "arm": "G1E1",
+      "guard_on": true,
+      "escape_on": true,
+      "episodes": 540,
+      "config": "inputs/G1E1.yaml",
+      "producer_path": "runs/g1e1__differential_drive/episodes.jsonl"
+    }
+  ]
+}

@@ -302,6 +302,10 @@ def test_collision_metric_gate_preserves_large_integer_count_arithmetic(
 
     typed = deepcopy(rows)
     typed[1]["event_ledger"] = {
+        "scenario_id": typed[1]["scenario_id"],
+        "seed": typed[1]["seed"],
+        "planner": typed[1]["algo"],
+        "software_commit": None,
         "schema_version": EPISODE_EVENT_LEDGER_SCHEMA_VERSION,
         "exact_events": {"collision": True, "invalid_run": False},
         "reconciliation": {
@@ -345,6 +349,10 @@ def test_collision_metric_gate_reconciles_typed_ledger_without_counting_events(
 
     row = _row("typed-ledger", 111, "goal", steps=100, collision=True, timeout=False)
     row["event_ledger"] = {
+        "scenario_id": row["scenario_id"],
+        "seed": row["seed"],
+        "planner": row["algo"],
+        "software_commit": None,
         "schema_version": EPISODE_EVENT_LEDGER_SCHEMA_VERSION,
         "exact_events": {"collision": True, "invalid_run": False},
         "collision_events": [{"collision_partner_type": "pedestrian"}] * 2,

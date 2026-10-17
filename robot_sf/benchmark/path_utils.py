@@ -6,7 +6,7 @@ import heapq
 from functools import lru_cache
 from itertools import pairwise
 from math import dist
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import numpy as np
 from shapely import from_wkb
@@ -246,8 +246,10 @@ def compute_completion_reference_length(
     if robot_radius:
         # Circumscribed 32-edge circles keep chord approximation outside the disc.
         obstacles = obstacles.buffer((robot_radius + 1e-8) / np.cos(np.pi / 32), quad_segs=8)
-    xs = [x for line in map_def.bounds for x in line[:2]]
-    ys = [y for line in map_def.bounds for y in line[2:]]
+    # MapDefinition normalizes both accepted Line2D forms to flat bounds.
+    bounds = cast("list[tuple[float, float, float, float]]", map_def.bounds)
+    xs = [x for line in bounds for x in line[:2]]
+    ys = [y for line in bounds for y in line[2:]]
     return _zone_reference_cached(
         str(scenario_id),
         seed,

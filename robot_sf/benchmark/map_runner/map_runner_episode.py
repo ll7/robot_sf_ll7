@@ -3906,7 +3906,9 @@ def _setup_and_run_step_loop(args: _StepLoopSetupArgs) -> _EpisodeStepLoopResult
             hybrid_source_field=args.hybrid_source_field,
         )
         slc = _make_step_loop_config(
-            footprint_metrics=footprint_enabled((args.scenario or {}).get("metadata")),
+            footprint_metrics=footprint_enabled(
+                cast("dict[str, Any] | None", (args.scenario or {}).get("metadata"))
+            ),
             config=args.config,
             policy_fn=policy_fn,
             planner_runtime=args.planner_runtime,

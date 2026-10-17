@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 
@@ -259,7 +259,8 @@ def compute_footprint_metrics(
     )
     if data.robot_force_samples:
         paired = paired_force_data(data)
-        presence = paired.robot_force_presence
+        # paired_force_data always materializes the presence array.
+        presence = cast("np.ndarray", paired.robot_force_presence)
         magnitudes = np.linalg.norm(paired.ped_forces, axis=-1)
         exceeded = (magnitudes > COMFORT_FORCE_THRESHOLD) & presence
         result["force_pairing"] = "pre-integration-inputs.v1"

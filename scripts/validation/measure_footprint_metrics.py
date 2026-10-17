@@ -19,7 +19,10 @@ import numpy as np
 import yaml
 from loguru import logger
 
-from robot_sf.benchmark.camera_ready_campaign import load_campaign_config, run_campaign
+from robot_sf.benchmark.camera_ready._legacy_campaign_facade import (
+    load_campaign_config,
+    run_campaign,
+)
 from robot_sf.benchmark.footprint_metrics import FOOTPRINT_MARKER, FOOTPRINT_SCHEMA
 from robot_sf.training.scenario_loader import load_scenarios
 from scripts.validation.run_empty_world_sweep import (

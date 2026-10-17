@@ -680,6 +680,8 @@ _LEGACY_FAST_FILES = {
     # contracts; include them in fast shards for changed-line coverage.
     "test_release_row_bundle.py",
     "test_release_row_anomalies.py",
+    # Borrowed-ledger identity faults use compact rows, without simulator steps.
+    "test_release_row_ledger_binding.py",
     "test_grid_socnav_extractor.py",
     "map_test.py",
     "navigation_test.py",

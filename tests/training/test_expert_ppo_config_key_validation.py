@@ -294,7 +294,9 @@ def test_all_tracked_canonical_expert_configs_load() -> None:
     # by three.
     # PR #10263 adds the delta-recovery pilot leaf while making one
     # release-contract config a shared base, so the runnable inventory grows by one.
-    assert len(config_paths) == 147
+    # The development-only train010 restart adds two runnable leaves: the fixed
+    # arm (runnable on its own) and the safety overlay that inherits it.
+    assert len(config_paths) == 149
     release_robot_leaves = {
         "configs/training/ppo/ablations/expert_ppo_release_contract_a_seed1001.yaml",
         "configs/training/ppo/ablations/expert_ppo_release_contract_a_seed1002.yaml",

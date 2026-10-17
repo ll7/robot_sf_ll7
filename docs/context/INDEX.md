@@ -1,5 +1,24 @@
 # Context Retrieval Index
 
+Guard/escape factorial ablation: 2,160 paired development episodes, independently
+confirmed numerical results, portable compact inputs and SHA-256 custody:
+[guard_escape_ablation/README.md](guard_escape_ablation/README.md).
+
+Preregistered guard/escape replication: 2,160 fresh paired development episodes,
+registered rule outcome, original comparison, secondary 60-seed pooling and
+checksum-verified W&B custody:
+[guard_escape_replication/README.md](guard_escape_replication/README.md).
+
+Issue #10211 cross-CPU reconstruction: 12,000 native development episodes on EPYC
+9354P and dual Xeon Silver 4310, default/kernel-pinned/float64 comparisons, and
+checksum-verified external evidence:
+[cross_cpu_20261013/REPORT.md](cross_cpu_20261013/REPORT.md).
+
+Examiner radius/preferred-speed and command-cap sensitivity study: thirty development
+seeds, ten Figure 7.3 representative cells, five sweep planners, fourteen cap arms,
+release-kernel crowd sanity, and checksum-covered diagnostic records:
+[robsweep/README.md](robsweep/README.md).
+
 Issue #9668/#9952 explicit scenario budgets: 0.0.7 all-outcome budget exposure,
 real 0.0.8 template limits, explicit fixed/scheduled modes, and missing trajectory evidence:
 [issue_9668_campaign_horizon_authority.md](issue_9668_campaign_horizon_authority.md).
@@ -878,3 +897,6 @@ it as a repeatable workflow.
   `output/` artifacts, not source-of-truth documentation.
 
 The checkpoint-bound PPO velocity-delta adapter and shared release plant limitation are documented in [ppo_checkpoint_action_semantics.md](ppo_checkpoint_action_semantics.md).
+
+- [Released PPO wall probe, five dev seeds](evidence/ppo_wall_probe_dev_20261012/README.md):
+  corrected absolute-target signature holds on 5/5 dev seeds (all 20 sampled targets at 2 m/s); diagnostic only.

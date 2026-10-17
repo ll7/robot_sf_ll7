@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 
@@ -217,6 +217,78 @@ def _original_shoulder_case(row):
     )
 
 
+def _finite_nonnegative(value):
+    """Check a recorded nonnegative numeric measurement.
+
+    Returns:
+        Whether the value is finite, numeric and nonnegative.
+    """
+    return (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and np.isfinite(value)
+        and value >= 0
+    )
+
+
+def _valid_counter(value):
+    """Validate nonnegative integral counters.
+
+    Returns:
+        Whether the counter is finite and has a numeric integer value.
+    """
+    return _finite_nonnegative(value) and value == int(value)
+
+
+def _recorded_physics(row: dict[str, Any]):
+    """Read independent physical failures and malformed runtime receipts.
+
+    Returns:
+        Invalid receipt, physical violation and solver fallback flags.
+    """
+    invalid = False
+    violated = False
+    fallback = False
+    records: list[dict[str, Any]] = [row, row.get("pair_overlap", {}).get("all", {})]
+    runtime = row.get("step_runtime", [])
+    if not isinstance(runtime, list) or any(not isinstance(r, dict) for r in runtime):
+        return True, False, False
+    records.extend(cast("list[dict[str, Any]]", runtime))
+    for record in records:
+        for key in (
+            "unresolved_count",
+            "over_cap_samples",
+            "wall_penetration_ped_steps",
+            "below_2r_count",
+            "initial_overlapping_pairs",
+            "fallback_count",
+            "steps",
+            "maximum_projection_passes",
+        ):
+            if key not in record:
+                continue
+            value = record[key]
+            if not _valid_counter(value):
+                invalid = True
+            elif key == "fallback_count":
+                fallback |= value > 0
+            elif key not in {"steps", "maximum_projection_passes"}:
+                violated |= value > 0
+    invalid |= any(
+        not _finite_nonnegative(record[key])
+        for record in runtime
+        for key in ("step_time_s", "maximum_speed_m_s")
+        if key in record
+    )
+    if "wall_penetration_m" in row:
+        value = row["wall_penetration_m"]
+        if not _finite_nonnegative(value):
+            invalid = True
+        else:
+            violated |= value > 0
+    return invalid, violated, fallback
+
+
 def engineering_gate(rows, config=None, *, require_complete=False) -> dict[str, Any]:
     """Evaluate population means, preserving every physical/censoring failure.
 
@@ -236,15 +308,19 @@ def engineering_gate(rows, config=None, *, require_complete=False) -> dict[str, 
         for r in active
         if any(r.get(key) is None or not np.isfinite(r[key]) for key in required.get(r["case"], ()))
     ]
-    physical = [
-        f"{r['case']}/{r['variant']}/{r['seed']}"
-        for r in active
-        if (
-            r.get("wall_penetration_m", 0.0) > 0.0
-            or r["pair_overlap"]["all"]["below_2r_count"] > 0
-            or r["pair_overlap"]["all"].get("initial_overlapping_pairs", 0) > 0
-        )
-    ]
+    physical = []
+    fallbacks = []
+    for row in active:
+        identity = f"{row['case']}/{row['variant']}/{row['seed']}"
+        invalid, violated, fallback = _recorded_physics(row)
+        if invalid and identity not in missing:
+            missing.append(identity)
+        if violated:
+            physical.append(identity)
+        if fallback:
+            fallbacks.append(identity)
+            if identity not in physical:
+                physical.append(identity)
     checks = []
     for case, variant in sorted(
         {(r["case"], r["variant"]) for r in active if r["case"] in required}
@@ -289,6 +365,8 @@ def engineering_gate(rows, config=None, *, require_complete=False) -> dict[str, 
         "scope": "complete dev suite" if require_complete else "observed cases",
         "measurement_missing": missing,
         "physical_violations": physical,
+        "solver_fallbacks": fallbacks,
+        "fallback_disposition": "diagnostic; qualification requires explicit disposition",
         "numeric_failures": numerical,
         "unspecified_tolerances": unspecified,
         "checks": checks,

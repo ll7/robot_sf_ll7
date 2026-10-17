@@ -26,7 +26,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
 from math import atan2, cos, isfinite, pi, sin
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 from loguru import logger
@@ -560,6 +560,23 @@ def _build_pysf_simulation(  # noqa: PLR0913
     pysf_config.social_force_config.kernel_version = getattr(
         config, "social_force_kernel_version", None
     )
+    if config.pedestrian_physics is not None:
+        if config.pedestrian_model in {
+            HSFM_TOTAL_FORCE_V1,
+            HSFM_TTC_PREDICTIVE_V1,
+            HSFM_ZANLUNGO_COLLISION_PREDICTION_V1,
+            HSFM_ANISOTROPIC_FOV_V1,
+            HSFM_ALIGNMENT_TORQUE_V1,
+        }:
+            raise ValueError("contact projection does not support HSFM integrators")
+        # Contact geometry uses physical bodies; retain the historical force radius
+        # when no shared radius is selected. The optional native selector never
+        # enters the contact-off dataclass payload.
+        cast("Any", pysf_config).pedestrian_contact_radius_m = config.ped_radius
+        # Native optional selectors deliberately do not enter default dataclass hashes.
+        experimental = cast("Any", pysf_config)
+        experimental.pedestrian_contact_rule = config.pedestrian_physics["contact_rule"]
+        experimental.pedestrian_contact_passes = config.pedestrian_physics["passes"]
     _apply_ped_desired_speed_config(pysf_config, config)
     spawn_config = PedSpawnConfig(
         config.peds_per_area_m2,
@@ -1263,7 +1280,7 @@ class Simulator:
         )
         return force_components, speed_cap, dynamics
 
-    def _record_oracle_transition(  # noqa: C901
+    def _record_oracle_transition(  # noqa: C901, PLR0912
         self, post_behavior_state: np.ndarray
     ) -> None:
         """Finalize one opt-in canonical oracle trace after pedestrian integration."""
@@ -1321,6 +1338,15 @@ class Simulator:
                 reasons.add(ExactInverseReason.SPEED_CAP_UNKNOWN)
             elif bool(diagnostics.cap_active[row]):
                 reasons.add(ExactInverseReason.SPEED_CAP_ACTIVE)
+            if diagnostics is not None and getattr(self.pysf_sim.peds, "velocity_projector", None):
+                proposal = self.pysf_sim.peds.capped_velocity(
+                    diagnostics.uncapped_velocity[row : row + 1],
+                    diagnostics.max_speed_mps[row : row + 1],
+                )[0]
+                if not np.array_equal(proposal, diagnostics.applied_velocity[row]):
+                    # The trace contains the executed motion but no contact impulse
+                    # in its force sum, so exact inversion must fail closed.
+                    reasons.add(ExactInverseReason.FORCE_STAGE_UNINSTRUMENTED)
             if diagnostics is not None and (
                 np.linalg.norm(diagnostics.previous_velocity[row]) <= 1e-12
                 and np.linalg.norm(diagnostics.uncapped_velocity[row]) <= 1e-12

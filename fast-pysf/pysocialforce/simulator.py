@@ -18,6 +18,7 @@ from pysocialforce.config import (
     SimulatorConfig,
     obstacle_force_law_metadata,
 )
+from pysocialforce.contact import install_projection
 from pysocialforce.force_trace import ForceComputationResult, compute_force_components
 from pysocialforce.map_config import MapDefinition
 from pysocialforce.ped_behavior import PedestrianBehavior
@@ -164,6 +165,7 @@ class Simulator_v2:
             self.states.raw_states, self.groupings.groups_as_lists, self.config.scene_config
         )
         self.forces = make_forces(self, self.config)
+        install_projection(self)
         self.t = 0
 
     @property
@@ -303,6 +305,7 @@ class Simulator:
         self.env = EnvState(obstacles or [], resolution)
         self.peds: PedState = PedState(state, groups or [], self.config.scene_config)
         self.forces = make_forces(self, self.config)
+        install_projection(self)
         self.t = 0
 
     def compute_forces(self):

@@ -142,6 +142,24 @@ def _normalize_shared_pedestrian_radius(value: Any) -> float | None:
     return float(value)
 
 
+def _normalize_pedestrian_physics(value: Any) -> dict[str, Any] | None:
+    """Validate the explicitly versioned opt-in physics settings.
+
+    Returns:
+        A copied rule mapping, or None for the untouched legacy path.
+    """
+    if value is None:
+        return None
+    if not isinstance(value, dict) or set(value) - {"contact_rule", "passes"}:
+        raise ValueError("pedestrian_physics requires contact_rule and optional passes")
+    if value.get("contact_rule") != "projection_v2":
+        raise ValueError("pedestrian_physics contact_rule must be projection_v2")
+    passes = value.get("passes", 3)
+    if type(passes) is not int or not 3 <= passes <= 10:
+        raise ValueError("contact passes must be an integer in 3..10")
+    return {"contact_rule": "projection_v2", "passes": passes}
+
+
 def _pedestrian_model_ttc_config(
     pedestrian_model: str,
     ttc_config: TtcPredictiveForceConfig,
@@ -484,6 +502,9 @@ class SimulationSettings:
     Explicit selection overrides ``ped_radius`` at every physical consumer.
     """
 
+    pedestrian_physics: InitVar[dict[str, Any] | None] = None
+    """Opt-in versioned contact settings; missing preserves legacy serialization."""
+
     episode_step_limit: InitVar[int | None] = field(default=None, kw_only=True)
     """Explicit whole-step episode budget; None retains duration-based ceiling semantics.
 
@@ -496,6 +517,9 @@ class SimulationSettings:
 
     def __setattr__(self, name: str, value: Any) -> None:
         """Resolve law assignments immediately and retain selector provenance."""
+        if name == "pedestrian_physics":
+            object.__setattr__(self, "_pedestrian_physics", _normalize_pedestrian_physics(value))
+            return
         if name == "pedestrian_radius_m":
             object.__setattr__(
                 self, "_pedestrian_radius_m", _normalize_shared_pedestrian_radius(value)
@@ -534,6 +558,8 @@ class SimulationSettings:
         Returns:
             The resolved selector for ``social_force_kernel_version`` or the requested attribute.
         """
+        if name == "pedestrian_physics":
+            return self._physics_value()
         if name in {"ped_radius", "pedestrian_radius_m"}:
             return self._shared_radius_value(name)
         if name == "obstacle_force_profile":
@@ -552,11 +578,17 @@ class SimulationSettings:
             except AttributeError:
                 return "legacy"
         if name == "episode_step_limit":
-            try:
-                return object.__getattribute__(self, "_episode_step_limit")
-            except AttributeError:
-                return None
+            return object.__getattribute__(self, "__dict__").get("_episode_step_limit")
         return object.__getattribute__(self, name)
+
+    def _physics_value(self) -> dict[str, Any] | None:
+        """Return a copy so mutation cannot bypass selector validation.
+
+        Returns:
+            Explicit physics options, or None for the legacy path.
+        """
+        value = object.__getattribute__(self, "__dict__").get("_pedestrian_physics")
+        return value.copy() if value is not None else None
 
     def _shared_radius_value(self, name: str) -> float | None:
         """Resolve shared radius while preserving the legacy physical field.
@@ -576,6 +608,8 @@ class SimulationSettings:
             Explicit runtime overrides, or an empty mapping for legacy defaults.
         """
         overrides: dict[str, Any] = {}
+        if self.pedestrian_physics is not None:
+            overrides["pedestrian_physics"] = self.pedestrian_physics
         if self.pedestrian_radius_m is not None:
             overrides["pedestrian_radius_m"] = self.pedestrian_radius_m
         if self.social_force_kernel_resolution_mode != "defaulted_missing":
@@ -694,10 +728,11 @@ class SimulationSettings:
             self.social_force_kernel_version = init_vars[0]
         self.obstacle_force_profile = init_vars[1] if len(init_vars) > 1 else None
         self.pedestrian_radius_m = init_vars[2] if len(init_vars) > 2 else None
-        if len(init_vars) > 3:
-            self.episode_step_limit = init_vars[3]
+        self.pedestrian_physics = init_vars[3] if len(init_vars) > 3 else None
         if len(init_vars) > 4:
-            self.group_allocation_mode = init_vars[4]
+            self.episode_step_limit = init_vars[4]
+        if len(init_vars) > 5:
+            self.group_allocation_mode = init_vars[5]
         # Check that the simulation time is positive
         if self.sim_time_in_secs <= 0:
             raise ValueError("Simulation length for episodes mustn't be negative or zero!")

@@ -691,16 +691,15 @@ def test_every_tracked_non_frozen_campaign_config_passes_horizon_preflight(tmp_p
         and r.get("unverified_reason") != "unfrozen_placeholder"
         and r["status"] != "compatible"
         and not (
-            r["status"] == "incompatible"
-            and Path(r["algo_config_path"]).name == known_historical
+            r["status"] == "incompatible" and Path(r["algo_config_path"]).name == known_historical
         )
     ]
     assert not bad
     assert scan["compatible"] > 0
-    # The behaviour-gate sweeps derive their campaigns from these two templates.
+    # The main sweep is compatible. The historical width matrix stays byte-identical to its
+    # released digest; its incompatible binding needs the separately reviewed successor.
     sweep_templates = {
         "paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml",
-        "paper_experiment_matrix_v2_h600_s30_three_width_doorway_v1.yaml",
     }
     sweep_bad = [
         (Path(r["matrix"]).name, r["planner_key"], r["status"])
@@ -708,3 +707,14 @@ def test_every_tracked_non_frozen_campaign_config_passes_horizon_preflight(tmp_p
         if Path(r["matrix"]).name in sweep_templates and r["status"] != "compatible"
     ]
     assert not sweep_bad
+    historical_width = [
+        r
+        for r in scan["bindings"]
+        if Path(r["matrix"]).name
+        == "paper_experiment_matrix_v2_h600_s30_three_width_doorway_v1.yaml"
+        and r["planner_key"] == "predictive_mppi"
+    ]
+    assert len(historical_width) == 1
+    assert historical_width[0]["status"] == "incompatible"
+    assert historical_width[0]["required_horizon_steps"] == 12
+    assert historical_width[0]["forecast_steps"] == 8

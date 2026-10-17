@@ -661,7 +661,7 @@ def stage_campaign_checkpoints(
     The campaign preflight is network-free and refuses an unstaged predictive checkpoint, so a
     fresh checkout must stage its registry artifacts first. Missing artifacts raise.
     """
-    from robot_sf.benchmark.campaign.campaign_checkpoint_preflight import (  # noqa: PLC0415
+    from robot_sf.benchmark.campaign.campaign_checkpoint_preflight import (
         check_campaign_arm_checkpoints_preflight,
     )
 

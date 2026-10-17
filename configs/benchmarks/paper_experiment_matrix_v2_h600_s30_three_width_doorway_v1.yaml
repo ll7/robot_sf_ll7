@@ -126,7 +126,7 @@ planners:
 - key: predictive_mppi
   algo: predictive_mppi
   planner_group: experimental
-  algo_config: configs/algos/predictive_mppi_release_v0_0_8.yaml
+  algo_config: configs/algos/predictive_mppi_camera_ready.yaml
   benchmark_profile: experimental
 - key: risk_dwa
   algo: risk_dwa

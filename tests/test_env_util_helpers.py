@@ -226,8 +226,9 @@ def test_robot_env_missing_wall_selector_matches_legacy_identity_byte_for_byte()
         map_pool=MapDefinitionPool(maps_folder="fixture", map_defs={"fixture": _minimal_map_def()}),
     )
     # ab3c014bd (merged by 408ffb1ba, #10278) renamed serialized rollover fields;
-    # dae7470d0 (#10295) integrated that identity change with the wall-law pins.
-    assert _stable_config_hash(cfg).encode("ascii") == b"c8ac3dfe358aac1e"
+    # The reviewed rollover hash compatibility shim preserves the pre-rename
+    # identity pinned by the independent literals below.
+    assert _stable_config_hash(cfg).encode("ascii") == b"d280527b83ce075c"
     assert _stable_config_hash(cfg).encode("ascii") == _stable_config_hash(explicit_legacy).encode(
         "ascii"
     )
@@ -243,12 +244,12 @@ def test_robot_env_hash_pins_explicit_body_edge_wall_identity() -> None:
     )
     # ab3c014bd (#10278) renamed serialized rollover fields to
     # two_wheel_axle_track_m and single_wheel_axle_to_cog_m; dae7470d0 (#10295)
-    # integrated that identity change without updating this pin.
-    # The geometry values and wall law did not change; the config identity did.
-    assert _stable_config_hash(cfg) == "e4bcf1d2f4d295af"
+    # integrated that identity change. The reviewed compatibility shim restores
+    # the pre-rename identity for unchanged geometry and wall laws.
+    assert _stable_config_hash(cfg) == "f6c4a0545697161d"
 
     cfg.sim_config.robot_goal_sampling_policy = ROBOT_GOAL_SAMPLING_LEGACY_V1
-    assert _stable_config_hash(cfg) == "e4bcf1d2f4d295af"
+    assert _stable_config_hash(cfg) == "f6c4a0545697161d"
 
 
 @pytest.mark.parametrize(

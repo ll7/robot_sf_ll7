@@ -574,6 +574,11 @@ def _assert_token_references(workflow: dict[str, Any]) -> None:
         ("jobs", "runner-availability", "steps", 2, "if"),
         ("jobs", "runner-availability", "steps", 2, "with", "github-token"),
     }
+    broad_serialization = (
+        re.compile(r"to\s*json\s*\(\s*steps\b", re.IGNORECASE),
+        re.compile(r"steps\s*(?:\.\s*\*|\[\s*['\"]\s*\*\s*['\"]\s*\])"),
+        re.compile(r"steps\s*\.\s*[\w\-]+\s*\.\s*outputs(?!\s*\.\s*[\w\-\*]+)"),
+    )
 
     def inspect(value: Any, path: tuple[Any, ...] = ()) -> None:
         if isinstance(value, dict):
@@ -582,12 +587,15 @@ def _assert_token_references(workflow: dict[str, Any]) -> None:
         elif isinstance(value, list):
             for index, child in enumerate(value):
                 inspect(child, (*path, index))
-        elif isinstance(value, str) and (
-            "ROBOT_SF_ROUTER_APP_" in value or "steps.router-token" in value
-        ):
-            assert path in allowed, (
-                "App credential must not escape mint inputs and probe input/guard"
-            )
+        elif isinstance(value, str):
+            if path[:2] == ("jobs", "runner-availability") and any(
+                pattern.search(value) for pattern in broad_serialization
+            ):
+                raise AssertionError("App credential must not escape via broad step serialization")
+            if "ROBOT_SF_ROUTER_APP_" in value or "steps.router-token" in value:
+                assert path in allowed, (
+                    "App credential must not escape mint inputs and probe input/guard"
+                )
 
     inspect(workflow)
 
@@ -690,3 +698,75 @@ def test_app_token_check_rejects_unsafe_workflow_mutations(mutation: str, reason
         mint["if"] = mint["if"].replace(guard, "")
     with pytest.raises(AssertionError, match=re.escape(reason)):
         _assert_router_app_token_boundary(workflow)
+
+
+@pytest.mark.parametrize(
+    "expression",
+    [
+        "${{ toJSON(steps) }}",
+        "${{ steps.*.outputs.token }}",
+        "${{ toJSON(steps.*.outputs) }}",
+        "${{ TOJSON( steps ) }}",
+        "${{ toJSON(steps.router-token.outputs) }}",
+    ],
+)
+def test_token_reference_check_rejects_indirect_step_serialization(
+    expression: str,
+) -> None:
+    """Broad step serialization in the credential job must fail the boundary check."""
+    workflow = copy.deepcopy(yaml.safe_load(CI_WORKFLOW.read_text(encoding="utf-8")))
+    probe = next(
+        step
+        for step in workflow["jobs"]["runner-availability"]["steps"]
+        if step.get("id") == "route"
+    )
+    probe.setdefault("env", {})["ROUTER_DEBUG_SNAPSHOT"] = expression
+    with pytest.raises(AssertionError, match="must not escape"):
+        _assert_token_references(workflow)
+
+
+def test_token_reference_check_accepts_checked_in_workflow() -> None:
+    """The checked-in workflow must pass the credential boundary check."""
+    _assert_token_references(yaml.safe_load(CI_WORKFLOW.read_text(encoding="utf-8")))
+
+
+@pytest.mark.parametrize(
+    "expression",
+    [
+        "${{ steps.route.outputs.fast_feedback }}",
+        "${{ needs.self-hosted-admission.outputs.self_hosted }}",
+    ],
+)
+def test_token_reference_check_accepts_specific_noncredential_references(
+    expression: str,
+) -> None:
+    """Specific non-credential references at the same probe site must keep passing."""
+    workflow = copy.deepcopy(yaml.safe_load(CI_WORKFLOW.read_text(encoding="utf-8")))
+    probe = next(
+        step
+        for step in workflow["jobs"]["runner-availability"]["steps"]
+        if step.get("id") == "route"
+    )
+    probe.setdefault("env", {})["ROUTER_DEBUG_SNAPSHOT"] = expression
+    _assert_token_references(workflow)
+
+
+def test_token_reference_check_rejects_serialization_at_allowed_input() -> None:
+    """Broad serialization is never exempted by the direct-reference allowlist."""
+    workflow = copy.deepcopy(yaml.safe_load(CI_WORKFLOW.read_text(encoding="utf-8")))
+    probe = next(
+        step
+        for step in workflow["jobs"]["runner-availability"]["steps"]
+        if step.get("id") == "route"
+    )
+    probe["if"] = f"{probe['if']} && toJSON(steps) != ''"
+    with pytest.raises(AssertionError, match="must not escape"):
+        _assert_token_references(workflow)
+
+
+def test_token_reference_check_ignores_other_jobs_step_serialization() -> None:
+    """Benign steps references in other jobs are not rejected via the credential job."""
+    workflow = copy.deepcopy(yaml.safe_load(CI_WORKFLOW.read_text(encoding="utf-8")))
+    other = workflow["jobs"]["fast-feedback"]["steps"][0]
+    other.setdefault("env", {})["ROUTER_DEBUG_SNAPSHOT"] = "${{ toJSON(steps) }}"
+    _assert_token_references(workflow)

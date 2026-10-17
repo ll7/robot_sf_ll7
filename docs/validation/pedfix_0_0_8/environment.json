@@ -1,0 +1,26 @@
+{
+  "python": "3.13.14",
+  "platform": "Linux",
+  "packages": {
+    "numpy": "2.4.6",
+    "numba": "0.67.0",
+    "gymnasium": "1.1.1",
+    "torch": "2.13.0",
+    "stable-baselines3": "2.9.0",
+    "tensorflow": "2.21.0",
+    "shapely": "2.1.2",
+    "pytest": "9.1.1",
+    "ruff": "0.16.7"
+  },
+  "OMP_NUM_THREADS": "1",
+  "pytest_workers": 0,
+  "episode_seed_band": [
+    1001,
+    1030
+  ],
+  "heldout_band_untouched": [
+    111,
+    140
+  ],
+  "max_simulation_processes": 2
+}

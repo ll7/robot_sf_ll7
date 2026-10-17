@@ -41,6 +41,7 @@ from robot_sf.benchmark.interaction_exposure import (
     INTERACTION_EXPOSURE_SCHEMA_VERSION,
     is_not_derivable_status,
 )
+from robot_sf.benchmark.metric_definitions import metric_schema_version
 from robot_sf.errors import RobotSfError
 from robot_sf.evidence.writers import write_json, write_review_sidecar, write_text
 
@@ -376,6 +377,7 @@ def adapt_record_to_typed_ledger(
 
     ledger_row = {
         "schema_version": "EpisodeEventLedger.v2",
+        "metric_schema_version": metric_schema_version(record),
         "scenario_id": scenario_id,
         "seed": seed,
         "planner": planner_name,

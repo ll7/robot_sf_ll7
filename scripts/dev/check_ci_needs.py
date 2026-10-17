@@ -11,7 +11,9 @@ Event-specific rules preserved from the workflow:
 
 - ``coverage-gate`` is required only for non-pull_request events;
 - ``changed-coverage-gate`` is required only for pull_request / merge_group;
-- all other required jobs are always required.
+- three expensive PR jobs may be skipped only with a complete-file-list path
+  selection output explicitly marking each one irrelevant; every other job
+  remains required.
 """
 
 from __future__ import annotations
@@ -40,14 +42,20 @@ CHANGED_COVERAGE_EVENTS = ("pull_request", "merge_group")
 # ``ci`` job is the workflow's own enforcement point for ``REQUIRED_JOBS`` and the event-specific
 # coverage gates, so a green aggregate check proves every required need passed.
 AGGREGATE_JOB = "ci"
-# This is the checked-in projection of the top-level ``paths-ignore`` filters
-# in ``.github/workflows/ci.yml``.  Both the CI monitor and merge-queue gate use
-# this manifest so a skipped workflow has one auditable path contract.
-CI_PATHS_IGNORE_PATTERNS = ("**/*.md", "docs/**")
+# The workflow always reports a check. This manifest selects documentation-only
+# internal admission, where heavy jobs and changed coverage are unnecessary.
+# The workflow, CI monitor and merge-queue gate share the same path contract.
+CI_DOCS_ONLY_PATTERNS = ("**/*.md", "docs/**")
+# Compatibility alias for existing imports and persisted audit source identities;
+# these patterns no longer suppress workflow triggers.
+CI_PATHS_IGNORE_PATTERNS = CI_DOCS_ONLY_PATTERNS
 
 
 def is_ci_path_ignored(path: str) -> bool:
-    """Return whether *path* matches the checked-in CI ``paths-ignore`` contract.
+    """Return whether *path* qualifies for internal docs-only CI admission.
+
+    The legacy function name is retained for CI monitor and merge-gate callers;
+    no workflow trigger is ignored by this policy.
 
     GitHub's ``**/*.md`` filter includes root-level Markdown.  The small
     normalization layer below keeps that behavior explicit while rejecting
@@ -62,7 +70,7 @@ def is_ci_path_ignored(path: str) -> bool:
         or any(part in {"", ".", ".."} for part in normalized.split("/"))
     ):
         return False
-    for pattern in CI_PATHS_IGNORE_PATTERNS:
+    for pattern in CI_DOCS_ONLY_PATTERNS:
         if pattern == "**/*.md":
             if normalized.endswith(".md"):
                 return True
@@ -75,7 +83,7 @@ def is_ci_path_ignored(path: str) -> bool:
 
 
 def docs_only_changed_files(changed_files: Any, *, complete: bool) -> bool:
-    """Prove that a complete, non-empty changed-file set is CI-ignored."""
+    """Prove that a complete, non-empty changed-file set needs only docs CI."""
     if not complete or not isinstance(changed_files, list) or not changed_files:
         return False
     if any(not isinstance(path, str) or not path.strip() for path in changed_files):
@@ -108,7 +116,11 @@ def normalize_needs(raw_results: dict[str, Any]) -> dict[str, Any]:
 
 
 def evaluate_needs(
-    results: dict[str, Any], event_name: str, *, treat_cancelled_as_superseded: bool = False
+    results: dict[str, Any],
+    event_name: str,
+    *,
+    treat_cancelled_as_superseded: bool = False,
+    lane_outputs: dict[str, str] | None = None,
 ) -> list[str]:
     """Return the failing job names for *results* under *event_name*.
 
@@ -122,8 +134,21 @@ def evaluate_needs(
     superseded run red.
     """
     failures: list[str] = []
+    optional_pr_jobs = {
+        "examples-smoke": "examples_smoke",
+        "notebooks-smoke": "notebooks_smoke",
+        "xdist-scratch-isolation": "xdist_scratch_isolation",
+    }
     for job in REQUIRED_JOBS:
         result = results.get(job)
+        if (
+            event_name == "pull_request"
+            and result == "skipped"
+            and lane_outputs is not None
+            and job in optional_pr_jobs
+            and lane_outputs.get(optional_pr_jobs[job]) == "false"
+        ):
+            continue
         if result == "cancelled" and treat_cancelled_as_superseded:
             continue
         if result != "success":
@@ -157,6 +182,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--event-name", required=True, help="GitHub event name (e.g. pull_request)")
     parser.add_argument(
+        "--lane-outputs", default="{}", help="JSON outputs from heavy PR path selection"
+    )
+    parser.add_argument(
         "--treat-cancelled-as-superseded",
         action="store_true",
         help=(
@@ -168,16 +196,23 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         results = json.loads(args.results)
+        lane_outputs = json.loads(args.lane_outputs)
     except json.JSONDecodeError as exc:
         print(f"ERROR: --results is not valid JSON: {exc}", file=sys.stderr)
         return 2
     if not isinstance(results, dict):
         print("ERROR: --results must be a JSON object", file=sys.stderr)
         return 2
+    if not isinstance(lane_outputs, dict):
+        print("ERROR: --lane-outputs must be a JSON object", file=sys.stderr)
+        return 2
 
     results = normalize_needs(results)
     failures = evaluate_needs(
-        results, args.event_name, treat_cancelled_as_superseded=args.treat_cancelled_as_superseded
+        results,
+        args.event_name,
+        treat_cancelled_as_superseded=args.treat_cancelled_as_superseded,
+        lane_outputs=lane_outputs,
     )
     for job in failures:
         print(f"{job} finished with {results.get(job, 'missing')}", file=sys.stderr)

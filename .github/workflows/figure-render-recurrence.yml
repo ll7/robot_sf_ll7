@@ -15,6 +15,7 @@ name: Figure-render recurrence guard
 
 on:
   pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
     paths:
       - "docs/context/figure_render_registry.v1.yaml"
       - "scripts/dev/check_figure_render_recurrence.py"
@@ -46,6 +47,7 @@ concurrency:
 
 jobs:
   figure-render-recurrence:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -116,7 +118,7 @@ jobs:
 
       - name: Upload recurrence log
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: figure-render-recurrence-log
           path: output/figure_render_recurrence.log

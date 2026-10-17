@@ -1,0 +1,21 @@
+sample,episode_key,detector,before_flag,after_flag,row_supported_actionable_candidate,judgment
+1,goal::classic_bottleneck_high--113--784ab81f160d7e75,extreme_measurements,True,False,False,Positive 13.30 s TTC; the single wall collision is within the count bound. No TTC corruption.
+2,guarded_ppo::classic_bottleneck_high--111--9275bcb8de151c27,extreme_measurements,True,False,False,Successful completion with positive 1.89 s TTC. No TTC corruption.
+3,guarded_ppo::classic_bottleneck_high--112--27aa060a5de28e6d,extreme_measurements,True,False,False,Successful completion with positive 1.99 s TTC. No TTC corruption.
+4,guarded_ppo::classic_bottleneck_high--113--9f886a9b5dc3d614,extreme_measurements,True,False,False,Positive 6.72 s TTC and one wall contact. TTC is not a count.
+5,guarded_ppo::classic_bottleneck_high--114--c55e9ebfaabd6290,extreme_measurements,True,False,False,Successful completion with positive 1.65 s TTC. No TTC corruption.
+6,goal::classic_bottleneck_high--118--0681bbd94a96cc36,seed_outlier,True,False,False,Ordinary collision-cohort speed/path/near-miss counts; zero-MAD SNQI shortcut caused the flag.
+7,goal::classic_bottleneck_high--124--995865c4c75b07c3,seed_outlier,True,False,False,SNQI -0.270 vs collision-peer median -0.258; ordinary speed and path. Zero-MAD shortcut.
+8,goal::classic_bottleneck_high--126--e8c28b0ddd0ac228,seed_outlier,True,False,False,Path 16.07 m within peer range 1.48-16.29; near misses 4 equals peer median. Zero-MAD shortcut.
+9,goal::classic_bottleneck_high--130--0014d257f4360c32,seed_outlier,True,False,False,Near misses 3 vs peer median 4; this discrete difference is not maximally unusual.
+10,goal::classic_bottleneck_high--137--58b5122cb7815cc6,seed_outlier,True,False,False,Speed 0.954 vs peer median 0.967; near misses 4 equals median; ordinary matched-cohort row.
+11,prediction_planner::classic_bottleneck_high--113--b59791ad0c2af2f0,short_collision,True,True,True,Wall contact at step 16 after 1.275 m; worth opening the early-contact cell with peer controls.
+12,predictive_mppi::classic_bottleneck_high--113--6e4c6316a32390ff,short_collision,True,True,True,"Wall contact at step 16 after 1.270 m, matching another planner in the same cell."
+13,risk_dwa::classic_bottleneck_high--113--968f0ec48f0a2223,short_collision,True,True,True,Wall contact at step 19 after 1.555 m in the same early-contact cell.
+14,ppo::classic_group_crossing_high--111--61d5162d49d7f3b8,impossible_contact_speed,True,True,True,Contact-relative speed 110.70 m/s is implausible for this navigation scenario; trace investigation warranted.
+15,goal::classic_station_platform_medium--112--29748dc2d1f564c8,impossible_contact_speed,True,True,True,Contact-relative speed 730.33 m/s at step 16; strongly suggests respawn/discontinuity class.
+16,guarded_ppo::classic_station_platform_medium--112--186706afcd29feab,impossible_contact_speed,True,True,True,Contact-relative speed 730.42 m/s at step 16 in the same station-platform cell.
+17,orca::classic_bottleneck_high--111--1d172faf4b156484,orbit_zero_progress,True,True,True,Curvature 404.42 with 136-sample no-progress run and 6.1 s stalled time; worth trace inspection.
+18,ppo::classic_bottleneck_high--111--368bb6cb47f51d78,orbit_zero_progress,True,True,False,"Collision after 19.12 m, progress ratio 0.955 and only 0.2 s stationary time; weak whole-episode stall candidate. Marked false for actionable orbit/stall triage."
+19,goal::classic_cross_trap_high--111--28c7468c28ed5b76,same_step_all_planners,True,True,True,All 14 planners collide with pedestrians at step 1; plausible reset/config defect cell.
+20,goal::classic_cross_trap_high--112--da7a60d9f2be9163,same_step_all_planners,True,True,True,A second seed has all 14 planners collide at step 1; repeatable reset/config candidate.

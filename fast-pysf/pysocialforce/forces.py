@@ -23,8 +23,15 @@ import numpy as np
 from numba import njit
 
 from pysocialforce.config import (
+    BODY_EDGE_EXPONENTIAL_LAW_VERSIONS,
+    BODY_EDGE_EXPONENTIAL_V3,
+    BODY_EDGE_EXPONENTIAL_V3_CONTACT_STIFF,
+    BODY_EDGE_EXPONENTIAL_V3_MULTI_SEGMENT,
+    BODY_EDGE_EXPONENTIAL_V3_PHYSICAL_MARGIN,
+    BODY_EDGE_EXPONENTIAL_V3_RANGE_ONLY,
     LEGACY_SHIFTED_GRADIENT_V1,
     OBSTACLE_FORCE_DISTANCE_FLOOR,
+    SOCIAL_FORCE_KERNEL_WRAPPED_V2,
     DesiredForceConfig,
     GroupCoherenceForceConfig,
     GroupGazeForceConfig,
@@ -33,6 +40,7 @@ from pysocialforce.config import (
     SocialForceConfig,
     obstacle_force_law_metadata,
     resolve_obstacle_force_law,
+    resolve_social_force_kernel_version,
 )
 from pysocialforce.logging import logger
 from pysocialforce.scene import Line2D, PedState, Point2D
@@ -40,6 +48,12 @@ from pysocialforce.scene import Line2D, PedState, Point2D
 logging.getLogger("numba").setLevel(logging.WARNING)
 
 Force = Callable[[], np.ndarray]
+BODY_EDGE_EXPONENTIAL_AMPLITUDE_UNSCALED = 0.3
+BODY_EDGE_EXPONENTIAL_DECAY_M = 0.04
+BODY_EDGE_EXPONENTIAL_RANGE_M = 0.2
+BODY_EDGE_EXPONENTIAL_PHYSICAL_MARGIN_M = 0.05
+BODY_EDGE_EXPONENTIAL_CONTACT_BIAS_UNSCALED = 0.6
+BODY_EDGE_EXPONENTIAL_CONTACT_STIFFNESS_UNSCALED_PER_M = 4.0
 
 _release_gil_for_social_force: ContextVar[bool] = ContextVar(
     "release_gil_for_social_force",
@@ -213,6 +227,9 @@ class SocialForce:
         kernel = (
             _social_force_gil_releasing if _release_gil_for_social_force.get() else social_force
         )
+        kernel_version = resolve_social_force_kernel_version(
+            getattr(self.config, "kernel_version", None)
+        )
         forces = kernel(
             ped_positions,
             ped_velocities,
@@ -221,6 +238,7 @@ class SocialForce:
             self.config.n_prime,
             self.config.lambda_importance,
             self.config.gamma,
+            kernel_version == SOCIAL_FORCE_KERNEL_WRAPPED_V2,
         )
         return forces * self.config.factor
 
@@ -234,6 +252,7 @@ def social_force(
     n_prime: int,
     lambda_importance: float,
     gamma: float,
+    wrap_theta: bool = False,
 ) -> np.ndarray:
     """
     Calculates the social force acting on each pedestrian.
@@ -246,6 +265,8 @@ def social_force(
         n_prime (int): Angular decay-shape parameter for the velocity-aligned interaction component.
         lambda_importance (float): Weight of relative velocity in the interaction direction.
         gamma (float): Scale factor for the interaction range parameter B.
+        wrap_theta (bool): Select the corrected shortest-angle calculation. The
+            default preserves the historical unwrapped kernel exactly.
 
     Returns:
         np.ndarray: Array of shape (num_peds, 2) representing the social forces acting on each pedestrian.
@@ -275,7 +296,7 @@ def social_force(
         vel_diffs = ped_velocities[other_ped_ids] - ped_velocities[ped_i]
         # Calculate the social force components for the current pedestrian
         force_x, force_y = social_force_single_ped(
-            pos_diffs, vel_diffs, n, n_prime, lambda_importance, gamma
+            pos_diffs, vel_diffs, n, n_prime, lambda_importance, gamma, wrap_theta
         )
         # Assign calculated force components to the forces array
         forces[ped_i, 0] = force_x
@@ -296,6 +317,7 @@ def social_force_single_ped(
     n_prime: int,
     lambda_importance: float,
     gamma: float,
+    wrap_theta: bool = False,
 ) -> Point2D:
     """
     Calculates the social force exerted on a single pedestrian.
@@ -307,6 +329,7 @@ def social_force_single_ped(
         n_prime (int): Angular decay-shape parameter for the velocity-aligned interaction component.
         lambda_importance (float): Importance factor for the social force.
         gamma (float): Scaling factor for the social force.
+        wrap_theta (bool): Whether to use the versioned shortest-angle correction.
 
     Returns:
         Point2D: The total social force exerted on the pedestrian in the x and y directions.
@@ -314,7 +337,7 @@ def social_force_single_ped(
     force_sum_x, force_sum_y = 0.0, 0.0
     for i in range(pos_diffs.shape[0]):
         force_x, force_y = social_force_ped_ped(
-            pos_diffs[i], vel_diffs[i], n, n_prime, lambda_importance, gamma
+            pos_diffs[i], vel_diffs[i], n, n_prime, lambda_importance, gamma, wrap_theta
         )
         force_sum_x += force_x
         force_sum_y += force_y
@@ -329,6 +352,7 @@ def social_force_ped_ped(
     n_prime: int,
     lambda_importance: float,
     gamma: float,
+    wrap_theta: bool = False,
 ) -> Point2D:
     """
     Calculates the social force between two pedestrians.
@@ -340,6 +364,7 @@ def social_force_ped_ped(
         n_prime (int): Angular decay-shape parameter for the velocity-aligned interaction component.
         lambda_importance (float): The importance of the velocity difference.
         gamma (float): The gamma value.
+        wrap_theta (bool): Whether to use the versioned shortest-angle correction.
 
     Returns:
         Point2D: The social force vector between the two pedestrians.
@@ -361,6 +386,8 @@ def social_force_ped_ped(
 
     # Calculate angle between interaction direction and difference direction
     theta = atan2(interaction_dir[1], interaction_dir[0]) - atan2(diff_dir_y, diff_dir_x)
+    if wrap_theta:
+        theta = (theta + np.pi) % (2.0 * np.pi) - np.pi
     # Determine the sign of theta for force calculation
     theta_sign = 1 if theta >= 0 else -1
     # Calculate B parameter with a small constant to avoid division by zero
@@ -432,11 +459,17 @@ class ObstacleForce:
         factor = float(self.config.factor)
         sigma = self.config.sigma
         threshold = self.config.threshold
+        agent_radius = self.get_agent_radius()
 
-        threshold = threshold + self.get_agent_radius() * sigma
         if law_version == LEGACY_SHIFTED_GRADIENT_V1:
+            threshold = threshold + agent_radius * sigma
             all_obstacle_forces(forces, ped_positions, obstacles, threshold)
+        elif law_version in BODY_EDGE_EXPONENTIAL_LAW_VERSIONS:
+            all_obstacle_forces_body_edge_exponential(
+                forces, ped_positions, obstacles, agent_radius, law_version
+            )
         else:
+            threshold = threshold + agent_radius * sigma
             all_obstacle_forces_surface_distance_unit_normal(
                 forces, ped_positions, obstacles, threshold
             )
@@ -451,22 +484,61 @@ class ObstacleForce:
         threshold = float(getattr(self.config, "threshold", 0.0))
         agent_radius = float(self.get_agent_radius())
         enabled = factor != 0.0
-        return obstacle_force_law_metadata(
-            getattr(self.config, "law_version", None),
-            site="fast_pysf",
-            geometry_convention="map_line_endpoints_orthogonal_vector",
-            radius_convention="threshold_plus_agent_radius_sigma",
-            enabled=enabled,
-            applied=bool(getattr(self, "_obstacle_force_applied", False)),
-            resolution_mode=getattr(self.config, "obstacle_force_law_resolution_mode", None),
-            parameters={
+        law_version = resolve_obstacle_force_law(getattr(self.config, "law_version", None))
+        if law_version in BODY_EDGE_EXPONENTIAL_LAW_VERSIONS:
+            geometry_convention = (
+                "all_nearby_distinct_surface_points"
+                if law_version == BODY_EDGE_EXPONENTIAL_V3_MULTI_SEGMENT
+                else "nearest_finite_segment_surface"
+            )
+            radius_convention = "physical_body_edge_clearance"
+            parameters = {
+                "factor": factor,
+                "agent_radius": agent_radius,
+                "amplitude_unscaled": BODY_EDGE_EXPONENTIAL_AMPLITUDE_UNSCALED,
+                "amplitude_m_s2": factor * BODY_EDGE_EXPONENTIAL_AMPLITUDE_UNSCALED,
+                "decay_m": BODY_EDGE_EXPONENTIAL_DECAY_M,
+                "range_m": BODY_EDGE_EXPONENTIAL_RANGE_M,
+                "distance_floor": OBSTACLE_FORCE_DISTANCE_FLOOR,
+            }
+            if law_version in (
+                BODY_EDGE_EXPONENTIAL_V3_PHYSICAL_MARGIN,
+                BODY_EDGE_EXPONENTIAL_V3_CONTACT_STIFF,
+            ):
+                parameters["contact_radius_margin_m"] = BODY_EDGE_EXPONENTIAL_PHYSICAL_MARGIN_M
+            if law_version == BODY_EDGE_EXPONENTIAL_V3_CONTACT_STIFF:
+                parameters.update(
+                    {
+                        "contact_bias_unscaled": BODY_EDGE_EXPONENTIAL_CONTACT_BIAS_UNSCALED,
+                        "contact_bias_m_s2": factor * BODY_EDGE_EXPONENTIAL_CONTACT_BIAS_UNSCALED,
+                        "contact_stiffness_unscaled_per_m": (
+                            BODY_EDGE_EXPONENTIAL_CONTACT_STIFFNESS_UNSCALED_PER_M
+                        ),
+                        "contact_stiffness_m_s2_per_m": (
+                            factor * BODY_EDGE_EXPONENTIAL_CONTACT_STIFFNESS_UNSCALED_PER_M
+                        ),
+                    }
+                )
+        else:
+            geometry_convention = "map_line_endpoints_orthogonal_vector"
+            radius_convention = "threshold_plus_agent_radius_sigma"
+            parameters = {
                 "factor": factor,
                 "sigma": sigma,
                 "threshold": threshold,
                 "agent_radius": agent_radius,
                 "effective_offset": threshold + agent_radius * sigma,
                 "distance_floor": OBSTACLE_FORCE_DISTANCE_FLOOR,
-            },
+            }
+        return obstacle_force_law_metadata(
+            getattr(self.config, "law_version", None),
+            site="fast_pysf",
+            geometry_convention=geometry_convention,
+            radius_convention=radius_convention,
+            enabled=enabled,
+            applied=bool(getattr(self, "_obstacle_force_applied", False)),
+            resolution_mode=getattr(self.config, "obstacle_force_law_resolution_mode", None),
+            parameters=parameters,
         )
 
 
@@ -522,6 +594,220 @@ def all_obstacle_forces_surface_distance_unit_normal(
             )
             out_forces[i, 0] += force_x
             out_forces[i, 1] += force_y
+
+
+@njit(nogil=True)
+def closest_point_on_segment(obstacle: Line2D, ped_pos: Point2D) -> tuple[float, float]:
+    """Return the closest finite-segment surface point to ``ped_pos``."""
+    x1, y1, x2, y2 = obstacle
+    dx = x2 - x1
+    dy = y2 - y1
+    denom = dx * dx + dy * dy
+    if denom == 0.0:
+        return x1, y1
+    t = ((ped_pos[0] - x1) * dx + (ped_pos[1] - y1) * dy) / denom
+    if t < 0.0:
+        t = 0.0
+    elif t > 1.0:
+        t = 1.0
+    return x1 + t * dx, y1 + t * dy
+
+
+@njit(nogil=True)
+def body_edge_exponential_force(
+    raw_distance: float,
+    dx_to_surface: float,
+    dy_to_surface: float,
+    ped_radius: float,
+    ortho_x: float = 0.0,
+    ortho_y: float = 0.0,
+    law_version: Any = BODY_EDGE_EXPONENTIAL_V3,
+) -> tuple[float, float]:
+    """Return the finite-range body-edge wall force before the config factor is applied."""
+    if (
+        not np.isfinite(raw_distance)
+        or not np.isfinite(dx_to_surface)
+        or not np.isfinite(dy_to_surface)
+        or not np.isfinite(ped_radius)
+    ):
+        return 0.0, 0.0
+    if (
+        raw_distance <= OBSTACLE_FORCE_DISTANCE_FLOOR
+        and law_version == BODY_EDGE_EXPONENTIAL_V3_RANGE_ONLY
+    ):
+        return 0.0, 0.0
+    radius_margin = 0.0
+    if law_version == BODY_EDGE_EXPONENTIAL_V3_PHYSICAL_MARGIN:
+        radius_margin = BODY_EDGE_EXPONENTIAL_PHYSICAL_MARGIN_M
+    elif law_version == BODY_EDGE_EXPONENTIAL_V3_CONTACT_STIFF:
+        radius_margin = BODY_EDGE_EXPONENTIAL_PHYSICAL_MARGIN_M
+    contact_radius = ped_radius + radius_margin
+    clearance = raw_distance - contact_radius
+    if clearance >= BODY_EDGE_EXPONENTIAL_RANGE_M:
+        return 0.0, 0.0
+    if raw_distance > OBSTACLE_FORCE_DISTANCE_FLOOR:
+        normal_x = dx_to_surface / raw_distance
+        normal_y = dy_to_surface / raw_distance
+    else:
+        normal_x = -ortho_x
+        normal_y = -ortho_y
+        normal_norm = euclid_dist(0.0, 0.0, normal_x, normal_y)
+        if normal_norm <= OBSTACLE_FORCE_DISTANCE_FLOOR:
+            return 0.0, 0.0
+        normal_x /= normal_norm
+        normal_y /= normal_norm
+    strength = BODY_EDGE_EXPONENTIAL_AMPLITUDE_UNSCALED * (
+        exp(-max(0.0, clearance) / BODY_EDGE_EXPONENTIAL_DECAY_M)
+        - exp(-BODY_EDGE_EXPONENTIAL_RANGE_M / BODY_EDGE_EXPONENTIAL_DECAY_M)
+    )
+    if law_version == BODY_EDGE_EXPONENTIAL_V3_CONTACT_STIFF:
+        penetration = max(0.0, -clearance)
+        if penetration > 0.0:
+            strength += (
+                BODY_EDGE_EXPONENTIAL_CONTACT_BIAS_UNSCALED
+                + BODY_EDGE_EXPONENTIAL_CONTACT_STIFFNESS_UNSCALED_PER_M * penetration
+            )
+    force_x = strength * normal_x
+    force_y = strength * normal_y
+    if not np.isfinite(force_x) or not np.isfinite(force_y):
+        return 0.0, 0.0
+    return force_x, force_y
+
+
+@njit(nogil=True)
+def obstacle_force_body_edge_exponential(
+    obstacle: Line2D,
+    ortho_vec: Point2D,
+    ped_pos: Point2D,
+    ped_radius: float,
+    law_version: Any = BODY_EDGE_EXPONENTIAL_V3,
+) -> tuple[float, float]:
+    """Calculate the finite-range wall force for one segment.
+
+    Returns:
+        Unscaled finite-range force components.
+    """
+    if not (
+        np.isfinite(obstacle[0])
+        and np.isfinite(obstacle[1])
+        and np.isfinite(obstacle[2])
+        and np.isfinite(obstacle[3])
+        and np.isfinite(ortho_vec[0])
+        and np.isfinite(ortho_vec[1])
+        and np.isfinite(ped_pos[0])
+        and np.isfinite(ped_pos[1])
+        and np.isfinite(ped_radius)
+    ):
+        return 0.0, 0.0
+    closest_x, closest_y = closest_point_on_segment(obstacle, ped_pos)
+    dx = ped_pos[0] - closest_x
+    dy = ped_pos[1] - closest_y
+    raw_distance = euclid_dist(ped_pos[0], ped_pos[1], closest_x, closest_y)
+    return body_edge_exponential_force(
+        raw_distance,
+        dx,
+        dy,
+        ped_radius,
+        ortho_vec[0],
+        ortho_vec[1],
+        law_version,
+    )
+
+
+@njit(nogil=True)
+def all_obstacle_forces_body_edge_exponential(
+    out_forces: np.ndarray,
+    ped_positions: np.ndarray,
+    obstacles: np.ndarray,
+    ped_radius: float,
+    law_version: Any = BODY_EDGE_EXPONENTIAL_V3,
+):
+    """Populate nearest-surface forces, or the named distinct-nearby-surfaces candidate."""
+    if law_version == BODY_EDGE_EXPONENTIAL_V3_MULTI_SEGMENT:
+        all_obstacle_forces_distinct_surface_points(
+            out_forces, ped_positions, obstacles, ped_radius
+        )
+        return
+    obstacle_segments = obstacles[:, :4]
+    ortho_vecs = obstacles[:, 4:]
+    num_peds = ped_positions.shape[0]
+    num_obstacles = obstacles.shape[0]
+
+    for i in range(num_peds):
+        ped_pos = ped_positions[i]
+        nearest_distance = np.inf
+        nearest_dx = 0.0
+        nearest_dy = 0.0
+        nearest_ortho_x = 0.0
+        nearest_ortho_y = 0.0
+        for j in range(num_obstacles):
+            closest_x, closest_y = closest_point_on_segment(obstacle_segments[j], ped_pos)
+            dx = ped_pos[0] - closest_x
+            dy = ped_pos[1] - closest_y
+            raw_distance = euclid_dist(ped_pos[0], ped_pos[1], closest_x, closest_y)
+            if raw_distance < nearest_distance:
+                nearest_distance = raw_distance
+                nearest_dx = dx
+                nearest_dy = dy
+                nearest_ortho_x = ortho_vecs[j, 0]
+                nearest_ortho_y = ortho_vecs[j, 1]
+        force_x, force_y = body_edge_exponential_force(
+            nearest_distance,
+            nearest_dx,
+            nearest_dy,
+            ped_radius,
+            nearest_ortho_x,
+            nearest_ortho_y,
+            law_version,
+        )
+        out_forces[i, 0] += force_x
+        out_forces[i, 1] += force_y
+
+
+@njit(nogil=True)
+def all_obstacle_forces_distinct_surface_points(
+    out_forces: np.ndarray,
+    ped_positions: np.ndarray,
+    obstacles: np.ndarray,
+    ped_radius: float,
+):
+    """Sum finite-range segments once per shared closest point (including corners)."""
+    for i in range(ped_positions.shape[0]):
+        point = ped_positions[i]
+        accepted = np.empty((obstacles.shape[0], 2))
+        count = 0
+        for j in range(obstacles.shape[0]):
+            edge = obstacles[j]
+            if not np.all(np.isfinite(edge)):
+                continue
+            closest_x, closest_y = closest_point_on_segment(edge[:4], point)
+            distance = euclid_dist(point[0], point[1], closest_x, closest_y)
+            if not np.isfinite(distance) or distance - ped_radius >= BODY_EDGE_EXPONENTIAL_RANGE_M:
+                continue
+            duplicate = False
+            for k in range(count):
+                if (
+                    euclid_dist(closest_x, closest_y, accepted[k, 0], accepted[k, 1])
+                    <= OBSTACLE_FORCE_DISTANCE_FLOOR
+                ):
+                    duplicate = True
+                    break
+            if duplicate:
+                continue
+            accepted[count, 0] = closest_x
+            accepted[count, 1] = closest_y
+            count += 1
+            fx, fy = body_edge_exponential_force(
+                distance,
+                point[0] - closest_x,
+                point[1] - closest_y,
+                ped_radius,
+                edge[4],
+                edge[5],
+                BODY_EDGE_EXPONENTIAL_V3_MULTI_SEGMENT,
+            )
+            out_forces[i, 0] += fx
+            out_forces[i, 1] += fy
 
 
 @njit(fastmath=True, nogil=True)
@@ -716,6 +1002,10 @@ def obstacle_force_for_law(
     resolved = resolve_obstacle_force_law(law_version)
     if resolved == LEGACY_SHIFTED_GRADIENT_V1:
         return obstacle_force(obstacle, ortho_vec, ped_pos, ped_radius)
+    if resolved in BODY_EDGE_EXPONENTIAL_LAW_VERSIONS:
+        return obstacle_force_body_edge_exponential(
+            obstacle, ortho_vec, ped_pos, ped_radius, resolved
+        )
     return obstacle_force_surface_distance_unit_normal(obstacle, ortho_vec, ped_pos, ped_radius)
 
 
@@ -730,6 +1020,10 @@ def all_obstacle_forces_for_law(
     resolved = resolve_obstacle_force_law(law_version)
     if resolved == LEGACY_SHIFTED_GRADIENT_V1:
         all_obstacle_forces(out_forces, ped_positions, obstacles, ped_radius)
+    elif resolved in BODY_EDGE_EXPONENTIAL_LAW_VERSIONS:
+        all_obstacle_forces_body_edge_exponential(
+            out_forces, ped_positions, obstacles, ped_radius, resolved
+        )
     else:
         all_obstacle_forces_surface_distance_unit_normal(
             out_forces, ped_positions, obstacles, ped_radius

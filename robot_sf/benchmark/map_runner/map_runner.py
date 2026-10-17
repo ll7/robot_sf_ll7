@@ -319,7 +319,9 @@ from robot_sf.planner.socnav import (  # noqa: F401 - registry re-export.
     SocNavBenchSamplingAdapter,
     SocNavPlannerConfig,
 )
+from robot_sf.planner.socnav_base import _SOCNAV_CONFIG_INIT_KEYS
 from robot_sf.planner.stream_gap import StreamGapPlannerAdapter  # noqa: F401
+from robot_sf.robot.reverse_drive import bound_drive_settings
 from robot_sf.training.scenario_loader import load_scenarios
 
 if TYPE_CHECKING:
@@ -955,7 +957,7 @@ def _build_socnav_config(cfg: dict[str, Any]) -> SocNavPlannerConfig:
     """
     if not isinstance(cfg, dict):
         return SocNavPlannerConfig()
-    allowed = {f.name for f in fields(SocNavPlannerConfig)}
+    allowed = {f.name for f in fields(SocNavPlannerConfig)} | _SOCNAV_CONFIG_INIT_KEYS
     filtered = {key: value for key, value in cfg.items() if key in allowed}
     return SocNavPlannerConfig(**filtered)
 
@@ -1170,6 +1172,9 @@ def _build_predictive_mppi_policy(
 
     _attach_planner_reset(_policy, adapter)
     _policy._planner_adapter = adapter
+    planner_bind_env = getattr(adapter, "bind_env", None)
+    if callable(planner_bind_env):
+        _policy._planner_bind_env = planner_bind_env
 
     def _planner_stats() -> dict[str, Any]:
         """Expose predictive-checkpoint runtime provenance for release admission.
@@ -1262,7 +1267,9 @@ def _attach_checkpoint_runtime_stats(
 
 
 def _attach_guard_decision_stats(
-    policy: Callable[[dict[str, Any]], Any], metadata: dict[str, Any]
+    policy: Callable[[dict[str, Any]], Any],
+    metadata: dict[str, Any],
+    guard_adapter: Any = None,
 ) -> None:
     """Expose the latest shield decision through the per-step planner stats hook.
 
@@ -1276,11 +1283,25 @@ def _attach_guard_decision_stats(
         """Return checkpoint provenance and the most recent guard decision."""
         base_payload = checkpoint_stats() if callable(checkpoint_stats) else {}
         runtime = dict(base_payload) if isinstance(base_payload, dict) else {}
+        if guard_adapter is not None:
+            runtime.update(guard_adapter.diagnostics())
         shield_stats = metadata.get("shield_stats")
         if isinstance(shield_stats, dict):
             last_decision = shield_stats.get("last_decision")
             if isinstance(last_decision, dict):
                 runtime["last_decision"] = dict(last_decision)
+                if guard_adapter is not None:
+                    for key in (
+                        "no_admissible_command",
+                        "no_admissible_command_count",
+                        "recovery_command_count",
+                    ):
+                        runtime["last_decision"][key] = runtime[key]
+                    if "recovery_kind" in runtime:
+                        runtime["last_decision"]["recovery_kind"] = runtime["recovery_kind"]
+        fallback_target = getattr(guard_adapter, "last_fallback_target_xy", None)
+        if fallback_target is not None:
+            runtime["planner_target_xy"] = [float(fallback_target[0]), float(fallback_target[1])]
         return runtime
 
     policy._planner_stats = _planner_stats
@@ -1702,7 +1723,7 @@ def _build_guarded_ppo_policy(  # noqa: C901, PLR0915
 
     _policy._planner_close = _close_guarded_ppo
     _attach_checkpoint_runtime_stats(_policy, ppo_planner, ppo_config)
-    _attach_guard_decision_stats(_policy, meta)
+    _attach_guard_decision_stats(_policy, meta, guard_adapter)
     ppo_bind_env = getattr(ppo_planner, "bind_env", None)
     guard_bind_env = getattr(guard_adapter, "bind_env", None)
     bind_hooks = [hook for hook in (ppo_bind_env, guard_bind_env) if callable(hook)]
@@ -2135,7 +2156,24 @@ def _build_common_adapter_policy(  # noqa: C901
     _attach_planner_reset(_policy, adapter)
     _policy._planner_adapter = adapter
     if planner_bind_env is not None:
-        _policy._planner_bind_env = planner_bind_env
+        original_bind_env = planner_bind_env
+
+        def _bind_live_env(env: Any) -> None:
+            """Keep SocNav projection limits in sync with the opt-in bound plant."""
+            nonlocal adapter_kinematics_model
+            original_bind_env(env)
+            drive = bound_drive_settings(env, adapter=adapter)
+            limits = dict(algo_config)
+            if getattr(drive, "limited_reverse", False):
+                limits.update(limited_reverse=True, max_reverse_speed=drive.max_reverse_speed)
+                if algo_key in {"hrvo", "socnav_hrvo"}:
+                    adapter.bind_env(env)
+            adapter_kinematics_model = resolve_benchmark_kinematics_model(
+                robot_kinematics=robot_kinematics, command_limits=limits
+            )
+            _policy._kinematics_model = adapter_kinematics_model
+
+        _policy._planner_bind_env = _bind_live_env
     adapter_diagnostics = getattr(adapter, "diagnostics", None)
     foresight_diagnostics = getattr(adapter, "foresight_diagnostics", None)
     if callable(adapter_diagnostics) or callable(foresight_diagnostics):
@@ -3276,17 +3314,12 @@ def _compute_resume_identity_payload(
         Identity payload dict used to compute the episode ID for deduplication.
     """
     identity_scenario = _scenario_with_episode_seed_defaults(sc, seed=int(seed))
-    identity_algo, identity_cfg = _resolve_policy_search_candidate_runtime(
+    identity_algo, identity_cfg = _policy_resolution.resolve_episode_policy_runtime(
         default_algo=ctx.algo,
         algo_config_path=ctx.algo_config_path,
         algo_config=ctx.raw_policy_cfg,
         scenario=identity_scenario,
-    )
-    identity_cfg = _apply_planner_selector_v2_context(
-        identity_algo, identity_cfg, scenario=identity_scenario, seed=int(seed)
-    )
-    identity_cfg = _apply_scenario_uncertainty_envelope_config(
-        identity_algo, identity_cfg, identity_scenario
+        seed=int(seed),
     )
     identity_observation_contract = resolve_learned_checkpoint_observation_contract(
         identity_algo,

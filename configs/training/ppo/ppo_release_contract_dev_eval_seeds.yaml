@@ -1,0 +1,4 @@
+# Shared development-only selection seed for the four release-contract retrains.
+schema_version: robot-sf-evaluation-seed-manifest.v1
+evaluation_seeds:
+- 1003

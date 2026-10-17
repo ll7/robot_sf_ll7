@@ -273,12 +273,17 @@ class TestRunCampaignArmIsolationParameter:
     @patch("robot_sf.benchmark.camera_ready.campaign._run_campaign_orchestrator")
     def test_run_campaign_passes_arm_isolation_to_orchestrator(self, mock_orchestrator):
         """Verify run_campaign passes arm_isolation to orchestrator."""
-        from robot_sf.benchmark.camera_ready._config_types import CampaignConfig, PlannerSpec
+        from robot_sf.benchmark.camera_ready._config_types import (
+            CampaignConfig,
+            PlannerSpec,
+            SeedPolicy,
+        )
         from robot_sf.benchmark.camera_ready.campaign import run_campaign
 
         config = CampaignConfig(
             name="test",
             scenario_matrix_path=Path("scenarios.yaml"),
+            seed_policy=SeedPolicy(mode="fixed-list", seeds=(1001,)),
             planners=(PlannerSpec(key="test", algo="test", enabled=True),),
         )
 

@@ -1,0 +1,531 @@
+{
+  "horizon": 600,
+  "scenarios": [
+    {
+      "scenario": "classic_bottleneck_low",
+      "limit": 500,
+      "effective_horizon": 500,
+      "source": {
+        "file": "configs/scenarios/archetypes/classic_bottleneck.yaml",
+        "line": 11,
+        "value": 500
+      }
+    },
+    {
+      "scenario": "classic_bottleneck_medium",
+      "limit": 500,
+      "effective_horizon": 500,
+      "source": {
+        "file": "configs/scenarios/archetypes/classic_bottleneck.yaml",
+        "line": 41,
+        "value": 500
+      }
+    },
+    {
+      "scenario": "classic_bottleneck_high",
+      "limit": 500,
+      "effective_horizon": 500,
+      "source": {
+        "file": "configs/scenarios/archetypes/classic_bottleneck.yaml",
+        "line": 71,
+        "value": 500
+      }
+    },
+    {
+      "scenario": "classic_realworld_double_bottleneck_high",
+      "limit": 700,
+      "effective_horizon": 600,
+      "source": {
+        "file": "configs/scenarios/archetypes/classic_realworld_bottleneck.yaml",
+        "line": 11,
+        "value": 700
+      }
+    },
+    {
+      "scenario": "classic_station_platform_medium",
+      "limit": 650,
+      "effective_horizon": 600,
+      "source": {
+        "file": "configs/scenarios/archetypes/classic_station_platform.yaml",
+        "line": 11,
+        "value": 650
+      }
+    },
+    {
+      "scenario": "classic_cross_trap_low",
+      "limit": 600,
+      "effective_horizon": 600,
+      "source": {
+        "file": "configs/scenarios/archetypes/classic_cross_trap.yaml",
+        "line": 11,
+        "value": 600
+      }
+    },
+    {
+      "scenario": "classic_cross_trap_medium",
+      "limit": 600,
+      "effective_horizon": 600,
+      "source": {
+        "file": "configs/scenarios/archetypes/classic_cross_trap.yaml",
+        "line": 40,
+        "value": 600
+      }
+    },
+    {
+      "scenario": "classic_cross_trap_high",
+      "limit": 600,
+      "effective_horizon": 600,
+      "source": {
+        "file": "configs/scenarios/archetypes/classic_cross_trap.yaml",
+        "line": 69,
+        "value": 600
+      }
+    },
+    {
+      "scenario": "classic_doorway_low",
+      "limit": 500,
+      "effective_horizon": 500,
+      "source": {
+        "file": "configs/scenarios/archetypes/classic_doorway.yaml",
+        "line": 11,
+        "value": 500
+      }
+    },
+    {
+      "scenario": "classic_doorway_medium",
+      "limit": 500,
+      "effective_horizon": 500,
+      "source": {
+        "file": "configs/scenarios/archetypes/classic_doorway.yaml",
+        "line": 42,
+        "value": 500
+      }
+    },
+    {
+      "scenario": "classic_doorway_high",
+      "limit": 500,
+      "effective_horizon": 500,
+      "source": {
+        "file": "configs/scenarios/archetypes/classic_doorway.yaml",
+        "line": 73,
+        "value": 500
+      }
+    },
+    {
+      "scenario": "classic_group_crossing_low",
+      "limit": 500,
+      "effective_horizon": 500,
+      "source": {
+        "file": "configs/scenarios/archetypes/classic_group_crossing.yaml",
+        "line": 11,
+        "value": 500
+      }
+    },
+    {
+      "scenario": "classic_group_crossing_medium",
+      "limit": 500,
+      "effective_horizon": 500,
+      "source": {
+        "file": "configs/scenarios/archetypes/classic_group_crossing.yaml",
+        "line": 40,
+        "value": 500
+      }
+    },
+    {
+      "scenario": "classic_group_crossing_high",
+      "limit": 500,
+      "effective_horizon": 500,
+      "source": {
+        "file": "configs/scenarios/archetypes/classic_group_crossing.yaml",
+        "line": 69,
+        "value": 500
+      }
+    },
+    {
+      "scenario": "classic_head_on_corridor_low",
+      "limit": 500,
+      "effective_horizon": 500,
+      "source": {
+        "file": "configs/scenarios/archetypes/classic_head_on_corridor.yaml",
+        "line": 11,
+        "value": 500
+      }
+    },
+    {
+      "scenario": "classic_head_on_corridor_medium",
+      "limit": 500,
+      "effective_horizon": 500,
+      "source": {
+        "file": "configs/scenarios/archetypes/classic_head_on_corridor.yaml",
+        "line": 39,
+        "value": 500
+      }
+    },
+    {
+      "scenario": "classic_merging_low",
+      "limit": 600,
+      "effective_horizon": 600,
+      "source": {
+        "file": "configs/scenarios/archetypes/classic_merging.yaml",
+        "line": 11,
+        "value": 600
+      }
+    },
+    {
+      "scenario": "classic_merging_medium",
+      "limit": 600,
+      "effective_horizon": 600,
+      "source": {
+        "file": "configs/scenarios/archetypes/classic_merging.yaml",
+        "line": 39,
+        "value": 600
+      }
+    },
+    {
+      "scenario": "classic_overtaking_low",
+      "limit": 600,
+      "effective_horizon": 600,
+      "source": {
+        "file": "configs/scenarios/archetypes/classic_overtaking.yaml",
+        "line": 11,
+        "value": 600
+      }
+    },
+    {
+      "scenario": "classic_overtaking_medium",
+      "limit": 600,
+      "effective_horizon": 600,
+      "source": {
+        "file": "configs/scenarios/archetypes/classic_overtaking.yaml",
+        "line": 39,
+        "value": 600
+      }
+    },
+    {
+      "scenario": "classic_t_intersection_low",
+      "limit": 500,
+      "effective_horizon": 500,
+      "source": {
+        "file": "configs/scenarios/archetypes/classic_t_intersection.yaml",
+        "line": 11,
+        "value": 500
+      }
+    },
+    {
+      "scenario": "classic_t_intersection_medium",
+      "limit": 500,
+      "effective_horizon": 500,
+      "source": {
+        "file": "configs/scenarios/archetypes/classic_t_intersection.yaml",
+        "line": 39,
+        "value": 500
+      }
+    },
+    {
+      "scenario": "classic_urban_crossing_medium",
+      "limit": 600,
+      "effective_horizon": 600,
+      "source": {
+        "file": "configs/scenarios/archetypes/classic_urban_crossing.yaml",
+        "line": 11,
+        "value": 600
+      }
+    },
+    {
+      "scenario": "francis2023_frontal_approach",
+      "limit": 400,
+      "effective_horizon": 400,
+      "source": {
+        "file": "configs/scenarios/single/francis2023_frontal_approach.yaml",
+        "line": 5,
+        "value": 400
+      }
+    },
+    {
+      "scenario": "francis2023_pedestrian_obstruction",
+      "limit": 400,
+      "effective_horizon": 400,
+      "source": {
+        "file": "configs/scenarios/single/francis2023_pedestrian_obstruction.yaml",
+        "line": 5,
+        "value": 400
+      }
+    },
+    {
+      "scenario": "francis2023_pedestrian_overtaking",
+      "limit": 400,
+      "effective_horizon": 400,
+      "source": {
+        "file": "configs/scenarios/single/francis2023_pedestrian_overtaking.yaml",
+        "line": 5,
+        "value": 400
+      }
+    },
+    {
+      "scenario": "francis2023_robot_overtaking",
+      "limit": 400,
+      "effective_horizon": 400,
+      "source": {
+        "file": "configs/scenarios/single/francis2023_robot_overtaking.yaml",
+        "line": 5,
+        "value": 400
+      }
+    },
+    {
+      "scenario": "francis2023_down_path",
+      "limit": 400,
+      "effective_horizon": 400,
+      "source": {
+        "file": "configs/scenarios/single/francis2023_down_path.yaml",
+        "line": 5,
+        "value": 400
+      }
+    },
+    {
+      "scenario": "francis2023_intersection_no_gesture",
+      "limit": 400,
+      "effective_horizon": 400,
+      "source": {
+        "file": "configs/scenarios/single/francis2023_intersection_no_gesture.yaml",
+        "line": 5,
+        "value": 400
+      }
+    },
+    {
+      "scenario": "francis2023_blind_corner",
+      "limit": 400,
+      "effective_horizon": 400,
+      "source": {
+        "file": "configs/scenarios/single/francis2023_blind_corner.yaml",
+        "line": 5,
+        "value": 400
+      }
+    },
+    {
+      "scenario": "francis2023_narrow_hallway",
+      "limit": 400,
+      "effective_horizon": 400,
+      "source": {
+        "file": "configs/scenarios/single/francis2023_narrow_hallway.yaml",
+        "line": 5,
+        "value": 400
+      }
+    },
+    {
+      "scenario": "francis2023_narrow_doorway",
+      "limit": 400,
+      "effective_horizon": 400,
+      "source": {
+        "file": "configs/scenarios/single/francis2023_narrow_doorway.yaml",
+        "line": 5,
+        "value": 400
+      }
+    },
+    {
+      "scenario": "francis2023_entering_room",
+      "limit": 400,
+      "effective_horizon": 400,
+      "source": {
+        "file": "configs/scenarios/single/francis2023_entering_room.yaml",
+        "line": 5,
+        "value": 400
+      }
+    },
+    {
+      "scenario": "francis2023_exiting_room",
+      "limit": 400,
+      "effective_horizon": 400,
+      "source": {
+        "file": "configs/scenarios/single/francis2023_exiting_room.yaml",
+        "line": 5,
+        "value": 400
+      }
+    },
+    {
+      "scenario": "francis2023_entering_elevator",
+      "limit": 400,
+      "effective_horizon": 400,
+      "source": {
+        "file": "configs/scenarios/single/francis2023_entering_elevator.yaml",
+        "line": 5,
+        "value": 400
+      }
+    },
+    {
+      "scenario": "francis2023_exiting_elevator",
+      "limit": 400,
+      "effective_horizon": 400,
+      "source": {
+        "file": "configs/scenarios/single/francis2023_exiting_elevator.yaml",
+        "line": 5,
+        "value": 400
+      }
+    },
+    {
+      "scenario": "francis2023_intersection_wait",
+      "limit": 400,
+      "effective_horizon": 400,
+      "source": {
+        "file": "configs/scenarios/single/francis2023_intersection_wait.yaml",
+        "line": 5,
+        "value": 400
+      }
+    },
+    {
+      "scenario": "francis2023_intersection_proceed",
+      "limit": 400,
+      "effective_horizon": 400,
+      "source": {
+        "file": "configs/scenarios/single/francis2023_intersection_proceed.yaml",
+        "line": 5,
+        "value": 400
+      }
+    },
+    {
+      "scenario": "francis2023_following_human",
+      "limit": 400,
+      "effective_horizon": 400,
+      "source": {
+        "file": "configs/scenarios/single/francis2023_following_human.yaml",
+        "line": 5,
+        "value": 400
+      }
+    },
+    {
+      "scenario": "francis2023_leading_human",
+      "limit": 400,
+      "effective_horizon": 400,
+      "source": {
+        "file": "configs/scenarios/single/francis2023_leading_human.yaml",
+        "line": 5,
+        "value": 400
+      }
+    },
+    {
+      "scenario": "francis2023_accompanying_peer",
+      "limit": 400,
+      "effective_horizon": 400,
+      "source": {
+        "file": "configs/scenarios/single/francis2023_accompanying_peer.yaml",
+        "line": 5,
+        "value": 400
+      }
+    },
+    {
+      "scenario": "francis2023_join_group",
+      "limit": 400,
+      "effective_horizon": 400,
+      "source": {
+        "file": "configs/scenarios/single/francis2023_join_group.yaml",
+        "line": 5,
+        "value": 400
+      }
+    },
+    {
+      "scenario": "francis2023_leave_group",
+      "limit": 400,
+      "effective_horizon": 400,
+      "source": {
+        "file": "configs/scenarios/single/francis2023_leave_group.yaml",
+        "line": 5,
+        "value": 400
+      }
+    },
+    {
+      "scenario": "francis2023_crowd_navigation",
+      "limit": 400,
+      "effective_horizon": 400,
+      "source": {
+        "file": "configs/scenarios/single/francis2023_crowd_navigation.yaml",
+        "line": 5,
+        "value": 400
+      }
+    },
+    {
+      "scenario": "francis2023_parallel_traffic",
+      "limit": 400,
+      "effective_horizon": 400,
+      "source": {
+        "file": "configs/scenarios/single/francis2023_parallel_traffic.yaml",
+        "line": 5,
+        "value": 400
+      }
+    },
+    {
+      "scenario": "francis2023_perpendicular_traffic",
+      "limit": 400,
+      "effective_horizon": 400,
+      "source": {
+        "file": "configs/scenarios/single/francis2023_perpendicular_traffic.yaml",
+        "line": 5,
+        "value": 400
+      }
+    },
+    {
+      "scenario": "francis2023_circular_crossing",
+      "limit": 400,
+      "effective_horizon": 400,
+      "source": {
+        "file": "configs/scenarios/single/francis2023_circular_crossing.yaml",
+        "line": 5,
+        "value": 400
+      }
+    },
+    {
+      "scenario": "francis2023_robot_crowding",
+      "limit": 400,
+      "effective_horizon": 400,
+      "source": {
+        "file": "configs/scenarios/single/francis2023_robot_crowding.yaml",
+        "line": 5,
+        "value": 400
+      }
+    }
+  ],
+  "closure_files": [
+    "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+    "configs/scenarios/classic_interactions_francis2023_goal_zone_entry_route_width_v4.yaml",
+    "configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v3.yaml",
+    "configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v2.yaml",
+    "configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v1.yaml",
+    "configs/scenarios/classic_interactions_francis2023.yaml",
+    "configs/scenarios/classic_interactions.yaml",
+    "configs/scenarios/archetypes/classic_bottleneck.yaml",
+    "configs/scenarios/archetypes/classic_realworld_bottleneck.yaml",
+    "configs/scenarios/archetypes/classic_station_platform.yaml",
+    "configs/scenarios/archetypes/classic_cross_trap.yaml",
+    "configs/scenarios/archetypes/classic_doorway.yaml",
+    "configs/scenarios/archetypes/classic_group_crossing.yaml",
+    "configs/scenarios/archetypes/classic_head_on_corridor.yaml",
+    "configs/scenarios/archetypes/classic_merging.yaml",
+    "configs/scenarios/archetypes/classic_overtaking.yaml",
+    "configs/scenarios/archetypes/classic_t_intersection.yaml",
+    "configs/scenarios/archetypes/classic_urban_crossing.yaml",
+    "configs/scenarios/francis2023.yaml",
+    "configs/scenarios/single/francis2023_frontal_approach.yaml",
+    "configs/scenarios/single/francis2023_pedestrian_obstruction.yaml",
+    "configs/scenarios/single/francis2023_pedestrian_overtaking.yaml",
+    "configs/scenarios/single/francis2023_robot_overtaking.yaml",
+    "configs/scenarios/single/francis2023_down_path.yaml",
+    "configs/scenarios/single/francis2023_intersection_no_gesture.yaml",
+    "configs/scenarios/single/francis2023_blind_corner.yaml",
+    "configs/scenarios/single/francis2023_narrow_hallway.yaml",
+    "configs/scenarios/single/francis2023_narrow_doorway.yaml",
+    "configs/scenarios/single/francis2023_entering_room.yaml",
+    "configs/scenarios/single/francis2023_exiting_room.yaml",
+    "configs/scenarios/single/francis2023_entering_elevator.yaml",
+    "configs/scenarios/single/francis2023_exiting_elevator.yaml",
+    "configs/scenarios/single/francis2023_intersection_wait.yaml",
+    "configs/scenarios/single/francis2023_intersection_proceed.yaml",
+    "configs/scenarios/single/francis2023_following_human.yaml",
+    "configs/scenarios/single/francis2023_leading_human.yaml",
+    "configs/scenarios/single/francis2023_accompanying_peer.yaml",
+    "configs/scenarios/single/francis2023_join_group.yaml",
+    "configs/scenarios/single/francis2023_leave_group.yaml",
+    "configs/scenarios/single/francis2023_crowd_navigation.yaml",
+    "configs/scenarios/single/francis2023_parallel_traffic.yaml",
+    "configs/scenarios/single/francis2023_perpendicular_traffic.yaml",
+    "configs/scenarios/single/francis2023_circular_crossing.yaml",
+    "configs/scenarios/single/francis2023_robot_crowding.yaml"
+  ]
+}

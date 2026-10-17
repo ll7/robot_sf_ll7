@@ -15,6 +15,7 @@ from pathlib import Path
 
 from loguru import logger
 
+from robot_sf.benchmark.metric_definitions import require_uniform_metric_schema
 from robot_sf.benchmark.snqi.compute import (
     WEIGHT_NAMES,
     compute_snqi_ablation,
@@ -142,6 +143,7 @@ def _compute_baseline_stats(episodes: list[dict]) -> dict[str, dict[str, float]]
     Returns:
         Dictionary mapping metric names to {'med': float, 'p95': float} statistics.
     """
+    metric_version = require_uniform_metric_schema(episodes)
     metric_names = [
         "collisions",
         "near_misses",
@@ -162,6 +164,7 @@ def _compute_baseline_stats(episodes: list[dict]) -> dict[str, dict[str, float]]
         if abs(p95 - med) < 1e-12:  # ensure non-zero span for normalization downstream
             p95 = med + 1.0
         stats[name] = {"med": float(med), "p95": float(p95)}
+    stats["_metadata"] = {"metric_schema_version": metric_version}
     return stats
 
 

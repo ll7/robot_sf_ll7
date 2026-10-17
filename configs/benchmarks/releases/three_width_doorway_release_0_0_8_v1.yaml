@@ -1,0 +1,123 @@
+# Full-roster three-width slice; the 2.0 m probe remains in the main grid.
+schema_version: benchmark-release-manifest.v0.1
+benchmark_protocol_version: 0.1.0
+release_id: three_width_doorway_0_0_8_v1
+release_tag: three-width-doorway-0.0.8-v1
+maturity: pre-1.0
+canonical_campaign_config: ../paper_experiment_matrix_v2_h600_s30_three_width_doorway_v1.yaml
+campaign_config_sha256: 9e815e03f5280c5b8366d7179a4f93d61acc914505f1379660c6467849a26e7c
+expected_paper_profile_version: paper-matrix-v1
+expected_paper_interpretation_profile: doorway-width-slice
+scenario:
+  matrix_path: ../../scenarios/francis2023_narrow_doorway_three_width_release_0_0_8_v1.yaml
+  matrix_sha256: 9de1d058c6a9145f76c84be63787d5c704be1db288b47fd9c1d31f3f56367778
+seed_policy:
+  mode: seed-set
+  seed_set: release_eval_0_0_8
+  seeds: []
+  seed_sets_path: ../../benchmarks/seed_sets_0_0_8.yaml
+  seed_sets_sha256: a8803bade9f39d504d508ba530208ca66acc343376304afd586b82d3308ce706
+  resolved_seeds:
+  # seed-holdout: release-evaluation begin
+  - 50036
+  - 50140
+  - 50331
+  - 50403
+  - 50813
+  - 51339
+  - 51709
+  - 51767
+  - 52094
+  - 52175
+  - 52257
+  - 52671
+  - 52850
+  - 52971
+  - 53020
+  - 53198
+  - 53239
+  - 53636
+  - 53671
+  - 53779
+  - 55022
+  - 55379
+  - 55568
+  - 56170
+  - 56966
+  - 57077
+  - 57113
+  - 57494
+  - 57943
+  - 59019
+  # seed-holdout: release-evaluation end
+metrics:
+  snqi_weights_path: ../snqi_weights_camera_ready_v3.json
+  snqi_weights_sha256: 71a67c3c02faff166f8c96bef8bcf898533981ca2b2c4493829988520fb1aeb2
+  snqi_baseline_path: ../snqi_baseline_camera_ready_v3.json
+  snqi_baseline_sha256: 329ca5766491e1587979d0a435c7ba676e148ccdff97040a36546bbb9414035a
+planners:
+  keys:
+  - prediction_planner
+  - goal
+  - social_force
+  - orca
+  - ppo
+  - socnav_sampling
+  - sacadrl
+  - scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4
+  - scenario_adaptive_hybrid_orca_v2_collision_guard_v4
+  - hybrid_rule_v4_fast_progress_static_escape
+  - hybrid_rule_v4_fast_progress_static_escape_continuous
+  - guarded_ppo
+  - predictive_mppi
+  - risk_dwa
+  groups:
+    prediction_planner: experimental
+    goal: core
+    social_force: core
+    orca: core
+    ppo: experimental
+    socnav_sampling: experimental
+    sacadrl: experimental
+    scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4: experimental
+    scenario_adaptive_hybrid_orca_v2_collision_guard_v4: experimental
+    hybrid_rule_v4_fast_progress_static_escape: experimental
+    hybrid_rule_v4_fast_progress_static_escape_continuous: experimental
+    guarded_ppo: experimental
+    predictive_mppi: experimental
+    risk_dwa: experimental
+kinematics:
+  matrix:
+  - differential_drive
+artifacts:
+  required_paths:
+  - campaign_manifest.json
+  - manifest.json
+  - run_meta.json
+  - preflight/validate_config.json
+  - preflight/preview_scenarios.json
+  - reports/campaign_summary.json
+  - reports/campaign_report.md
+  - reports/matrix_summary.json
+  - reports/campaign_table.md
+  - reports/snqi_diagnostics.json
+provenance:
+  repository_url: https://github.com/ll7/robot_sf_ll7
+  doi: diagnostic-only-unpublished
+citation_path: ../../../CITATION.cff
+release_checklist_path: ../../../docs/RELEASE.md
+release_kind: benchmark-width-slice
+width_slice_contract:
+  schema_version: benchmark-doorway-width-slice.v1
+  widths_m:
+  - 2.2
+  - 2.8
+  - 3.6
+  planner_arms: 14
+  evaluation_seeds: 30
+  expected_episode_rows: 1260
+  requested_horizon_steps: 400
+  scenario_horizon_cap_steps: 400
+  dt: 0.1
+  pairing: same_seed_across_widths_requires_initial_actor_and_external_rng_identity_receipts
+  source_preregistration: configs/benchmarks/issue_9348_three_width_doorway_v1.yaml

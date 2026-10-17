@@ -14,18 +14,20 @@
   "exclusion_reason_counts": {
     "missing_committed_fixture": 10,
     "non_deterministic_contract": 10,
+    "not_in_approved_execution_scope": 1,
     "unsafe_command": 4
   },
-  "generated_at": "2026-08-12T21:37:07+00:00",
-  "ineligible_count": 24,
+  "generated_at": "2026-09-27T04:55:56+00:00",
+  "ineligible_count": 25,
   "issue": 6769,
   "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "route_evidence_only": true,
   "schema": "issue_6769_figure_render_registry_audit.v1",
   "source_class_counts": {
     "build_command_txt": 2,
+    "manifest_field": 1,
     "readme_reproduction": 31
   },
-  "source_commit": "f306d3f9c54195095eee1f6837d7b1853001b4a6",
-  "total_entries": 33
+  "source_commit": "4bb3a5f9a429a63a64411f8374062be5128bf5a8",
+  "total_entries": 34
 }

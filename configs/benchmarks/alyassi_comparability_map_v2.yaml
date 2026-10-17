@@ -1,0 +1,74 @@
+mapping_version: alyassi-comparability-v2
+
+scenario_family_mapping:
+  classic_head_on_corridor: corridor
+  classic_bottleneck: bottleneck
+  classic_doorway: doorway
+  classic_t_intersection: intersection
+  classic_cross_trap: intersection
+  classic_crossing: intersection
+  classic_urban_crossing: intersection
+  classic_merging: merge
+  classic_overtaking: overtaking
+  classic_group_crossing: crossing
+
+amv_specific_extensions:
+  - shared-space micromobility interactions
+  - delivery robot curb-side handoff approach
+  - mixed sidewalk and bike-lane transitions
+
+metric_comparability:
+  success:
+    classification: comparable
+    alyassi_metric: success_rate
+    rationale: Both benchmarks report episode-level success completion.
+  collisions:
+    classification: comparable
+    alyassi_metric: collision_rate
+    rationale: Collision rate is directly comparable at episode granularity.
+  near_misses:
+    classification: proxy
+    alyassi_metric: safety-distance violations
+    rationale: Near misses approximate low-clearance safety stress but are not identical.
+  comfort_exposure:
+    classification: proxy
+    alyassi_metric: comfort/smoothness terms
+    rationale: Comfort exposure overlaps with smoothness-focused safety comfort metrics.
+  snqi:
+    classification: amv_specific
+    alyassi_metric: n/a
+    rationale: SNQI is a robot_sf composite quality index used as an AMV extension metric.
+
+planner_key_mapping:
+  gap_prediction: gap-prediction
+  goal: goal-seeking
+  guarded_ppo: guarded-ppo
+  guarded_ppo_relaxed_v1: guarded-ppo-relaxed-v1
+  guarded_ppo_relaxed_v2: guarded-ppo-relaxed-v2
+  hybrid_portfolio: hybrid-portfolio
+  hybrid_rule_v3_fast_progress_static_escape: hybrid-rule-v3-fast-progress-static-escape
+  hybrid_rule_v3_fast_progress_static_escape_continuous: hybrid-rule-v3-fast-progress-static-escape-continuous
+  hybrid_rule_v4_fast_progress_static_escape: hybrid-rule-v4-fast-progress-static-escape
+  hybrid_rule_v4_fast_progress_static_escape_continuous: hybrid-rule-v4-fast-progress-static-escape-continuous
+  mppi_social: mppi-social
+  orca: orca
+  ppo: ppo
+  prediction_planner: prediction-planner
+  prediction_planner_v2_full: predictive-planner-full
+  prediction_planner_v2_xl_ego: predictive-planner-xl-ego
+  predictive_mppi: predictive-mppi
+  risk_dwa: risk-dwa
+  sacadrl: sacadrl
+  social_force: social-force
+  social_navigation_pyenvs_hsfm_new_guo: social-navigation-pyenvs-hsfm-new-guo
+  social_navigation_pyenvs_orca: social-navigation-pyenvs-orca
+  social_navigation_pyenvs_socialforce: social-navigation-pyenvs-socialforce
+  scenario_adaptive_hybrid_orca_v1: scenario-adaptive-hybrid-orca-v1
+  scenario_adaptive_hybrid_orca_v2_bottleneck_yield: scenario-adaptive-hybrid-orca-v2-bottleneck-yield
+  scenario_adaptive_hybrid_orca_v2_collision_guard: scenario-adaptive-hybrid-orca-v2-collision-guard
+  scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4: scenario-adaptive-hybrid-orca-v2-bottleneck-yield-v4
+  scenario_adaptive_hybrid_orca_v2_collision_guard_v4: scenario-adaptive-hybrid-orca-v2-collision-guard-v4
+  socnav_bench: socnav-bench
+  socnav_sampling: socnav-sampling
+  stream_gap: stream-gap
+  teb: teb-corridor-commitment

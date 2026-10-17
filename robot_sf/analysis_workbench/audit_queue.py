@@ -81,8 +81,8 @@ QUEUE_POLICY_FIXED = "fixed"
 QUEUE_POLICY_ACTIVE = "active"
 SCAN_IDENTITY_PRODUCER = "ba01-audit-scan"
 _SCAN_IDENTITY_ADMISSION = object()
-DEFAULT_POLICY_VERSION = "audit-queue.active.v1"
-FIXED_POLICY_VERSION = "audit-queue.fixed.v1"
+DEFAULT_POLICY_VERSION = "audit-queue.active.v1.1"
+FIXED_POLICY_VERSION = "audit-queue.fixed.v1.1"
 
 PRIORITY_BENCHMARK_CONFIG = "benchmark_config_defect"
 PRIORITY_RELEASE_MANUSCRIPT = "release_manuscript_impact"
@@ -124,9 +124,9 @@ CONTROL_STATUSES = frozenset(
 CONTROL_OUTCOMES = frozenset(
     {"success", "failure", "failed", "pass", "fail", "collision", "timeout"}
 )
-_MAX_INPUT_BYTES = 8 * 1024 * 1024
+_MAX_INPUT_BYTES = 2 * 1024**3  # Full retained scan inventory plus detector records.
 _MAX_JSON_DEPTH = 40
-_MAX_JSON_NODES = 100_000
+_MAX_JSON_NODES = 50_000_000
 _MAX_STRING_BYTES = 512 * 1024
 
 FIXED_WEIGHTS: dict[str, float] = {
@@ -1930,6 +1930,7 @@ def _coerce_priority_band(value: Any) -> str | None:
     normalized = value.strip().lower().replace("/", "_").replace("-", "_").replace(" ", "_")
     aliases = {
         "benchmark_defect": PRIORITY_BENCHMARK_CONFIG,
+        "common_mode_failure": PRIORITY_BENCHMARK_CONFIG,
         "configuration_defect": PRIORITY_BENCHMARK_CONFIG,
         "benchmark_configuration_defect": PRIORITY_BENCHMARK_CONFIG,
         "benchmark_config": PRIORITY_BENCHMARK_CONFIG,
@@ -3232,8 +3233,37 @@ class AuditQueue:
                 pair[0].episode_id,
             )
         )
+        # The review head covers cells before repeating planner views of a
+        # shared failure. Retain every episode after the representative window.
+        representatives = []
+        remaining = []
+        seen_cells = set()
+        for item, explanation in ranked:
+            seed = item.episode.seed
+            cell = (
+                (item.episode.campaign_digest, item.scenario_id, seed)
+                if seed is not None
+                else (item.episode_id,)
+            )
+            if len(representatives) < 100 and cell not in seen_cells:
+                seen_cells.add(cell)
+                representatives.append(
+                    (
+                        item,
+                        replace(
+                            explanation,
+                            reasons=(
+                                *explanation.reasons,
+                                "cell representative in diverse top-100 review window",
+                            ),
+                        ),
+                    )
+                )
+            else:
+                remaining.append((item, explanation))
         return [
-            RankedCandidate(candidate=item, explanation=explanation) for item, explanation in ranked
+            RankedCandidate(candidate=item, explanation=explanation)
+            for item, explanation in (*representatives, *remaining)
         ]
 
     rank = rank_candidates

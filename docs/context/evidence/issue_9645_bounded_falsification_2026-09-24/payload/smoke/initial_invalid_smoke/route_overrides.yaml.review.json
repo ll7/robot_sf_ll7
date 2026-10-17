@@ -1,0 +1,7 @@
+{
+  "artifact_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/smoke/initial_invalid_smoke/route_overrides.yaml",
+  "artifact_sha256": "ed9dfd905ba36c3e1261da3dcd50a1886bcfa809dd4430c56479fb924dac9214",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "evidence-review-marker.v1"
+}

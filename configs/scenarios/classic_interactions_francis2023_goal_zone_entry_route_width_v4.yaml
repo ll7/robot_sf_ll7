@@ -1,0 +1,20 @@
+# Versioned room/elevator route-width candidate for issue #9856.
+# Inherit the reviewed goal-zone v3 matrix; historical inputs and scenario identities stay frozen.
+includes:
+- classic_interactions_francis2023_goal_zone_entry_v3.yaml
+map_search_paths:
+- ../../maps/svg_maps
+- ../../maps/successor_svg_maps
+scenario_overrides_by_name:
+  francis2023_entering_room:
+    map_id: null
+    map_file: ../../maps/successor_svg_maps/issue_9856_francis2023_entering_room_route_width_v1.svg
+  francis2023_exiting_room:
+    map_id: null
+    map_file: ../../maps/successor_svg_maps/issue_9856_francis2023_exiting_room_route_width_v1.svg
+  francis2023_entering_elevator:
+    map_id: null
+    map_file: ../../maps/successor_svg_maps/issue_9856_francis2023_entering_elevator_route_width_v1.svg
+  francis2023_exiting_elevator:
+    map_id: null
+    map_file: ../../maps/successor_svg_maps/issue_9856_francis2023_exiting_elevator_route_width_v1.svg

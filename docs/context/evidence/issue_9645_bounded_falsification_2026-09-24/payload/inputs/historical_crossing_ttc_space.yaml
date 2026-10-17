@@ -1,0 +1,29 @@
+schema_version: adversarial-search-space.v1
+description: Bounded v1 random-search space for crossing/TTC adversarial candidates.
+variables:
+  start_x:
+    min: 1.0
+    max: 3.0
+  start_y:
+    min: 2.0
+    max: 4.0
+  goal_x:
+    min: 7.0
+    max: 9.0
+  goal_y:
+    min: 2.0
+    max: 4.0
+  spawn_time_s:
+    min: 0.0
+    max: 2.0
+  pedestrian_speed_mps:
+    min: 0.8
+    max: 1.4
+  pedestrian_delay_s:
+    min: 0.0
+    max: 2.0
+  scenario_seed:
+    min: 100
+    max: 999
+constraints:
+  min_start_goal_distance_m: 2.0

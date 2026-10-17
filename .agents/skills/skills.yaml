@@ -1117,6 +1117,26 @@ skills:
     delegates_to: []
     output_schema: skill_run_summary.v1
     aliases: []
+  test-value-gate:
+    description: Decide whether a pytest test is worth adding, changing, or keeping, and prove that bug tests fail for the right reason.
+    category: validation
+    kind: atomic
+    phase: verification
+    requires_write: false
+    requires_slurm: false
+    requires_benchmark_artifacts: false
+    writes:
+      git: false
+      github_issue: false
+      github_project: false
+      github_pr: false
+      filesystem: false
+    requires:
+    - git
+    - uv
+    delegates_to: []
+    output_schema: skill_run_summary.v1
+    aliases: []
   trace-mechanism-review:
     writes:
       git: false

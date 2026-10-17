@@ -1,0 +1,7 @@
+{
+  "artifact_path": "docs/context/evidence/2026-10-04_freeze008_f2_calibration/producer-preservation-receipt.json",
+  "artifact_sha256": "abe65fa2c4f1142d091060cd6d14d1be65f1439a66c32dbd7daf31e7a0e69acc",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "evidence-review-marker.v1"
+}

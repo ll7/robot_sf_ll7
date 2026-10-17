@@ -11,6 +11,7 @@ from typing import Any
 import pytest
 
 from robot_sf._execution_context import (
+    LEARNED_POLICY_CONTEXT_FIELDS,
     build_execution_context,
     execution_context_digest,
     public_machine_id,
@@ -98,6 +99,17 @@ def _update_context(report: dict[str, Any], **updates: Any) -> None:
     for field in ("numpy_version", "numba_version", "python_version", "cpu_only", "workers"):
         if field in updates:
             environment[field] = updates[field]
+
+
+@pytest.mark.parametrize("field", LEARNED_POLICY_CONTEXT_FIELDS)
+def test_v1_exact_repeat_refuses_additive_policy_fields(manifest, field):
+    """Policy provenance additions must not silently expand the historical v1 wire contract."""
+    report = _host_report(manifest, "fixture-v1-context")
+    for name in LEARNED_POLICY_CONTEXT_FIELDS:
+        report["environment"]["execution_context"].pop(name, None)
+    _update_context(report, **{field: "fixture-policy-version"})
+    with pytest.raises(ValueError, match="unsupported fields"):
+        verify_host_report(manifest, report)
 
 
 def test_manifest_pins_all_seven_knife_edge_cells_and_their_420_runs(manifest):

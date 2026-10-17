@@ -61,11 +61,20 @@ uv run python scripts/validation/run_issue_9348_three_width_campaign.py \
   --mode verify --output-root "$RETRIEVED_CAMPAIGN_ROOT"
 ```
 
-The producer runs the geometry/oracle preflight, then the 18 H400 episodes
-serially with one paired-reset session. It writes validated raw episode JSONL,
+The producer runs the geometry/oracle preflight, then a separate actor-present
+H10 confirmation over all 18 planner/seed/width cells. H400 starts only if
+every short probe follows its declared baseline command route, has a nonempty
+simulation/action trace and valid typed spawn clearance (`spawn_validity.v1`
+or `.v2` with available, non-overlapping reset evidence), is fallback-free,
+and is paired by reset and RNG receipts. The oracle's exact `slow_speed_tier`
+finding stays diagnostic
+and cannot clear this gate. A red confirmation writes a failure receipt and
+stops before H400. The producer then runs the 18 H400 episodes serially with
+one paired-reset session. It writes validated raw episode JSONL,
 line and file SHA-256 digests, copied scientific inputs, generated maps and
 scenarios, a six-pair receipt manifest, a report, and full-tree `SHA256SUMS`.
-The verify mode checks the retrieved bundle without modifying it. A failed
+The verify mode rebuilds H10 admission from the preserved raw probes before
+checking the H400 report, without modifying the bundle. A failed
 run writes `run_failure.json` and returns nonzero; it is not confirmation
 evidence. The private launcher must also preserve startup, producer exit,
 scheduler, retrieval, and cold-readback receipts outside the hashed producer
@@ -79,7 +88,16 @@ not a significance basis. Arrival time uses successful pairs only, with
 failures censored at termination. Pedestrian delay or impairment is explicitly
 unavailable without a matched no-robot control trace. Human review must tie
 each mechanism claim to a recorded trace before promoting the slice. Only rows
-with native execution and readiness status plus a non-empty planner decision
-trace are native evidence. Fallback, degraded, adapter and incomplete-trace
+with the expected `goal` native-command mode or documented Social Force adapter,
+valid typed spawn clearance, nonempty simulation/action steps, and no runtime
+fallback marker may enter the complete-pair comparison. These baseline planners
+have empty specialized internal-decision arrays by design. The raw trace must
+carry one indexed simulation step with finite selected and applied action fields
+for each executed row step; placeholders and truncated traces are excluded.
+The report lists unavailable reset sampler/route and unrelated paired-effect
+telemetry as ancillary coverage gaps. Unexpected adapters, fallback, degraded and incomplete
 rows are excluded; no physical doorway or deployment safety claim follows from
 this simulator-only comparison.
+The report's legacy `native_rows` count means eligible baseline rows under
+these arm-specific routes; each row also records its actual command execution
+mode, so Social Force adapter execution is not presented as native commands.

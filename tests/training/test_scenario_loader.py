@@ -407,6 +407,23 @@ def test_build_robot_config_applies_goal_completion_policy_override(tmp_path: Pa
     assert config.sim_config.goal_completion_policy == GOAL_COMPLETION_POLICY_GOAL_ZONE_ENTRY_V1
 
 
+def test_corrected_diagnostic_activates_goal_sampling_policy() -> None:
+    """Every corrected diagnostic row must activate its declared sampling policy."""
+    matrix = (
+        Path(__file__).resolve().parents[2]
+        / "configs/scenarios/issue_9860_corrected_diagnostic_v1.yaml"
+    )
+    scenarios = load_scenarios(matrix)
+    assert len(scenarios) == 48
+    assert len({scenario["name"] for scenario in scenarios}) == 48
+
+    for scenario in scenarios:
+        declared = scenario["simulation_config"]["robot_goal_sampling_policy"]
+        assert declared == "footprint_clearance_v1", scenario["name"]
+        effective = build_robot_config_from_scenario(scenario, scenario_path=matrix)
+        assert effective.sim_config.robot_goal_sampling_policy == declared, scenario["name"]
+
+
 def test_build_robot_config_rejects_unknown_goal_completion_policy(tmp_path: Path) -> None:
     """Unknown success-definition versions must fail closed during scenario loading."""
     with pytest.raises(ValueError, match="Unknown goal_completion_policy"):

@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[2]
 RELEASE_DOC = ROOT / "docs" / "RELEASE.md"
 FULL_MANIFEST = "configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml"
 SMOKE_MANIFEST = (
-    "configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_2.yaml"
+    "configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_5.yaml"
 )
 SMOKE_RECEIPT = "output/benchmarks/camera_ready/<smoke_id>/release/release_result.json"
 

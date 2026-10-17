@@ -155,6 +155,36 @@ Any deletion, symlink/path alias, identity drift, new content, lease, lookup err
 refuses removal. Normal worktree removal preserves the local branch and its commits; artifact
 preservation remains the owner's responsibility before retirement.
 
+### Report and reclaim temporary validation copies
+
+Task-owned validation copies under `/tmp` (`robot-sf-pr<N>-*` and siblings) are not custody
+artifacts; an interrupted run that skips its cleanup trap silently drains the headroom the
+2 GiB worktree capacity gate depends on (#9720). Inventory first — dry-run by default:
+
+```bash
+uv run python scripts/dev/temp_copy_doctor.py            # counts + bytes by PR, ownership, age
+uv run python scripts/dev/temp_copy_doctor.py --json     # full temp_copy_doctor.v1 report
+```
+
+The doctor never deletes `protected` (lock roots, symlinks), `active` (fresh or
+process-referenced), or `unclassified` data. Reclaim is explicit and reviewable:
+
+```bash
+# paths registered by a task and marked completed
+uv run python scripts/dev/temp_copy_doctor.py --apply
+
+# ad-hoc copies for a PR confirmed merged/closed (age gate still applies)
+uv run python scripts/dev/temp_copy_doctor.py --apply --pr <PR_NUMBER> --assume-merged
+```
+
+Register a copy when creating it, and remove it on completion after validation logs are
+preserved:
+
+```bash
+uv run python scripts/dev/task_temp_registry.py register --task <TASK_ID> --path /tmp/robot-sf-pr<PR>-*
+uv run python scripts/dev/task_temp_registry.py complete --task <TASK_ID> --remove
+```
+
 ### Audit durable locality and failure domains
 
 ```bash

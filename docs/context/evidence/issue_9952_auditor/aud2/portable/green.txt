@@ -1,0 +1,27 @@
+<!-- AI-GENERATED (10007, 2026-10-01) - NEEDS-REVIEW -->
+Shared-venv scratch preflight passed: path=/tmp available=93386336KiB required=1048576KiB
+Shared-venv selection gate acquired: producer-home/luttkule/aud/.git/robot-sf-venv-selection-6b91de2490d8.lockdir
+Shared-venv project package freshness preflight passed: package=pysocialforce venv=producer-home/luttkule/aud-work/.venv
+Shared-venv tool freshness preflight skipped: tool=pytest reason=interpreter-or-shell elapsed_ms=285 venv=producer-home/luttkule/aud-work/.venv
+............................                                             [100%]
+============================= slowest 10 durations =============================
+0.07s call     tests/analysis_workbench/test_aud2_detectors.py::test_failure_subgroup_has_outcome_incidence_without_external_control
+0.03s call     tests/analysis_workbench/test_aud2_detectors.py::test_planner_uniform_failures_compare_against_scenario_not_planner_config
+0.02s call     tests/analysis_workbench/test_aud2_detectors.py::test_uniform_metric_shift_has_cross_planner_median_signal
+0.01s call     tests/analysis_workbench/test_aud2_detectors.py::test_published_unresolved_candidate_exposes_runner_simulator_horizon_mismatch
+
+(6 durations < 0.005s hidden.  Use -vv to show these durations.)
+
+Slow Test Report (soft<20s hard=60s, top 10)
+1) tests/analysis_workbench/test_aud2_detectors.py::test_failure_subgroup_has_outcome_incidence_without_external_control  0.07s
+2) tests/analysis_workbench/test_aud2_detectors.py::test_planner_uniform_failures_compare_against_scenario_not_planner_config  0.03s
+3) tests/analysis_workbench/test_aud2_detectors.py::test_uniform_metric_shift_has_cross_planner_median_signal  0.02s
+4) tests/analysis_workbench/test_aud2_detectors.py::test_published_unresolved_candidate_exposes_runner_simulator_horizon_mismatch  0.01s
+5) tests/analysis_workbench/test_aud2_detectors.py::test_horizon_timeout_steps_cannot_disappear_inside_small_outcome_cohort  0.00s
+6) tests/analysis_workbench/test_aud2_refutations.py::test_malformed_physical_scalar_does_not_report_clear[clearance_m]  0.00s
+7) tests/analysis_workbench/test_aud2_refutations.py::test_malformed_physical_scalar_does_not_report_clear[ped_force_mean]  0.00s
+8) tests/analysis_workbench/test_aud2_refutations.py::test_malformed_physical_scalar_does_not_report_clear[time_to_collision_min]  0.00s
+9) tests/analysis_workbench/test_aud2_refutations.py::test_malformed_physical_scalar_does_not_report_clear[total_collision_count]  0.00s
+10) tests/analysis_workbench/test_aud2_detectors.py::test_mad_floor_keeps_percent_level_signal_and_rejects_micro_noise[cohort_multivariate_outlier]  0.00s
+
+28 passed in 0.93s

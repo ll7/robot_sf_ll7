@@ -1,0 +1,2515 @@
+{
+  "metadata": {
+    "repository": "ll7/robot_sf_ll7",
+    "base_sha": "33a4735900153e742828227cc2171436ea09cd90",
+    "source_ref": "origin/main",
+    "source_dirty_at_inventory": false,
+    "collected_at": "2026-10-12T19:37:54.322896+00:00",
+    "window": "latest up to 200 workflow runs per registered workflow; latest attempt only",
+    "transports": {
+      "rest-run-attempt-jobs": 4840,
+      "graphql-check-suite-latest": 731
+    },
+    "complete": true,
+    "workflow_count": 44,
+    "run_count": 5571,
+    "job_count": 11391,
+    "runtime": "job start to completion; workflow earliest executing job to latest completion, excluding queue time and skipped jobs; completed decisive outcomes only",
+    "failure_rate": "(failure + timed_out + action_required + startup_failure + stale) / decisive outcomes; cancelled, skipped and unfinished excluded",
+    "classification": "a retains plausible functional/security/integrity defect detection conservatively; b bookkeeping/non-validation orchestration; c exact duplicate validation. No zero-failure inference of uselessness.",
+    "source_authority": "Current workflow bytes at base SHA; historical jobs are API observations, not current authority. GitHub-managed/retired sources and GraphQL runner labels/steps are unavailable companions.",
+    "artifacts": [
+      {
+        "path": "observations.csv",
+        "sha256": "6efa8fee3a5c053b94fe27c4c018b27091d5cbf64bd8bc1db9674541cd5ac745"
+      }
+    ]
+  },
+  "workflows": [
+    {
+      "id": 329866742,
+      "name": "RobotSF actionable-change monitor",
+      "path": ".github/workflows/actionable-change-monitor.yml",
+      "current_source": true,
+      "classification": "b",
+      "reason": "Scheduled research queue report; already outside PR admission.",
+      "current_jobs": [
+        {
+          "id": "monitor",
+          "display_name": "monitor",
+          "classification": "b",
+          "reason": "Scheduled research queue report; already outside PR admission.",
+          "observed_exact_name": true
+        }
+      ],
+      "sample_started": "2026-08-18T12:50:29Z",
+      "sample_ended": "2026-10-12T14:44:28Z",
+      "observations": 200,
+      "decisive": 200,
+      "failures": 0,
+      "failure_rate": 0.0,
+      "median_seconds": 228.0,
+      "cancelled": 0,
+      "skipped": 0,
+      "incomplete": 0,
+      "jobs": [
+        {
+          "name": "monitor",
+          "classification": "b",
+          "reason": "Scheduled research queue report; already outside PR admission.",
+          "observations": 200,
+          "decisive": 200,
+          "failures": 0,
+          "failure_rate": 0.0,
+          "median_seconds": 228.0,
+          "cancelled": 0,
+          "skipped": 0,
+          "incomplete": 0
+        }
+      ]
+    },
+    {
+      "id": 346160281,
+      "name": "Actionlint",
+      "path": ".github/workflows/actionlint.yml",
+      "current_source": true,
+      "classification": "a",
+      "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+      "current_jobs": [
+        {
+          "id": "actionlint",
+          "display_name": "actionlint",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observed_exact_name": true
+        }
+      ],
+      "sample_started": "2026-09-09T11:53:56Z",
+      "sample_ended": "2026-10-12T13:25:11Z",
+      "observations": 200,
+      "decisive": 184,
+      "failures": 0,
+      "failure_rate": 0.0,
+      "median_seconds": 13.0,
+      "cancelled": 2,
+      "skipped": 14,
+      "incomplete": 0,
+      "jobs": [
+        {
+          "name": "actionlint",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observations": 200,
+          "decisive": 184,
+          "failures": 0,
+          "failure_rate": 0.0,
+          "median_seconds": 13.0,
+          "cancelled": 2,
+          "skipped": 14,
+          "incomplete": 0
+        }
+      ]
+    },
+    {
+      "id": 346673810,
+      "name": "Apply issue 8134 canonical lint correction",
+      "path": ".github/workflows/apply-8134-lint-v2.yml",
+      "current_source": false,
+      "classification": "b",
+      "reason": "Historical workflow already absent from current main; retain historical measurements, no current job to change.",
+      "current_jobs": [],
+      "sample_started": "2026-08-31T14:14:42Z",
+      "sample_ended": "2026-08-31T14:19:46Z",
+      "observations": 2,
+      "decisive": 2,
+      "failures": 1,
+      "failure_rate": 0.5,
+      "median_seconds": 17.5,
+      "cancelled": 0,
+      "skipped": 0,
+      "incomplete": 0,
+      "jobs": [
+        {
+          "name": "apply-canonical-lint",
+          "classification": "b",
+          "reason": "Historical workflow already absent from current main; retain historical measurements, no current job to change.",
+          "observations": 2,
+          "decisive": 2,
+          "failures": 1,
+          "failure_rate": 0.5,
+          "median_seconds": 17.5,
+          "cancelled": 0,
+          "skipped": 0,
+          "incomplete": 0
+        }
+      ]
+    },
+    {
+      "id": 346672790,
+      "name": "Apply issue 8134 lint correction",
+      "path": ".github/workflows/apply-8134-lint.yml",
+      "current_source": false,
+      "classification": "b",
+      "reason": "Historical workflow already absent from current main; retain historical measurements, no current job to change.",
+      "current_jobs": [],
+      "sample_started": "2026-08-31T14:13:27Z",
+      "sample_ended": "2026-08-31T14:19:46Z",
+      "observations": 3,
+      "decisive": 3,
+      "failures": 3,
+      "failure_rate": 1.0,
+      "median_seconds": 16.0,
+      "cancelled": 0,
+      "skipped": 0,
+      "incomplete": 0,
+      "jobs": [
+        {
+          "name": "apply-lint-correction",
+          "classification": "b",
+          "reason": "Historical workflow already absent from current main; retain historical measurements, no current job to change.",
+          "observations": 3,
+          "decisive": 3,
+          "failures": 3,
+          "failure_rate": 1.0,
+          "median_seconds": 16.0,
+          "cancelled": 0,
+          "skipped": 0,
+          "incomplete": 0
+        }
+      ]
+    },
+    {
+      "id": 346659583,
+      "name": "Apply issue 8134 patch",
+      "path": ".github/workflows/apply-8134.yml",
+      "current_source": false,
+      "classification": "b",
+      "reason": "Historical workflow already absent from current main; retain historical measurements, no current job to change.",
+      "current_jobs": [],
+      "sample_started": "2026-08-31T13:55:36Z",
+      "sample_ended": "2026-08-31T14:06:10Z",
+      "observations": 4,
+      "decisive": 4,
+      "failures": 3,
+      "failure_rate": 0.75,
+      "median_seconds": 14.0,
+      "cancelled": 0,
+      "skipped": 0,
+      "incomplete": 0,
+      "jobs": [
+        {
+          "name": "apply-patch",
+          "classification": "b",
+          "reason": "Historical workflow already absent from current main; retain historical measurements, no current job to change.",
+          "observations": 4,
+          "decisive": 4,
+          "failures": 3,
+          "failure_rate": 0.75,
+          "median_seconds": 14.0,
+          "cancelled": 0,
+          "skipped": 0,
+          "incomplete": 0
+        }
+      ]
+    },
+    {
+      "id": 354817169,
+      "name": "Apply issue 8677 projection repair",
+      "path": ".github/workflows/apply-issue-8677-projection-repair.yml",
+      "current_source": false,
+      "classification": "b",
+      "reason": "Historical workflow already absent from current main; retain historical measurements, no current job to change.",
+      "current_jobs": [],
+      "sample_started": "2026-09-10T10:32:27Z",
+      "sample_ended": "2026-09-10T10:32:27Z",
+      "observations": 1,
+      "decisive": 1,
+      "failures": 1,
+      "failure_rate": 1.0,
+      "median_seconds": 18.0,
+      "cancelled": 0,
+      "skipped": 0,
+      "incomplete": 0,
+      "jobs": [
+        {
+          "name": "apply",
+          "classification": "b",
+          "reason": "Historical workflow already absent from current main; retain historical measurements, no current job to change.",
+          "observations": 1,
+          "decisive": 1,
+          "failures": 1,
+          "failure_rate": 1.0,
+          "median_seconds": 18.0,
+          "cancelled": 0,
+          "skipped": 0,
+          "incomplete": 0
+        }
+      ]
+    },
+    {
+      "id": 336599925,
+      "name": "Asset Rights Inventory",
+      "path": ".github/workflows/asset-rights-inventory.yml",
+      "current_source": true,
+      "classification": "a",
+      "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+      "current_jobs": [
+        {
+          "id": "inventory",
+          "display_name": "classify tracked assets",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observed_exact_name": true
+        }
+      ],
+      "sample_started": "2026-10-08T10:58:19Z",
+      "sample_ended": "2026-10-12T18:58:33Z",
+      "observations": 200,
+      "decisive": 132,
+      "failures": 0,
+      "failure_rate": 0.0,
+      "median_seconds": 43.0,
+      "cancelled": 3,
+      "skipped": 65,
+      "incomplete": 0,
+      "jobs": [
+        {
+          "name": "classify tracked assets",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observations": 200,
+          "decisive": 132,
+          "failures": 0,
+          "failure_rate": 0.0,
+          "median_seconds": 43.0,
+          "cancelled": 3,
+          "skipped": 65,
+          "incomplete": 0
+        }
+      ]
+    },
+    {
+      "id": 277346410,
+      "name": "Benchmark Docker Repro Smoke",
+      "path": ".github/workflows/benchmark-docker-repro-smoke.yml",
+      "current_source": true,
+      "classification": "a",
+      "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+      "current_jobs": [
+        {
+          "id": "docker-repro-smoke",
+          "display_name": "docker-repro-smoke",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observed_exact_name": true
+        }
+      ],
+      "sample_started": "2026-05-15T12:56:03Z",
+      "sample_ended": "2026-10-08T12:14:21Z",
+      "observations": 184,
+      "decisive": 166,
+      "failures": 2,
+      "failure_rate": 0.012048192771084338,
+      "median_seconds": 215.0,
+      "cancelled": 11,
+      "skipped": 7,
+      "incomplete": 0,
+      "jobs": [
+        {
+          "name": "docker-repro-smoke",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observations": 184,
+          "decisive": 166,
+          "failures": 2,
+          "failure_rate": 0.012048192771084338,
+          "median_seconds": 215.0,
+          "cancelled": 11,
+          "skipped": 7,
+          "incomplete": 0
+        }
+      ]
+    },
+    {
+      "id": 311089032,
+      "name": "Blocker staleness report",
+      "path": ".github/workflows/blocker-staleness.yml",
+      "current_source": true,
+      "classification": "b",
+      "reason": "Scheduled blocker report; already outside PR admission.",
+      "current_jobs": [
+        {
+          "id": "blocker-staleness",
+          "display_name": "blocker-staleness",
+          "classification": "b",
+          "reason": "Scheduled blocker report; already outside PR admission.",
+          "observed_exact_name": true
+        }
+      ],
+      "sample_started": "2026-07-13T09:21:21Z",
+      "sample_ended": "2026-10-12T14:23:42Z",
+      "observations": 14,
+      "decisive": 14,
+      "failures": 0,
+      "failure_rate": 0.0,
+      "median_seconds": 188.5,
+      "cancelled": 0,
+      "skipped": 0,
+      "incomplete": 0,
+      "jobs": [
+        {
+          "name": "blocker-staleness",
+          "classification": "b",
+          "reason": "Scheduled blocker report; already outside PR admission.",
+          "observations": 14,
+          "decisive": 14,
+          "failures": 0,
+          "failure_rate": 0.0,
+          "median_seconds": 188.5,
+          "cancelled": 0,
+          "skipped": 0,
+          "incomplete": 0
+        }
+      ]
+    },
+    {
+      "id": 380242051,
+      "name": "CI runner queue watchdog",
+      "path": ".github/workflows/ci-runner-watchdog.yml",
+      "current_source": true,
+      "classification": "b",
+      "reason": "Runner recovery, not a correctness gate; retain delivery infrastructure.",
+      "current_jobs": [
+        {
+          "id": "recover",
+          "display_name": "recover",
+          "classification": "b",
+          "reason": "Runner recovery, not a correctness gate; retain delivery infrastructure.",
+          "observed_exact_name": true
+        }
+      ],
+      "sample_started": "2026-10-10T03:53:38Z",
+      "sample_ended": "2026-10-12T19:19:56Z",
+      "observations": 194,
+      "decisive": 188,
+      "failures": 6,
+      "failure_rate": 0.031914893617021274,
+      "median_seconds": 136.0,
+      "cancelled": 0,
+      "skipped": 0,
+      "incomplete": 6,
+      "jobs": [
+        {
+          "name": "recover",
+          "classification": "b",
+          "reason": "Runner recovery, not a correctness gate; retain delivery infrastructure.",
+          "observations": 194,
+          "decisive": 188,
+          "failures": 6,
+          "failure_rate": 0.031914893617021274,
+          "median_seconds": 136.0,
+          "cancelled": 0,
+          "skipped": 0,
+          "incomplete": 6
+        }
+      ]
+    },
+    {
+      "id": 85849363,
+      "name": "CI",
+      "path": ".github/workflows/ci.yml",
+      "current_source": true,
+      "classification": "a",
+      "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+      "current_jobs": [
+        {
+          "id": "self-hosted-admission",
+          "display_name": "self-hosted-admission",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observed_exact_name": true
+        },
+        {
+          "id": "dispatch-ownership",
+          "display_name": "dispatch-ownership",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observed_exact_name": true
+        },
+        {
+          "id": "runner-availability",
+          "display_name": "runner-availability",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observed_exact_name": true
+        },
+        {
+          "id": "fast-feedback",
+          "display_name": "fast-feedback",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observed_exact_name": true
+        },
+        {
+          "id": "browser-witnesses",
+          "display_name": "browser-witnesses",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observed_exact_name": true
+        },
+        {
+          "id": "changed-coverage-gate",
+          "display_name": "changed-coverage-gate",
+          "classification": "b",
+          "reason": "Numeric coverage/process gate. Retained: changed-coverage proof is consumed by merge admission; relaxing that coupled policy requires a separate reviewed change, tracked on #10070.",
+          "observed_exact_name": true
+        },
+        {
+          "id": "coverage-gate",
+          "display_name": "coverage-gate",
+          "classification": "b",
+          "reason": "Numeric coverage/process gate. Retained: changed-coverage proof is consumed by merge admission; relaxing that coupled policy requires a separate reviewed change, tracked on #10070.",
+          "observed_exact_name": true
+        },
+        {
+          "id": "compat-matrix",
+          "display_name": "compat-matrix",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observed_exact_name": true
+        },
+        {
+          "id": "fast-pysf-compat",
+          "display_name": "fast-pysf-compat",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observed_exact_name": true
+        },
+        {
+          "id": "smoke-artifacts",
+          "display_name": "smoke-artifacts",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observed_exact_name": true
+        },
+        {
+          "id": "scenario-validation",
+          "display_name": "scenario-validation",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observed_exact_name": true
+        },
+        {
+          "id": "new-tests-fail-on-base",
+          "display_name": "new-tests-fail-on-base",
+          "classification": "b",
+          "reason": "Advisory test-value audit, not a behavioral defect verdict. Opt-in execution candidate tracked on #10070; current test-quality policy belongs to #9986.",
+          "observed_exact_name": true
+        },
+        {
+          "id": "reproducibility-check",
+          "display_name": "reproducibility-check",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observed_exact_name": true
+        },
+        {
+          "id": "reproducibility-check-reconciliation",
+          "display_name": "reproducibility-check-reconciliation",
+          "classification": "b",
+          "reason": "Diagnostic hosted-status repair; retain until its separately documented GitHub pending-state failure is shown obsolete.",
+          "observed_exact_name": true
+        },
+        {
+          "id": "xdist-scratch-isolation",
+          "display_name": "xdist-scratch-isolation",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observed_exact_name": true
+        },
+        {
+          "id": "wheel-smoke-install",
+          "display_name": "wheel-smoke-install",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observed_exact_name": true
+        },
+        {
+          "id": "examples-smoke",
+          "display_name": "examples-smoke",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observed_exact_name": true
+        },
+        {
+          "id": "notebooks-smoke",
+          "display_name": "notebooks-smoke",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observed_exact_name": true
+        },
+        {
+          "id": "determinism-gate",
+          "display_name": "determinism-gate",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observed_exact_name": true
+        },
+        {
+          "id": "exact-repeat-model-preflight",
+          "display_name": "exact-repeat-model-preflight",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observed_exact_name": true
+        },
+        {
+          "id": "ci",
+          "display_name": "${{ github.event_name == 'pull_request' && github.event.pull_request.draft && 'ci-draft' || 'ci' }}",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observed_exact_name": false
+        }
+      ],
+      "sample_started": "2026-10-10T02:39:45Z",
+      "sample_ended": "2026-10-12T19:19:55Z",
+      "observations": 200,
+      "decisive": 107,
+      "failures": 60,
+      "failure_rate": 0.5607476635514018,
+      "median_seconds": 2950.0,
+      "cancelled": 81,
+      "skipped": 0,
+      "incomplete": 12,
+      "jobs": [
+        {
+          "name": "browser-witnesses",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observations": 172,
+          "decisive": 106,
+          "failures": 0,
+          "failure_rate": 0.0,
+          "median_seconds": 232.5,
+          "cancelled": 38,
+          "skipped": 24,
+          "incomplete": 4
+        },
+        {
+          "name": "changed-coverage-gate",
+          "classification": "b",
+          "reason": "Numeric coverage/process gate. Retained: changed-coverage proof is consumed by merge admission; relaxing that coupled policy requires a separate reviewed change, tracked on #10070.",
+          "observations": 180,
+          "decisive": 32,
+          "failures": 3,
+          "failure_rate": 0.09375,
+          "median_seconds": 247.0,
+          "cancelled": 68,
+          "skipped": 80,
+          "incomplete": 0
+        },
+        {
+          "name": "ci",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observations": 157,
+          "decisive": 155,
+          "failures": 70,
+          "failure_rate": 0.45161290322580644,
+          "median_seconds": 14.0,
+          "cancelled": 2,
+          "skipped": 0,
+          "incomplete": 0
+        },
+        {
+          "name": "ci-draft",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observations": 23,
+          "decisive": 23,
+          "failures": 3,
+          "failure_rate": 0.13043478260869565,
+          "median_seconds": 4.0,
+          "cancelled": 0,
+          "skipped": 0,
+          "incomplete": 0
+        },
+        {
+          "name": "compat-matrix",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observations": 48,
+          "decisive": 0,
+          "failures": 0,
+          "failure_rate": null,
+          "median_seconds": null,
+          "cancelled": 20,
+          "skipped": 28,
+          "incomplete": 0
+        },
+        {
+          "name": "compat-matrix (macos-latest, 3.11)",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observations": 142,
+          "decisive": 119,
+          "failures": 1,
+          "failure_rate": 0.008403361344537815,
+          "median_seconds": 527.0,
+          "cancelled": 20,
+          "skipped": 0,
+          "incomplete": 3
+        },
+        {
+          "name": "compat-matrix (macos-latest, 3.13)",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observations": 142,
+          "decisive": 119,
+          "failures": 1,
+          "failure_rate": 0.008403361344537815,
+          "median_seconds": 518.0,
+          "cancelled": 21,
+          "skipped": 0,
+          "incomplete": 2
+        },
+        {
+          "name": "compat-matrix (ubuntu-latest, 3.11)",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observations": 142,
+          "decisive": 108,
+          "failures": 0,
+          "failure_rate": 0.0,
+          "median_seconds": 563.0,
+          "cancelled": 31,
+          "skipped": 0,
+          "incomplete": 3
+        },
+        {
+          "name": "compat-matrix (ubuntu-latest, 3.13)",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observations": 142,
+          "decisive": 107,
+          "failures": 1,
+          "failure_rate": 0.009345794392523364,
+          "median_seconds": 562.0,
+          "cancelled": 31,
+          "skipped": 0,
+          "incomplete": 4
+        },
+        {
+          "name": "coverage-gate",
+          "classification": "b",
+          "reason": "Numeric coverage/process gate. Retained: changed-coverage proof is consumed by merge admission; relaxing that coupled policy requires a separate reviewed change, tracked on #10070.",
+          "observations": 180,
+          "decisive": 1,
+          "failures": 0,
+          "failure_rate": 0.0,
+          "median_seconds": 437.0,
+          "cancelled": 68,
+          "skipped": 111,
+          "incomplete": 0
+        },
+        {
+          "name": "determinism-gate",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observations": 186,
+          "decisive": 106,
+          "failures": 0,
+          "failure_rate": 0.0,
+          "median_seconds": 20.0,
+          "cancelled": 51,
+          "skipped": 28,
+          "incomplete": 1
+        },
+        {
+          "name": "dispatch-ownership",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observations": 192,
+          "decisive": 171,
+          "failures": 9,
+          "failure_rate": 0.05263157894736842,
+          "median_seconds": 29.0,
+          "cancelled": 19,
+          "skipped": 0,
+          "incomplete": 2
+        },
+        {
+          "name": "exact-repeat-model-preflight",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observations": 190,
+          "decisive": 114,
+          "failures": 0,
+          "failure_rate": 0.0,
+          "median_seconds": 283.5,
+          "cancelled": 44,
+          "skipped": 28,
+          "incomplete": 4
+        },
+        {
+          "name": "examples-smoke",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observations": 186,
+          "decisive": 76,
+          "failures": 6,
+          "failure_rate": 0.07894736842105263,
+          "median_seconds": 570.0,
+          "cancelled": 51,
+          "skipped": 56,
+          "incomplete": 3
+        },
+        {
+          "name": "fast-feedback",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observations": 67,
+          "decisive": 0,
+          "failures": 0,
+          "failure_rate": null,
+          "median_seconds": null,
+          "cancelled": 39,
+          "skipped": 28,
+          "incomplete": 0
+        },
+        {
+          "name": "fast-feedback (1)",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observations": 119,
+          "decisive": 86,
+          "failures": 25,
+          "failure_rate": 0.29069767441860467,
+          "median_seconds": 2178.5,
+          "cancelled": 28,
+          "skipped": 0,
+          "incomplete": 5
+        },
+        {
+          "name": "fast-feedback (2)",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observations": 119,
+          "decisive": 87,
+          "failures": 24,
+          "failure_rate": 0.27586206896551724,
+          "median_seconds": 2047.0,
+          "cancelled": 26,
+          "skipped": 0,
+          "incomplete": 6
+        },
+        {
+          "name": "fast-feedback (3)",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observations": 119,
+          "decisive": 89,
+          "failures": 34,
+          "failure_rate": 0.38202247191011235,
+          "median_seconds": 2110.0,
+          "cancelled": 25,
+          "skipped": 0,
+          "incomplete": 5
+        },
+        {
+          "name": "fast-feedback (4)",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observations": 119,
+          "decisive": 87,
+          "failures": 19,
+          "failure_rate": 0.21839080459770116,
+          "median_seconds": 2118.0,
+          "cancelled": 27,
+          "skipped": 0,
+          "incomplete": 5
+        },
+        {
+          "name": "fast-feedback (5)",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observations": 119,
+          "decisive": 85,
+          "failures": 22,
+          "failure_rate": 0.25882352941176473,
+          "median_seconds": 2186.0,
+          "cancelled": 29,
+          "skipped": 0,
+          "incomplete": 5
+        },
+        {
+          "name": "fast-feedback (6)",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observations": 119,
+          "decisive": 86,
+          "failures": 27,
+          "failure_rate": 0.313953488372093,
+          "median_seconds": 2083.0,
+          "cancelled": 28,
+          "skipped": 0,
+          "incomplete": 5
+        },
+        {
+          "name": "fast-pysf-compat",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observations": 190,
+          "decisive": 122,
+          "failures": 0,
+          "failure_rate": 0.0,
+          "median_seconds": 14.0,
+          "cancelled": 38,
+          "skipped": 28,
+          "incomplete": 2
+        },
+        {
+          "name": "new-tests-fail-on-base",
+          "classification": "b",
+          "reason": "Advisory test-value audit, not a behavioral defect verdict. Opt-in execution candidate tracked on #10070; current test-quality policy belongs to #9986.",
+          "observations": 190,
+          "decisive": 100,
+          "failures": 0,
+          "failure_rate": 0.0,
+          "median_seconds": 257.5,
+          "cancelled": 30,
+          "skipped": 57,
+          "incomplete": 3
+        },
+        {
+          "name": "notebooks-smoke",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observations": 186,
+          "decisive": 78,
+          "failures": 0,
+          "failure_rate": 0.0,
+          "median_seconds": 292.5,
+          "cancelled": 49,
+          "skipped": 56,
+          "incomplete": 3
+        },
+        {
+          "name": "reproducibility-check",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observations": 190,
+          "decisive": 97,
+          "failures": 0,
+          "failure_rate": 0.0,
+          "median_seconds": 237.0,
+          "cancelled": 32,
+          "skipped": 57,
+          "incomplete": 4
+        },
+        {
+          "name": "reproducibility-check-reconciliation",
+          "classification": "b",
+          "reason": "Diagnostic hosted-status repair; retain until its separately documented GitHub pending-state failure is shown obsolete.",
+          "observations": 186,
+          "decisive": 95,
+          "failures": 1,
+          "failure_rate": 0.010526315789473684,
+          "median_seconds": 15.0,
+          "cancelled": 32,
+          "skipped": 57,
+          "incomplete": 2
+        },
+        {
+          "name": "runner-availability",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observations": 186,
+          "decisive": 115,
+          "failures": 0,
+          "failure_rate": 0.0,
+          "median_seconds": 13.0,
+          "cancelled": 39,
+          "skipped": 28,
+          "incomplete": 4
+        },
+        {
+          "name": "scenario-validation",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observations": 190,
+          "decisive": 119,
+          "failures": 2,
+          "failure_rate": 0.01680672268907563,
+          "median_seconds": 215.0,
+          "cancelled": 39,
+          "skipped": 28,
+          "incomplete": 4
+        },
+        {
+          "name": "self-hosted-admission",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observations": 192,
+          "decisive": 171,
+          "failures": 0,
+          "failure_rate": 0.0,
+          "median_seconds": 13.0,
+          "cancelled": 20,
+          "skipped": 0,
+          "incomplete": 1
+        },
+        {
+          "name": "smoke-artifacts",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observations": 186,
+          "decisive": 108,
+          "failures": 0,
+          "failure_rate": 0.0,
+          "median_seconds": 321.0,
+          "cancelled": 50,
+          "skipped": 28,
+          "incomplete": 0
+        },
+        {
+          "name": "wheel-smoke-install",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observations": 186,
+          "decisive": 107,
+          "failures": 0,
+          "failure_rate": 0.0,
+          "median_seconds": 384.0,
+          "cancelled": 50,
+          "skipped": 28,
+          "incomplete": 1
+        },
+        {
+          "name": "xdist-scratch-isolation",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observations": 190,
+          "decisive": 86,
+          "failures": 0,
+          "failure_rate": 0.0,
+          "median_seconds": 329.5,
+          "cancelled": 43,
+          "skipped": 57,
+          "incomplete": 4
+        }
+      ]
+    },
+    {
+      "id": 301291340,
+      "name": "CodeQL",
+      "path": ".github/workflows/codeql.yml",
+      "current_source": true,
+      "classification": "a",
+      "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+      "current_jobs": [
+        {
+          "id": "analyze",
+          "display_name": "Analyze Python",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observed_exact_name": true
+        }
+      ],
+      "sample_started": "2026-10-10T01:47:52Z",
+      "sample_ended": "2026-10-12T19:19:55Z",
+      "observations": 200,
+      "decisive": 145,
+      "failures": 0,
+      "failure_rate": 0.0,
+      "median_seconds": 237.0,
+      "cancelled": 31,
+      "skipped": 24,
+      "incomplete": 0,
+      "jobs": [
+        {
+          "name": "Analyze Python",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observations": 200,
+          "decisive": 145,
+          "failures": 0,
+          "failure_rate": 0.0,
+          "median_seconds": 237.0,
+          "cancelled": 31,
+          "skipped": 24,
+          "incomplete": 0
+        }
+      ]
+    },
+    {
+      "id": 301291342,
+      "name": "Dependency Review",
+      "path": ".github/workflows/dependency-review.yml",
+      "current_source": true,
+      "classification": "a",
+      "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+      "current_jobs": [
+        {
+          "id": "review",
+          "display_name": "review",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observed_exact_name": true
+        }
+      ],
+      "sample_started": "2026-09-03T03:03:43Z",
+      "sample_ended": "2026-10-11T00:14:03Z",
+      "observations": 200,
+      "decisive": 169,
+      "failures": 11,
+      "failure_rate": 0.0650887573964497,
+      "median_seconds": 16.0,
+      "cancelled": 8,
+      "skipped": 23,
+      "incomplete": 0,
+      "jobs": [
+        {
+          "name": "review",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observations": 200,
+          "decisive": 169,
+          "failures": 11,
+          "failure_rate": 0.0650887573964497,
+          "median_seconds": 16.0,
+          "cancelled": 8,
+          "skipped": 23,
+          "incomplete": 0
+        }
+      ]
+    },
+    {
+      "id": 301951616,
+      "name": "Docs & Evidence Integrity",
+      "path": ".github/workflows/docs-evidence-integrity.yml",
+      "current_source": true,
+      "classification": "a",
+      "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+      "current_jobs": [
+        {
+          "id": "docs-evidence-integrity",
+          "display_name": "docs-evidence-integrity",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observed_exact_name": true
+        }
+      ],
+      "sample_started": "2026-10-09T11:06:57Z",
+      "sample_ended": "2026-10-12T18:58:33Z",
+      "observations": 200,
+      "decisive": 146,
+      "failures": 3,
+      "failure_rate": 0.02054794520547945,
+      "median_seconds": 20.0,
+      "cancelled": 16,
+      "skipped": 38,
+      "incomplete": 0,
+      "jobs": [
+        {
+          "name": "docs-evidence-integrity",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observations": 200,
+          "decisive": 146,
+          "failures": 3,
+          "failure_rate": 0.02054794520547945,
+          "median_seconds": 20.0,
+          "cancelled": 16,
+          "skipped": 38,
+          "incomplete": 0
+        }
+      ]
+    },
+    {
+      "id": 323520810,
+      "name": "Docs Link Integrity",
+      "path": ".github/workflows/docs-link-integrity.yml",
+      "current_source": true,
+      "classification": "a",
+      "reason": "Unique full-repository link detection retained; duplicate checker setup merged into docs-evidence-integrity with failure-propagating check-name alias.",
+      "current_jobs": [
+        {
+          "id": "docs-link-integrity",
+          "display_name": "docs-link-integrity",
+          "classification": "a",
+          "reason": "Unique full-repository link detection retained; duplicate checker setup merged into docs-evidence-integrity with failure-propagating check-name alias.",
+          "observed_exact_name": true
+        }
+      ],
+      "sample_started": "2026-10-08T10:22:28Z",
+      "sample_ended": "2026-10-12T18:58:33Z",
+      "observations": 200,
+      "decisive": 122,
+      "failures": 0,
+      "failure_rate": 0.0,
+      "median_seconds": 24.0,
+      "cancelled": 13,
+      "skipped": 65,
+      "incomplete": 0,
+      "jobs": [
+        {
+          "name": "docs-link-integrity",
+          "classification": "a",
+          "reason": "Unique full-repository link detection retained; duplicate checker setup merged into docs-evidence-integrity with failure-propagating check-name alias.",
+          "observations": 200,
+          "decisive": 122,
+          "failures": 0,
+          "failure_rate": 0.0,
+          "median_seconds": 24.0,
+          "cancelled": 13,
+          "skipped": 65,
+          "incomplete": 0
+        }
+      ]
+    },
+    {
+      "id": 315020796,
+      "name": "Evidence-registry ratchet",
+      "path": ".github/workflows/evidence-registry-ratchet.yml",
+      "current_source": true,
+      "classification": "a",
+      "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+      "current_jobs": [
+        {
+          "id": "evidence-registry-ratchet",
+          "display_name": "evidence-registry-ratchet",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observed_exact_name": true
+        }
+      ],
+      "sample_started": "2026-09-30T08:44:15Z",
+      "sample_ended": "2026-10-12T18:58:33Z",
+      "observations": 200,
+      "decisive": 105,
+      "failures": 12,
+      "failure_rate": 0.11428571428571428,
+      "median_seconds": 192.0,
+      "cancelled": 5,
+      "skipped": 90,
+      "incomplete": 0,
+      "jobs": [
+        {
+          "name": "evidence-registry-ratchet",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observations": 200,
+          "decisive": 105,
+          "failures": 12,
+          "failure_rate": 0.11428571428571428,
+          "median_seconds": 192.0,
+          "cancelled": 5,
+          "skipped": 90,
+          "incomplete": 0
+        }
+      ]
+    },
+    {
+      "id": 330302042,
+      "name": "Figure-render recurrence guard",
+      "path": ".github/workflows/figure-render-recurrence.yml",
+      "current_source": true,
+      "classification": "a",
+      "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+      "current_jobs": [
+        {
+          "id": "figure-render-recurrence",
+          "display_name": "figure-render-recurrence",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observed_exact_name": true
+        }
+      ],
+      "sample_started": "2026-09-29T06:03:54Z",
+      "sample_ended": "2026-10-12T18:58:33Z",
+      "observations": 200,
+      "decisive": 116,
+      "failures": 1,
+      "failure_rate": 0.008620689655172414,
+      "median_seconds": 238.5,
+      "cancelled": 7,
+      "skipped": 77,
+      "incomplete": 0,
+      "jobs": [
+        {
+          "name": "figure-render-recurrence",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observations": 200,
+          "decisive": 116,
+          "failures": 1,
+          "failure_rate": 0.008620689655172414,
+          "median_seconds": 238.5,
+          "cancelled": 7,
+          "skipped": 77,
+          "incomplete": 0
+        }
+      ]
+    },
+    {
+      "id": 347137385,
+      "name": "Main CI incident reconciliation",
+      "path": ".github/workflows/main-ci-incident-reconcile.yml",
+      "current_source": true,
+      "classification": "b",
+      "reason": "Scheduled main incident lifecycle; no PR gate to demote.",
+      "current_jobs": [
+        {
+          "id": "reconcile",
+          "display_name": "reconcile",
+          "classification": "b",
+          "reason": "Scheduled main incident lifecycle; no PR gate to demote.",
+          "observed_exact_name": true
+        }
+      ],
+      "sample_started": "2026-09-01T11:35:47Z",
+      "sample_ended": "2026-10-12T15:16:19Z",
+      "observations": 150,
+      "decisive": 149,
+      "failures": 0,
+      "failure_rate": 0.0,
+      "median_seconds": 177.0,
+      "cancelled": 1,
+      "skipped": 0,
+      "incomplete": 0,
+      "jobs": [
+        {
+          "name": "reconcile",
+          "classification": "b",
+          "reason": "Scheduled main incident lifecycle; no PR gate to demote.",
+          "observations": 150,
+          "decisive": 149,
+          "failures": 0,
+          "failure_rate": 0.0,
+          "median_seconds": 177.0,
+          "cancelled": 1,
+          "skipped": 0,
+          "incomplete": 0
+        }
+      ]
+    },
+    {
+      "id": 321418793,
+      "name": "Merge Queue Gate",
+      "path": ".github/workflows/merge-queue-gate.yml",
+      "current_source": true,
+      "classification": "a",
+      "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+      "current_jobs": [
+        {
+          "id": "merge-queue-gate",
+          "display_name": "merge-queue-gate",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observed_exact_name": true
+        }
+      ],
+      "sample_started": "2026-10-09T10:34:55Z",
+      "sample_ended": "2026-10-12T18:58:33Z",
+      "observations": 200,
+      "decisive": 0,
+      "failures": 0,
+      "failure_rate": null,
+      "median_seconds": null,
+      "cancelled": 0,
+      "skipped": 200,
+      "incomplete": 0,
+      "jobs": [
+        {
+          "name": "merge-queue-gate",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observations": 200,
+          "decisive": 0,
+          "failures": 0,
+          "failure_rate": null,
+          "median_seconds": null,
+          "cancelled": 0,
+          "skipped": 200,
+          "incomplete": 0
+        }
+      ]
+    },
+    {
+      "id": 336591259,
+      "name": "Model License Preflight",
+      "path": ".github/workflows/model-license-preflight.yml",
+      "current_source": true,
+      "classification": "a",
+      "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+      "current_jobs": [
+        {
+          "id": "model-license-preflight",
+          "display_name": "model-license-preflight",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observed_exact_name": true
+        }
+      ],
+      "sample_started": "2026-08-18T00:41:24Z",
+      "sample_ended": "2026-10-02T14:55:14Z",
+      "observations": 37,
+      "decisive": 28,
+      "failures": 3,
+      "failure_rate": 0.10714285714285714,
+      "median_seconds": 33.5,
+      "cancelled": 0,
+      "skipped": 9,
+      "incomplete": 0,
+      "jobs": [
+        {
+          "name": "model-license-preflight",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observations": 37,
+          "decisive": 28,
+          "failures": 3,
+          "failure_rate": 0.10714285714285714,
+          "median_seconds": 33.5,
+          "cancelled": 0,
+          "skipped": 9,
+          "incomplete": 0
+        }
+      ]
+    },
+    {
+      "id": 318312278,
+      "name": "Mutation testing",
+      "path": ".github/workflows/mutation-testing.yml",
+      "current_source": true,
+      "classification": "a",
+      "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+      "current_jobs": [
+        {
+          "id": "mutation-testing",
+          "display_name": "mutation-testing",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observed_exact_name": true
+        }
+      ],
+      "sample_started": "2026-07-27T10:06:31Z",
+      "sample_ended": "2026-10-12T15:13:31Z",
+      "observations": 12,
+      "decisive": 12,
+      "failures": 5,
+      "failure_rate": 0.4166666666666667,
+      "median_seconds": 211.5,
+      "cancelled": 0,
+      "skipped": 0,
+      "incomplete": 0,
+      "jobs": [
+        {
+          "name": "mutation-testing",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observations": 12,
+          "decisive": 12,
+          "failures": 5,
+          "failure_rate": 0.4166666666666667,
+          "median_seconds": 211.5,
+          "cancelled": 0,
+          "skipped": 0,
+          "incomplete": 0
+        }
+      ]
+    },
+    {
+      "id": 319474623,
+      "name": "Packaging Extras Matrix",
+      "path": ".github/workflows/packaging-extras.yml",
+      "current_source": true,
+      "classification": "a",
+      "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+      "current_jobs": [
+        {
+          "id": "clean-wheel-extra",
+          "display_name": "clean wheel [${{ matrix.extra }}]",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observed_exact_name": true
+        }
+      ],
+      "sample_started": "2026-09-17T20:44:40Z",
+      "sample_ended": "2026-10-11T00:14:03Z",
+      "observations": 200,
+      "decisive": 168,
+      "failures": 1,
+      "failure_rate": 0.005952380952380952,
+      "median_seconds": 436.0,
+      "cancelled": 0,
+      "skipped": 32,
+      "incomplete": 0,
+      "jobs": [
+        {
+          "name": "clean wheel [${{ matrix.extra }}]",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observations": 32,
+          "decisive": 0,
+          "failures": 0,
+          "failure_rate": null,
+          "median_seconds": null,
+          "cancelled": 0,
+          "skipped": 32,
+          "incomplete": 0
+        },
+        {
+          "name": "clean wheel [all]",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observations": 168,
+          "decisive": 168,
+          "failures": 0,
+          "failure_rate": 0.0,
+          "median_seconds": 354.0,
+          "cancelled": 0,
+          "skipped": 0,
+          "incomplete": 0
+        },
+        {
+          "name": "clean wheel [benchmark]",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observations": 168,
+          "decisive": 168,
+          "failures": 1,
+          "failure_rate": 0.005952380952380952,
+          "median_seconds": 213.5,
+          "cancelled": 0,
+          "skipped": 0,
+          "incomplete": 0
+        },
+        {
+          "name": "clean wheel [maps]",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observations": 168,
+          "decisive": 168,
+          "failures": 0,
+          "failure_rate": 0.0,
+          "median_seconds": 224.0,
+          "cancelled": 0,
+          "skipped": 0,
+          "incomplete": 0
+        },
+        {
+          "name": "clean wheel [training]",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observations": 168,
+          "decisive": 168,
+          "failures": 0,
+          "failure_rate": 0.0,
+          "median_seconds": 275.5,
+          "cancelled": 0,
+          "skipped": 0,
+          "incomplete": 0
+        },
+        {
+          "name": "clean wheel [viz]",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observations": 168,
+          "decisive": 168,
+          "failures": 0,
+          "failure_rate": 0.0,
+          "median_seconds": 215.0,
+          "cancelled": 0,
+          "skipped": 0,
+          "incomplete": 0
+        }
+      ]
+    },
+    {
+      "id": 233827630,
+      "name": "Nightly Performance",
+      "path": ".github/workflows/perf-nightly.yml",
+      "current_source": true,
+      "classification": "a",
+      "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+      "current_jobs": [
+        {
+          "id": "perf-nightly",
+          "display_name": "perf-nightly",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observed_exact_name": true
+        }
+      ],
+      "sample_started": "2026-03-27T04:19:41Z",
+      "sample_ended": "2026-10-12T11:10:05Z",
+      "observations": 200,
+      "decisive": 131,
+      "failures": 65,
+      "failure_rate": 0.4961832061068702,
+      "median_seconds": 211.0,
+      "cancelled": 69,
+      "skipped": 0,
+      "incomplete": 0,
+      "jobs": [
+        {
+          "name": "perf-nightly",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observations": 200,
+          "decisive": 131,
+          "failures": 65,
+          "failure_rate": 0.4961832061068702,
+          "median_seconds": 211.0,
+          "cancelled": 69,
+          "skipped": 0,
+          "incomplete": 0
+        }
+      ]
+    },
+    {
+      "id": 300804702,
+      "name": "PR body contracts",
+      "path": ".github/workflows/pr-body-contracts.yml",
+      "current_source": false,
+      "classification": "b",
+      "reason": "Historical workflow already absent from current main; retain historical measurements, no current job to change.",
+      "current_jobs": [],
+      "sample_started": "2026-09-28T09:05:40Z",
+      "sample_ended": "2026-09-29T00:15:53Z",
+      "observations": 200,
+      "decisive": 110,
+      "failures": 0,
+      "failure_rate": 0.0,
+      "median_seconds": 152.5,
+      "cancelled": 90,
+      "skipped": 0,
+      "incomplete": 0,
+      "jobs": [
+        {
+          "name": "pr-body-contracts",
+          "classification": "b",
+          "reason": "Historical workflow already absent from current main; retain historical measurements, no current job to change.",
+          "observations": 198,
+          "decisive": 111,
+          "failures": 0,
+          "failure_rate": 0.0,
+          "median_seconds": 153.0,
+          "cancelled": 87,
+          "skipped": 0,
+          "incomplete": 0
+        }
+      ]
+    },
+    {
+      "id": 308507840,
+      "name": "PR Contract Check",
+      "path": ".github/workflows/pr-contract-check.yml",
+      "current_source": true,
+      "classification": "a",
+      "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+      "current_jobs": [
+        {
+          "id": "pr-contract-check",
+          "display_name": "pr-contract-check",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observed_exact_name": true
+        }
+      ],
+      "sample_started": "2026-10-10T09:47:55Z",
+      "sample_ended": "2026-10-12T19:19:55Z",
+      "observations": 200,
+      "decisive": 108,
+      "failures": 65,
+      "failure_rate": 0.6018518518518519,
+      "median_seconds": 188.5,
+      "cancelled": 51,
+      "skipped": 41,
+      "incomplete": 0,
+      "jobs": [
+        {
+          "name": "pr-contract-check",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observations": 195,
+          "decisive": 108,
+          "failures": 65,
+          "failure_rate": 0.6018518518518519,
+          "median_seconds": 188.5,
+          "cancelled": 45,
+          "skipped": 42,
+          "incomplete": 0
+        }
+      ]
+    },
+    {
+      "id": 273901181,
+      "name": "PR Promoted Planner Smoke",
+      "path": ".github/workflows/pr-promoted-planner-smoke.yml",
+      "current_source": true,
+      "classification": "a",
+      "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+      "current_jobs": [
+        {
+          "id": "promoted-planner-smoke",
+          "display_name": "promoted-planner-smoke",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observed_exact_name": true
+        }
+      ],
+      "sample_started": "2026-10-10T00:08:32Z",
+      "sample_ended": "2026-10-12T19:19:55Z",
+      "observations": 200,
+      "decisive": 150,
+      "failures": 0,
+      "failure_rate": 0.0,
+      "median_seconds": 299.0,
+      "cancelled": 22,
+      "skipped": 28,
+      "incomplete": 0,
+      "jobs": [
+        {
+          "name": "promoted-planner-smoke",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observations": 199,
+          "decisive": 150,
+          "failures": 0,
+          "failure_rate": 0.0,
+          "median_seconds": 299.0,
+          "cancelled": 21,
+          "skipped": 28,
+          "incomplete": 0
+        }
+      ]
+    },
+    {
+      "id": 357885655,
+      "name": "Publish docs site",
+      "path": ".github/workflows/publish-docs-site.yml",
+      "current_source": true,
+      "classification": "a",
+      "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+      "current_jobs": [
+        {
+          "id": "build-site",
+          "display_name": "build-site",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observed_exact_name": true
+        },
+        {
+          "id": "deploy-site",
+          "display_name": "deploy-site",
+          "classification": "b",
+          "reason": "Main-only docs publication, not a PR gate; retain the requested delivery function.",
+          "observed_exact_name": true
+        }
+      ],
+      "sample_started": "2026-10-08T18:37:41Z",
+      "sample_ended": "2026-10-12T18:58:33Z",
+      "observations": 200,
+      "decisive": 146,
+      "failures": 0,
+      "failure_rate": 0.0,
+      "median_seconds": 322.0,
+      "cancelled": 0,
+      "skipped": 54,
+      "incomplete": 0,
+      "jobs": [
+        {
+          "name": "build-site",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observations": 200,
+          "decisive": 146,
+          "failures": 0,
+          "failure_rate": 0.0,
+          "median_seconds": 314.0,
+          "cancelled": 0,
+          "skipped": 54,
+          "incomplete": 0
+        },
+        {
+          "name": "deploy-site",
+          "classification": "b",
+          "reason": "Main-only docs publication, not a PR gate; retain the requested delivery function.",
+          "observations": 200,
+          "decisive": 25,
+          "failures": 0,
+          "failure_rate": 0.0,
+          "median_seconds": 10.0,
+          "cancelled": 0,
+          "skipped": 175,
+          "incomplete": 0
+        }
+      ]
+    },
+    {
+      "id": 346702018,
+      "name": "Release issue 8134 atomic claim",
+      "path": ".github/workflows/release-8134-claim.yml",
+      "current_source": false,
+      "classification": "b",
+      "reason": "Historical workflow already absent from current main; retain historical measurements, no current job to change.",
+      "current_jobs": [],
+      "sample_started": "2026-08-31T14:49:12Z",
+      "sample_ended": "2026-08-31T14:49:12Z",
+      "observations": 1,
+      "decisive": 1,
+      "failures": 0,
+      "failure_rate": 0.0,
+      "median_seconds": 10.0,
+      "cancelled": 0,
+      "skipped": 0,
+      "incomplete": 0,
+      "jobs": [
+        {
+          "name": "release-claim",
+          "classification": "b",
+          "reason": "Historical workflow already absent from current main; retain historical measurements, no current job to change.",
+          "observations": 1,
+          "decisive": 1,
+          "failures": 0,
+          "failure_rate": 0.0,
+          "median_seconds": 10.0,
+          "cancelled": 0,
+          "skipped": 0,
+          "incomplete": 0
+        }
+      ]
+    },
+    {
+      "id": 308181798,
+      "name": "Release Functional Badge Verification",
+      "path": ".github/workflows/release-functional-badge.yml",
+      "current_source": true,
+      "classification": "a",
+      "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+      "current_jobs": [
+        {
+          "id": "verify-badge",
+          "display_name": "verify-badge",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observed_exact_name": true
+        }
+      ],
+      "sample_started": "2026-07-12T05:34:40Z",
+      "sample_ended": "2026-09-17T16:04:50Z",
+      "observations": 7,
+      "decisive": 7,
+      "failures": 2,
+      "failure_rate": 0.2857142857142857,
+      "median_seconds": 83.0,
+      "cancelled": 0,
+      "skipped": 0,
+      "incomplete": 0,
+      "jobs": [
+        {
+          "name": "verify-badge",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observations": 7,
+          "decisive": 7,
+          "failures": 2,
+          "failure_rate": 0.2857142857142857,
+          "median_seconds": 83.0,
+          "cancelled": 0,
+          "skipped": 0,
+          "incomplete": 0
+        }
+      ]
+    },
+    {
+      "id": 336591260,
+      "name": "Release Legal Input Coverage",
+      "path": ".github/workflows/release-legal-input-coverage.yml",
+      "current_source": true,
+      "classification": "a",
+      "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+      "current_jobs": [
+        {
+          "id": "release-legal-input-coverage",
+          "display_name": "release-legal-input-coverage",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observed_exact_name": true
+        }
+      ],
+      "sample_started": "2026-10-10T00:08:32Z",
+      "sample_ended": "2026-10-12T19:19:55Z",
+      "observations": 200,
+      "decisive": 172,
+      "failures": 0,
+      "failure_rate": 0.0,
+      "median_seconds": 32.0,
+      "cancelled": 0,
+      "skipped": 28,
+      "incomplete": 0,
+      "jobs": [
+        {
+          "name": "release-legal-input-coverage",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observations": 200,
+          "decisive": 172,
+          "failures": 0,
+          "failure_rate": 0.0,
+          "median_seconds": 32.0,
+          "cancelled": 0,
+          "skipped": 28,
+          "incomplete": 0
+        }
+      ]
+    },
+    {
+      "id": 311105228,
+      "name": "Route external review bots",
+      "path": ".github/workflows/review-bot-routing.yml",
+      "current_source": true,
+      "classification": "a",
+      "reason": "Routes independent defect reviews; preserve conservatively. Job success alone does not establish review quality.",
+      "current_jobs": [
+        {
+          "id": "route-coderabbit",
+          "display_name": "route-coderabbit",
+          "classification": "a",
+          "reason": "Routes independent defect reviews; preserve conservatively. Job success alone does not establish review quality.",
+          "observed_exact_name": true
+        }
+      ],
+      "sample_started": "2026-10-10T00:11:22Z",
+      "sample_ended": "2026-10-12T19:19:55Z",
+      "observations": 200,
+      "decisive": 152,
+      "failures": 0,
+      "failure_rate": 0.0,
+      "median_seconds": 5.0,
+      "cancelled": 20,
+      "skipped": 28,
+      "incomplete": 0,
+      "jobs": [
+        {
+          "name": "route-coderabbit",
+          "classification": "a",
+          "reason": "Routes independent defect reviews; preserve conservatively. Job success alone does not establish review quality.",
+          "observations": 200,
+          "decisive": 152,
+          "failures": 0,
+          "failure_rate": 0.0,
+          "median_seconds": 5.0,
+          "cancelled": 20,
+          "skipped": 28,
+          "incomplete": 0
+        }
+      ]
+    },
+    {
+      "id": 339399271,
+      "name": "Scripts Catalog",
+      "path": ".github/workflows/scripts-catalog.yml",
+      "current_source": true,
+      "classification": "c",
+      "reason": "Same catalog validation, README render comparison and tests already in fast-feedback; standalone audit moved to weekly/manual, PR check name retained.",
+      "current_jobs": [
+        {
+          "id": "scripts-catalog",
+          "display_name": "scripts-catalog",
+          "classification": "c",
+          "reason": "Same catalog validation, README render comparison and tests already in fast-feedback; standalone audit moved to weekly/manual, PR check name retained.",
+          "observed_exact_name": true
+        }
+      ],
+      "sample_started": "2026-10-08T21:53:33Z",
+      "sample_ended": "2026-10-12T19:19:55Z",
+      "observations": 200,
+      "decisive": 142,
+      "failures": 0,
+      "failure_rate": 0.0,
+      "median_seconds": 209.5,
+      "cancelled": 10,
+      "skipped": 48,
+      "incomplete": 0,
+      "jobs": [
+        {
+          "name": "scripts-catalog",
+          "classification": "c",
+          "reason": "Same catalog validation, README render comparison and tests already in fast-feedback; standalone audit moved to weekly/manual, PR check name retained.",
+          "observations": 200,
+          "decisive": 142,
+          "failures": 0,
+          "failure_rate": 0.0,
+          "median_seconds": 209.5,
+          "cancelled": 10,
+          "skipped": 48,
+          "incomplete": 0
+        }
+      ]
+    },
+    {
+      "id": 301291341,
+      "name": "Security Baseline",
+      "path": ".github/workflows/security-baseline.yml",
+      "current_source": true,
+      "classification": "a",
+      "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+      "current_jobs": [
+        {
+          "id": "ruff-security-advisory",
+          "display_name": "ruff-security-advisory",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observed_exact_name": true
+        }
+      ],
+      "sample_started": "2026-10-09T22:53:06Z",
+      "sample_ended": "2026-10-12T19:19:55Z",
+      "observations": 200,
+      "decisive": 156,
+      "failures": 0,
+      "failure_rate": 0.0,
+      "median_seconds": 205.0,
+      "cancelled": 17,
+      "skipped": 27,
+      "incomplete": 0,
+      "jobs": [
+        {
+          "name": "ruff-security-advisory",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observations": 200,
+          "decisive": 156,
+          "failures": 0,
+          "failure_rate": 0.0,
+          "median_seconds": 205.0,
+          "cancelled": 17,
+          "skipped": 27,
+          "incomplete": 0
+        }
+      ]
+    },
+    {
+      "id": 346449607,
+      "name": "Build Immutable Software Candidate",
+      "path": ".github/workflows/software-candidate.yml",
+      "current_source": true,
+      "classification": "a",
+      "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+      "current_jobs": [
+        {
+          "id": "build-candidate",
+          "display_name": "Build and verify once",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observed_exact_name": true
+        }
+      ],
+      "sample_started": "2026-09-01T09:01:58Z",
+      "sample_ended": "2026-09-08T11:28:40Z",
+      "observations": 5,
+      "decisive": 5,
+      "failures": 5,
+      "failure_rate": 1.0,
+      "median_seconds": 101.0,
+      "cancelled": 0,
+      "skipped": 0,
+      "incomplete": 0,
+      "jobs": [
+        {
+          "name": "Build and verify once",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observations": 5,
+          "decisive": 5,
+          "failures": 5,
+          "failure_rate": 1.0,
+          "median_seconds": 101.0,
+          "cancelled": 0,
+          "skipped": 0,
+          "incomplete": 0
+        }
+      ]
+    },
+    {
+      "id": 347119055,
+      "name": "Promote Immutable Software Candidate",
+      "path": ".github/workflows/software-promotion.yml",
+      "current_source": true,
+      "classification": "b",
+      "reason": "Manual publication pipeline; author-reserved delivery, no PR gate.",
+      "current_jobs": [
+        {
+          "id": "verify-candidate",
+          "display_name": "Verify immutable candidate",
+          "classification": "b",
+          "reason": "Manual publication pipeline; author-reserved delivery, no PR gate.",
+          "observed_exact_name": false
+        },
+        {
+          "id": "testpypi-upload",
+          "display_name": "Publish exact bytes to TestPyPI",
+          "classification": "b",
+          "reason": "Manual publication pipeline; author-reserved delivery, no PR gate.",
+          "observed_exact_name": false
+        },
+        {
+          "id": "testpypi-cold-install",
+          "display_name": "Verify TestPyPI public-index install",
+          "classification": "b",
+          "reason": "Manual publication pipeline; author-reserved delivery, no PR gate.",
+          "observed_exact_name": false
+        },
+        {
+          "id": "pypi-upload",
+          "display_name": "Publish exact bytes to PyPI",
+          "classification": "b",
+          "reason": "Manual publication pipeline; author-reserved delivery, no PR gate.",
+          "observed_exact_name": false
+        },
+        {
+          "id": "pypi-cold-verify",
+          "display_name": "Verify PyPI public-index bytes",
+          "classification": "b",
+          "reason": "Manual publication pipeline; author-reserved delivery, no PR gate.",
+          "observed_exact_name": false
+        }
+      ],
+      "sample_started": null,
+      "sample_ended": null,
+      "observations": 0,
+      "decisive": 0,
+      "failures": 0,
+      "failure_rate": null,
+      "median_seconds": null,
+      "cancelled": 0,
+      "skipped": 0,
+      "incomplete": 0,
+      "jobs": []
+    },
+    {
+      "id": 300786451,
+      "name": "Strip closed state labels",
+      "path": ".github/workflows/strip-closed-state-labels.yml",
+      "current_source": true,
+      "classification": "b",
+      "reason": "Issue lifecycle cleanup; no PR gate to demote.",
+      "current_jobs": [
+        {
+          "id": "strip-state-labels",
+          "display_name": "strip-state-labels",
+          "classification": "b",
+          "reason": "Issue lifecycle cleanup; no PR gate to demote.",
+          "observed_exact_name": true
+        }
+      ],
+      "sample_started": "2026-09-22T12:46:32Z",
+      "sample_ended": "2026-10-12T06:21:51Z",
+      "observations": 200,
+      "decisive": 200,
+      "failures": 0,
+      "failure_rate": 0.0,
+      "median_seconds": 14.0,
+      "cancelled": 0,
+      "skipped": 0,
+      "incomplete": 0,
+      "jobs": [
+        {
+          "name": "strip-state-labels",
+          "classification": "b",
+          "reason": "Issue lifecycle cleanup; no PR gate to demote.",
+          "observations": 200,
+          "decisive": 200,
+          "failures": 0,
+          "failure_rate": 0.0,
+          "median_seconds": 14.0,
+          "cancelled": 0,
+          "skipped": 0,
+          "incomplete": 0
+        }
+      ]
+    },
+    {
+      "id": 312088159,
+      "name": "Superseded draft scanner",
+      "path": ".github/workflows/superseded-draft-scanner.yml",
+      "current_source": true,
+      "classification": "b",
+      "reason": "Scheduled draft lifecycle report; no PR gate to demote.",
+      "current_jobs": [
+        {
+          "id": "scan-superseded-drafts",
+          "display_name": "scan-superseded-drafts",
+          "classification": "b",
+          "reason": "Scheduled draft lifecycle report; no PR gate to demote.",
+          "observed_exact_name": true
+        }
+      ],
+      "sample_started": "2026-07-14T08:35:18Z",
+      "sample_ended": "2026-10-12T15:52:29Z",
+      "observations": 65,
+      "decisive": 64,
+      "failures": 0,
+      "failure_rate": 0.0,
+      "median_seconds": 198.0,
+      "cancelled": 1,
+      "skipped": 0,
+      "incomplete": 0,
+      "jobs": [
+        {
+          "name": "scan-superseded-drafts",
+          "classification": "b",
+          "reason": "Scheduled draft lifecycle report; no PR gate to demote.",
+          "observations": 65,
+          "decisive": 64,
+          "failures": 0,
+          "failure_rate": 0.0,
+          "median_seconds": 198.0,
+          "cancelled": 1,
+          "skipped": 0,
+          "incomplete": 0
+        }
+      ]
+    },
+    {
+      "id": 319463369,
+      "name": "Temporary Ruff diagnostics",
+      "path": ".github/workflows/tmp-ruff-diagnostics.yml",
+      "current_source": false,
+      "classification": "b",
+      "reason": "Historical workflow already absent from current main; retain historical measurements, no current job to change.",
+      "current_jobs": [],
+      "sample_started": "2026-07-24T08:20:37Z",
+      "sample_ended": "2026-07-24T08:33:22Z",
+      "observations": 5,
+      "decisive": 5,
+      "failures": 0,
+      "failure_rate": 0.0,
+      "median_seconds": 146.0,
+      "cancelled": 0,
+      "skipped": 0,
+      "incomplete": 0,
+      "jobs": [
+        {
+          "name": "diagnostics",
+          "classification": "b",
+          "reason": "Historical workflow already absent from current main; retain historical measurements, no current job to change.",
+          "observations": 5,
+          "decisive": 5,
+          "failures": 0,
+          "failure_rate": 0.0,
+          "median_seconds": 146.0,
+          "cancelled": 0,
+          "skipped": 0,
+          "incomplete": 0
+        }
+      ]
+    },
+    {
+      "id": 310639424,
+      "name": "ty advisory ratchet",
+      "path": ".github/workflows/ty-advisory-ratchet.yml",
+      "current_source": true,
+      "classification": "a",
+      "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+      "current_jobs": [
+        {
+          "id": "ty-advisory-ratchet",
+          "display_name": "ty-advisory-ratchet",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observed_exact_name": true
+        }
+      ],
+      "sample_started": "2026-10-10T00:08:32Z",
+      "sample_ended": "2026-10-12T19:19:55Z",
+      "observations": 200,
+      "decisive": 174,
+      "failures": 27,
+      "failure_rate": 0.15517241379310345,
+      "median_seconds": 227.0,
+      "cancelled": 23,
+      "skipped": 2,
+      "incomplete": 1,
+      "jobs": [
+        {
+          "name": "ty-advisory-ratchet",
+          "classification": "a",
+          "reason": "Retain functional/security/integrity validation conservatively; absence of a recent red run is not evidence that this check lacks defect value.",
+          "observations": 199,
+          "decisive": 175,
+          "failures": 27,
+          "failure_rate": 0.15428571428571428,
+          "median_seconds": 227.0,
+          "cancelled": 22,
+          "skipped": 2,
+          "incomplete": 0
+        }
+      ]
+    },
+    {
+      "id": 271854134,
+      "name": "OpenAI Codex",
+      "path": "dynamic/agents/openai-code-agent",
+      "current_source": false,
+      "classification": "b",
+      "reason": "GitHub-managed implementation/review/dependency automation; no checkout-owned job to remove. Changing platform configuration is outside authorization.",
+      "current_jobs": [],
+      "sample_started": "2026-05-06T07:46:24Z",
+      "sample_ended": "2026-05-06T07:46:24Z",
+      "observations": 1,
+      "decisive": 1,
+      "failures": 0,
+      "failure_rate": 0.0,
+      "median_seconds": 495.0,
+      "cancelled": 0,
+      "skipped": 0,
+      "incomplete": 0,
+      "jobs": [
+        {
+          "name": "codex",
+          "classification": "b",
+          "reason": "GitHub-managed implementation/review/dependency automation; no checkout-owned job to remove. Changing platform configuration is outside authorization.",
+          "observations": 1,
+          "decisive": 1,
+          "failures": 0,
+          "failure_rate": 0.0,
+          "median_seconds": 495.0,
+          "cancelled": 0,
+          "skipped": 0,
+          "incomplete": 0
+        }
+      ]
+    },
+    {
+      "id": 201905018,
+      "name": "Copilot code review",
+      "path": "dynamic/copilot-pull-request-reviewer/copilot-pull-request-reviewer",
+      "current_source": false,
+      "classification": "b",
+      "reason": "GitHub-managed implementation/review/dependency automation; no checkout-owned job to remove. Changing platform configuration is outside authorization.",
+      "current_jobs": [],
+      "sample_started": "2025-10-29T08:34:45Z",
+      "sample_ended": "2026-05-18T10:02:46Z",
+      "observations": 52,
+      "decisive": 52,
+      "failures": 2,
+      "failure_rate": 0.038461538461538464,
+      "median_seconds": 166.0,
+      "cancelled": 0,
+      "skipped": 0,
+      "incomplete": 0,
+      "jobs": [
+        {
+          "name": "Agent",
+          "classification": "b",
+          "reason": "GitHub-managed implementation/review/dependency automation; no checkout-owned job to remove. Changing platform configuration is outside authorization.",
+          "observations": 52,
+          "decisive": 52,
+          "failures": 1,
+          "failure_rate": 0.019230769230769232,
+          "median_seconds": 132.5,
+          "cancelled": 0,
+          "skipped": 0,
+          "incomplete": 0
+        },
+        {
+          "name": "Autovalidate",
+          "classification": "b",
+          "reason": "GitHub-managed implementation/review/dependency automation; no checkout-owned job to remove. Changing platform configuration is outside authorization.",
+          "observations": 33,
+          "decisive": 0,
+          "failures": 0,
+          "failure_rate": null,
+          "median_seconds": null,
+          "cancelled": 0,
+          "skipped": 33,
+          "incomplete": 0
+        },
+        {
+          "name": "Cleanup artifacts",
+          "classification": "b",
+          "reason": "GitHub-managed implementation/review/dependency automation; no checkout-owned job to remove. Changing platform configuration is outside authorization.",
+          "observations": 52,
+          "decisive": 52,
+          "failures": 1,
+          "failure_rate": 0.019230769230769232,
+          "median_seconds": 4.0,
+          "cancelled": 0,
+          "skipped": 0,
+          "incomplete": 0
+        },
+        {
+          "name": "CodeQL analysis",
+          "classification": "b",
+          "reason": "GitHub-managed implementation/review/dependency automation; no checkout-owned job to remove. Changing platform configuration is outside authorization.",
+          "observations": 2,
+          "decisive": 0,
+          "failures": 0,
+          "failure_rate": null,
+          "median_seconds": null,
+          "cancelled": 0,
+          "skipped": 2,
+          "incomplete": 0
+        },
+        {
+          "name": "CodeQL analysis (python)",
+          "classification": "b",
+          "reason": "GitHub-managed implementation/review/dependency automation; no checkout-owned job to remove. Changing platform configuration is outside authorization.",
+          "observations": 31,
+          "decisive": 31,
+          "failures": 1,
+          "failure_rate": 0.03225806451612903,
+          "median_seconds": 88.0,
+          "cancelled": 0,
+          "skipped": 0,
+          "incomplete": 0
+        },
+        {
+          "name": "Prepare",
+          "classification": "b",
+          "reason": "GitHub-managed implementation/review/dependency automation; no checkout-owned job to remove. Changing platform configuration is outside authorization.",
+          "observations": 47,
+          "decisive": 47,
+          "failures": 0,
+          "failure_rate": 0.0,
+          "median_seconds": 4.0,
+          "cancelled": 0,
+          "skipped": 0,
+          "incomplete": 0
+        },
+        {
+          "name": "Upload results",
+          "classification": "b",
+          "reason": "GitHub-managed implementation/review/dependency automation; no checkout-owned job to remove. Changing platform configuration is outside authorization.",
+          "observations": 52,
+          "decisive": 52,
+          "failures": 0,
+          "failure_rate": 0.0,
+          "median_seconds": 10.0,
+          "cancelled": 0,
+          "skipped": 0,
+          "incomplete": 0
+        },
+        {
+          "name": "prepare",
+          "classification": "b",
+          "reason": "GitHub-managed implementation/review/dependency automation; no checkout-owned job to remove. Changing platform configuration is outside authorization.",
+          "observations": 5,
+          "decisive": 5,
+          "failures": 0,
+          "failure_rate": 0.0,
+          "median_seconds": 5.0,
+          "cancelled": 0,
+          "skipped": 0,
+          "incomplete": 0
+        }
+      ]
+    },
+    {
+      "id": 188082442,
+      "name": "Copilot coding agent",
+      "path": "dynamic/copilot-swe-agent/copilot",
+      "current_source": false,
+      "classification": "b",
+      "reason": "GitHub-managed implementation/review/dependency automation; no checkout-owned job to remove. Changing platform configuration is outside authorization.",
+      "current_jobs": [],
+      "sample_started": "2025-09-10T13:25:59Z",
+      "sample_ended": "2025-11-21T15:26:49Z",
+      "observations": 32,
+      "decisive": 31,
+      "failures": 3,
+      "failure_rate": 0.0967741935483871,
+      "median_seconds": 904.0,
+      "cancelled": 1,
+      "skipped": 0,
+      "incomplete": 0,
+      "jobs": [
+        {
+          "name": "copilot",
+          "classification": "b",
+          "reason": "GitHub-managed implementation/review/dependency automation; no checkout-owned job to remove. Changing platform configuration is outside authorization.",
+          "observations": 32,
+          "decisive": 31,
+          "failures": 3,
+          "failure_rate": 0.0967741935483871,
+          "median_seconds": 904.0,
+          "cancelled": 1,
+          "skipped": 0,
+          "incomplete": 0
+        }
+      ]
+    },
+    {
+      "id": 301303031,
+      "name": "Dependabot Updates",
+      "path": "dynamic/dependabot/dependabot-updates",
+      "current_source": false,
+      "classification": "b",
+      "reason": "GitHub-managed implementation/review/dependency automation; no checkout-owned job to remove. Changing platform configuration is outside authorization.",
+      "current_jobs": [],
+      "sample_started": "2026-06-24T07:20:25Z",
+      "sample_ended": "2026-10-06T07:05:10Z",
+      "observations": 60,
+      "decisive": 60,
+      "failures": 21,
+      "failure_rate": 0.35,
+      "median_seconds": 262.5,
+      "cancelled": 0,
+      "skipped": 0,
+      "incomplete": 0,
+      "jobs": [
+        {
+          "name": "Dependabot",
+          "classification": "b",
+          "reason": "GitHub-managed implementation/review/dependency automation; no checkout-owned job to remove. Changing platform configuration is outside authorization.",
+          "observations": 60,
+          "decisive": 60,
+          "failures": 21,
+          "failure_rate": 0.35,
+          "median_seconds": 262.5,
+          "cancelled": 0,
+          "skipped": 0,
+          "incomplete": 0
+        }
+      ]
+    },
+    {
+      "id": 267755265,
+      "name": "Dependency Graph",
+      "path": "dynamic/dependabot/update-graph",
+      "current_source": false,
+      "classification": "b",
+      "reason": "GitHub-managed implementation/review/dependency automation; no checkout-owned job to remove. Changing platform configuration is outside authorization.",
+      "current_jobs": [],
+      "sample_started": "2026-04-28T13:47:47Z",
+      "sample_ended": "2026-10-11T02:04:58Z",
+      "observations": 142,
+      "decisive": 142,
+      "failures": 1,
+      "failure_rate": 0.007042253521126761,
+      "median_seconds": 56.5,
+      "cancelled": 0,
+      "skipped": 0,
+      "incomplete": 0,
+      "jobs": [
+        {
+          "name": "update-uv-graph",
+          "classification": "b",
+          "reason": "GitHub-managed implementation/review/dependency automation; no checkout-owned job to remove. Changing platform configuration is outside authorization.",
+          "observations": 142,
+          "decisive": 142,
+          "failures": 1,
+          "failure_rate": 0.007042253521126761,
+          "median_seconds": 56.5,
+          "cancelled": 0,
+          "skipped": 0,
+          "incomplete": 0
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/scenario_authoring_0_1_0_empty_world.json",
+  "artifact_sha256": "de22e754649936d8c4a21b63a8f03a2f8f98c26857887a621ce2ee95d579d4fc",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW"
+}

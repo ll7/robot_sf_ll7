@@ -1,0 +1,4 @@
+Shared-venv scratch preflight passed: path=/tmp available=525602776KiB required=1048576KiB
+Shared-venv project package freshness preflight passed: package=pysocialforce venv=<environment-path>
+Shared-venv tool freshness preflight skipped: tool=python reason=interpreter-or-shell elapsed_ms=249 venv=<environment-path>
+Behaviour receipt gate: accepted or out of scope

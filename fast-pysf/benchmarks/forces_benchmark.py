@@ -103,7 +103,8 @@ class SimSettings:
         obs_start = self.rand_2d_coords(self.num_obstacles)
         obs_end = self.rand_2d_coords(self.num_obstacles)
         obstacles = [
-            [s_x, s_y, e_x, e_y]
+            # Simulator/EnvState input groups coordinates by axis.
+            [s_x, e_x, s_y, e_y]
             for ((s_x, s_y), (e_x, e_y)) in zip(obs_start, obs_end, strict=False)
         ]
 

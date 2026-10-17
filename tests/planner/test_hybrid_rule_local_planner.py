@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 
 from robot_sf.planner.hybrid_rule_local_planner import (
+    HYBRID_RULE_V4_CLEARANCE_BRAKING_VARIANT,
     HybridRuleCandidate,
     HybridRuleLocalPlannerAdapter,
     HybridRuleLocalPlannerConfig,
@@ -1778,6 +1779,47 @@ def test_hybrid_rule_deadlock_escape_bonus_prefers_rotation_when_stalled() -> No
     assert stop_eval["terms"]["deadlock_escape"] == 0.0
     assert rotate_eval["terms"]["deadlock_escape"] == 1.0
     assert rotate_eval["score"] > stop_eval["score"]
+
+
+@pytest.mark.parametrize(
+    ("planner_variant", "expected"),
+    [
+        ("hybrid_rule_v3_teb_like_rollout", 1.0),
+        (HYBRID_RULE_V4_CLEARANCE_BRAKING_VARIANT, 0.0),
+    ],
+)
+def test_recovery_gates_keep_v3_center_and_use_v4_surface_distance(
+    planner_variant: str, expected: float, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A nearby pedestrian blocks v4 recovery by surface clearance, not centre distance."""
+    cfg = HybridRuleLocalPlannerConfig(
+        planner_variant=planner_variant,
+        recovery_enabled=True,
+        static_recenter_enabled=True,
+        slow_distance_human=1.0,
+    )
+    planner = HybridRuleLocalPlannerAdapter(cfg)
+    monkeypatch.setattr(planner, "_static_recenter_probe_score", lambda **_kwargs: 1.0)
+    observation = _obs(
+        goal=(4.0, 0.0),
+        ped_positions=[(1.2, 0.0), (1.8, 0.0)],
+        ped_velocities=[(0.0, 0.0), (0.0, 0.0)],
+    )
+    state = planner._extract_state(observation)
+
+    terms = planner._compute_recovery_and_commitment_terms(
+        candidate=HybridRuleCandidate(0.0, 0.6, "rotate_left"),
+        observation=observation,
+        state=state,
+        ctx={"start_dist": 4.0, "hard_static_clearance": 2.0},
+        nearest_ped=1.2,
+        progress_windows={"3s": 0.0},
+    )
+
+    if planner_variant == HYBRID_RULE_V4_CLEARANCE_BRAKING_VARIANT:
+        assert planner._v4_surface_clearances(state) == pytest.approx([0.7, 1.3])
+    assert terms["deadlock_escape"] == pytest.approx(expected)
+    assert terms["static_recenter"] == pytest.approx(expected)
 
 
 def test_hybrid_rule_static_recenter_probe_prefers_safe_rotation(monkeypatch) -> None:

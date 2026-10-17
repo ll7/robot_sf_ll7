@@ -285,6 +285,18 @@ def test_social_force_diagnostics_defaults_before_initialization():
     assert diagnostics["obstacle_force_law"]["law_version"] == LEGACY_SHIFTED_GRADIENT_V1
 
 
+def test_social_force_metadata_with_no_config_matches_explicit_legacy_robot_law():
+    """A missing robot config must not inherit the new pedestrian wall default."""
+    uninitialized = SocialForcePlannerAdapter.__new__(SocialForcePlannerAdapter)
+    uninitialized.config = None
+    historical = SocialForcePlannerAdapter(SocNavPlannerConfig(social_force_obstacle_law=None))
+
+    assert historical.obstacle_force_law_metadata()["law_version"] == (LEGACY_SHIFTED_GRADIENT_V1)
+    assert uninitialized.obstacle_force_law_metadata()["law_version"] == (
+        LEGACY_SHIFTED_GRADIENT_V1
+    )
+
+
 def test_social_force_adapter_responds_to_pedestrian():
     """Social-force adapter slows or turns when pedestrians are in the path."""
     cfg = SocNavPlannerConfig(social_force_repulsion_weight=2.0)
@@ -479,13 +491,16 @@ def test_orca_velocity_projection_records_optional_adapter_trace():
     assert record["executed_command_vw"] == pytest.approx([v, w])
     assert record["executed_speed_mps"] == pytest.approx(v)
     assert record["angle_error_rad"] == pytest.approx(np.pi / 4)
-    assert record["speed_delta_mps"] == pytest.approx(0.0)
+    # The forward projection of [0.6, 0.6] is 0.6 m/s; the planned
+    # magnitude is sqrt(0.72), so the diagnostic records the lost component.
+    assert record["executed_speed_mps"] == pytest.approx(0.6)
+    assert record["speed_delta_mps"] == pytest.approx(-0.24852813742385693)
 
     summary = diagnostics["adapter_trace_summary"]
     assert summary["schema_version"] == "orca_adapter_trace.v1"
     assert summary["sample_count"] == 1
     assert summary["angle_error_rad_mean"] == pytest.approx(np.pi / 4)
-    assert summary["speed_delta_mps_mean"] == pytest.approx(0.0)
+    assert summary["speed_delta_mps_mean"] == pytest.approx(-0.24852813742385693)
 
 
 def test_orca_velocity_projection_trace_rejects_nonfinite_values():

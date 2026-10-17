@@ -1,0 +1,572 @@
+FFFFFFFFFFFFFFFFFFFFFFFFFFFF                                             [100%]
+=================================== FAILURES ===================================
+______ test_malformed_physical_scalar_does_not_report_clear[clearance_m] _______
+
+metric = 'clearance_m'
+
+    @pytest.mark.parametrize(
+        "metric", ["clearance_m", "time_to_collision_min", "ped_force_mean", "total_collision_count"]
+    )
+    def test_malformed_physical_scalar_does_not_report_clear(metric):
+        row = {"episode_id": "malformed", "metrics": {"valid_distance": 1.0, metric: {"value": -1.0}}}
+        scan = scan_campaign([row], detector_ids=["extreme_measurements"])
+>       assert scan.signals[0].status == "error"
+E       AssertionError: assert 'clear' == 'error'
+E
+E         - error
+E         + clear
+
+../aud-work/tests/analysis_workbench/test_aud2_refutations.py:14: AssertionError
+_ test_malformed_physical_scalar_does_not_report_clear[time_to_collision_min] __
+
+metric = 'time_to_collision_min'
+
+    @pytest.mark.parametrize(
+        "metric", ["clearance_m", "time_to_collision_min", "ped_force_mean", "total_collision_count"]
+    )
+    def test_malformed_physical_scalar_does_not_report_clear(metric):
+        row = {"episode_id": "malformed", "metrics": {"valid_distance": 1.0, metric: {"value": -1.0}}}
+        scan = scan_campaign([row], detector_ids=["extreme_measurements"])
+>       assert scan.signals[0].status == "error"
+E       AssertionError: assert 'clear' == 'error'
+E
+E         - error
+E         + clear
+
+../aud-work/tests/analysis_workbench/test_aud2_refutations.py:14: AssertionError
+_____ test_malformed_physical_scalar_does_not_report_clear[ped_force_mean] _____
+
+metric = 'ped_force_mean'
+
+    @pytest.mark.parametrize(
+        "metric", ["clearance_m", "time_to_collision_min", "ped_force_mean", "total_collision_count"]
+    )
+    def test_malformed_physical_scalar_does_not_report_clear(metric):
+        row = {"episode_id": "malformed", "metrics": {"valid_distance": 1.0, metric: {"value": -1.0}}}
+        scan = scan_campaign([row], detector_ids=["extreme_measurements"])
+>       assert scan.signals[0].status == "error"
+E       AssertionError: assert 'clear' == 'error'
+E
+E         - error
+E         + clear
+
+../aud-work/tests/analysis_workbench/test_aud2_refutations.py:14: AssertionError
+_ test_malformed_physical_scalar_does_not_report_clear[total_collision_count] __
+
+metric = 'total_collision_count'
+
+    @pytest.mark.parametrize(
+        "metric", ["clearance_m", "time_to_collision_min", "ped_force_mean", "total_collision_count"]
+    )
+    def test_malformed_physical_scalar_does_not_report_clear(metric):
+        row = {"episode_id": "malformed", "metrics": {"valid_distance": 1.0, metric: {"value": -1.0}}}
+        scan = scan_campaign([row], detector_ids=["extreme_measurements"])
+>       assert scan.signals[0].status == "error"
+E       AssertionError: assert 'clear' == 'error'
+E
+E         - error
+E         + clear
+
+../aud-work/tests/analysis_workbench/test_aud2_refutations.py:14: AssertionError
+_____ test_failure_subgroup_has_outcome_incidence_without_external_control _____
+
+    def test_failure_subgroup_has_outcome_incidence_without_external_control():
+        rows = [row(i) for i in range(24)] + [row(24 + i, outcome="timeout", value=1) for i in range(6)]
+>       signals = channel(rows, "outcome_incidence")
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+../aud-work/tests/analysis_workbench/test_aud2_detectors.py:36:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+rows = [{'episode_id': 'bad-0', 'planner_id': 'bad', 'scenario_id': 'same', 'config_id': 'bad-config', ...}, {'episode_id': '...onfig', ...}, {'episode_id': 'bad-5', 'planner_id': 'bad', 'scenario_id': 'same', 'config_id': 'bad-config', ...}, ...]
+detector = 'outcome_incidence'
+
+    def channel(rows, detector):
+        # Use the public default scan, so the pre-fix failure identifies the missing
+        # independent channel rather than an unknown-detector exception.
+        signals = [s for s in scan_campaign(rows).signals if s.detector_id == detector]
+>       assert len(signals) == len(rows), f"missing independent {detector} channel"
+E       AssertionError: missing independent outcome_incidence channel
+E       assert 0 == 30
+E        +  where 0 = len([])
+E        +  and   30 = len([{'episode_id': 'bad-0', 'planner_id': 'bad', 'scenario_id': 'same', 'config_id': 'bad-config', ...}, {'episode_id': '...onfig', ...}, {'episode_id': 'bad-5', 'planner_id': 'bad', 'scenario_id': 'same', 'config_id': 'bad-config', ...}, ...])
+
+../aud-work/tests/analysis_workbench/test_aud2_detectors.py:30: AssertionError
+__ test_planner_uniform_failures_compare_against_scenario_not_planner_config ___
+
+    def test_planner_uniform_failures_compare_against_scenario_not_planner_config():
+        rows = [row(i, outcome="collision") for i in range(4)]
+        rows += [row(i, planner=p) for p in ("good-a", "good-b") for i in range(4)]
+>       signals = channel(rows, "outcome_incidence")
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+../aud-work/tests/analysis_workbench/test_aud2_detectors.py:49:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+rows = [{'episode_id': 'bad-0', 'planner_id': 'bad', 'scenario_id': 'same', 'config_id': 'bad-config', ...}, {'episode_id': '.....}, {'episode_id': 'good-a-1', 'planner_id': 'good-a', 'scenario_id': 'same', 'config_id': 'good-a-config', ...}, ...]
+detector = 'outcome_incidence'
+
+    def channel(rows, detector):
+        # Use the public default scan, so the pre-fix failure identifies the missing
+        # independent channel rather than an unknown-detector exception.
+        signals = [s for s in scan_campaign(rows).signals if s.detector_id == detector]
+>       assert len(signals) == len(rows), f"missing independent {detector} channel"
+E       AssertionError: missing independent outcome_incidence channel
+E       assert 0 == 12
+E        +  where 0 = len([])
+E        +  and   12 = len([{'episode_id': 'bad-0', 'planner_id': 'bad', 'scenario_id': 'same', 'config_id': 'bad-config', ...}, {'episode_id': '.....}, {'episode_id': 'good-a-1', 'planner_id': 'good-a', 'scenario_id': 'same', 'config_id': 'good-a-config', ...}, ...])
+
+../aud-work/tests/analysis_workbench/test_aud2_detectors.py:30: AssertionError
+__________ test_uniform_metric_shift_has_cross_planner_median_signal ___________
+
+    def test_uniform_metric_shift_has_cross_planner_median_signal():
+        rows = [row(i, value=0.4) for i in range(4)]
+        rows += [row(i, planner=p) for p in ("good-a", "good-b") for i in range(4)]
+>       signals = channel(rows, "planner_cohort_shift")
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+../aud-work/tests/analysis_workbench/test_aud2_detectors.py:70:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+rows = [{'episode_id': 'bad-0', 'planner_id': 'bad', 'scenario_id': 'same', 'config_id': 'bad-config', ...}, {'episode_id': '.....}, {'episode_id': 'good-a-1', 'planner_id': 'good-a', 'scenario_id': 'same', 'config_id': 'good-a-config', ...}, ...]
+detector = 'planner_cohort_shift'
+
+    def channel(rows, detector):
+        # Use the public default scan, so the pre-fix failure identifies the missing
+        # independent channel rather than an unknown-detector exception.
+        signals = [s for s in scan_campaign(rows).signals if s.detector_id == detector]
+>       assert len(signals) == len(rows), f"missing independent {detector} channel"
+E       AssertionError: missing independent planner_cohort_shift channel
+E       assert 0 == 12
+E        +  where 0 = len([])
+E        +  and   12 = len([{'episode_id': 'bad-0', 'planner_id': 'bad', 'scenario_id': 'same', 'config_id': 'bad-config', ...}, {'episode_id': '.....}, {'episode_id': 'good-a-1', 'planner_id': 'good-a', 'scenario_id': 'same', 'config_id': 'good-a-config', ...}, ...])
+
+../aud-work/tests/analysis_workbench/test_aud2_detectors.py:30: AssertionError
+_ test_mad_floor_keeps_percent_level_signal_and_rejects_micro_noise[seed_outlier] _
+
+detector = 'seed_outlier'
+
+    @pytest.mark.parametrize("detector", ["seed_outlier", "cohort_multivariate_outlier"])
+    def test_mad_floor_keeps_percent_level_signal_and_rejects_micro_noise(detector):
+        rows = [row(i, value=10) for i in range(4)]
+        target = row(4, value=10.1)
+>       assert detect(detector, target, cohort=[*rows, target]).status == "flagged"
+E       AssertionError: assert 'clear' == 'flagged'
+E
+E         - flagged
+E         + clear
+
+../aud-work/tests/analysis_workbench/test_aud2_detectors.py:82: AssertionError
+_ test_mad_floor_keeps_percent_level_signal_and_rejects_micro_noise[cohort_multivariate_outlier] _
+
+detector = 'cohort_multivariate_outlier'
+
+    @pytest.mark.parametrize("detector", ["seed_outlier", "cohort_multivariate_outlier"])
+    def test_mad_floor_keeps_percent_level_signal_and_rejects_micro_noise(detector):
+        rows = [row(i, value=10) for i in range(4)]
+        target = row(4, value=10.1)
+>       assert detect(detector, target, cohort=[*rows, target]).status == "flagged"
+E       AssertionError: assert 'clear' == 'flagged'
+E
+E         - flagged
+E         + clear
+
+../aud-work/tests/analysis_workbench/test_aud2_detectors.py:82: AssertionError
+___ test_horizon_timeout_steps_cannot_disappear_inside_small_outcome_cohort ____
+
+    def test_horizon_timeout_steps_cannot_disappear_inside_small_outcome_cohort():
+        r = horizon_row()
+>       s = channel([r], "horizon_consistency")[r["episode_id"]]
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+../aud-work/tests/analysis_workbench/test_aud2_detectors.py:95:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+rows = [{'episode_id': 'bad-0', 'planner_id': 'bad', 'scenario_id': 'same', 'config_id': 'bad-config', ...}]
+detector = 'horizon_consistency'
+
+    def channel(rows, detector):
+        # Use the public default scan, so the pre-fix failure identifies the missing
+        # independent channel rather than an unknown-detector exception.
+        signals = [s for s in scan_campaign(rows).signals if s.detector_id == detector]
+>       assert len(signals) == len(rows), f"missing independent {detector} channel"
+E       AssertionError: missing independent horizon_consistency channel
+E       assert 0 == 1
+E        +  where 0 = len([])
+E        +  and   1 = len([{'episode_id': 'bad-0', 'planner_id': 'bad', 'scenario_id': 'same', 'config_id': 'bad-config', ...}])
+
+../aud-work/tests/analysis_workbench/test_aud2_detectors.py:30: AssertionError
+_ test_published_unresolved_candidate_exposes_runner_simulator_horizon_mismatch _
+
+    def test_published_unresolved_candidate_exposes_runner_simulator_horizon_mismatch():
+        p = Path(__file__).parents[1] / "fixtures/analysis_workbench/aud2_horizon_0_0_7.json"
+        fixture = json.loads(p.read_text())
+        assert hashlib.sha256(fixture["raw_line"].encode()).hexdigest() == fixture["line_sha256"]
+        r = json.loads(fixture["raw_line"])
+        r["_release_arm"] = "scenario_adaptive_hybrid_orca_v2_bottleneck_yield"
+        r["_source_member"] = fixture["source_member"]
+        assert r["steps"] == 400
+        assert r["scenario_params"]["run_horizon"] == 600
+        assert r["metrics"]["deadlock_stall"]["stall_window_count"] == 0
+>       s = channel([r], "horizon_consistency")[r["_release_arm"] + "::" + r["episode_id"]]
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+../aud-work/tests/analysis_workbench/test_aud2_detectors.py:127:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+rows = [{'algo': 'hybrid_rule_local_planner', 'algorithm_metadata': {'algorithm': 'hybrid_rule_local_planner', 'ammv_feasibil... 'hybrid_rule_local_planner', ...}, 'config_hash': '0be782383551a050', 'development_pedestrian_model': 'unknown', ...}]
+detector = 'horizon_consistency'
+
+    def channel(rows, detector):
+        # Use the public default scan, so the pre-fix failure identifies the missing
+        # independent channel rather than an unknown-detector exception.
+        signals = [s for s in scan_campaign(rows).signals if s.detector_id == detector]
+>       assert len(signals) == len(rows), f"missing independent {detector} channel"
+E       AssertionError: missing independent horizon_consistency channel
+E       assert 0 == 1
+E        +  where 0 = len([])
+E        +  and   1 = len([{'algo': 'hybrid_rule_local_planner', 'algorithm_metadata': {'algorithm': 'hybrid_rule_local_planner', 'ammv_feasibil... 'hybrid_rule_local_planner', ...}, 'config_hash': '0be782383551a050', 'development_pedestrian_model': 'unknown', ...}])
+
+../aud-work/tests/analysis_workbench/test_aud2_detectors.py:30: AssertionError
+____ test_nonfinite_physical_scalar_has_measurement_error[nan-clearance_m] _____
+
+metric = 'clearance_m', value = nan
+
+    @pytest.mark.parametrize(
+        "metric", ["clearance_m", "time_to_collision_min", "ped_force_mean", "total_collision_count"]
+    )
+    @pytest.mark.parametrize("value", [math.nan, math.inf, -math.inf])
+    def test_nonfinite_physical_scalar_has_measurement_error(metric, value):
+        s = detect("extreme_measurements", {"episode_id": "corrupt", "metrics": {metric: value}})
+        assert s.status == "error"
+>       assert s.reason_code == "nonfinite_or_malformed_measurement"
+E       AssertionError: assert 'row_contains_nonfinite_value' == 'nonfinite_or...d_measurement'
+E
+E         - nonfinite_or_malformed_measurement
+E         + row_contains_nonfinite_value
+
+../aud-work/tests/analysis_workbench/test_aud2_detectors.py:141: AssertionError
+_ test_nonfinite_physical_scalar_has_measurement_error[nan-time_to_collision_min] _
+
+metric = 'time_to_collision_min', value = nan
+
+    @pytest.mark.parametrize(
+        "metric", ["clearance_m", "time_to_collision_min", "ped_force_mean", "total_collision_count"]
+    )
+    @pytest.mark.parametrize("value", [math.nan, math.inf, -math.inf])
+    def test_nonfinite_physical_scalar_has_measurement_error(metric, value):
+        s = detect("extreme_measurements", {"episode_id": "corrupt", "metrics": {metric: value}})
+        assert s.status == "error"
+>       assert s.reason_code == "nonfinite_or_malformed_measurement"
+E       AssertionError: assert 'row_contains_nonfinite_value' == 'nonfinite_or...d_measurement'
+E
+E         - nonfinite_or_malformed_measurement
+E         + row_contains_nonfinite_value
+
+../aud-work/tests/analysis_workbench/test_aud2_detectors.py:141: AssertionError
+___ test_nonfinite_physical_scalar_has_measurement_error[nan-ped_force_mean] ___
+
+metric = 'ped_force_mean', value = nan
+
+    @pytest.mark.parametrize(
+        "metric", ["clearance_m", "time_to_collision_min", "ped_force_mean", "total_collision_count"]
+    )
+    @pytest.mark.parametrize("value", [math.nan, math.inf, -math.inf])
+    def test_nonfinite_physical_scalar_has_measurement_error(metric, value):
+        s = detect("extreme_measurements", {"episode_id": "corrupt", "metrics": {metric: value}})
+        assert s.status == "error"
+>       assert s.reason_code == "nonfinite_or_malformed_measurement"
+E       AssertionError: assert 'row_contains_nonfinite_value' == 'nonfinite_or...d_measurement'
+E
+E         - nonfinite_or_malformed_measurement
+E         + row_contains_nonfinite_value
+
+../aud-work/tests/analysis_workbench/test_aud2_detectors.py:141: AssertionError
+_ test_nonfinite_physical_scalar_has_measurement_error[nan-total_collision_count] _
+
+metric = 'total_collision_count', value = nan
+
+    @pytest.mark.parametrize(
+        "metric", ["clearance_m", "time_to_collision_min", "ped_force_mean", "total_collision_count"]
+    )
+    @pytest.mark.parametrize("value", [math.nan, math.inf, -math.inf])
+    def test_nonfinite_physical_scalar_has_measurement_error(metric, value):
+        s = detect("extreme_measurements", {"episode_id": "corrupt", "metrics": {metric: value}})
+        assert s.status == "error"
+>       assert s.reason_code == "nonfinite_or_malformed_measurement"
+E       AssertionError: assert 'row_contains_nonfinite_value' == 'nonfinite_or...d_measurement'
+E
+E         - nonfinite_or_malformed_measurement
+E         + row_contains_nonfinite_value
+
+../aud-work/tests/analysis_workbench/test_aud2_detectors.py:141: AssertionError
+____ test_nonfinite_physical_scalar_has_measurement_error[inf-clearance_m] _____
+
+metric = 'clearance_m', value = inf
+
+    @pytest.mark.parametrize(
+        "metric", ["clearance_m", "time_to_collision_min", "ped_force_mean", "total_collision_count"]
+    )
+    @pytest.mark.parametrize("value", [math.nan, math.inf, -math.inf])
+    def test_nonfinite_physical_scalar_has_measurement_error(metric, value):
+        s = detect("extreme_measurements", {"episode_id": "corrupt", "metrics": {metric: value}})
+        assert s.status == "error"
+>       assert s.reason_code == "nonfinite_or_malformed_measurement"
+E       AssertionError: assert 'row_contains_nonfinite_value' == 'nonfinite_or...d_measurement'
+E
+E         - nonfinite_or_malformed_measurement
+E         + row_contains_nonfinite_value
+
+../aud-work/tests/analysis_workbench/test_aud2_detectors.py:141: AssertionError
+_ test_nonfinite_physical_scalar_has_measurement_error[inf-time_to_collision_min] _
+
+metric = 'time_to_collision_min', value = inf
+
+    @pytest.mark.parametrize(
+        "metric", ["clearance_m", "time_to_collision_min", "ped_force_mean", "total_collision_count"]
+    )
+    @pytest.mark.parametrize("value", [math.nan, math.inf, -math.inf])
+    def test_nonfinite_physical_scalar_has_measurement_error(metric, value):
+        s = detect("extreme_measurements", {"episode_id": "corrupt", "metrics": {metric: value}})
+        assert s.status == "error"
+>       assert s.reason_code == "nonfinite_or_malformed_measurement"
+E       AssertionError: assert 'row_contains_nonfinite_value' == 'nonfinite_or...d_measurement'
+E
+E         - nonfinite_or_malformed_measurement
+E         + row_contains_nonfinite_value
+
+../aud-work/tests/analysis_workbench/test_aud2_detectors.py:141: AssertionError
+___ test_nonfinite_physical_scalar_has_measurement_error[inf-ped_force_mean] ___
+
+metric = 'ped_force_mean', value = inf
+
+    @pytest.mark.parametrize(
+        "metric", ["clearance_m", "time_to_collision_min", "ped_force_mean", "total_collision_count"]
+    )
+    @pytest.mark.parametrize("value", [math.nan, math.inf, -math.inf])
+    def test_nonfinite_physical_scalar_has_measurement_error(metric, value):
+        s = detect("extreme_measurements", {"episode_id": "corrupt", "metrics": {metric: value}})
+        assert s.status == "error"
+>       assert s.reason_code == "nonfinite_or_malformed_measurement"
+E       AssertionError: assert 'row_contains_nonfinite_value' == 'nonfinite_or...d_measurement'
+E
+E         - nonfinite_or_malformed_measurement
+E         + row_contains_nonfinite_value
+
+../aud-work/tests/analysis_workbench/test_aud2_detectors.py:141: AssertionError
+_ test_nonfinite_physical_scalar_has_measurement_error[inf-total_collision_count] _
+
+metric = 'total_collision_count', value = inf
+
+    @pytest.mark.parametrize(
+        "metric", ["clearance_m", "time_to_collision_min", "ped_force_mean", "total_collision_count"]
+    )
+    @pytest.mark.parametrize("value", [math.nan, math.inf, -math.inf])
+    def test_nonfinite_physical_scalar_has_measurement_error(metric, value):
+        s = detect("extreme_measurements", {"episode_id": "corrupt", "metrics": {metric: value}})
+        assert s.status == "error"
+>       assert s.reason_code == "nonfinite_or_malformed_measurement"
+E       AssertionError: assert 'row_contains_nonfinite_value' == 'nonfinite_or...d_measurement'
+E
+E         - nonfinite_or_malformed_measurement
+E         + row_contains_nonfinite_value
+
+../aud-work/tests/analysis_workbench/test_aud2_detectors.py:141: AssertionError
+____ test_nonfinite_physical_scalar_has_measurement_error[-inf-clearance_m] ____
+
+metric = 'clearance_m', value = -inf
+
+    @pytest.mark.parametrize(
+        "metric", ["clearance_m", "time_to_collision_min", "ped_force_mean", "total_collision_count"]
+    )
+    @pytest.mark.parametrize("value", [math.nan, math.inf, -math.inf])
+    def test_nonfinite_physical_scalar_has_measurement_error(metric, value):
+        s = detect("extreme_measurements", {"episode_id": "corrupt", "metrics": {metric: value}})
+        assert s.status == "error"
+>       assert s.reason_code == "nonfinite_or_malformed_measurement"
+E       AssertionError: assert 'row_contains_nonfinite_value' == 'nonfinite_or...d_measurement'
+E
+E         - nonfinite_or_malformed_measurement
+E         + row_contains_nonfinite_value
+
+../aud-work/tests/analysis_workbench/test_aud2_detectors.py:141: AssertionError
+_ test_nonfinite_physical_scalar_has_measurement_error[-inf-time_to_collision_min] _
+
+metric = 'time_to_collision_min', value = -inf
+
+    @pytest.mark.parametrize(
+        "metric", ["clearance_m", "time_to_collision_min", "ped_force_mean", "total_collision_count"]
+    )
+    @pytest.mark.parametrize("value", [math.nan, math.inf, -math.inf])
+    def test_nonfinite_physical_scalar_has_measurement_error(metric, value):
+        s = detect("extreme_measurements", {"episode_id": "corrupt", "metrics": {metric: value}})
+        assert s.status == "error"
+>       assert s.reason_code == "nonfinite_or_malformed_measurement"
+E       AssertionError: assert 'row_contains_nonfinite_value' == 'nonfinite_or...d_measurement'
+E
+E         - nonfinite_or_malformed_measurement
+E         + row_contains_nonfinite_value
+
+../aud-work/tests/analysis_workbench/test_aud2_detectors.py:141: AssertionError
+__ test_nonfinite_physical_scalar_has_measurement_error[-inf-ped_force_mean] ___
+
+metric = 'ped_force_mean', value = -inf
+
+    @pytest.mark.parametrize(
+        "metric", ["clearance_m", "time_to_collision_min", "ped_force_mean", "total_collision_count"]
+    )
+    @pytest.mark.parametrize("value", [math.nan, math.inf, -math.inf])
+    def test_nonfinite_physical_scalar_has_measurement_error(metric, value):
+        s = detect("extreme_measurements", {"episode_id": "corrupt", "metrics": {metric: value}})
+        assert s.status == "error"
+>       assert s.reason_code == "nonfinite_or_malformed_measurement"
+E       AssertionError: assert 'row_contains_nonfinite_value' == 'nonfinite_or...d_measurement'
+E
+E         - nonfinite_or_malformed_measurement
+E         + row_contains_nonfinite_value
+
+../aud-work/tests/analysis_workbench/test_aud2_detectors.py:141: AssertionError
+_ test_nonfinite_physical_scalar_has_measurement_error[-inf-total_collision_count] _
+
+metric = 'total_collision_count', value = -inf
+
+    @pytest.mark.parametrize(
+        "metric", ["clearance_m", "time_to_collision_min", "ped_force_mean", "total_collision_count"]
+    )
+    @pytest.mark.parametrize("value", [math.nan, math.inf, -math.inf])
+    def test_nonfinite_physical_scalar_has_measurement_error(metric, value):
+        s = detect("extreme_measurements", {"episode_id": "corrupt", "metrics": {metric: value}})
+        assert s.status == "error"
+>       assert s.reason_code == "nonfinite_or_malformed_measurement"
+E       AssertionError: assert 'row_contains_nonfinite_value' == 'nonfinite_or...d_measurement'
+E
+E         - nonfinite_or_malformed_measurement
+E         + row_contains_nonfinite_value
+
+../aud-work/tests/analysis_workbench/test_aud2_detectors.py:141: AssertionError
+_____ test_only_named_structured_diagnostics_may_bypass_scalar_validation ______
+
+    def test_only_named_structured_diagnostics_may_bypass_scalar_validation():
+        r = {"episode_id": "structured", "metrics": {"clearance_m": 1, "mystery": {"value": -1}}}
+        s = detect("extreme_measurements", r)
+>       assert s.status == "error"
+E       AssertionError: assert 'clear' == 'error'
+E
+E         - error
+E         + clear
+
+../aud-work/tests/analysis_workbench/test_aud2_detectors.py:147: AssertionError
+____________ test_boolean_physical_scalar_is_malformed[clearance_m] ____________
+
+metric = 'clearance_m'
+
+    @pytest.mark.parametrize(
+        "metric", ["clearance_m", "time_to_collision_min", "ped_force_mean", "total_collision_count"]
+    )
+    def test_boolean_physical_scalar_is_malformed(metric):
+        s = detect("extreme_measurements", {"episode_id": "bool", "metrics": {metric: True}})
+>       assert s.status == "error"
+E       AssertionError: assert 'unavailable' == 'error'
+E
+E         - error
+E         + unavailable
+
+../aud-work/tests/analysis_workbench/test_aud2_detectors.py:162: AssertionError
+_______ test_boolean_physical_scalar_is_malformed[time_to_collision_min] _______
+
+metric = 'time_to_collision_min'
+
+    @pytest.mark.parametrize(
+        "metric", ["clearance_m", "time_to_collision_min", "ped_force_mean", "total_collision_count"]
+    )
+    def test_boolean_physical_scalar_is_malformed(metric):
+        s = detect("extreme_measurements", {"episode_id": "bool", "metrics": {metric: True}})
+>       assert s.status == "error"
+E       AssertionError: assert 'unavailable' == 'error'
+E
+E         - error
+E         + unavailable
+
+../aud-work/tests/analysis_workbench/test_aud2_detectors.py:162: AssertionError
+__________ test_boolean_physical_scalar_is_malformed[ped_force_mean] ___________
+
+metric = 'ped_force_mean'
+
+    @pytest.mark.parametrize(
+        "metric", ["clearance_m", "time_to_collision_min", "ped_force_mean", "total_collision_count"]
+    )
+    def test_boolean_physical_scalar_is_malformed(metric):
+        s = detect("extreme_measurements", {"episode_id": "bool", "metrics": {metric: True}})
+>       assert s.status == "error"
+E       AssertionError: assert 'unavailable' == 'error'
+E
+E         - error
+E         + unavailable
+
+../aud-work/tests/analysis_workbench/test_aud2_detectors.py:162: AssertionError
+_______ test_boolean_physical_scalar_is_malformed[total_collision_count] _______
+
+metric = 'total_collision_count'
+
+    @pytest.mark.parametrize(
+        "metric", ["clearance_m", "time_to_collision_min", "ped_force_mean", "total_collision_count"]
+    )
+    def test_boolean_physical_scalar_is_malformed(metric):
+        s = detect("extreme_measurements", {"episode_id": "bool", "metrics": {metric: True}})
+>       assert s.status == "error"
+E       AssertionError: assert 'unavailable' == 'error'
+E
+E         - error
+E         + unavailable
+
+../aud-work/tests/analysis_workbench/test_aud2_detectors.py:162: AssertionError
+============================= slowest 10 durations =============================
+0.05s call     tests/analysis_workbench/test_aud2_detectors.py::test_failure_subgroup_has_outcome_incidence_without_external_control
+0.02s call     tests/analysis_workbench/test_aud2_detectors.py::test_uniform_metric_shift_has_cross_planner_median_signal
+0.02s call     tests/analysis_workbench/test_aud2_detectors.py::test_planner_uniform_failures_compare_against_scenario_not_planner_config
+0.01s call     tests/analysis_workbench/test_aud2_detectors.py::test_published_unresolved_candidate_exposes_runner_simulator_horizon_mismatch
+
+(6 durations < 0.005s hidden.  Use -vv to show these durations.)
+
+Slow Test Report (soft<20s hard=60s, top 10)
+1) tests/analysis_workbench/test_aud2_detectors.py::test_failure_subgroup_has_outcome_incidence_without_external_control  0.05s
+2) tests/analysis_workbench/test_aud2_detectors.py::test_uniform_metric_shift_has_cross_planner_median_signal  0.02s
+3) tests/analysis_workbench/test_aud2_detectors.py::test_planner_uniform_failures_compare_against_scenario_not_planner_config  0.02s
+4) tests/analysis_workbench/test_aud2_detectors.py::test_published_unresolved_candidate_exposes_runner_simulator_horizon_mismatch  0.01s
+5) tests/analysis_workbench/test_aud2_detectors.py::test_horizon_timeout_steps_cannot_disappear_inside_small_outcome_cohort  0.00s
+6) tests/analysis_workbench/test_aud2_refutations.py::test_malformed_physical_scalar_does_not_report_clear[clearance_m]  0.00s
+7) tests/analysis_workbench/test_aud2_refutations.py::test_malformed_physical_scalar_does_not_report_clear[time_to_collision_min]  0.00s
+8) tests/analysis_workbench/test_aud2_refutations.py::test_malformed_physical_scalar_does_not_report_clear[total_collision_count]  0.00s
+9) tests/analysis_workbench/test_aud2_refutations.py::test_malformed_physical_scalar_does_not_report_clear[ped_force_mean]  0.00s
+10) tests/analysis_workbench/test_aud2_detectors.py::test_mad_floor_keeps_percent_level_signal_and_rejects_micro_noise[seed_outlier]  0.00s
+
+=========================== short test summary info ============================
+FAILED ../aud-work/tests/analysis_workbench/test_aud2_refutations.py::test_malformed_physical_scalar_does_not_report_clear[clearance_m]
+FAILED ../aud-work/tests/analysis_workbench/test_aud2_refutations.py::test_malformed_physical_scalar_does_not_report_clear[time_to_collision_min]
+FAILED ../aud-work/tests/analysis_workbench/test_aud2_refutations.py::test_malformed_physical_scalar_does_not_report_clear[ped_force_mean]
+FAILED ../aud-work/tests/analysis_workbench/test_aud2_refutations.py::test_malformed_physical_scalar_does_not_report_clear[total_collision_count]
+FAILED ../aud-work/tests/analysis_workbench/test_aud2_detectors.py::test_failure_subgroup_has_outcome_incidence_without_external_control
+FAILED ../aud-work/tests/analysis_workbench/test_aud2_detectors.py::test_planner_uniform_failures_compare_against_scenario_not_planner_config
+FAILED ../aud-work/tests/analysis_workbench/test_aud2_detectors.py::test_uniform_metric_shift_has_cross_planner_median_signal
+FAILED ../aud-work/tests/analysis_workbench/test_aud2_detectors.py::test_mad_floor_keeps_percent_level_signal_and_rejects_micro_noise[seed_outlier]
+FAILED ../aud-work/tests/analysis_workbench/test_aud2_detectors.py::test_mad_floor_keeps_percent_level_signal_and_rejects_micro_noise[cohort_multivariate_outlier]
+FAILED ../aud-work/tests/analysis_workbench/test_aud2_detectors.py::test_horizon_timeout_steps_cannot_disappear_inside_small_outcome_cohort
+FAILED ../aud-work/tests/analysis_workbench/test_aud2_detectors.py::test_published_unresolved_candidate_exposes_runner_simulator_horizon_mismatch
+FAILED ../aud-work/tests/analysis_workbench/test_aud2_detectors.py::test_nonfinite_physical_scalar_has_measurement_error[nan-clearance_m]
+FAILED ../aud-work/tests/analysis_workbench/test_aud2_detectors.py::test_nonfinite_physical_scalar_has_measurement_error[nan-time_to_collision_min]
+FAILED ../aud-work/tests/analysis_workbench/test_aud2_detectors.py::test_nonfinite_physical_scalar_has_measurement_error[nan-ped_force_mean]
+FAILED ../aud-work/tests/analysis_workbench/test_aud2_detectors.py::test_nonfinite_physical_scalar_has_measurement_error[nan-total_collision_count]
+FAILED ../aud-work/tests/analysis_workbench/test_aud2_detectors.py::test_nonfinite_physical_scalar_has_measurement_error[inf-clearance_m]
+FAILED ../aud-work/tests/analysis_workbench/test_aud2_detectors.py::test_nonfinite_physical_scalar_has_measurement_error[inf-time_to_collision_min]
+FAILED ../aud-work/tests/analysis_workbench/test_aud2_detectors.py::test_nonfinite_physical_scalar_has_measurement_error[inf-ped_force_mean]
+FAILED ../aud-work/tests/analysis_workbench/test_aud2_detectors.py::test_nonfinite_physical_scalar_has_measurement_error[inf-total_collision_count]
+FAILED ../aud-work/tests/analysis_workbench/test_aud2_detectors.py::test_nonfinite_physical_scalar_has_measurement_error[-inf-clearance_m]
+FAILED ../aud-work/tests/analysis_workbench/test_aud2_detectors.py::test_nonfinite_physical_scalar_has_measurement_error[-inf-time_to_collision_min]
+FAILED ../aud-work/tests/analysis_workbench/test_aud2_detectors.py::test_nonfinite_physical_scalar_has_measurement_error[-inf-ped_force_mean]
+FAILED ../aud-work/tests/analysis_workbench/test_aud2_detectors.py::test_nonfinite_physical_scalar_has_measurement_error[-inf-total_collision_count]
+FAILED ../aud-work/tests/analysis_workbench/test_aud2_detectors.py::test_only_named_structured_diagnostics_may_bypass_scalar_validation
+FAILED ../aud-work/tests/analysis_workbench/test_aud2_detectors.py::test_boolean_physical_scalar_is_malformed[clearance_m]
+FAILED ../aud-work/tests/analysis_workbench/test_aud2_detectors.py::test_boolean_physical_scalar_is_malformed[time_to_collision_min]
+FAILED ../aud-work/tests/analysis_workbench/test_aud2_detectors.py::test_boolean_physical_scalar_is_malformed[ped_force_mean]
+FAILED ../aud-work/tests/analysis_workbench/test_aud2_detectors.py::test_boolean_physical_scalar_is_malformed[total_collision_count]
+28 failed in 0.94s

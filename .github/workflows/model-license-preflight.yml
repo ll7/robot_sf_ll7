@@ -2,6 +2,7 @@ name: Model License Preflight
 
 on:
   pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
     paths:
       - "model/**"
       - "scripts/tools/publish_model_registry_release.py"
@@ -17,6 +18,7 @@ permissions:
 
 jobs:
   model-license-preflight:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     name: model-license-preflight
     runs-on: ubuntu-latest
     timeout-minutes: 10

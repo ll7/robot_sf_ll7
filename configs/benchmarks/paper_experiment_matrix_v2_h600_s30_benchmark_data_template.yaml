@@ -6,10 +6,11 @@
 # Zenodo coordinates are selected. Keep the scientific contract and all input
 # bytes stable when resolving a release.
 name: paper_experiment_matrix_v2_h600_s30_benchmark_data
+protocol_version: 0.0.8
 paper_facing: true
 paper_profile_version: paper-matrix-v1
-scenario_matrix: configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v1.yaml
-comparability_mapping: configs/benchmarks/alyassi_comparability_map_v1.yaml
+scenario_matrix: configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml
+comparability_mapping: configs/benchmarks/alyassi_comparability_map_v2.yaml
 route_clearance_certifications: configs/benchmarks/route_clearance_certifications_v1.yaml
 
 amv_profile:
@@ -24,13 +25,14 @@ amv_profile:
 
 seed_policy:
   mode: seed-set
-  seed_set: paper_eval_s30
-  seed_sets_path: configs/benchmarks/seed_sets_v1.yaml
+  seed_set: release_eval_0_0_8
+  seed_sets_path: configs/benchmarks/seed_sets_0_0_8.yaml
 
-snqi_weights: configs/benchmarks/snqi_weights_camera_ready_v3.json
-snqi_baseline: configs/benchmarks/snqi_baseline_camera_ready_v3.json
+# Legacy SNQI is excluded: calibrate and pin schema-matched SNQI-v2 anchors first.
+snqi_weights: null
+snqi_baseline: null
 snqi_contract:
-  enabled: true
+  enabled: false
   enforcement: warn
   rank_alignment_warn_threshold: 0.5
   rank_alignment_fail_threshold: 0.3
@@ -42,9 +44,14 @@ snqi_contract:
   calibration_trials: 6000
 
 workers: 32
-horizon: 600
+# Authored per-scenario budgets replace the fixed horizon (including H650/H700).
+scenario_horizons: configs/benchmarks/horizon_schedules/release_0_0_8_authored_v1.yaml
+scenario_horizons_sha256: 032bbf8ad354ea9394492659aa50188e2bc40078930975ef30cd3ba77208675e
 dt: 0.1
 record_forces: true
+# D-057: 0.0.8 release rows stay untraced (record_simulation_step_trace defaults
+# to false). Diagnostic/illustration traces come from rehearsal 2, a separate
+# DEV-seed 1001 run at the freeze commit. No sealed-seed trace run exists.
 checkpoint_provenance_enforcement: error
 resume: true
 # Release execution stops at the first broken arm. Same-ID resume is admitted only
@@ -70,7 +77,7 @@ planners:
   - key: prediction_planner
     algo: prediction_planner
     planner_group: experimental
-    algo_config: configs/algos/prediction_planner_camera_ready.yaml
+    algo_config: configs/algos/prediction_planner_release_v0_0_8.yaml
     benchmark_profile: experimental
 
   - key: goal
@@ -81,14 +88,15 @@ planners:
   - key: social_force
     algo: social_force
     planner_group: core
-    # Issue #9724: resolution-independent obstacle term and speed-limited commands.
-    algo_config: configs/algos/social_force_resolution_independent_v2.yaml
+    # Issues #9724/#9764: resolution-independent planner and wrapped pair kernel.
+    algo_config: configs/algos/social_force_release_v0_0_8.yaml
     benchmark_profile: baseline-safe
 
   - key: orca
     algo: orca
     planner_group: core
     benchmark_profile: baseline-safe
+    algo_config: configs/algos/orca_release_v0_0_8.yaml
     socnav_missing_prereq_policy: fail-fast
 
   - key: ppo
@@ -96,7 +104,7 @@ planners:
     planner_group: experimental
     # CPU inference is the established parallel-matrix profile. GPU-backed
     # model loading in forked workers failed closed on both imech192 and LiCCA.
-    algo_config: configs/baselines/ppo_issue_791_eval_aligned_large_capacity_cpu.yaml
+    algo_config: configs/baselines/ppo_release_robot_0_0_8_cpu.yaml
     benchmark_profile: experimental
     adapter_impact_eval: true
 
@@ -104,58 +112,67 @@ planners:
     algo: socnav_sampling
     planner_group: experimental
     # Issues #9727/#9746: bounded_v2 sampling heuristic (footprint sweep, speed cap).
-    algo_config: configs/algos/socnav_sampling_bounded_v2.yaml
+    algo_config: configs/algos/socnav_sampling_release_v0_0_8.yaml
     benchmark_profile: experimental
     socnav_missing_prereq_policy: fail-fast
 
   - key: sacadrl
     algo: sacadrl
     planner_group: experimental
+    algo_config: configs/algos/socnav_release_v0_0_8.yaml
     benchmark_profile: experimental
     socnav_missing_prereq_policy: fail-fast
 
-  - key: scenario_adaptive_hybrid_orca_v2_bottleneck_yield
+  # Issue #9751: replaces 0.0.7 slot `scenario_adaptive_hybrid_orca_v2_bottleneck_yield` (reported as
+  # `implementation replaced`). Frozen under the #9748 hybrid v4 decision.
+  - key: scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4
     algo: hybrid_rule_local_planner
     planner_group: experimental
     algo_config: >-
-      configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_bottleneck_yield_s30_h600_release.yaml
+      configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4_s30_h600_release_0_0_8_frozen.yaml
     benchmark_profile: experimental
 
-  - key: scenario_adaptive_hybrid_orca_v2_collision_guard
+  # Issue #9751: replaces 0.0.7 slot `scenario_adaptive_hybrid_orca_v2_collision_guard` (reported as
+  # `implementation replaced`). Frozen under the #9748 hybrid v4 decision.
+  - key: scenario_adaptive_hybrid_orca_v2_collision_guard_v4
     algo: hybrid_rule_local_planner
     planner_group: experimental
     algo_config: >-
-      configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard_s30_h600_release.yaml
+      configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard_v4_s30_h600_release_0_0_8_frozen.yaml
     benchmark_profile: experimental
 
-  - key: hybrid_rule_v3_fast_progress_static_escape
+  # Issue #9751: replaces 0.0.7 slot `hybrid_rule_v3_fast_progress_static_escape` (reported as
+  # `implementation replaced`). Frozen under the #9748 hybrid v4 decision.
+  - key: hybrid_rule_v4_fast_progress_static_escape
     algo: hybrid_rule_local_planner
     planner_group: experimental
     algo_config: >-
-      configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape_s30_h600_release.yaml
+      configs/policy_search/candidates/hybrid_rule_v4_fast_progress_static_escape_s30_h600_release_0_0_8_frozen.yaml
     benchmark_profile: experimental
 
-  - key: hybrid_rule_v3_fast_progress_static_escape_continuous
+  # Issue #9751: replaces 0.0.7 slot `hybrid_rule_v3_fast_progress_static_escape_continuous` (reported as
+  # `implementation replaced`). Frozen under the #9748 hybrid v4 decision.
+  - key: hybrid_rule_v4_fast_progress_static_escape_continuous
     algo: hybrid_rule_local_planner
     planner_group: experimental
     algo_config: >-
-      configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape_continuous_s30_h600_release.yaml
+      configs/policy_search/candidates/hybrid_rule_v4_fast_progress_static_escape_continuous_s30_h600_release_0_0_8_frozen.yaml
     benchmark_profile: experimental
 
   - key: guarded_ppo
     algo: guarded_ppo
     planner_group: experimental
-    algo_config: configs/algos/guarded_ppo_camera_ready_cpu.yaml
+    algo_config: configs/algos/guarded_ppo_release_v0_0_8.yaml
     benchmark_profile: experimental
 
   - key: predictive_mppi
     algo: predictive_mppi
     planner_group: experimental
-    algo_config: configs/algos/predictive_mppi_camera_ready.yaml
+    algo_config: configs/algos/predictive_mppi_release_v0_0_8.yaml
     benchmark_profile: experimental
 
   - key: risk_dwa
     algo: risk_dwa
     planner_group: experimental
-    algo_config: configs/algos/risk_dwa_camera_ready.yaml
+    algo_config: configs/algos/risk_dwa_release_v0_0_8.yaml
     benchmark_profile: experimental

@@ -1,0 +1,7 @@
+{
+  "artifact_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/smoke/initial_invalid_smoke_manifest.json",
+  "artifact_sha256": "e6404e296cc43731f5e8e0f5ae121ed16f37479205d3756dec394df2fd11446f",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "evidence-review-marker.v1"
+}

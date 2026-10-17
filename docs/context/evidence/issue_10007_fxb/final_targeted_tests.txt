@@ -1,0 +1,28 @@
+........................................................................ [ 34%]
+........................................................................ [ 69%]
+...............................................................          [100%]
+============================= slowest 10 durations =============================
+7.81s call     tests/benchmark/test_issue_9727_socnav_sampling.py::test_diagnostic_cell_replay_reaches_goal_without_wall_contact[francis2023_crowd_navigation]
+2.51s call     tests/planner/test_socnav_orca_module.py::test_facade_wildcard_import_resolves_lazy_public_exports
+1.14s call     tests/benchmark/test_issue_9727_socnav_sampling.py::test_diagnostic_cell_replay_reaches_goal_without_wall_contact[francis2023_robot_crowding]
+0.20s call     tests/test_socnav_planner_adapter.py::test_sacadrl_adapter_runs_model_when_available
+0.15s call     tests/test_socnav_planner_adapter.py::test_social_force_obstacle_vectorized_parity
+0.12s call     tests/test_socnav_planner_adapter.py::test_prediction_adapter_probabilistic_risk_mode_is_deterministic
+0.12s call     tests/test_socnav_planner_adapter.py::test_prediction_adapter_mcts_mode_is_deterministic
+0.12s call     tests/test_socnav_planner_adapter.py::test_prediction_adapter_sequence_search_is_deterministic
+0.12s call     tests/test_socnav_planner_adapter.py::test_prediction_adapter_ttc_penalty_reduces_speed
+0.12s call     tests/test_socnav_planner_adapter.py::test_prediction_adapter_speed_clearance_gain_reduces_speed
+
+Slow Test Report (soft<20s hard=60s, top 10)
+1) tests/benchmark/test_issue_9727_socnav_sampling.py::test_diagnostic_cell_replay_reaches_goal_without_wall_contact[francis2023_crowd_navigation]  7.80s
+2) tests/planner/test_socnav_orca_module.py::test_facade_wildcard_import_resolves_lazy_public_exports  2.51s
+3) tests/benchmark/test_issue_9727_socnav_sampling.py::test_diagnostic_cell_replay_reaches_goal_without_wall_contact[francis2023_robot_crowding]  1.14s
+4) tests/test_socnav_planner_adapter.py::test_sacadrl_adapter_runs_model_when_available  0.20s
+5) tests/test_socnav_planner_adapter.py::test_social_force_obstacle_vectorized_parity  0.15s
+6) tests/test_socnav_planner_adapter.py::test_prediction_adapter_probabilistic_risk_mode_is_deterministic  0.12s
+7) tests/test_socnav_planner_adapter.py::test_prediction_adapter_mcts_mode_is_deterministic  0.12s
+8) tests/test_socnav_planner_adapter.py::test_prediction_adapter_sequence_search_is_deterministic  0.12s
+9) tests/test_socnav_planner_adapter.py::test_prediction_adapter_ttc_penalty_reduces_speed  0.12s
+10) tests/test_socnav_planner_adapter.py::test_prediction_adapter_speed_clearance_gain_reduces_speed  0.12s
+
+207 passed in 18.20s

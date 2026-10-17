@@ -48,7 +48,7 @@ def _spawn_config() -> PedSpawnConfig:
         max_group_members=3,
         initial_speed=0.5,
         route_spawn_distribution="spread",
-        route_spawn_seed=123,
+        route_spawn_seed=1013,
     )
 
 

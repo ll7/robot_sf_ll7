@@ -9,6 +9,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from robot_sf.benchmark.release_notes import gate_manifest
 from robot_sf.benchmark.release_protocol import (
     RESOLVED_RELEASE_METADATA_FILENAME,
     verify_resolved_release_identity,
@@ -33,6 +34,19 @@ def _parser() -> argparse.ArgumentParser:
     generate.add_argument("--concept-doi", required=True)
     generate.add_argument("--version-doi", required=True)
     generate.add_argument("--repository-root", type=Path, default=None)
+    generate.add_argument(
+        "--development-rehearsal",
+        action="store_true",
+        help="Generate a non-releasable D-070 development identity.",
+    )
+    generate.add_argument(
+        "--development-seeds",
+        default=None,
+        help="Comma-separated development seeds, allowed only with rehearsal opt-in.",
+    )
+
+    generate.add_argument("--determinism-receipt-path", type=Path)
+    generate.add_argument("--determinism-receipt-sha256")
 
     verify = subparsers.add_parser("verify", help="Reproduce and verify resolved identity bytes.")
     verify.add_argument("--identity", type=Path, required=True)
@@ -54,6 +68,23 @@ def main(argv: list[str] | None = None) -> int:
     repository_root = (args.repository_root or get_repository_root()).resolve()
     try:
         if args.command == "generate":
+            rehearsal_seeds = None
+            if args.development_rehearsal:
+                rehearsal_seeds = tuple(
+                    int(value) for value in (args.development_seeds or "1001,1002,1003").split(",")
+                )
+            elif args.development_seeds is not None:
+                raise ValueError("development seeds require --development-rehearsal")
+            if (args.determinism_receipt_path is None) != (args.determinism_receipt_sha256 is None):
+                raise ValueError("determinism receipt requires both path and sha256")
+            receipt = (
+                {
+                    "path": str(args.determinism_receipt_path),
+                    "sha256": args.determinism_receipt_sha256,
+                }
+                if args.determinism_receipt_path is not None
+                else None
+            )
             output = args.output if args.output.is_absolute() else repository_root / args.output
             payload = write_resolved_release_identity(
                 template_path=args.template,
@@ -63,6 +94,8 @@ def main(argv: list[str] | None = None) -> int:
                 concept_doi=args.concept_doi,
                 version_doi=args.version_doi,
                 repository_root=repository_root,
+                development_rehearsal_seeds=rehearsal_seeds,
+                determinism_receipt=receipt,
             )
             metadata = output.parent / RESOLVED_RELEASE_METADATA_FILENAME
             _print(
@@ -84,10 +117,12 @@ def main(argv: list[str] | None = None) -> int:
 
         identity = args.identity if args.identity.is_absolute() else repository_root / args.identity
         manifest = verify_resolved_release_identity(identity, repository_root=repository_root)
+        notes_receipt = gate_manifest(manifest, repository_root)
         _print(
             {
                 "schema_version": "benchmark-release-identity-command.v1",
                 "status": "verified",
+                "release_notes_gate": notes_receipt,
                 "source_commit": manifest.source_sha,
                 "latest_main_base_commit": manifest.latest_main_base_commit,
                 "release_tag": manifest.release_tag,

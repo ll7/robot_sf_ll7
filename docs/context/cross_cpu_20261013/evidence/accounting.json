@@ -1,0 +1,205 @@
+{
+  "rows": [
+    {
+      "job_id": "31581",
+      "state": "COMPLETED",
+      "elapsed": "00:00:01",
+      "allocated_cpus": "1",
+      "allocated_cpu_seconds": "1",
+      "exit_code": "0:0",
+      "node": "auxme-imech091"
+    },
+    {
+      "job_id": "31582",
+      "state": "COMPLETED",
+      "elapsed": "00:00:01",
+      "allocated_cpus": "1",
+      "allocated_cpu_seconds": "1",
+      "exit_code": "0:0",
+      "node": "auxme-imech093"
+    },
+    {
+      "job_id": "31583",
+      "state": "COMPLETED",
+      "elapsed": "00:00:01",
+      "allocated_cpus": "1",
+      "allocated_cpu_seconds": "1",
+      "exit_code": "0:0",
+      "node": "auxme-imech142"
+    },
+    {
+      "job_id": "31584",
+      "state": "COMPLETED",
+      "elapsed": "00:00:00",
+      "allocated_cpus": "1",
+      "allocated_cpu_seconds": "0",
+      "exit_code": "0:0",
+      "node": "auxme-imech172"
+    },
+    {
+      "job_id": "31585",
+      "state": "COMPLETED",
+      "elapsed": "00:00:00",
+      "allocated_cpus": "1",
+      "allocated_cpu_seconds": "0",
+      "exit_code": "0:0",
+      "node": "auxme-imech254"
+    },
+    {
+      "job_id": "31586",
+      "state": "COMPLETED",
+      "elapsed": "00:00:37",
+      "allocated_cpus": "4",
+      "allocated_cpu_seconds": "148",
+      "exit_code": "0:0",
+      "node": "auxme-imech091"
+    },
+    {
+      "job_id": "31587",
+      "state": "FAILED",
+      "elapsed": "00:04:07",
+      "allocated_cpus": "4",
+      "allocated_cpu_seconds": "988",
+      "exit_code": "1:0",
+      "node": "auxme-imech091"
+    },
+    {
+      "job_id": "31588",
+      "state": "FAILED",
+      "elapsed": "00:06:07",
+      "allocated_cpus": "4",
+      "allocated_cpu_seconds": "1468",
+      "exit_code": "1:0",
+      "node": "auxme-imech172"
+    },
+    {
+      "job_id": "31589",
+      "state": "COMPLETED",
+      "elapsed": "00:03:54",
+      "allocated_cpus": "4",
+      "allocated_cpu_seconds": "936",
+      "exit_code": "0:0",
+      "node": "auxme-imech091"
+    },
+    {
+      "job_id": "31590",
+      "state": "COMPLETED",
+      "elapsed": "00:05:39",
+      "allocated_cpus": "4",
+      "allocated_cpu_seconds": "1356",
+      "exit_code": "0:0",
+      "node": "auxme-imech172"
+    },
+    {
+      "job_id": "31591",
+      "state": "COMPLETED",
+      "elapsed": "00:53:01",
+      "allocated_cpus": "4",
+      "allocated_cpu_seconds": "12724",
+      "exit_code": "0:0",
+      "node": "auxme-imech091"
+    },
+    {
+      "job_id": "31592",
+      "state": "COMPLETED",
+      "elapsed": "00:52:45",
+      "allocated_cpus": "4",
+      "allocated_cpu_seconds": "12660",
+      "exit_code": "0:0",
+      "node": "auxme-imech091"
+    },
+    {
+      "job_id": "31593",
+      "state": "COMPLETED",
+      "elapsed": "00:58:18",
+      "allocated_cpus": "4",
+      "allocated_cpu_seconds": "13992",
+      "exit_code": "0:0",
+      "node": "auxme-imech091"
+    },
+    {
+      "job_id": "31594",
+      "state": "FAILED",
+      "elapsed": "00:00:08",
+      "allocated_cpus": "4",
+      "allocated_cpu_seconds": "32",
+      "exit_code": "1:0",
+      "node": "auxme-imech091"
+    },
+    {
+      "job_id": "31595",
+      "state": "COMPLETED",
+      "elapsed": "01:28:34",
+      "allocated_cpus": "4",
+      "allocated_cpu_seconds": "21256",
+      "exit_code": "0:0",
+      "node": "auxme-imech172"
+    },
+    {
+      "job_id": "31596",
+      "state": "COMPLETED",
+      "elapsed": "01:26:22",
+      "allocated_cpus": "4",
+      "allocated_cpu_seconds": "20728",
+      "exit_code": "0:0",
+      "node": "auxme-imech172"
+    },
+    {
+      "job_id": "31597",
+      "state": "COMPLETED",
+      "elapsed": "01:36:08",
+      "allocated_cpus": "4",
+      "allocated_cpu_seconds": "23072",
+      "exit_code": "0:0",
+      "node": "auxme-imech172"
+    },
+    {
+      "job_id": "31598",
+      "state": "CANCELLED by 1010",
+      "elapsed": "00:00:00",
+      "allocated_cpus": "0",
+      "allocated_cpu_seconds": "0",
+      "exit_code": "0:0",
+      "node": "None assigned"
+    },
+    {
+      "job_id": "31599",
+      "state": "COMPLETED",
+      "elapsed": "00:00:13",
+      "allocated_cpus": "4",
+      "allocated_cpu_seconds": "52",
+      "exit_code": "0:0",
+      "node": "auxme-imech091"
+    },
+    {
+      "job_id": "31600",
+      "state": "COMPLETED",
+      "elapsed": "00:58:24",
+      "allocated_cpus": "4",
+      "allocated_cpu_seconds": "14016",
+      "exit_code": "0:0",
+      "node": "auxme-imech091"
+    },
+    {
+      "job_id": "31601",
+      "state": "COMPLETED",
+      "elapsed": "01:32:01",
+      "allocated_cpus": "4",
+      "allocated_cpu_seconds": "22084",
+      "exit_code": "0:0",
+      "node": "auxme-imech172"
+    }
+  ],
+  "allocated_cpu_hours": 40.420833333333334,
+  "study_job_ids": [
+    "31591",
+    "31592",
+    "31593",
+    "31595",
+    "31596",
+    "31597",
+    "31600",
+    "31601"
+  ],
+  "cpu_hour_cap": 150
+}

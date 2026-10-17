@@ -41,6 +41,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+from scripts.dev import check_ci_needs as ci_manifest
 from scripts.dev.check_ci_needs import (
     AGGREGATE_JOB,
     CI_PATHS_IGNORE_PATTERNS,
@@ -48,6 +49,8 @@ from scripts.dev.check_ci_needs import (
     required_check_identities,
 )
 from tests.support.environment_guards import configure_git_identity
+
+pytestmark = pytest.mark.usefixtures("isolated_ci_wrapper_environment")
 
 ROOT = Path(__file__).resolve().parents[1]
 CI_DRIVER = ROOT / "scripts" / "dev" / "ci_driver.sh"
@@ -129,7 +132,7 @@ def test_run_tests_parallel_exposes_xdist_distribution_mode() -> None:
 
     script_text = RUN_TESTS_PARALLEL.read_text(encoding="utf-8")
 
-    assert 'dist_mode="${PYTEST_XDIST_DIST:-load}"' in script_text
+    assert 'dist_mode="${PYTEST_XDIST_DIST:-$default_dist_mode}"' in script_text
     assert "Invalid PYTEST_XDIST_DIST value" in script_text
     assert "cmd=(uv run pytest)" in script_text
     assert 'if [[ "$pytest_execution_mode" == "xdist" ]]; then' in script_text
@@ -198,7 +201,9 @@ def test_run_tests_parallel_allows_only_empty_fast_only_shards() -> None:
     assert "fast-only shard collected no tests" in script_text
 
 
-def test_run_tests_parallel_empty_shard_guard_executes_only_the_safe_case(tmp_path: Path) -> None:
+def test_run_tests_parallel_empty_shard_guard_executes_only_the_safe_case(
+    tmp_path: Path,
+) -> None:
     """Exercise the exit-5 guard and prove rejected cases clean up their logs."""
 
     repo = tmp_path / "repo"
@@ -255,13 +260,14 @@ def test_run_tests_parallel_empty_shard_guard_executes_only_the_safe_case(tmp_pa
         "set -euo pipefail\n"
         'if [[ "$1" == run && "$2" == python ]]; then\n'
         '  case "$3" in\n'
-        "    *resolve_pytest_workers.py) printf '1\\n' ;;\n"
+        "    *resolve_pytest_workers.py) printf '%s\\n' \"$PYTEST_NUM_WORKERS\" ;;\n"
         "    *diagnose_xdist_crash.py) exit 0 ;;\n"
         '    *) echo "unexpected helper: $*" >&2; exit 99 ;;\n'
         "  esac\n"
         "  exit 0\n"
         "fi\n"
         'if [[ "$1" == run && "$2" == pytest ]]; then\n'
+        '  printf \'%s\\n\' "$@" >"$FIXTURE_ARGS"\n'
         '  cat "$FIXTURE_OUTPUT"\n'
         '  exit "$FIXTURE_EXIT"\n'
         "fi\n"
@@ -282,13 +288,21 @@ def test_run_tests_parallel_empty_shard_guard_executes_only_the_safe_case(tmp_pa
         ("full-suite-empty", 5, "no tests ran\n", 2, 1, 1),
         ("unsharded-empty", 5, "no tests ran\n", 1, 1, 0),
     )
-    for name, pytest_exit, pytest_output, shard_count, shard_index, include_slow in cases:
+    for (
+        name,
+        pytest_exit,
+        pytest_output,
+        shard_count,
+        shard_index,
+        include_slow,
+    ) in cases:
         output.write_text(pytest_output, encoding="utf-8")
         env = {
             **os.environ,
             "PATH": f"{fake_bin}{os.pathsep}{os.environ['PATH']}",
-            "PYTEST_NUM_WORKERS": "1",
+            "PYTEST_NUM_WORKERS": "4",
             "PYTEST_FAST_FAIL": "0",
+            "FIXTURE_ARGS": str(tmp_path / "args.txt"),
             "PYTEST_ORDER_MODE": "none",
             "PYTEST_SHARD_COUNT": str(shard_count),
             "PYTEST_SHARD_INDEX": str(shard_index),
@@ -300,6 +314,7 @@ def test_run_tests_parallel_empty_shard_guard_executes_only_the_safe_case(tmp_pa
             "FIXTURE_OUTPUT": str(output),
             "FIXTURE_EXIT": str(pytest_exit),
         }
+        env.pop("PYTEST_XDIST_DIST", None)
         result = subprocess.run(
             [str(script_dir / "run_tests_parallel.sh")],
             cwd=repo,
@@ -309,10 +324,31 @@ def test_run_tests_parallel_empty_shard_guard_executes_only_the_safe_case(tmp_pa
             timeout=30,
             check=False,
         )
+        argv = (tmp_path / "args.txt").read_text().splitlines()
+        assert argv[argv.index("--dist") + 1] == ("worksteal" if shard_count > 1 else "load")
         expected = 0 if name == "empty-fast-shard" else pytest_exit
         assert result.returncode == expected, (name, result.stdout, result.stderr)
         assert not list(temp_root.glob("pytest_run.*.log")), name
         assert not list(temp_root.glob("pytest_serial.*.log")), name
+
+    override_env = {
+        **env,
+        "PYTEST_SHARD_COUNT": "2",
+        "PYTEST_XDIST_DIST": "loadscope",
+        "FIXTURE_EXIT": "0",
+    }
+    overridden = subprocess.run(
+        [str(script_dir / "run_tests_parallel.sh")],
+        cwd=repo,
+        env=override_env,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=30,
+    )
+    assert overridden.returncode == 0, overridden.stderr
+    argv = (tmp_path / "args.txt").read_text().splitlines()
+    assert argv[argv.index("--dist") + 1] == "loadscope"
 
     missing_coverage_env = {
         **os.environ,
@@ -359,7 +395,7 @@ def test_ci_workflow_persists_merged_pytest_duration_store() -> None:
     fast_feedback_steps = fast_feedback["steps"]
     duration_restore = next(
         step
-        for step in fast_feedback_steps
+        for step in workflow["jobs"]["dispatch-ownership"]["steps"]
         if step.get("name") == "Restore test durations for pytest-split balancing"
     )
     duration_upload = next(
@@ -368,10 +404,16 @@ def test_ci_workflow_persists_merged_pytest_duration_store() -> None:
 
     assert duration_restore["uses"].startswith("actions/cache/restore@")
     assert duration_restore["continue-on-error"] is True
-    assert duration_restore["with"]["path"] == ".test_durations"
+    assert duration_restore["with"]["path"].splitlines() == [
+        ".test_durations",
+        ".pytest_cache/test_durations_metadata.json",
+    ]
     assert "${{ github.run_id }}" in duration_restore["with"]["key"]
     assert "${{ github.run_attempt }}" in duration_restore["with"]["key"]
-    assert "test-durations-${{ runner.os }}-" in duration_restore["with"]["restore-keys"]
+    assert (
+        "test-durations-v2-${{ runner.os }}-${{ runner.arch }}-"
+        in duration_restore["with"]["restore-keys"]
+    )
     assert duration_upload["if"] == "always()"
     assert duration_upload["continue-on-error"] is True
     assert duration_upload["with"] == {
@@ -427,7 +469,7 @@ def test_ci_workflow_persists_merged_pytest_duration_store() -> None:
     assert "always()" in duration_save["if"]
     assert "steps.checkout_ci_source.outcome == 'success'" in duration_save["if"]
     assert "steps.merge-test-durations.outcome == 'success'" in duration_save["if"]
-    assert duration_save["with"]["path"] == ".test_durations"
+    assert duration_save["with"]["path"] == duration_restore["with"]["path"]
     assert "${{ github.run_id }}" in duration_save["with"]["key"]
     assert "${{ github.run_attempt }}" in duration_save["with"]["key"]
 
@@ -475,23 +517,130 @@ def test_required_check_identities_bind_to_aggregate_ci_contract() -> None:
 
 
 def test_draft_feedback_uses_a_distinct_aggregate_check_name() -> None:
-    """Draft feedback must not publish the full-run check identity."""
+    """Ready docs PRs report ci; draft feedback cannot masquerade as full admission."""
     workflow = yaml.safe_load(CI_WORKFLOW.read_text(encoding="utf-8"))
     assert workflow["jobs"][AGGREGATE_JOB]["name"] == (
         "${{ github.event_name == 'pull_request' && github.event.pull_request.draft "
         "&& 'ci-draft' || 'ci' }}"
     )
+    assert workflow["jobs"][AGGREGATE_JOB]["if"] == "always()"
+    decision = next(
+        step
+        for step in workflow["jobs"]["dispatch-ownership"]["steps"]
+        if step.get("id") == "decision"
+    )
+    assert "github.event.pull_request.draft" in decision["run"]
+    assert 'echo "run_full_ci=false"' in decision["run"]
 
 
 def test_ci_paths_ignore_manifest_matches_workflow_triggers() -> None:
-    """The checked-in ignore manifest must match both CI skip declarations."""
+    """The former ignore manifest now controls internal skips, never event delivery."""
     workflow = yaml.safe_load(CI_WORKFLOW.read_text(encoding="utf-8"))
     triggers = workflow.get(True, workflow.get("on", {}))
-
     assert isinstance(triggers, dict)
-    expected = list(CI_PATHS_IGNORE_PATTERNS)
-    assert triggers["push"]["paths-ignore"] == expected
-    assert triggers["pull_request"]["paths-ignore"] == expected
+    for event in ("push", "pull_request", "merge_group"):
+        assert event in triggers
+        assert "paths-ignore" not in (triggers[event] or {})
+    assert ci_manifest.CI_DOCS_ONLY_PATTERNS == ("**/*.md", "docs/**")
+    # Preserve imports and audit receipt identities for callers on older revisions.
+    assert CI_PATHS_IGNORE_PATTERNS == ci_manifest.CI_DOCS_ONLY_PATTERNS
+    dispatch = workflow["jobs"]["dispatch-ownership"]
+    detector = next(step for step in dispatch["steps"] if step.get("id") == "docs")
+    assert "from scripts.dev.check_ci_needs import docs_only_changed_files" in detector["run"]
+    assert "docs_only_changed_files(paths, complete=True)" in detector["run"]
+    assert dispatch["outputs"]["docs_only"] == "${{ steps.docs.outputs.docs_only }}"
+    aggregate = workflow["jobs"][AGGREGATE_JOB]
+    docs_result = next(
+        step
+        for step in aggregate["steps"]
+        if step.get("name") == "Record documentation-only result"
+    )
+    assert "needs.dispatch-ownership.result == 'success'" in docs_result["if"]
+    assert "needs.dispatch-ownership.outputs.docs_only == 'true'" in docs_result["if"]
+
+
+@pytest.mark.parametrize("event", ["pull_request", "push", "merge_group"])
+@pytest.mark.parametrize(
+    ("change", "expected"),
+    [
+        ("docs", True),
+        ("code", False),
+        ("mixed", False),
+        ("leading_space", False),
+        ("rename_in", False),
+        ("rename_out", False),
+        ("delete_docs", True),
+        ("empty", False),
+        ("missing_base", False),
+    ],
+)
+def test_ci_docs_only_admission_executes_complete_git_diff(
+    tmp_path: Path,
+    event: str,
+    change: str,
+    expected: bool,
+) -> None:
+    """Execute the workflow: skip heavy work only for a proven docs-only diff."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    configure_git_identity(repo)
+
+    def git(*args: str) -> str:
+        return subprocess.check_output(["git", *args], cwd=repo, text=True).strip()
+
+    (repo / "docs").mkdir()
+    (repo / "src").mkdir()
+    (repo / "README.md").write_text("Baseline docs\n", encoding="utf-8")
+    (repo / "src/code.py").write_text("print(1)\n", encoding="utf-8")
+    git("add", ".")
+    git("commit", "-qm", "base")
+    base = git("rev-parse", "HEAD")
+    if change == "leading_space":
+        (repo / " README.md").write_text("Ambiguous normalized path\n", encoding="utf-8")
+    elif change == "docs":
+        (repo / "docs/notes.json").write_text("{}\n", encoding="utf-8")
+    elif change in {"code", "mixed"}:
+        (repo / "src/code.py").write_text("print(2)\n", encoding="utf-8")
+        if change == "mixed":
+            (repo / "README.md").write_text("Updated docs\n", encoding="utf-8")
+    elif change == "rename_in":
+        git("mv", "src/code.py", "docs/code.py")
+    elif change == "rename_out":
+        git("mv", "README.md", "src/readme.txt")
+    elif change == "delete_docs":
+        git("rm", "README.md")
+    git("add", ".")
+    git("commit", "--allow-empty", "-qm", "changed")
+    head = git("rev-parse", "HEAD")
+    if change == "missing_base":
+        base = "f" * 40
+    workflow = yaml.safe_load(CI_WORKFLOW.read_text(encoding="utf-8"))
+    detector = next(
+        step for step in workflow["jobs"]["dispatch-ownership"]["steps"] if step.get("id") == "docs"
+    )
+    output = tmp_path / "output"
+    env = dict(
+        os.environ,
+        PYTHONPATH=str(ROOT),
+        GITHUB_EVENT_NAME=event,
+        GITHUB_SHA=head,
+        PR_BASE_SHA=base,
+        PR_HEAD_SHA=head,
+        PUSH_BASE_SHA=base,
+        GROUP_BASE_SHA=base,
+        GROUP_HEAD_SHA=head,
+        GITHUB_OUTPUT=str(output),
+    )
+    subprocess.run(
+        ["bash", "-e", "-c", detector["run"]],
+        cwd=repo,
+        env=env,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert output.read_text(encoding="utf-8") == f"docs_only={str(expected).lower()}\n"
 
 
 def test_ci_aggregate_uses_declarative_needs_checker() -> None:
@@ -968,11 +1117,14 @@ def test_run_tests_parallel_keeps_ped_npc_in_core_lane() -> None:
     assert "tests/ped_npc" not in OPTIONAL_ALLOWLIST.read_text(encoding="utf-8")
 
 
+@pytest.mark.parametrize("shard_count", [1, 4])
+@pytest.mark.parametrize("serial_exit", [0, 1])
 def test_run_tests_parallel_serial_fallback_is_single_worker_and_fail_closed(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, shard_count: int, serial_exit: int
 ) -> None:
     """Coverage-finalization fallback must be true no-xdist and fail closed (#6526)."""
     monkeypatch.delenv("PYTEST_DEBUG_TEMPROOT", raising=False)
+    monkeypatch.delenv("PYTEST_XDIST_DIST", raising=False)
     repo = tmp_path / "repo"
     script_dir = repo / "scripts" / "dev"
     fake_bin = repo / "fake-bin"
@@ -1010,7 +1162,7 @@ def test_run_tests_parallel_serial_fallback_is_single_worker_and_fail_closed(
                 '    *resolve_pytest_workers.py) printf "2\\n" ;;',
                 "    *diagnose_xdist_crash.py)",
                 '      printf "%s\\n" "$*" >> "$UV_DIAGNOSTIC_ARGS"',
-                '      if [[ " $* " == *" --serialized-ok false "* ]]; then',
+                '      if [[ " $* " == *" --execution-mode no-xdist "* ]]; then',
                 '        echo "serial diagnostic observed" >&2',
                 "      else",
                 '        echo "parallel diagnostic observed" >&2',
@@ -1028,7 +1180,8 @@ def test_run_tests_parallel_serial_fallback_is_single_worker_and_fail_closed(
                 '  printf "%s\\n" "$*" >> "$UV_CAPTURED_ARGS"',
                 '  echo "sqlite3.OperationalError: unable to open database file" >&2',
                 '  echo "Segmentation fault (core dumped)" >&2',
-                "  exit 1",
+                '  if [[ "$count" -eq 1 ]]; then exit 1; fi',
+                '  exit "$UV_SERIAL_EXIT"',
                 "fi",
                 'echo "unexpected uv invocation: $*" >&2',
                 "exit 99",
@@ -1050,6 +1203,11 @@ def test_run_tests_parallel_serial_fallback_is_single_worker_and_fail_closed(
             "PYTEST_NUM_WORKERS": "2",
             "PYTEST_FAST_FAIL": "0",
             "PYTEST_ORDER_MODE": "none",
+            "PYTEST_SHARD_COUNT": str(shard_count),
+            "PYTEST_SHARD_INDEX": "3" if shard_count > 1 else "1",
+            "ROBOT_SF_PYTEST_COVERAGE": "0",
+            "CI": "false",
+            "UV_SERIAL_EXIT": str(serial_exit),
             "UV_CAPTURED_ARGS": str(captured_args),
             "UV_DIAGNOSTIC_ARGS": str(captured_diagnostic_args),
             "UV_COUNT_FILE": str(invocation_count),
@@ -1064,7 +1222,11 @@ def test_run_tests_parallel_serial_fallback_is_single_worker_and_fail_closed(
     calls = captured_args.read_text(encoding="utf-8").splitlines()
     assert len(calls) == 2
     assert "-n 2" in calls[0]
-    assert "--dist load" in calls[0]
+    expected_dist = "worksteal" if shard_count > 1 else "load"
+    assert f"--dist {expected_dist}" in calls[0]
+    assert calls[1].split()[2].startswith("-")
+    assert "-p timeout --timeout=300" in calls[1]
+    assert "tests/dev" in calls[1]
     padded_serial_call = f" {calls[1]} "
     assert " -n " not in padded_serial_call
     assert " --dist " not in padded_serial_call
@@ -1075,7 +1237,14 @@ def test_run_tests_parallel_serial_fallback_is_single_worker_and_fail_closed(
     diagnostic_calls = captured_diagnostic_args.read_text(encoding="utf-8").splitlines()
     assert len(diagnostic_calls) == 2
     assert "--pytest-exit-code 1" in diagnostic_calls[0]
-    assert "--pytest-exit-code 1" in diagnostic_calls[1]
+    assert f"--pytest-exit-code {serial_exit}" in diagnostic_calls[1]
+    assert "--requested-workers 2" in diagnostic_calls[0]
+    assert "--requested-workers 1" in diagnostic_calls[1]
+    assert "--execution-mode no-xdist" in diagnostic_calls[1]
+    assert f"--serialized-ok {str(serial_exit == 0).lower()}" in diagnostic_calls[1]
+    if shard_count > 1:
+        assert "--splits 4 --group 3" in calls[0]
+        assert "--splits 4 --group 3" in calls[1]
 
 
 def test_xdist_race_validation_wraps_parallel_tests_and_artifact_scan() -> None:
@@ -2616,7 +2785,14 @@ def test_worktree_shared_venv_standalone_mode_bypasses_stale_project_env(
     assert result.returncode == 7
     assert "uv-reached" in result.stderr
     assert "Shared virtualenv is stale" not in result.stderr
-    assert "pythonpath=\n" in result.stderr
+    # Standalone drops project injection; the session safety bootstrap still propagates.
+    support = ROOT / "tests" / "support"
+    guard_path = (
+        os.pathsep.join((str(support / "seedguard_bootstrap"), str(support)))
+        if os.environ.get("ROBOT_SF_PYTEST_SEED_GUARD") == "1"
+        else ""
+    )
+    assert f"pythonpath={guard_path}\n" in result.stderr
 
 
 def test_worktree_shared_venv_freshness_check_env_var_bypasses_stale_env(
@@ -2714,6 +2890,7 @@ def _make_pinned_tool_fixture_repo(
         "PATH": f"{fake_bin}{os.pathsep}{os.environ['PATH']}",
     }
     env.pop("PYTHONPATH", None)
+    env.pop("ROBOT_SF_VENV_FRESHNESS_CHECK", None)
     return repo, venv, env
 
 
@@ -3943,10 +4120,17 @@ def test_worktree_shared_venv_skips_unpinned_tool_with_log_line(
     assert "reason=unpinned" in result.stderr
 
 
+@pytest.mark.parametrize("parent_bypasses_freshness", [False, True])
 def test_worktree_shared_venv_skips_tool_gate_for_interpreters(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    parent_bypasses_freshness: bool,
 ) -> None:
     """Interpreter commands keep the #6003 contract even when a stale tool sits in the venv."""
+    if parent_bypasses_freshness:
+        monkeypatch.setenv("ROBOT_SF_VENV_FRESHNESS_CHECK", "skip")
+    else:
+        monkeypatch.delenv("ROBOT_SF_VENV_FRESHNESS_CHECK", raising=False)
     repo, venv, env = _make_pinned_tool_fixture_repo(tmp_path, resolved_version="0.16.4")
     checker = repo / "scripts" / "dev" / "check_fast_pysf_runtime.py"
     checker.parent.mkdir(parents=True)
@@ -5690,6 +5874,11 @@ def test_coverage_docs_match_effective_source_scope() -> None:
     assert 'source = ["robot_sf", "fast-pysf/pysocialforce"]' in cov_guide_text
     assert "fast-pysf/pysocialforce" in coverage_run["source"]
     assert 'cmd+=("--cov=robot_sf" "--cov-report=html" "--cov-report=json")' in wrapper_text
+    assert "--cov=robot_sf/gym_env" in cov_guide_text
+    assert "--cov=robot_sf/benchmark" in cov_guide_text
+    assert "--cov=robot_sf/analysis_workbench --cov-branch" in cov_guide_text
+    assert "coverage report -m" in cov_guide_text
+    assert "Coverage.py imports dotted source names" in cov_guide_text
     assert "Only the `robot_sf/` package" in cov_guide_text
     assert "not included in the local wrapper report" in cov_guide_text
     assert "measure only the `robot_sf/` package" in dev_guide_text

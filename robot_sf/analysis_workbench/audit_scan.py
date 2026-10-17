@@ -38,12 +38,17 @@ from robot_sf.analysis_workbench.audit_detectors import (
     DETECTOR_ENGINE_VERSION,
     DetectorRegistry,
     DetectorSpec,
+    cohort_drop_counts,
+    cohort_shards,
     default_registry,
     detect,
     normalize_detector_ids,
+    normalize_recorded_undefined,
+    release_timeout_status,
     signal_status_counts,
     unavailable_signal,
 )
+from robot_sf.analysis_workbench.audit_release_adapter import project_release_row
 from robot_sf.analysis_workbench.review_context import (
     _assert_output_directory_current,
     _assert_output_parent_current,
@@ -141,7 +146,7 @@ SUPPORTED_SOURCE_SCHEMAS = frozenset(
 SUPPORTED_SOURCE_FORMATS = frozenset(
     {"campaign-result", "campaign-result-store", "episode-jsonl", "json", "jsonl", "ndjson"}
 )
-MAX_SOURCE_BYTES = 64 * 1024 * 1024
+MAX_SOURCE_BYTES = 1024 * 1024 * 1024  # 20,160 published rows occupy ~605 MB.
 MAX_EPISODES = 100_000
 MAX_CONFIG_BYTES = 256 * 1024
 MAX_SOURCE_FILES = 4096
@@ -316,6 +321,8 @@ def _execution_status(  # noqa: C901, PLR0912
         token, error = _status_token(raw, path=surface_path)
         if error is not None:
             return "invalid", error
+        if surface_path == f"{path}.status" and release_timeout_status(value):
+            continue
         if token in EXECUTION_UNSUPPORTED:
             return "unsupported", f"non-admissible execution status: {token}"
         if token in {
@@ -1377,6 +1384,17 @@ def _load_source(  # noqa: C901, PLR0912, PLR0915
     _strict_walk(metadata_payload, path="campaign")
     if len(source_bytes) > MAX_SOURCE_BYTES:
         raise AuditScanError(f"source exceeds {MAX_SOURCE_BYTES} bytes")
+    # Preserve the original source digest while adapting only loader-marked
+    # publication rows. Generic row/alias validation remains unchanged.
+    try:
+        rows = [
+            (project_release_row(row) if isinstance(row, Mapping) else row, line)
+            for row, line in rows
+        ]
+    except ValueError as exc:
+        raise AuditScanError(str(exc)) from exc
+    if isinstance(payload.get("episodes"), list):
+        payload = {**payload, "episodes": [row for row, _line in rows]}
     digest = _sha256(source_bytes)
     ref = _source_ref_from_value(
         source_ref, source_path=source_path, observed_digest=digest, payload=payload
@@ -2160,6 +2178,8 @@ def scan_campaign(  # noqa: C901, PLR0912, PLR0915
         raise AuditScanError(f"expected episode count exceeds {MAX_EPISODES}")
     rows_by_id: dict[str, list[tuple[Mapping[str, Any] | None, int, str, str]]] = {}
     for row, line in loaded.rows:
+        if isinstance(row, Mapping):
+            row = normalize_recorded_undefined(row)
         episode_id, status, reason = _row_validation(row, line=line)
         if status == "readable" and row is not None:
             binding_error = _row_binding_error(
@@ -2363,6 +2383,33 @@ def scan_campaign(  # noqa: C901, PLR0912, PLR0915
         readable_rows.append(row_copy)
     inventory.sort(key=lambda item: (item.episode_id, item.line_number or 0, item.status))
     readable_ids = {item.episode_id for item in inventory if item.readable}
+    shards = {
+        detector_id: cohort_shards(readable_rows, active_registry.get(detector_id))
+        for detector_id in selected_ids
+    }
+    # Retain admission-loss accounting independently of the admitted peer rows.
+    # Raw corrupt values never enter detector calculations.
+    dropped_rows: list[Mapping[str, Any] | None] = []
+    for item in inventory:
+        if item.readable:
+            continue
+        matches = rows_by_id.get(item.episode_id, [])
+        if not matches:
+            dropped_rows.append(None)
+        for raw, _line, _status, _reason in matches:
+            if isinstance(raw, Mapping):
+                rejected = dict(raw)
+                rejected.setdefault("campaign_digest", audit.campaign_digest)
+                rejected.setdefault("campaign_id", expected_campaign_identity)
+                dropped_rows.append(rejected)
+            else:
+                dropped_rows.append(None)
+    dropped_counts = {
+        detector_id: cohort_drop_counts(
+            readable_rows, dropped_rows, active_registry.get(detector_id)
+        )
+        for detector_id in selected_ids
+    }
     signals: list[Signal] = []
     # A non-readable expected row still receives an explicit attempt result so
     # unavailable/error accounting cannot disappear into an omitted denominator.
@@ -2382,7 +2429,8 @@ def scan_campaign(  # noqa: C901, PLR0912, PLR0915
                 signal = detect(
                     detector_id,
                     row,
-                    cohort=readable_rows,
+                    cohort=shards[detector_id].get(item.episode_id, ()),
+                    cohort_dropped_counts=dropped_counts[detector_id].get(item.episode_id, {}),
                     config=config_mapping,
                     registry=active_registry,
                 )

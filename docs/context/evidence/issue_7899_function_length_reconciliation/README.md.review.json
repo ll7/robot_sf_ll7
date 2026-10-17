@@ -1,7 +1,9 @@
 {
   "artifact_path": "docs/context/evidence/issue_7899_function_length_reconciliation/README.md",
-  "artifact_sha256": "0bc45ceb87a8a43711132cee299a5b4d9cc111f56cabfe3cc7f45af08d6e8241",
-  "preserved_exact_bytes": true,
+  "artifact_sha256": "46845cbe1ad126f697bfdd3e44cdc0f3f41d0b163ea5e66b42b4be0219704526",
+  "preserved_exact_bytes": false,
   "review_marker": "AI-GENERATED NEEDS-REVIEW",
-  "schema_version": "evidence-review-marker.v1"
+  "schema_version": "evidence-review-marker.v1",
+  "supersedes_artifact_sha256": "0bc45ceb87a8a43711132cee299a5b4d9cc111f56cabfe3cc7f45af08d6e8241",
+  "supersession_note": "PR #9836 replaces scratch-root locators and availability metadata; this marker supersedes the prior artifact digest. These are revised bytes, not an exact-byte preservation or new domain approval."
 }

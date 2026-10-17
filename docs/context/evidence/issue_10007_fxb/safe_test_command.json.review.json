@@ -1,0 +1,7 @@
+{
+  "artifact_path": "docs/context/evidence/issue_10007_fxb/safe_test_command.json",
+  "artifact_sha256": "4ee64c1d14dd56dc62a9000bdc3192634454c846c274dbef956dd65c061db34e",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "evidence-review-marker.v1"
+}

@@ -15,6 +15,7 @@ from robot_sf.benchmark.full_classic.visual_constants import (
     RENDERER_SIM_VIEW,
     RENDERER_SYNTHETIC,
 )
+from tests.support.development_scenarios import write_development_matrix
 
 
 class _Cfg:
@@ -24,13 +25,18 @@ class _Cfg:
         """Populate the subset of orchestrator settings used by these tests."""
 
         self.output_root = str(tmp_path)
-        self.scenario_matrix_path = "configs/scenarios/classic_interactions.yaml"
+        self.scenario_matrix_path = str(
+            write_development_matrix(
+                Path("configs/scenarios/classic_interactions.yaml"),
+                tmp_path / "development_matrix.yaml",
+            )
+        )
         self.initial_episodes = 1
         self.max_episodes = 1
         self.batch_size = 1
         self.algo = "ppo"
         self.workers = 1
-        self.master_seed = 123
+        self.master_seed = 1013
         self.smoke = smoke
         self.disable_videos = disable_videos
         self.max_videos = 1

@@ -29,10 +29,10 @@
     }
   },
   "ambiguous_labels": [],
-  "command": "python scripts/dev/terminal_label_reconcile.py --inventory terminal --repo ll7/robot_sf_ll7 --report output/terminal_label_plan.json --max-items 200",
+  "command": "python scripts/dev/terminal_label_reconcile.py --inventory terminal --repo ll7/robot_sf_ll7 --report <scratch-root>/terminal_label_plan.json --max-items 200",
   "completeness": "diagnostic-only bounded sample; pagination.complete=false and bounded_by_max_items=true",
   "exit_status": 0,
-  "full_report_pointer": "output/terminal_label_plan.json (ignored, worktree-local)",
+  "full_report_pointer": "<scratch-root>/terminal_label_plan.json (git-ignored scratch; unavailable)",
   "full_report_sha256": "275b8d4acca8ba65aac9f1dcca03776d431e6c365bf622acda89129f96e9382e",
   "mutation_authorized": false,
   "observed_at": "2026-08-27T14:01:49.629706+00:00",
@@ -50,5 +50,8 @@
     "exact_item_endpoint": "repos/ll7/robot_sf_ll7/issues/{number}",
     "list_endpoint": "repos/ll7/robot_sf_ll7/issues?state=closed&per_page=100&page={page}"
   },
-  "zero_mutation_proof": "inventory mode never calls add_label/remove_label; verified by test_inventory_zero_mutation_proof"
+  "zero_mutation_proof": "inventory mode never calls add_label/remove_label; verified by test_inventory_zero_mutation_proof",
+  "full_report_retained": false,
+  "full_report_durable_retrieval_pointer": null,
+  "report_path_is_reproduction_template": true
 }

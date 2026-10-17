@@ -1,0 +1,133 @@
+{
+  "budget_grid": [
+    16
+  ],
+  "claim_scope": "not_paper_facing_benchmark_evidence",
+  "objectives": [
+    "constraints_first_lexicographic_v1"
+  ],
+  "package_b_notes": {
+    "held_out_family_yield": "not_evaluated_narrow_archive",
+    "learned_failure_proposal_issue_2921": "stretch_out_of_scope"
+  },
+  "report_status": "diagnostic_local_nominal",
+  "rows": [
+    {
+      "best_bundle_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/random/candidate_0000",
+      "best_objective_value": 0.0,
+      "best_valid_objective": 0.0,
+      "budget": 16,
+      "caveats": [
+        "diagnostic/local nominal report; not paper-facing benchmark evidence",
+        "held-out-family yield is not evaluated in package B; narrow archive caveat applies",
+        "learned failure proposal #2921 remains stretch/out of scope"
+      ],
+      "certified_valid_failure_count": 0,
+      "degraded_candidate_count": 0,
+      "fallback_candidate_count": 0,
+      "first_failure_iteration": null,
+      "held_out_family_status": "not_evaluated_narrow_archive",
+      "held_out_family_yield": null,
+      "invalid_candidate_rate": 0.0,
+      "manifest_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/random/manifest.json",
+      "num_candidates": 16,
+      "num_failed_evaluations": 0,
+      "num_invalid_candidates": 0,
+      "num_valid_candidates": 16,
+      "objective": "constraints_first_lexicographic_v1",
+      "replay_success_rate": null,
+      "replayable_valid_failure_count": 0,
+      "sampler": "random",
+      "seed": 1101
+    },
+    {
+      "best_bundle_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/optuna/candidate_0000",
+      "best_objective_value": 0.0,
+      "best_valid_objective": 0.0,
+      "budget": 16,
+      "caveats": [
+        "diagnostic/local nominal report; not paper-facing benchmark evidence",
+        "held-out-family yield is not evaluated in package B; narrow archive caveat applies",
+        "learned failure proposal #2921 remains stretch/out of scope"
+      ],
+      "certified_valid_failure_count": 0,
+      "degraded_candidate_count": 0,
+      "fallback_candidate_count": 0,
+      "first_failure_iteration": null,
+      "held_out_family_status": "not_evaluated_narrow_archive",
+      "held_out_family_yield": null,
+      "invalid_candidate_rate": 0.0,
+      "manifest_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/optuna/manifest.json",
+      "num_candidates": 16,
+      "num_failed_evaluations": 0,
+      "num_invalid_candidates": 0,
+      "num_valid_candidates": 16,
+      "objective": "constraints_first_lexicographic_v1",
+      "replay_success_rate": null,
+      "replayable_valid_failure_count": 0,
+      "sampler": "optuna",
+      "seed": 1101
+    },
+    {
+      "best_bundle_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/random/candidate_0000",
+      "best_objective_value": 0.0,
+      "best_valid_objective": 0.0,
+      "budget": 16,
+      "caveats": [
+        "diagnostic/local nominal report; not paper-facing benchmark evidence",
+        "held-out-family yield is not evaluated in package B; narrow archive caveat applies",
+        "learned failure proposal #2921 remains stretch/out of scope"
+      ],
+      "certified_valid_failure_count": 0,
+      "degraded_candidate_count": 0,
+      "fallback_candidate_count": 0,
+      "first_failure_iteration": null,
+      "held_out_family_status": "not_evaluated_narrow_archive",
+      "held_out_family_yield": null,
+      "invalid_candidate_rate": 0.0,
+      "manifest_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/random/manifest.json",
+      "num_candidates": 16,
+      "num_failed_evaluations": 0,
+      "num_invalid_candidates": 0,
+      "num_valid_candidates": 16,
+      "objective": "constraints_first_lexicographic_v1",
+      "replay_success_rate": null,
+      "replayable_valid_failure_count": 0,
+      "sampler": "random",
+      "seed": 2202
+    },
+    {
+      "best_bundle_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/optuna/candidate_0000",
+      "best_objective_value": 0.0,
+      "best_valid_objective": 0.0,
+      "budget": 16,
+      "caveats": [
+        "diagnostic/local nominal report; not paper-facing benchmark evidence",
+        "held-out-family yield is not evaluated in package B; narrow archive caveat applies",
+        "learned failure proposal #2921 remains stretch/out of scope"
+      ],
+      "certified_valid_failure_count": 0,
+      "degraded_candidate_count": 0,
+      "fallback_candidate_count": 0,
+      "first_failure_iteration": null,
+      "held_out_family_status": "not_evaluated_narrow_archive",
+      "held_out_family_yield": null,
+      "invalid_candidate_rate": 0.0,
+      "manifest_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/optuna/manifest.json",
+      "num_candidates": 16,
+      "num_failed_evaluations": 0,
+      "num_invalid_candidates": 0,
+      "num_valid_candidates": 16,
+      "objective": "constraints_first_lexicographic_v1",
+      "replay_success_rate": null,
+      "replayable_valid_failure_count": 0,
+      "sampler": "optuna",
+      "seed": 2202
+    }
+  ],
+  "schema_version": "adversarial-sampler-comparison.v3",
+  "seeds": [
+    1101,
+    2202
+  ]
+}

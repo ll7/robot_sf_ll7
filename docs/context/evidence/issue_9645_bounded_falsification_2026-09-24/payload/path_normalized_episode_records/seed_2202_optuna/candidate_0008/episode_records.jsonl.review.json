@@ -1,0 +1,7 @@
+{
+  "artifact_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_2202_optuna/candidate_0008/episode_records.jsonl",
+  "artifact_sha256": "4d1c4636f13aea230cb2ce5ed54adc98a0776cd92a53120336c72f80f44e1301",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "evidence-review-marker.v1"
+}

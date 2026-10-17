@@ -97,6 +97,7 @@ pr_ready_parent_pgid=""
 pr_ready_cleanup_status="no_child_active"
 pr_ready_evidence_scope_file=""
 pr_ready_docs_scope_file=""
+pr_ready_impact_scope_file=""
 pr_ready_termination_receipt="${PR_READY_TERMINATION_RECEIPT:-}"
 if [[ -z "$pr_ready_termination_receipt" ]]; then
   pr_ready_termination_stamp="$(date -u +%Y%m%dT%H%M%SZ 2>/dev/null || printf 'unknown')"
@@ -403,6 +404,9 @@ pr_ready_exit_without_coverage() {
   if [[ -n "$pr_ready_docs_scope_file" ]]; then
     rm -f -- "$pr_ready_docs_scope_file" || true
   fi
+  if [[ -n "$pr_ready_impact_scope_file" ]]; then
+    rm -f -- "$pr_ready_impact_scope_file" || true
+  fi
   release_pr_ready_lock || true
   return "$exit_code"
 }
@@ -698,7 +702,9 @@ preflight_check_docs_evidence_integrity() {
     while IFS= read -r -d '' changed_path; do
       case "$changed_path" in
         *.md|*.markdown|docs/*|*.json|*.yaml|*.yml|\
-        .github/ISSUE_TEMPLATE/*|AGENTS.md|CLAUDE.md)
+        .github/ISSUE_TEMPLATE/*|AGENTS.md|CLAUDE.md|\
+        scripts/dev/check_docs_evidence_integrity.py|\
+        tests/dev/test_docs_link_integrity_workflow.py)
           relevant=1 ;;
       esac
     done < "$pr_ready_docs_scope_file"
@@ -980,9 +986,14 @@ optional_changed_files=()
 # the optional lane runs only the allowlist. Some test roots therefore belong to
 # neither lane and are never executed by a readiness run, so a green readiness
 # report can silently omit them. Track those roots explicitly instead of letting
-# a PR body imply coverage that no lane produced.
-pr_ready_uncovered_test_roots=()
+# a PR body imply coverage that no lane produced. Keep the declared impact roots
+# separate from the subset that still contains executable files after the change.
+pr_ready_declared_extended_test_roots=()
 for pr_ready_candidate_root in tests/validation tests/maps; do
+  pr_ready_declared_extended_test_roots+=("$pr_ready_candidate_root")
+done
+pr_ready_uncovered_test_roots=()
+for pr_ready_candidate_root in "${pr_ready_declared_extended_test_roots[@]}"; do
   if [[ -e "$pr_ready_candidate_root" ]] && ! is_optional_readiness_path "${pr_ready_candidate_root}/"; then
     pr_ready_uncovered_test_roots+=("$pr_ready_candidate_root")
   fi
@@ -997,23 +1008,106 @@ while IFS= read -r changed_file; do
   else
     core_changed_files+=("$changed_file")
   fi
-  # A change to shipped behavior (robot_sf/, configs/, maps/) or to a test root
-  # that no lane covers can break the uncovered roots, so they must run.
-  case "$changed_file" in
-    robot_sf/*|configs/*|maps/*)
-      pr_ready_extended_required=1
-      pr_ready_extended_trigger_files+=("$changed_file")
+done < <(git diff --name-only --diff-filter=ACMRT "$BASE_REF...HEAD")
+
+# Issue #9851: impact routing has a wider contract than the surviving-file
+# inputs above.  Read name-status records separately so deletion-only changes
+# and both endpoints of a rename can select the extended lane without handing
+# removed paths to formatting or pytest.  ``scripts/validation`` is imported
+# by the uncovered validation/map tests.  The tests also import the
+# fast-pysf runtime package, and its package/lock manifests can change that
+# API; fast-pysf tests already belong to the fixed core lane, while its
+# docs/examples/benchmarks/maps remain on their existing lanes.
+pr_ready_impact_files=()
+pr_ready_impact_scope_file="$(mktemp "${TMPDIR:-/tmp}/pr-ready-impact-scope.XXXXXX")"
+pr_ready_impact_scope_status=0
+if git diff --name-status -z --find-renames --diff-filter=ACDMRT "$BASE_REF...HEAD" \
+  > "$pr_ready_impact_scope_file"; then
+  :
+else
+  pr_ready_impact_scope_status=$?
+fi
+if [[ "$pr_ready_impact_scope_status" -ne 0 ]]; then
+  printf 'Cannot resolve readiness impact scope from Git diff; refusing to classify the extended lane.\n' >&2
+  rm -f -- "$pr_ready_impact_scope_file"
+  pr_ready_impact_scope_file=""
+  exit "$pr_ready_impact_scope_status"
+fi
+pr_ready_impact_parse_status=0
+while IFS= read -r -d '' change_status; do
+  if [[ ! "$change_status" =~ ^[ACDMRT][0-9]*$ ]]; then
+    printf 'Malformed Git impact record: invalid change status %q.\n' "$change_status" >&2
+    pr_ready_impact_parse_status=2
+    break
+  fi
+  if ! IFS= read -r -d '' change_path; then
+    printf 'Malformed Git impact record: missing path for status %q.\n' "$change_status" >&2
+    pr_ready_impact_parse_status=2
+    break
+  fi
+  if [[ -z "$change_path" ]]; then
+    printf 'Malformed Git impact record: empty path for status %q.\n' "$change_status" >&2
+    pr_ready_impact_parse_status=2
+    break
+  fi
+  pr_ready_impact_files+=("$change_path")
+  case "$change_status" in
+    R*|C*)
+      if ! IFS= read -r -d '' change_path; then
+        printf 'Malformed Git impact record: missing rename destination for status %q.\n' \
+          "$change_status" >&2
+        pr_ready_impact_parse_status=2
+        break
+      fi
+      if [[ -z "$change_path" ]]; then
+        printf 'Malformed Git impact record: empty rename destination for status %q.\n' \
+          "$change_status" >&2
+        pr_ready_impact_parse_status=2
+        break
+      fi
+      pr_ready_impact_files+=("$change_path")
       ;;
   esac
-  for pr_ready_uncovered_root in "${pr_ready_uncovered_test_roots[@]}"; do
-    case "$changed_file" in
-      "${pr_ready_uncovered_root}"/*)
+done < "$pr_ready_impact_scope_file"
+if [[ "$pr_ready_impact_parse_status" -eq 0 && -s "$pr_ready_impact_scope_file" ]]; then
+  pr_ready_impact_last_byte="$(tail -c 1 "$pr_ready_impact_scope_file" | od -An -t x1 | tr -d '[:space:]')"
+  if [[ "$pr_ready_impact_last_byte" != "00" ]]; then
+    printf 'Malformed Git impact record: truncated NUL framing.\n' >&2
+    pr_ready_impact_parse_status=2
+  fi
+fi
+rm -f -- "$pr_ready_impact_scope_file"
+pr_ready_impact_scope_file=""
+if [[ "$pr_ready_impact_parse_status" -ne 0 ]]; then
+  exit "$pr_ready_impact_parse_status"
+fi
+for impact_file in "${pr_ready_impact_files[@]}"; do
+  case "$impact_file" in
+    robot_sf/*|configs/*|maps/*|scripts/validation/*|\
+      fast-pysf/pysocialforce/*|fast-pysf/pyproject.toml|fast-pysf/uv.lock|\
+      pyproject.toml|uv.lock)
+      pr_ready_extended_required=1
+      pr_ready_extended_trigger_files+=("$impact_file")
+      ;;
+  esac
+  for pr_ready_declared_root in "${pr_ready_declared_extended_test_roots[@]}"; do
+    case "$impact_file" in
+      "${pr_ready_declared_root}"/*)
         pr_ready_extended_required=1
-        pr_ready_extended_trigger_files+=("$changed_file")
+        pr_ready_extended_trigger_files+=("$impact_file")
         ;;
     esac
   done
-done < <(git diff --name-only --diff-filter=ACMRT "$BASE_REF...HEAD")
+done
+if [[ ${#pr_ready_extended_trigger_files[@]} -gt 0 ]]; then
+  pr_ready_extended_reason="changed impact paths:"
+  for impact_file in "${pr_ready_extended_trigger_files[@]}"; do
+    printf -v pr_ready_quoted_impact_file '%q' "$impact_file"
+    pr_ready_extended_reason+=" $pr_ready_quoted_impact_file"
+  done
+else
+  pr_ready_extended_reason="no changed paths matched the extended-lane impact roots"
+fi
 
 # Validate that every changed test file under tests/ or fast-pysf/tests/ is classified
 # and covered by the optional test allowlist if classified as optional.
@@ -1085,6 +1179,7 @@ if [[ -n "$VALIDATED_BASE_SHA" ]]; then
 fi
 
 mark_pr_ready_progress "validation_setup" "none" "running follow-up and evidence preflight checks"
+bash "$SCRIPT_DIR/fetch_test_fixture_sources.sh"
 followup_args=()
 if [[ "$pr_ready_final" == "1" ]]; then
   followup_args+=(--require-body)
@@ -1097,6 +1192,9 @@ if [[ "$pr_ready_final" == "1" ]]; then
   changed_files_list="$(mktemp "${TMPDIR:-/tmp}/pr-ready-changed-files.XXXXXX")"
   printf '%s\n' "${changed_files[@]}" > "$changed_files_list"
   contract_args=(--changed-files-file "$changed_files_list" --base-ref "$BASE_REF")
+  # Local budgets cover only feature changes; the moving base can be ahead of HEAD.
+  # Keep VALIDATED_BASE_SHA as the base-tip identity for freshness and drift checks.
+  contract_args+=(--budget-base-sha "$(git merge-base "$VALIDATED_BASE_SHA" HEAD)")
   if [[ -n "$PR_READY_PR_BODY_FILE" ]]; then
     contract_args+=(--pr-body-file "$PR_READY_PR_BODY_FILE")
   fi
@@ -1262,16 +1360,20 @@ fi
 # Issue #9754: run the test roots that no readiness lane covers when the change
 # can affect them, and always report which roots this run did and did not cover.
 pr_ready_extended_ran=0
-if [[ ${#pr_ready_uncovered_test_roots[@]} -gt 0 ]]; then
+if [[ ${#pr_ready_declared_extended_test_roots[@]} -gt 0 ]]; then
   if [[ "$pr_ready_extended_required" -eq 1 ]]; then
-    printf 'Running extended readiness lane for test roots no other lane covers.\n' >&2
-    printf 'Extended roots: %s\n' "${pr_ready_uncovered_test_roots[*]}" >&2
-    run_pr_ready_lane extended env \
-      ROBOT_SF_TEST_LANE=core \
-      "$SCRIPT_DIR/run_tests_parallel.sh" --lane core "${pr_ready_uncovered_test_roots[@]}"
-    pr_ready_extended_ran=1
+    if [[ ${#pr_ready_uncovered_test_roots[@]} -gt 0 ]]; then
+      printf 'Running extended readiness lane for test roots no other lane covers.\n' >&2
+      printf 'Extended roots: %s\n' "${pr_ready_uncovered_test_roots[*]}" >&2
+      run_pr_ready_lane extended env \
+        ROBOT_SF_TEST_LANE=core \
+        "$SCRIPT_DIR/run_tests_parallel.sh" --lane core "${pr_ready_uncovered_test_roots[@]}"
+      pr_ready_extended_ran=1
+    else
+      printf 'Extended readiness lane required, but no declared test roots survive the checkout.\n' >&2
+    fi
   else
-    printf 'Extended readiness lane not required: no robot_sf/, configs/, maps/ or uncovered-root change.\n' >&2
+    printf 'Extended readiness lane not required: no impact path matched the declared roots.\n' >&2
   fi
   mark_pr_ready_progress "lane_coverage_summary" "none" "reporting readiness lane coverage"
   lane_coverage_dir="${REPO_ROOT}/output/validation/pr_ready"
@@ -1284,13 +1386,18 @@ if [[ ${#pr_ready_uncovered_test_roots[@]} -gt 0 ]]; then
     else
       printf '  optional lane:  skipped (no optional-extra changed files)\n'
     fi
-    if [[ ${#pr_ready_uncovered_test_roots[@]} -eq 0 ]]; then
-      printf '  uncovered roots: none\n'
-    elif [[ "$pr_ready_extended_ran" -eq 1 ]]; then
+    if [[ "$pr_ready_extended_ran" -eq 1 ]]; then
       printf '  extended lane:  ran (%s)\n' "${pr_ready_uncovered_test_roots[*]}"
+      printf '  extended lane reason: %s\n' "$pr_ready_extended_reason"
       printf '  uncovered roots: none remaining\n'
+    elif [[ ${#pr_ready_uncovered_test_roots[@]} -eq 0 ]]; then
+      printf '  extended lane:  NOT RUN (no surviving test roots)\n'
+      printf '  extended lane reason: %s\n' "$pr_ready_extended_reason"
+      printf '  extended lane disposition: %s\n' \
+        "$([[ "$pr_ready_extended_required" -eq 1 ]] && printf 'required impact; no surviving tests' || printf 'not required; no surviving tests')"
     else
       printf '  extended lane:  NOT RUN\n'
+      printf '  extended lane reason: %s\n' "$pr_ready_extended_reason"
       printf '  NOT COVERED by this readiness run: %s\n' "${pr_ready_uncovered_test_roots[*]}"
       printf '  A PR body must not claim full-suite or benchmark/validation/map coverage from this run.\n'
     fi

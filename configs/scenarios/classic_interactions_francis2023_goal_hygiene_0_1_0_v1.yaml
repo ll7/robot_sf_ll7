@@ -1,0 +1,14 @@
+# Diagnostic 0.1.0 successor: all existing footprint-clear robot goal settings
+# are inherited unchanged. Released scenario/map bytes remain historical inputs.
+includes:
+- classic_interactions_francis2023_release_0_0_8_v1.yaml
+scenario_overrides_by_name:
+  classic_bottleneck_low:
+    map_id: null
+    map_file: ../../maps/successor_svg_maps/issue_10037_classic_bottleneck_goal_hygiene_v1.svg
+  classic_bottleneck_medium:
+    map_id: null
+    map_file: ../../maps/successor_svg_maps/issue_10037_classic_bottleneck_goal_hygiene_v1.svg
+  classic_bottleneck_high:
+    map_id: null
+    map_file: ../../maps/successor_svg_maps/issue_10037_classic_bottleneck_goal_hygiene_v1.svg

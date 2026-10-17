@@ -1,24 +1,15 @@
-"""Characterization baseline tests for ``robot_sf/benchmark/metrics.py`` public entry points.
+"""Core metric behavior on small synthetic episodes.
 
-These tests pin the *current observable behavior* of the core metric functions
-on small synthetic ``EpisodeData`` inputs. They are table-driven and assert
-exact golden values, including the documented edge cases: empty pedestrian
-sets (K=0), single timestep, and degenerate/NaN force inputs where the
-finite-guards apply.
-
-Purpose (issue #4874, Refs #4770): lock a behavioral baseline so the
-post-submission refactor wave can prove behavior-preservation by re-running
-these tests. If a test reveals a genuine bug, do NOT fix it here — document it
-and file a separate fix issue.
-
-These tests are additive and focus on golden-value pinning; they do not
-duplicate the property/contract coverage in the ``test_*_metric_contract.py``
-files.
+Continuous values use controlled differences and geometric invariants (#10089).
+Boundary counts, missing-data guards and independently calculated SNQI arithmetic
+remain explicit contract oracles. A small release-pinned motion sentinel lives in
+``test_release_metric_oracles.py``; it must not be rebaselined for moving main.
 """
 
 from __future__ import annotations
 
 import math
+from dataclasses import replace
 
 import numpy as np
 import pytest
@@ -54,10 +45,6 @@ from robot_sf.benchmark.metrics import (
     time_to_goal,
     timeout,
 )
-
-# EpisodeData default radii: robot_radius=1.0, ped_radius=0.4 -> sum 1.4.
-# Clearance is center-distance minus (robot_radius + ped_radius).
-_RADIUS_SUM = 1.4
 
 
 def _episode(  # noqa: PLR0913
@@ -124,14 +111,21 @@ def test_clearance_based_collision_and_near_miss_table(
     assert robot_ped_within_5m_frac(data) == pytest.approx(1.0)
 
 
-def test_mean_distance_and_clearance_average_min_per_step() -> None:
-    """``mean_distance`` averages the per-step minimum robot-ped distance."""
-    robot_pos = np.zeros((2, 2))
-    # Two peds at distances 1.0 and 3.0 -> per-step min = 1.0 both steps.
-    peds = np.tile([[[1.0, 0.0], [3.0, 0.0]]], (2, 1, 1))
-    data = _episode(robot_pos=robot_pos, peds_pos=peds, ped_forces=np.zeros((2, 2, 2)))
-    assert mean_distance(data) == pytest.approx(1.0)
-    assert mean_clearance(data) == pytest.approx(1.0 - _RADIUS_SUM)
+@pytest.mark.parametrize("metric", [min_distance, mean_distance, min_clearance, mean_clearance])
+def test_distance_metrics_respond_only_to_nearest_pedestrian(metric) -> None:
+    """Moving a far pedestrian has no effect; moving the closest changes one sample."""
+    data = _episode(
+        robot_pos=np.zeros((2, 2)),
+        peds_pos=np.array([[[2.0, 0.0], [8.0, 0.0]], [[4.0, 0.0], [9.0, 0.0]]]),
+        ped_forces=np.zeros((2, 2, 2)),
+    )
+    farther = replace(data, peds_pos=data.peds_pos.copy())
+    farther.peds_pos[:, 1, 0] += 3.0
+    assert metric(farther) == pytest.approx(metric(data))
+    closer = replace(data, peds_pos=data.peds_pos.copy())
+    closer.peds_pos[0, 0, 0] -= 0.75
+    expected_delta = 0.75 if metric in (min_distance, min_clearance) else 0.75 / 2
+    assert metric(data) - metric(closer) == pytest.approx(expected_delta)
 
 
 def test_empty_pedestrian_set_returns_documented_guards() -> None:
@@ -171,10 +165,10 @@ def test_success_rate_requires_goal_before_horizon_and_no_collisions() -> None:
     assert timeout(data, horizon=3) == 1.0
 
 
-def test_time_to_goal_is_step_times_dt() -> None:
-    """``time_to_goal`` is ``reached_goal_step * dt``; NaN when the goal is unreached."""
+def test_time_to_goal_is_completed_steps_times_dt() -> None:
+    """``time_to_goal`` is ``(reached_goal_step + 1) * dt``; NaN when the goal is unreached."""
     data = _straight_line_episode()
-    assert time_to_goal(data) == pytest.approx(3 * 0.5)
+    assert time_to_goal(data) == pytest.approx(4 * 0.5)
     no_goal = _episode(robot_pos=np.zeros((3, 2)), reached_goal_step=None)
     assert math.isnan(time_to_goal(no_goal))
 
@@ -184,45 +178,104 @@ def test_time_to_goal_is_step_times_dt() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_path_motion_metrics_on_straight_line() -> None:
-    """Pin path/energy/jerk/curvature/efficiency values on a unit straight-line episode."""
-    data = _straight_line_episode()
-    assert path_length(data) == pytest.approx(3.0)
-    assert avg_speed(data) == pytest.approx(1.0)
-    assert energy(data) == pytest.approx(0.0)  # zero acceleration
-    assert jerk_mean(data) == pytest.approx(0.0)
-    assert curvature_mean(data) == pytest.approx(0.0)
-    assert path_efficiency(data, 3.0) == pytest.approx(1.0)
-    assert socnavbench_path_length(data) == pytest.approx(3.0)
-
-
-def test_path_motion_metrics_on_curved_nonuniform_trajectory() -> None:
-    """Pin non-zero jerk and curvature on a bent trajectory."""
-    data = _episode(
-        robot_pos=np.array(
-            [
-                [0.0, 0.0],
-                [1.0, 0.0],
-                [1.0, 1.0],
-                [0.0, 1.0],
-            ]
-        ),
-        robot_acc=np.array(
-            [
-                [0.0, 0.0],
-                [1.0, 0.0],
-                [1.0, 1.0],
-                [2.0, 1.0],
-            ]
-        ),
+def _motion_episode() -> EpisodeData:
+    """Bent path with nonuniform speeds and accelerations; every metric is nonzero."""
+    return _episode(
+        robot_pos=np.array([[0.0, 0.0], [2.0, 0.0], [2.0, 1.0], [1.0, 1.0]]),
+        robot_vel=np.array([[2.0, 0.0], [0.0, 1.0], [-1.0, 0.0], [-0.5, 0.0]]),
+        robot_acc=np.array([[0.0, 0.0], [1.0, 0.0], [1.0, 2.0], [4.0, 2.0]]),
+        peds_pos=np.array([[[5.0, 1.0]], [[6.0, 2.0]], [[7.0, 3.0]], [[8.0, 4.0]]]),
+        ped_forces=np.zeros((4, 1, 2)),
+        goal=np.array([1.0, 1.0]),
         dt=0.5,
-        goal=np.array([0.0, 1.0]),
         reached_goal_step=3,
     )
 
-    assert path_length(data) == pytest.approx(3.0)
-    assert jerk_mean(data) == pytest.approx(1.0)
-    assert curvature_mean(data) == pytest.approx(1.0)
+
+_MOTION_METRICS = [
+    path_length,
+    socnavbench_path_length,
+    avg_speed,
+    energy,
+    jerk_mean,
+    curvature_mean,
+]
+
+
+@pytest.mark.parametrize("metric", _MOTION_METRICS)
+def test_motion_metrics_follow_length_unit_scaling(metric) -> None:
+    """Changing length units scales vectors; curvature has inverse-length units."""
+    data = _motion_episode()
+    scale = 3.0
+    scaled = replace(
+        data,
+        robot_pos=data.robot_pos * scale,
+        robot_vel=data.robot_vel * scale,
+        robot_acc=data.robot_acc * scale,
+        peds_pos=data.peds_pos * scale,
+        goal=data.goal * scale,
+        robot_radius=data.robot_radius * scale,
+        ped_radius=data.ped_radius * scale,
+    )
+    before = metric(data)
+    assert before > 0
+    multiplier = 1 / scale if metric is curvature_mean else scale
+    assert metric(scaled) == pytest.approx(before * multiplier)
+
+
+@pytest.mark.parametrize("metric", [min_distance, mean_distance, min_clearance, mean_clearance])
+def test_distance_metrics_follow_length_unit_scaling(metric) -> None:
+    """Scale center separation and both radii together, retaining surface clearance units."""
+    data = _single_ped_episode(2.0, t=2)
+    scale = 3.0
+    scaled = replace(
+        data,
+        robot_pos=data.robot_pos * scale,
+        peds_pos=data.peds_pos * scale,
+        robot_radius=data.robot_radius * scale,
+        ped_radius=data.ped_radius * scale,
+    )
+    before = metric(data)
+    assert before > 0
+    assert metric(scaled) == pytest.approx(before * scale)
+
+
+@pytest.mark.parametrize("transform", ["translation", "rotation"])
+@pytest.mark.parametrize(
+    "metric", [*_MOTION_METRICS, min_distance, mean_distance, min_clearance, mean_clearance]
+)
+def test_metric_invariance_under_rigid_transform(metric, transform) -> None:
+    """World origin and orientation cannot change scalar motion or separation metrics."""
+    data = _motion_episode()
+    angle = 0.73
+    rotation = np.array([[np.cos(angle), -np.sin(angle)], [np.sin(angle), np.cos(angle)]])
+    offset = np.array([7.25, -3.5])
+    if transform == "translation":
+        transformed = replace(
+            data,
+            robot_pos=data.robot_pos + offset,
+            peds_pos=data.peds_pos + offset,
+            goal=data.goal + offset,
+        )
+    else:
+        transformed = replace(
+            data,
+            robot_pos=data.robot_pos @ rotation.T,
+            peds_pos=data.peds_pos @ rotation.T,
+            goal=data.goal @ rotation.T,
+            robot_vel=data.robot_vel @ rotation.T,
+            robot_acc=data.robot_acc @ rotation.T,
+        )
+    assert metric(transformed) == pytest.approx(metric(data))
+
+
+def test_detour_increases_length_and_reduces_efficiency() -> None:
+    """Move one intermediate point while retaining endpoints and reference distance."""
+    direct = _straight_line_episode()
+    detour = replace(direct, robot_pos=direct.robot_pos.copy())
+    detour.robot_pos[1, 1] = 2.0
+    assert path_length(detour) > path_length(direct)
+    assert path_efficiency(detour, 3.0) < path_efficiency(direct, 3.0)
 
 
 def test_path_length_single_timestep_is_zero() -> None:
@@ -236,19 +289,32 @@ def test_path_length_single_timestep_is_zero() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_force_quantiles_and_mean_on_known_magnitude() -> None:
-    """Single sample of magnitude 5 (3-4-5 force vector) at all quantiles/mean."""
-    forces = np.array([[[3.0, 4.0]]])  # ||(3,4)|| = 5
-    data = _episode(robot_pos=np.zeros((1, 2)), peds_pos=np.zeros((1, 1, 2)), ped_forces=forces)
-    assert has_force_data(data) is True
-    q = force_quantiles(data)
-    assert q["force_q50"] == pytest.approx(5.0)
-    assert q["force_q90"] == pytest.approx(5.0)
-    assert q["force_q95"] == pytest.approx(5.0)
-    assert ped_force_mean(data) == pytest.approx(5.0)
-    # comfort threshold default 2.0 -> 1 exceed event over 1 (t,k) sample.
-    assert force_exceed_events(data) == pytest.approx(1.0)
-    assert comfort_exposure(data) == pytest.approx(1.0)
+@pytest.mark.parametrize("key", ["force_q50", "force_q90", "force_q95", "mean"])
+def test_force_metrics_scale_with_force_magnitude(key) -> None:
+    """Multiply only force vectors: each quantile and the mean scale by the same factor."""
+    forces = np.array([[[1.0, 2.0]], [[3.0, 4.0]], [[2.0, 1.0]]])
+    data = _episode(robot_pos=np.zeros((3, 2)), peds_pos=np.zeros((3, 1, 2)), ped_forces=forces)
+    scaled = replace(data, ped_forces=forces * 2.5)
+    if key == "mean":
+        before, after = ped_force_mean(data), ped_force_mean(scaled)
+    else:
+        before, after = force_quantiles(data)[key], force_quantiles(scaled)[key]
+    assert before > 0
+    assert after == pytest.approx(before * 2.5)
+
+
+@pytest.mark.parametrize("key", ["force_q50", "force_q90", "force_q95", "mean"])
+def test_force_metrics_are_invariant_under_rotation(key) -> None:
+    """Changing the orientation of force vectors preserves magnitude summaries."""
+    forces = np.array([[[1.0, 2.0]], [[3.0, 4.0]], [[2.0, 1.0]]])
+    data = _episode(robot_pos=np.zeros((3, 2)), peds_pos=np.zeros((3, 1, 2)), ped_forces=forces)
+    angle = 0.73
+    rotation = np.array([[np.cos(angle), -np.sin(angle)], [np.sin(angle), np.cos(angle)]])
+    rotated = replace(data, ped_forces=forces @ rotation.T)
+    if key == "mean":
+        assert ped_force_mean(rotated) == pytest.approx(ped_force_mean(data))
+    else:
+        assert force_quantiles(rotated)[key] == pytest.approx(force_quantiles(data)[key])
 
 
 def test_per_ped_force_quantiles_averages_across_pedestrians() -> None:
@@ -429,3 +495,30 @@ def test_compute_all_metrics_opt_in_keys_absent_by_default() -> None:
     assert "ped_impact_accel_delta_mean" not in values
     assert "human_proxy_available" not in values
     assert "near_misses_ttc" not in values
+
+
+def test_path_motion_metrics_on_straight_line() -> None:
+    """Pin path/energy/jerk/curvature/efficiency values on a unit straight-line episode."""
+    data = _straight_line_episode()
+    assert path_length(data) == pytest.approx(3.0)
+    assert avg_speed(data) == pytest.approx(1.0)
+    assert energy(data) == pytest.approx(0.0)  # zero acceleration
+    assert jerk_mean(data) == pytest.approx(0.0)
+    assert curvature_mean(data) == pytest.approx(0.0)
+    assert path_efficiency(data, 3.0) == pytest.approx(1.0)
+    assert socnavbench_path_length(data) == pytest.approx(3.0)
+
+
+def test_force_quantiles_and_mean_on_known_magnitude() -> None:
+    """Single sample of magnitude 5 (3-4-5 force vector) at all quantiles/mean."""
+    forces = np.array([[[3.0, 4.0]]])  # ||(3,4)|| = 5
+    data = _episode(robot_pos=np.zeros((1, 2)), peds_pos=np.zeros((1, 1, 2)), ped_forces=forces)
+    assert has_force_data(data) is True
+    q = force_quantiles(data)
+    assert q["force_q50"] == pytest.approx(5.0)
+    assert q["force_q90"] == pytest.approx(5.0)
+    assert q["force_q95"] == pytest.approx(5.0)
+    assert ped_force_mean(data) == pytest.approx(5.0)
+    # comfort threshold default 2.0 -> 1 exceed event over 1 (t,k) sample.
+    assert force_exceed_events(data) == pytest.approx(1.0)
+    assert comfort_exposure(data) == pytest.approx(1.0)

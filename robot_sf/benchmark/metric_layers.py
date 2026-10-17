@@ -353,6 +353,18 @@ CANONICAL_METRICS: dict[str, MetricDefinition] = dict(
 
 
 # Model quantities; the pp-equivalent family is an experimental counterfactual.
+for _force_prefix in ("robot_force", "robot_force_pp_equiv"):
+    _validity_name = f"{_force_prefix}_invalid_present_samples"
+    CANONICAL_METRICS[_validity_name] = MetricDefinition(
+        name=_validity_name,
+        layer="comfort",
+        source_keys=(f"metrics.{_validity_name}",),
+        reduction="sum",
+        higher_is_better=False,
+        unit="count",
+        description="Invalid present pedestrian force samples; valid rows report zero.",
+    )
+
 CANONICAL_METRICS["robot_force_impulse_total"] = MetricDefinition(
     name="robot_force_impulse_total",
     layer="comfort",

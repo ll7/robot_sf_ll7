@@ -1,0 +1,28 @@
+{
+  "reviewed_head": "d81f0195d227b398cdd5ddb8e545c356d4d1542b",
+  "finding": "P2: unregistered broad exception in the cross-CPU startup hook",
+  "resolution": "Register the unchanged fatal startup boundary with review_reason; narrowing would allow unexpected dependency exceptions to be ignored by Python site startup.",
+  "hook_behavior_changed": false,
+  "full_lint": {
+    "command": "scripts/dev/ci_driver.sh lint",
+    "exit_code": 0,
+    "checks": [
+      "repository Ruff lint",
+      "repository Ruff format",
+      "broad-exception ratchet: 207 registered entries",
+      "advisory version alignment",
+      "Ruff version parity"
+    ]
+  },
+  "focused_tests": {
+    "command": "uv run pytest tests/benchmark/test_cross_cpu_diagnostic_20261013.py tests/benchmark/test_pinned_numerical_mode.py tests/validation/test_check_broad_exceptions.py -q -n 0 -o addopts=''",
+    "passed": 41,
+    "exit_code": 0,
+    "includes": "Two subprocess startup-error controls, eleven study cases total, twenty numerical-mode controls, ten ratchet controls."
+  },
+  "sealed_acquisition_bundle_modified": false,
+  "logs": {
+    "review_fix_lint.log": "93824dd0d6b8110d0528f17b2582ffbca28c1ef02f1694c7c0be0273788c9887",
+    "review_fix_tests.log": "ae0c9be80efc7da6544a364876722e5f2b604d9e54262c553343d5ba9a664b9e"
+  }
+}

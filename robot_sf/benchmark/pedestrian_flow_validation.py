@@ -222,6 +222,7 @@ def run_ped_flow_trace(
         ped_density_by_difficulty=[0.0],
         difficulty=0,
         route_spawn_seed=config.seed,
+        pedestrian_seed=config.seed,
         max_total_pedestrians=pedestrian_count,
     )
     sim = Simulator(

@@ -60,7 +60,7 @@ def test_robot_start_exclusions_keep_footprint_off_walls(corridor_map) -> None:
     samples = sample_zone(
         zone_on_wall,
         200,
-        rng=np.random.default_rng(116),
+        rng=np.random.default_rng(1006),
         max_attempts_per_point=50,
         exclusions=exclusions,
     )
@@ -164,7 +164,13 @@ def _route_behavior(robot_xy):
         spawn_zone=((0.0, 0.0), (4.0, 0.0), (4.0, 4.0)),
         goal_zone=((29.0, 0.0), (31.0, 0.0), (31.0, 2.0)),
     )
-    behavior = FollowRouteBehavior(groups, {gid: route}, [0])
+    behavior = FollowRouteBehavior(
+        groups,
+        {gid: route},
+        [0],
+        rng=np.random.default_rng(1001),
+        guard_rng=np.random.default_rng(1002),
+    )
     exclusion = ROBOT_RADIUS + PED_RADIUS + SPAWN_CLEARANCE_MARGIN_M
     behavior.set_robot_exclusion(lambda: [(robot_xy, 0.0)], exclusion)
     return behavior, groups, gid, states, exclusion
@@ -174,7 +180,7 @@ def test_respawn_excludes_robot_footprint() -> None:
     """Route-end respawns never land inside the robot exclusion circle."""
     robot_xy = (3.0, 1.0)
     behavior, _groups, gid, states, exclusion = _route_behavior(robot_xy)
-    np.random.seed(115)
+    np.random.seed(1005)
     for _ in range(200):
         behavior.respawn_group_at_start(gid)
         for row in states[:, 0:2]:
@@ -186,9 +192,7 @@ def test_respawn_records_event_and_keeps_legacy_sample_when_zone_is_fully_covere
     """If the robot covers the whole spawn zone, the first (legacy) sample is kept."""
     behavior, _groups, gid, states, _exclusion = _route_behavior((2.7, 1.3))
     behavior.robot_exclusion_radius = 10.0
-    np.random.seed(0)
-    legacy = sample_zone(((0.0, 0.0), (4.0, 0.0), (4.0, 4.0)), 2)
-    np.random.seed(0)
+    legacy = sample_zone(((0.0, 0.0), (4.0, 0.0), (4.0, 4.0)), 2, rng=np.random.default_rng(1001))
     behavior.respawn_group_at_start(gid)
     assert [tuple(row) for row in states[:, 0:2]] == legacy
     assert len(behavior.respawn_overlap_events) == 1
@@ -200,13 +204,12 @@ def test_respawn_records_event_and_keeps_legacy_sample_when_zone_is_fully_covere
 def test_respawn_keeps_random_stream_when_legacy_sample_is_clear() -> None:
     """A respawn far from the robot is identical to the unguarded one, draws included."""
     behavior, _groups, gid, states, _exclusion = _route_behavior((100.0, 100.0))
-    np.random.seed(5)
-    legacy = sample_zone(((0.0, 0.0), (4.0, 0.0), (4.0, 4.0)), 2)
-    after_legacy = np.random.uniform()
-    np.random.seed(5)
+    reference_rng = np.random.default_rng(1001)
+    legacy = sample_zone(((0.0, 0.0), (4.0, 0.0), (4.0, 4.0)), 2, rng=reference_rng)
+    after_legacy = reference_rng.uniform()
     behavior.respawn_group_at_start(gid)
     assert [tuple(row) for row in states[:, 0:2]] == legacy
-    assert np.random.uniform() == after_legacy
+    assert behavior.rng.uniform() == after_legacy
 
 
 def test_reset_respawn_does_not_use_stale_robot_pose() -> None:

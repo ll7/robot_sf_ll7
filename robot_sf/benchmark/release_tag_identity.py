@@ -126,6 +126,8 @@ def check_tag_source_consistency(
     Returns:
         Problem strings; empty when the tag is consistent.
     """
+    if str(tag).startswith("development-rehearsal-"):
+        return ["development rehearsal cannot become a release tag"]
     identity = extract_tag_sha_component(tag)
     problems: list[str] = []
     if identity.full_sha_present:
@@ -165,6 +167,8 @@ def check_canonical_source_tag(tag: str, source_sha: str) -> list[str]:
     Returns:
         Problem strings; empty only for one exact full-SHA suffix.
     """
+    if str(tag).startswith("development-rehearsal-"):
+        return ["development rehearsal cannot become a release tag"]
     if not isinstance(source_sha, str) or re.fullmatch(r"[0-9a-f]{40}", source_sha) is None:
         return ["source_sha must be a full 40-character lowercase hexadecimal SHA"]
     normalized_tag = str(tag).strip()

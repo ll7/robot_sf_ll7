@@ -68,7 +68,7 @@ def test_pedestrian_explicit_opt_out_respected():
     rec_opts = RecordingOptions(record=False, video_path="/tmp/should_not_be_used.mp4")
     env = make_pedestrian_env(
         config=PedestrianSimulationConfig(),
-        seed=123,
+        seed=1013,
         robot_model=None,
         record_video=True,
         recording_options=rec_opts,

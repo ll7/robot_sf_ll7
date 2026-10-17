@@ -12,6 +12,75 @@ import pytest
 SETUP = Path(__file__).resolve().parents[2] / "scripts/ci/self_hosted/setup.sh"
 
 
+@pytest.mark.parametrize(
+    ("filesystem", "block_size", "blocks", "accepted"),
+    [
+        ("tmpfs", 4096, 131072, False),  # 512 MiB, as in the failed wheel install.
+        ("tmpfs", 4096, 524287, False),  # One block below 2 GiB.
+        ("tmpfs", 4096, 524288, True),
+        ("tmpfs", 1024, 2097152, True),
+        ("ext2/ext3", 4096, 131072, True),
+        ("real-filesystem", 0, 0, True),  # Exercise stat's symlink resolution too.
+        ("unknown", "invalid", 0, False),
+        ("stat-failure", 4096, 524288, False),
+    ],
+)
+def test_container_startup_checks_tmpdir_capacity(
+    tmp_path: Path, filesystem: str, block_size: int | str, blocks: int, accepted: bool
+) -> None:
+    """Reject small temporary tmpfs mounts before registering or running a job."""
+    commands = tmp_path / "commands"
+    commands.mkdir()
+    trace = tmp_path / "trace"
+    target = tmp_path / "disk-scratch"
+    target.mkdir()
+    scratch = tmp_path / "scratch-link"
+    scratch.symlink_to(target, target_is_directory=True)
+    _mock_command(
+        commands,
+        "stat",
+        'printf "stat:%s\\n" "${!#}" >>"$TRACE"\n'
+        '[[ "$FS_TYPE" != real-filesystem ]] || exec /usr/bin/stat "$@"\n'
+        '[[ "$FS_TYPE" != stat-failure ]] || exit 1\n'
+        'printf "%s %s %s\\n" "$FS_TYPE" "$BLOCK_SIZE" "$BLOCKS"\n',
+    )
+    for name in ("config.sh", "run.sh"):
+        _mock_command(tmp_path, name, f'printf "{name}\\n" >>"$TRACE"\n')
+    environment = os.environ.copy()
+    environment.update(
+        PATH=f"{commands}:{environment['PATH']}",
+        TRACE=str(trace),
+        TMPDIR=str(scratch),
+        FS_TYPE=filesystem,
+        BLOCK_SIZE=str(block_size),
+        BLOCKS=str(blocks),
+        TEST_RUNNER_HOME=str(tmp_path),
+    )
+    result = subprocess.run(
+        [
+            "bash",
+            "-c",
+            'cd() { builtin cd "$TEST_RUNNER_HOME"; }; cp() { :; }; install() { :; }; '
+            'source "$1" container fixture-runner',
+            "container-startup-test",
+            str(SETUP),
+        ],
+        input="fixture-registration-token\n",
+        env=environment,
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+    events = trace.read_text(encoding="utf-8").splitlines()
+    assert (result.returncode == 0) is accepted, result.stderr
+    assert ("config.sh" in events) is accepted, "unsafe scratch must block registration"
+    assert ("run.sh" in events) is accepted, "unsafe scratch must block job execution"
+    assert events[0] == f"stat:{scratch}", "startup must inspect the effective TMPDIR"
+    if not accepted:
+        assert "TMPDIR" in result.stderr
+
+
 def _mock_command(directory: Path, name: str, body: str) -> None:
     command = directory / name
     command.write_text("#!/usr/bin/env bash\nset -eu\n" + body, encoding="utf-8")
@@ -19,10 +88,25 @@ def _mock_command(directory: Path, name: str, body: str) -> None:
 
 
 @pytest.mark.parametrize(
-    "failure", ["none", "network", "probe", "disk", "info", "ps", "df", "start", "attach"]
+    "failure",
+    [
+        "none",
+        "network",
+        "probe",
+        "disk",
+        "info",
+        "ps",
+        "df",
+        "start",
+        "delivery",
+        "token",
+        "partial-token",
+        "job",
+        "wait",
+    ],
 )
 def test_supervisor_checks_isolation_before_each_registration(tmp_path: Path, failure: str) -> None:
-    """A failed isolation or disk check skips token requests and retries after 60 seconds."""
+    """Gate replacements, deliver stdin, and retry fetch/delivery/job/wait failures."""
     commands = tmp_path / "commands"
     commands.mkdir()
     _mock_command(commands, "hostname", "printf 'imech039\\n'\n")
@@ -54,9 +138,23 @@ case "$1:$2" in
     esac
     ;;
   attach:*)
+    # Model attach entering its container wait, even after an empty API failure.
     cat >/dev/null
-    printf 'runner\\n' >>"$TRACE"
-    [[ "$FAILURE" != attach ]]
+    printf 'delivery\\n' >>"$TRACE"
+    [[ "$FAILURE" != delivery ]] || exit 1
+    printf 'runner-wait\\n' >>"$TRACE"
+    [[ "$FAILURE" != job && "$FAILURE" != wait ]]
+    ;;
+  exec:*)
+    value="$(cat)"
+    [[ "$FAILURE" == token || "$value" == fixture-token ]]
+    printf 'delivery\\n' >>"$TRACE"
+    [[ "$FAILURE" != delivery ]]
+    ;;
+  wait:*)
+    printf 'runner-wait\\n' >>"$TRACE"
+    [[ "$FAILURE" != wait ]] || exit 1
+    if [[ "$FAILURE" == job ]]; then printf '1\\n'; else printf '0\\n'; fi
     ;;
   stop:*) printf 'runner-stop\\n' >>"$TRACE" ;;
   *) exit 2 ;;
@@ -71,7 +169,10 @@ esac
     _mock_command(
         commands,
         "gh",
-        "printf 'gh\\n' >>\"$TRACE\"\nprintf 'fixture-token\\n'\n",
+        "printf 'gh\\n' >>\"$TRACE\"\n"
+        '[[ "$FAILURE" != token ]] || exit 1\n'
+        "printf 'fixture-token\\n'\n"
+        '[[ "$FAILURE" != partial-token ]]\n',
     )
     _mock_command(
         commands,
@@ -116,10 +217,11 @@ printf '%s\\n' "$count" >"$SLEEP_COUNT"
     )
 
     assert result.returncode == 99, result.stderr
+    assert "fixture-token" not in result.stdout + result.stderr
     events = (tmp_path / "trace").read_text(encoding="utf-8").splitlines()
     checked = ["network-verify", "probe", "docker-info", "docker-ps", "df"]
     expected = {
-        "none": checked + ["runner-start", "gh", "runner", "sleep:15"],
+        "none": checked + ["runner-start", "gh", "delivery", "runner-wait", "sleep:15"],
         "network": ["network-verify", "sleep:60"],
         "probe": ["network-verify", "probe", "sleep:60"],
         "info": checked[:3] + ["sleep:60"],
@@ -127,7 +229,13 @@ printf '%s\\n' "$count" >"$SLEEP_COUNT"
         "df": checked + ["sleep:60"],
         "disk": checked + ["sleep:60"],
         "start": checked + ["runner-start", "sleep:15"],
-        "attach": checked + ["runner-start", "gh", "runner", "runner-stop", "sleep:15"],
+        "delivery": checked + ["runner-start", "gh", "delivery", "runner-stop", "sleep:15"],
+        "token": checked + ["runner-start", "gh", "delivery", "runner-stop", "sleep:15"],
+        "partial-token": checked + ["runner-start", "gh", "delivery", "runner-stop", "sleep:15"],
+        "job": checked
+        + ["runner-start", "gh", "delivery", "runner-wait", "runner-stop", "sleep:15"],
+        "wait": checked
+        + ["runner-start", "gh", "delivery", "runner-wait", "runner-stop", "sleep:15"],
     }
     assert events == expected[failure] * 2
     expected_error = {
@@ -138,7 +246,11 @@ printf '%s\\n' "$count" >"$SLEEP_COUNT"
         "df": "Docker disk capacity check failed",
         "disk": "Docker disk capacity check failed",
         "start": "container failed to start",
-        "attach": "failed to register",
+        "delivery": "failed to register",
+        "token": "failed to register",
+        "partial-token": "failed to register",
+        "job": "failed to register",
+        "wait": "failed to register",
     }
     if failure != "none":
         assert expected_error[failure] in result.stderr
@@ -174,7 +286,8 @@ case "$1:$2" in
       printf 'runner-start\\n' >>"$TRACE"
     fi
     ;;
-  attach:*) cat >/dev/null ;;
+  attach:*|exec:*) cat >/dev/null ;;
+  wait:*) printf '0\\n' ;;
   *) exit 2 ;;
 esac
 """,
@@ -247,7 +360,8 @@ case "$1:$2" in
       printf 'robot-sf-ci-imech039-1\\n' >"$ACTIVE_SLOT"
     fi
     ;;
-  attach:*) cat >/dev/null ;;
+  attach:*|exec:*) cat >/dev/null ;;
+  wait:*) printf '0\\n' ;;
   *) exit 2 ;;
 esac
 """,
@@ -327,3 +441,69 @@ def test_setup_accepts_auxme_hostname_prefix(tmp_path: Path, reported: str) -> N
 
     assert result.returncode == 2
     assert "SLOT must be in 1..2 on imech039" in result.stderr
+
+
+@pytest.mark.parametrize(
+    ("reported", "cpus", "memory", "workers"),
+    [
+        ("auxme-imech036", "4", "8g", "2"),
+        ("auxme-imech039", "4", "8g", "2"),
+        ("imech156-u", "8", "16g", "4"),
+    ],
+)
+def test_runner_container_uses_host_slot_size(
+    tmp_path: Path, reported: str, cpus: str, memory: str, workers: str
+) -> None:
+    """Each host starts runner containers with its own CPU, memory and pytest-worker size."""
+    commands = tmp_path / "commands"
+    commands.mkdir()
+    _mock_command(commands, "hostname", f"printf '{reported}\\n'\n")
+    _mock_command(
+        commands,
+        "docker",
+        """
+case "$1:$2" in
+  network:inspect) printf '{}\\n' ;;
+  info:-f) printf '/var/lib/docker\\n' ;;
+  ps:--format) ;;
+  run:*)
+    case " $* " in
+      *' --entrypoint '*) ;;
+      *) printf '%s\\n' "$@" >"$RUN_ARGS"; exit 1 ;;
+    esac
+    ;;
+  *) exit 2 ;;
+esac
+""",
+    )
+    _mock_command(commands, "jq", "true\n")
+    _mock_command(
+        commands,
+        "df",
+        "printf 'Filesystem 1024-blocks Used Available Capacity Mounted on\\n'\n"
+        "printf 'fixture 100000000 0 209715200 0%% /var/lib/docker\\n'\n",
+    )
+    _mock_command(commands, "sleep", "exit 99\n")
+    environment = os.environ.copy()
+    environment.update(
+        PATH=f"{commands}:{environment['PATH']}",
+        RUN_ARGS=str(tmp_path / "run-args"),
+        XDG_STATE_HOME=str(tmp_path / "state"),
+    )
+
+    result = subprocess.run(
+        ["bash", str(SETUP), "supervise", "1"],
+        env=environment,
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+
+    assert result.returncode == 99, result.stderr
+    args = (tmp_path / "run-args").read_text(encoding="utf-8").splitlines()
+    assert args[args.index("--cpus") + 1] == cpus
+    assert args[args.index("--memory") + 1] == memory
+    assert args[args.index("--memory-swap") + 1] == memory
+    assert f"PYTEST_NUM_WORKERS={workers}" in args
+    assert "OMP_NUM_THREADS=1" in args

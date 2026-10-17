@@ -100,10 +100,10 @@ class TestSelectSeeds:
         )
         assert result == [42]
 
-    def test_fallback_to_seed_zero(self) -> None:
-        """Without any seeds, the fallback must be [0]."""
+    def test_declared_zero_default(self) -> None:
+        """An explicitly declared zero default remains valid."""
         scenario = {"name": "sc1"}
-        result = _select_seeds(scenario, suite_seeds={}, suite_key="default")
+        result = _select_seeds(scenario, suite_seeds={"default": [0]}, suite_key="default")
         assert result == [0]
 
     def test_empty_scenario_seeds_fall_through(self) -> None:

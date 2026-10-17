@@ -14,7 +14,7 @@ route_clearance_certifications: configs/benchmarks/route_clearance_certification
 
 seed_policy:
   mode: fixed-list
-  seeds: [116]
+  seeds: [1001]
   seed_sets_path: configs/benchmarks/seed_sets_v1.yaml
 
 snqi_weights: configs/benchmarks/snqi_weights_camera_ready_v3.json
@@ -113,19 +113,19 @@ stress_smoke_contract:
     - issue4365/job13378-original
   representative_cells:
     - scenario_id: classic_urban_crossing_medium
-      seed: 116
+      seed: 1001
       mechanism: urban-crossing
     - scenario_id: classic_cross_trap_high
-      seed: 116
+      seed: 1001
       mechanism: cross-trap
     - scenario_id: classic_doorway_high
-      seed: 116
+      seed: 1001
       mechanism: doorway
     - scenario_id: francis2023_exiting_elevator
-      seed: 116
+      seed: 1001
       mechanism: elevator-exit
     - scenario_id: francis2023_robot_crowding
-      seed: 116
+      seed: 1001
       mechanism: robot-crowding
 
 planners:

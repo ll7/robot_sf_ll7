@@ -1,0 +1,222 @@
+{
+  "status": "AI-GENERATED/NEEDS-REVIEW; dev-only",
+  "meaning": "New failures versus off plus lost successes versus the former combined static/goal arm; one class per episode",
+  "episodes": [
+    {
+      "world": "empty",
+      "scenario": "francis2023_accompanying_peer",
+      "seed": 1002,
+      "arm": "static_only",
+      "classification": "livelock",
+      "new_vs_off": false,
+      "lost_vs_round3_static_with_goal_validity": true,
+      "evidence": "Timeout at 60.0s, goal gap 1.498475m; 64 feasible moving candidates at last step and zero no-moving time; explicit successor-validity pair succeeds in 17.4s. The retained absent-successor origin target produces the near-goal cycle, rather than physical exclusion. Withdrawing the validity flags is an ablation.",
+      "next_step": "enable the existing independent goal_next_validity_enabled and include_goal_next_valid flags; planner defect, not genuine space-time infeasibility",
+      "only_final": {
+        "command": [
+          0.0,
+          0.45
+        ],
+        "feasible_moving_count": 64,
+        "stop_kind": "PREFERRED",
+        "constraints": [],
+        "progress_windows": {
+          "1s": 34.606367492376926,
+          "3s": -0.39143215668254383,
+          "5s": 0.5298960067063678
+        },
+        "speed_safety": {
+          "model": "hybrid_rule_v4_clearance_braking",
+          "min_surface_clearance": null,
+          "level": "free",
+          "band_cap": 2.0,
+          "braking_cap": null,
+          "speed_cap": 2.0,
+          "reaction_time": 0.10000000149011612
+        }
+      },
+      "paired_duration_s": 17.400000000000002,
+      "only_freezing_metric": false
+    },
+    {
+      "world": "empty",
+      "scenario": "francis2023_down_path",
+      "seed": 1002,
+      "arm": "static_only",
+      "classification": "livelock",
+      "new_vs_off": false,
+      "lost_vs_round3_static_with_goal_validity": true,
+      "evidence": "Timeout at 60.0s, goal gap 1.498475m; 64 feasible moving candidates at last step and zero no-moving time; explicit successor-validity pair succeeds in 17.4s. The retained absent-successor origin target produces the near-goal cycle, rather than physical exclusion. Withdrawing the validity flags is an ablation.",
+      "next_step": "enable the existing independent goal_next_validity_enabled and include_goal_next_valid flags; planner defect, not genuine space-time infeasibility",
+      "only_final": {
+        "command": [
+          0.0,
+          0.45
+        ],
+        "feasible_moving_count": 64,
+        "stop_kind": "PREFERRED",
+        "constraints": [],
+        "progress_windows": {
+          "1s": 34.606367492376926,
+          "3s": -0.39143215668254383,
+          "5s": 0.5298960067063678
+        },
+        "speed_safety": {
+          "model": "hybrid_rule_v4_clearance_braking",
+          "min_surface_clearance": null,
+          "level": "free",
+          "band_cap": 2.0,
+          "braking_cap": null,
+          "speed_cap": 2.0,
+          "reaction_time": 0.10000000149011612
+        }
+      },
+      "paired_duration_s": 17.400000000000002,
+      "only_freezing_metric": false
+    },
+    {
+      "world": "empty",
+      "scenario": "francis2023_following_human",
+      "seed": 1002,
+      "arm": "static_only",
+      "classification": "livelock",
+      "new_vs_off": false,
+      "lost_vs_round3_static_with_goal_validity": true,
+      "evidence": "Timeout at 60.0s, goal gap 1.498475m; 64 feasible moving candidates at last step and zero no-moving time; explicit successor-validity pair succeeds in 17.4s. The retained absent-successor origin target produces the near-goal cycle, rather than physical exclusion. Withdrawing the validity flags is an ablation.",
+      "next_step": "enable the existing independent goal_next_validity_enabled and include_goal_next_valid flags; planner defect, not genuine space-time infeasibility",
+      "only_final": {
+        "command": [
+          0.0,
+          0.45
+        ],
+        "feasible_moving_count": 64,
+        "stop_kind": "PREFERRED",
+        "constraints": [],
+        "progress_windows": {
+          "1s": 34.606367492376926,
+          "3s": -0.39143215668254383,
+          "5s": 0.5298960067063678
+        },
+        "speed_safety": {
+          "model": "hybrid_rule_v4_clearance_braking",
+          "min_surface_clearance": null,
+          "level": "free",
+          "band_cap": 2.0,
+          "braking_cap": null,
+          "speed_cap": 2.0,
+          "reaction_time": 0.10000000149011612
+        }
+      },
+      "paired_duration_s": 17.400000000000002,
+      "only_freezing_metric": false
+    },
+    {
+      "world": "empty",
+      "scenario": "francis2023_leading_human",
+      "seed": 1002,
+      "arm": "static_only",
+      "classification": "livelock",
+      "new_vs_off": false,
+      "lost_vs_round3_static_with_goal_validity": true,
+      "evidence": "Timeout at 60.0s, goal gap 1.498475m; 64 feasible moving candidates at last step and zero no-moving time; explicit successor-validity pair succeeds in 17.4s. The retained absent-successor origin target produces the near-goal cycle, rather than physical exclusion. Withdrawing the validity flags is an ablation.",
+      "next_step": "enable the existing independent goal_next_validity_enabled and include_goal_next_valid flags; planner defect, not genuine space-time infeasibility",
+      "only_final": {
+        "command": [
+          0.0,
+          0.45
+        ],
+        "feasible_moving_count": 64,
+        "stop_kind": "PREFERRED",
+        "constraints": [],
+        "progress_windows": {
+          "1s": 34.606367492376926,
+          "3s": -0.39143215668254383,
+          "5s": 0.5298960067063678
+        },
+        "speed_safety": {
+          "model": "hybrid_rule_v4_clearance_braking",
+          "min_surface_clearance": null,
+          "level": "free",
+          "band_cap": 2.0,
+          "braking_cap": null,
+          "speed_cap": 2.0,
+          "reaction_time": 0.10000000149011612
+        }
+      },
+      "paired_duration_s": 17.400000000000002,
+      "only_freezing_metric": false
+    },
+    {
+      "world": "empty",
+      "scenario": "francis2023_narrow_hallway",
+      "seed": 1002,
+      "arm": "static_only",
+      "classification": "livelock",
+      "new_vs_off": true,
+      "lost_vs_round3_static_with_goal_validity": true,
+      "evidence": "Timeout at 60.0s, goal gap 0.704654m; 57 feasible moving candidates at last step and zero no-moving time; explicit successor-validity pair succeeds in 13.3s. The retained absent-successor origin target produces the near-goal cycle, rather than physical exclusion. Withdrawing the validity flags is an ablation.",
+      "next_step": "enable the existing independent goal_next_validity_enabled and include_goal_next_valid flags; planner defect, not genuine space-time infeasibility",
+      "only_final": {
+        "command": [
+          0.0,
+          -1.0
+        ],
+        "feasible_moving_count": 57,
+        "stop_kind": "PREFERRED",
+        "constraints": [],
+        "progress_windows": {
+          "1s": -24.896032113288925,
+          "3s": -24.334568033262126,
+          "5s": -0.17626887821824866
+        },
+        "speed_safety": {
+          "model": "hybrid_rule_v4_clearance_braking",
+          "min_surface_clearance": null,
+          "level": "free",
+          "band_cap": 2.0,
+          "braking_cap": null,
+          "speed_cap": 2.0,
+          "reaction_time": 0.10000000149011612
+        }
+      },
+      "paired_duration_s": 13.3,
+      "only_freezing_metric": true
+    },
+    {
+      "world": "empty",
+      "scenario": "francis2023_pedestrian_overtaking",
+      "seed": 1002,
+      "arm": "static_only",
+      "classification": "livelock",
+      "new_vs_off": false,
+      "lost_vs_round3_static_with_goal_validity": true,
+      "evidence": "Timeout at 60.0s, goal gap 0.460627m; 65 feasible moving candidates at last step and zero no-moving time; explicit successor-validity pair succeeds in 46.8s. The retained absent-successor origin target produces the near-goal cycle, rather than physical exclusion. Withdrawing the validity flags is an ablation.",
+      "next_step": "enable the existing independent goal_next_validity_enabled and include_goal_next_valid flags; planner defect, not genuine space-time infeasibility",
+      "only_final": {
+        "command": [
+          0.7,
+          -1.0
+        ],
+        "feasible_moving_count": 65,
+        "stop_kind": null,
+        "constraints": [],
+        "progress_windows": {
+          "1s": -0.10147327374055948,
+          "3s": -35.08103474495124,
+          "5s": -35.17148817105742
+        },
+        "speed_safety": {
+          "model": "hybrid_rule_v4_clearance_braking",
+          "min_surface_clearance": null,
+          "level": "free",
+          "band_cap": 0.7,
+          "braking_cap": null,
+          "speed_cap": 0.7,
+          "reaction_time": 0.10000000149011612
+        }
+      },
+      "paired_duration_s": 46.800000000000004,
+      "only_freezing_metric": false
+    }
+  ]
+}

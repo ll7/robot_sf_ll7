@@ -1,0 +1,36 @@
+scenarios:
+- name: crossing_ttc_template_adversarial_0008
+  map_id: classic_cross_trap
+  simulation_config:
+    max_episode_steps: 120
+    ped_density: 0.02
+    route_spawn_seed: 320
+    peds_speed_mult: 0.9460388097685773
+  robot_config: {}
+  metadata:
+    archetype: adversarial_crossing_ttc
+    flow: cross
+    behavior: generated_stress_test
+    purpose: Base template for programmable adversarial crossing/TTC search.
+    generated_cases_are_benchmark_evidence: false
+    promotion_note: Generated cases remain development stress tests until separately
+      certified and promoted.
+    adversarial_candidate:
+      start:
+        x: 2.3119256556477077
+        y: 2.5992335516140495
+        theta: 0.0
+      goal:
+        x: 7.288956756845657
+        y: 2.807913333960939
+        theta: 0.0
+      spawn_time_s: 0.6205390536891795
+      pedestrian_speed_mps: 0.9460388097685773
+      pedestrian_delay_s: 1.1762080853167522
+      scenario_seed: 320
+      candidate_index: 8
+      spawn_time_s_note: stored for search provenance; route-spawn timing support
+        is adapter-dependent
+  seeds:
+  - 320
+  route_overrides_file: route_overrides.yaml

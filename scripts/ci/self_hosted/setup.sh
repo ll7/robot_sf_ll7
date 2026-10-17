@@ -18,7 +18,7 @@ state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/robot-sf-ci-runners"
 
 usage() {
   cat <<'USAGE'
-Usage: setup.sh build | network | start SLOT | stop SLOT | status SLOT
+Usage: setup.sh build | network | limits | start SLOT | stop SLOT | status SLOT
 
 Build the pinned container image locally, then start one supervisor per slot.
 Slots 1-2 are allowed on imech036 and imech039; slots 1-3 on imech156-u.
@@ -38,6 +38,18 @@ require_slot() {
     echo "SLOT must be in 1..$limit on $host" >&2
     exit 2
   fi
+}
+
+# Per-slot container size: CPUs, memory (also the swap cap) and pytest workers.
+# Measured 2026-09-30: a 2-worker shard peaks near 6 GiB, so memory, not CPU,
+# bounds workers; tmpfs mounts (up to 3 GiB) count against the same limit.
+# imech156-u (32 cores, 62 GiB, 3 slots) runs larger slots;
+# imech036/imech039 (20 cores, 31 GiB, 2 slots) keep the original size.
+slot_limits() {
+  case "$host" in
+    imech156-u) printf '8 16g 4\n' ;;
+    *) printf '4 8g 2\n' ;;
+  esac
 }
 
 slot_name() { printf 'robot-sf-ci-%s-%s' "$host" "$1"; }
@@ -79,12 +91,22 @@ build_image() {
 FROM ghcr.io/actions/actions-runner@sha256:0cfdcc701ce933c6d243c6b0b2da767366dc9f2e99961d4c3754b0b78084cdda
 USER root
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential cmake ffmpeg gh \
+    build-essential cmake ffmpeg gh git-lfs \
     libglib2.0-0t64 libgl1 fonts-dejavu-core jq poppler-utils iputils-ping curl \
     && rm -rf /var/lib/apt/lists/* \
+    && curl -fsSLo /tmp/node.tar.gz \
+      https://nodejs.org/dist/v22.23.2/node-v22.23.2-linux-x64.tar.gz \
+    && echo 'b294a556e639d64338823920e5866c21c02741742d2e1529ee1a225c1ec9252a  /tmp/node.tar.gz' | sha256sum -c - \
+    && mkdir -p /opt/node \
+    && tar -xzf /tmp/node.tar.gz -C /opt/node --strip-components=1 \
+    && ln -s /opt/node/bin/node /usr/local/bin/node \
+    && ln -s /opt/node/bin/npm /usr/local/bin/npm \
+    && ln -s /opt/node/bin/npx /usr/local/bin/npx \
+    && rm /tmp/node.tar.gz \
     && usermod -G '' runner \
     && rm -f /etc/sudoers \
     && mkdir -p /opt/robot-sf-runner \
+    && ln -s /home/runner/_tool /opt/hostedtoolcache \
     && cp -a /home/runner/. /opt/robot-sf-runner/ \
     && chown -R runner:runner /opt/robot-sf-runner \
     && install -d -o runner -g runner /home/runner/_work
@@ -95,6 +117,26 @@ ENV ACTIONS_RUNNER_HOOK_JOB_STARTED=/usr/local/libexec/robot-sf-job-started.sh
 USER 1001:1001
 ENTRYPOINT ["/usr/local/bin/robot-sf-runner", "container"]
 DOCKERFILE
+}
+
+check_tmpdir() {
+  local scratch="${TMPDIR:-/tmp}" filesystem block_size blocks
+  # stat -f follows symlinks and queries the containing filesystem, so nested
+  # mounts and TMPDIR overrides cannot hide a small tmpfs behind a disk path.
+  local mount_stats
+  if ! mount_stats="$(stat -f -c '%T %S %b' -- "$scratch")"; then
+    echo "Could not inspect TMPDIR filesystem" >&2
+    return 1
+  fi
+  read -r filesystem block_size blocks <<<"$mount_stats"
+  if [[ -z "$filesystem" || ! "$block_size" =~ ^[1-9][0-9]*$ || ! "$blocks" =~ ^[0-9]+$ ]]; then
+    echo "Invalid TMPDIR filesystem capacity" >&2
+    return 1
+  fi
+  if [[ "$filesystem" == tmpfs ]] && (( block_size * blocks < 2147483648 )); then
+    echo "TMPDIR tmpfs must have at least 2 GiB capacity" >&2
+    return 1
+  fi
 }
 
 run_container() {
@@ -108,7 +150,9 @@ run_container() {
   cd /home/runner
   cp -a /opt/robot-sf-runner/. /home/runner/
   install -d -m 700 /home/runner/_work/_temp /home/runner/_work/_uv_cache \
+    /home/runner/_work/_tmp /home/runner/_work/_pip_cache \
     /home/runner/_tool
+  check_tmpdir
   ./config.sh --unattended --ephemeral --disableupdate --replace \
     --url "https://github.com/$repo" --token "$token" \
     --name "$runner_name" --labels "$label" --work _work
@@ -117,14 +161,17 @@ run_container() {
 }
 
 supervise() {
-  local name
+  local name cpus memory workers container_exit
   name="$(slot_name "$1")"
+  read -r cpus memory workers < <(slot_limits)
   while true; do
     if ! ensure_network || ! probe_network; then
       echo "Runner $name network isolation check failed; retrying after 60 seconds" >&2
       sleep 60
       continue
     fi
+    # TMPDIR uses the disk-backed work volume, outside the small /tmp and
+    # credential-scratch tmpfs mounts. Container startup verifies its capacity.
     # Keep the host lock through container startup: the next slot must count
     # this container when it checks capacity. --rm removes its work volume.
     if ! lock_disk_admission; then
@@ -146,13 +193,14 @@ supervise() {
         --tmpfs /home/runner/_work/_temp:rw,exec,nosuid,nodev,uid=1001,gid=1001,size=512m,mode=700 \
         --tmpfs /tmp:rw,exec,nosuid,nodev,uid=1001,gid=1001,size=512m \
         --cap-drop ALL --security-opt no-new-privileges \
-        --pids-limit 512 --cpus 4 --memory 8g --memory-swap 8g \
+        --pids-limit 512 --cpus "$cpus" --memory "$memory" --memory-swap "$memory" \
         --env HOME=/home/runner \
         --env RUNNER_TEMP=/home/runner/_work/_temp \
         --env RUNNER_TOOL_CACHE=/home/runner/_tool \
         --env UV_CACHE_DIR=/home/runner/_work/_uv_cache \
-        --env TMPDIR=/tmp \
-        --env PYTEST_NUM_WORKERS=2 --env OPENBLAS_NUM_THREADS=1 \
+        --env TMPDIR=/home/runner/_work/_tmp \
+        --env PIP_CACHE_DIR=/home/runner/_work/_pip_cache \
+        --env PYTEST_NUM_WORKERS="$workers" --env OPENBLAS_NUM_THREADS=1 \
         --env OMP_NUM_THREADS=1 \
         "$image" "$name" >/dev/null; then
       unlock_disk_admission
@@ -161,10 +209,14 @@ supervise() {
       continue
     fi
     unlock_disk_admission
-    # The API response goes straight to the waiting container's stdin. No
-    # token file, token-bearing Docker argument, or shell trace is created.
+    # An empty token response can leave attach blocked on a tokenless
+    # container, delaying detection of the failed API request indefinitely.
+    # Deliver to PID 1's stdin using exec and check the complete pipeline
+    # before waiting for container exit. The token remains a pipe:
+    # no token file, token-bearing Docker argument, or shell trace is created.
     if gh api -X POST "repos/$repo/actions/runners/registration-token" --jq .token |
-      docker attach --sig-proxy=false "$name"; then
+      docker exec --interactive "$name" bash -c 'cat > /proc/1/fd/0' &&
+      container_exit="$(docker wait "$name")" && [[ "$container_exit" == 0 ]]; then
       echo "Runner $name finished its job; replacing its container"
     else
       docker stop --time 5 "$name" >/dev/null 2>&1 || true
@@ -269,6 +321,7 @@ stop_slot() {
 case "${1:-}" in
   build) [[ $# -eq 1 ]] || { usage; exit 2; }; build_image ;;
   network) [[ $# -eq 1 ]] || { usage; exit 2; }; ensure_network ;;
+  limits) [[ $# -eq 1 ]] || { usage; exit 2; }; require_slot 1; slot_limits ;;
   supervise) [[ $# -eq 2 ]] || { usage; exit 2; }; require_slot "$2"; supervise "$2" ;;
   start|stop|status)
     [[ $# -eq 2 ]] || { usage; exit 2; }

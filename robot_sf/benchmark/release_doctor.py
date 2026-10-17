@@ -25,6 +25,7 @@ from robot_sf.benchmark.checkpoint_staging_receipt import (
 )
 from robot_sf.benchmark.release_acceptance import FULL_RELEASE_EXPECTED_EPISODE_CELLS
 from robot_sf.benchmark.release_protocol import (
+    DEVELOPMENT_REHEARSAL_KIND,
     RELEASE_MANIFEST_SCHEMA_VERSION_V0_2,
     load_release_campaign_config,
     load_release_manifest,
@@ -496,6 +497,14 @@ def _manifest_check(
     """
     try:
         manifest = load_release_manifest(manifest_path, repository_root=repository_root)
+        if getattr(manifest, "release_kind", None) == DEVELOPMENT_REHEARSAL_KIND:
+            return (
+                ReleaseDoctorCheck(
+                    "manifest", "fail", "development rehearsal cannot be minted as a release"
+                ),
+                manifest,
+                None,
+            )
         if getattr(manifest, "resolved_identity_path", None) is not None:
             cfg = load_release_campaign_config(
                 manifest,

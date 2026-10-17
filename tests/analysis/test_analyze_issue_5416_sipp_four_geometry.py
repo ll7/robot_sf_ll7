@@ -226,3 +226,17 @@ def test_invalid_manifest_field_type_blocks_provenance(tmp_path: Path) -> None:
     assert any(
         "cpu_route" in error and "invalid" in error for error in report["provenance"]["errors"]
     )
+
+
+def test_fxm2_failed_run_allows_undefined_success_only_efficiency():
+    row = _row("goal", SCENARIOS[0], 1003, success=False)
+    row["metric_schema_version"] = "robot-sf-metrics.v2"
+    row["metrics"]["metric_schema_version"] = "robot-sf-metrics.v2"
+    row["metrics"]["path_efficiency"] = None
+    values, reasons = analyzer._measurement(row)
+    assert reasons == []
+    assert values["path_efficiency"] is None
+    row["outcome"]["route_complete"] = True
+    row["outcome"]["collision_event"] = False
+    values, reasons = analyzer._measurement(row)
+    assert "metrics.path_efficiency is missing or invalid" in reasons

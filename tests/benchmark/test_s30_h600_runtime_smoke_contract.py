@@ -22,6 +22,8 @@ from robot_sf.benchmark.release_parameter_freeze import (
 )
 from robot_sf.benchmark.release_protocol import load_release_manifest, validate_release_manifest
 from robot_sf.benchmark.runtime_smoke_admission import RUNTIME_SMOKE_PLANNER_KEYS
+from robot_sf.benchmark.seed_bands import EVAL_SEEDS_0_0_8
+from robot_sf.benchmark.spawn_preflight import _release_manifest_inputs, run_manifest_preflight
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SOURCE_CONFIG_PATH = (
@@ -37,7 +39,9 @@ SMOKE_MANIFEST_PATH = REPO_ROOT / (
 CAMPAIGN_TEMPLATE_PATH = REPO_ROOT / (
     "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml"
 )
-CALIBRATION_CONFIG_PATH = REPO_ROOT / "configs/benchmarks/snqi_v2/calibration.dev101_102.yaml"
+CALIBRATION_CONFIG_PATH = (
+    REPO_ROOT / "configs/benchmarks/snqi_v2/calibration.dev1001_1002_scheduled_acquisition.yaml"
+)
 RUNTIME_SMOKE_V03_CONFIG_PATH = REPO_ROOT / (
     "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_3.yaml"
 )
@@ -61,7 +65,7 @@ PINNED_V04_MANIFEST_SHA256 = "aded0ca71e40bdc8f7193282bb8d28420a9b627f93d47a4303
 PINNED_V03_CONFIG_SHA256 = "fbd900243f5a004cc07f7d10c672126f46ec583eb6f108ec7a0e8fce9daa7ad4"
 PINNED_V03_MANIFEST_SHA256 = "d6f3047adaacfb8cad2cc12430ee5ce7331f11b0777ac522209fd1e5af019241"
 HISTORICAL_V04_TEMPLATE_SHA256 = "f453b7c824fdd47298cbc66dae3afc1fffcd7eedf57ee4bb87cd1c67b4feb1d7"
-CAMPAIGN_TEMPLATE_SHA256 = "3b5302c2546b5c9c03dbfb5c752b9b78ea062c4af7e957450de9b8595d44bec6"
+CAMPAIGN_TEMPLATE_SHA256 = "5d805909643f1b6c5e919a891657ec86e6800f2ab602b7cfd70f1af1aec94462"
 
 EXPECTED_PLANNER_KEYS = [
     "prediction_planner",
@@ -237,7 +241,7 @@ def test_runtime_smoke_preserves_all_fourteen_source_arms_without_fallback() -> 
 
     assert list(smoke_planners) == EXPECTED_PLANNER_KEYS
     assert list(source_planners) == EXPECTED_PLANNER_KEYS
-    assert list(RUNTIME_SMOKE_PLANNER_KEYS) == EXPECTED_PLANNER_KEYS
+    assert list(RUNTIME_SMOKE_PLANNER_KEYS) == EXPECTED_0_0_8_PLANNER_KEYS
     assert len(smoke_planners) == 14
     for key in EXPECTED_PLANNER_KEYS:
         source_row = dict(source_planners[key])
@@ -391,12 +395,16 @@ def test_runtime_smoke_manifest_validates_against_config_and_assets() -> None:
     assert manifest.expected_kinematics_matrix == ("differential_drive",)
 
 
-def test_runtime_smoke_v0_4_preserves_its_historical_binding_and_v0_3() -> None:
+def test_runtime_smoke_v0_4_preserves_main_runner_cap_and_v0_3() -> None:
     """The predecessor keeps its original source pin and v4 fail-closed roster."""
     template = _load_yaml(CAMPAIGN_TEMPLATE_PATH)
     smoke = _load_yaml(RUNTIME_SMOKE_V04_CONFIG_PATH)
     cfg = load_campaign_config(RUNTIME_SMOKE_V04_CONFIG_PATH)
-    scenarios = _load_campaign_scenarios(cfg)
+    assert cfg.horizon_policy is None
+    assert cfg.protocol_version is None
+    ordinary = _load_campaign_scenarios(cfg)
+    assert {s["simulation_config"]["max_episode_steps"] for s in ordinary} == {400}
+    assert all("campaign_horizon" not in s.get("metadata", {}) for s in ordinary)
 
     assert _sha256(RUNTIME_SMOKE_V04_CONFIG_PATH) == PINNED_V04_CONFIG_SHA256
     assert _sha256(RUNTIME_SMOKE_V04_MANIFEST_PATH) == PINNED_V04_MANIFEST_SHA256
@@ -406,9 +414,8 @@ def test_runtime_smoke_v0_4_preserves_its_historical_binding_and_v0_3() -> None:
         "config_sha256": HISTORICAL_V04_TEMPLATE_SHA256,
     }
     assert [row["key"] for row in smoke["planners"]] == EXPECTED_0_0_8_PLANNER_KEYS
-    # The canonical runtime-smoke admission roster stays the 0.0.7 (v0_2) roster;
-    # the 0.0.8 keys are its slot-for-slot successors.
-    assert list(RUNTIME_SMOKE_PLANNER_KEYS) == EXPECTED_PLANNER_KEYS
+    # The historical manifests keep their pins; current admission selects the v4 successor.
+    assert list(RUNTIME_SMOKE_PLANNER_KEYS) == EXPECTED_0_0_8_PLANNER_KEYS
     assert [slot.key_0_0_7 for slot in ARM_SLOTS_0_0_7_TO_0_0_8] == EXPECTED_PLANNER_KEYS
     assert len(smoke["planners"]) == 14
     for row in smoke["planners"]:
@@ -440,9 +447,14 @@ def test_runtime_smoke_v0_4_preserves_its_historical_binding_and_v0_3() -> None:
     )
 
     expected_config_differences = {
+        "protocol_version",
         "artifact_provenance",
+        "horizon",
+        "scenario_horizons",
+        "scenario_horizons_sha256",
         "bootstrap_samples",
         "claim_boundary",
+        "comparability_mapping",
         "derived_from",
         "doi",
         "export_publication_bundle",
@@ -456,8 +468,12 @@ def test_runtime_smoke_v0_4_preserves_its_historical_binding_and_v0_3() -> None:
         "scenario_matrix",
         "seed_policy.mode",
         "seed_policy.seed_set",
+        "seed_policy.seed_sets_path",  # D-049 version-specific sealed schedule
         "seed_policy.seeds",
         "snqi_contract.calibration_trials",
+        "snqi_contract.enabled",
+        "snqi_weights",
+        "snqi_baseline",
         "zenodo",
     }
     # The current template advances the simulator kernel and Social Force selector;
@@ -471,15 +487,21 @@ def test_runtime_smoke_v0_4_preserves_its_historical_binding_and_v0_3() -> None:
     assert smoke["export_publication_bundle"] is False
     assert smoke["overwrite_publication_bundle"] is False
 
+    assert template.get("horizon") is None
+    assert template["scenario_horizons_sha256"] == _sha256(
+        REPO_ROOT / template["scenario_horizons"]
+    )
     assert cfg.horizon == 600
     assert cfg.dt == 0.1
     assert cfg.workers == 32
     assert cfg.kinematics_matrix == ("differential_drive",)
     assert cfg.resume is False
     assert cfg.stop_on_failure is True
-    assert len(scenarios) == 1
-    assert scenarios[0]["name"] == "francis2023_blind_corner"
-    assert list(scenarios[0]["seeds"]) == [111]
+    assert (
+        smoke["scenario_matrix"]
+        == "configs/scenarios/single/francis2023_blind_corner_goal_zone_entry_v1.yaml"
+    )
+    assert smoke["seed_policy"]["seeds"] == [111]
 
     assert _sha256(RUNTIME_SMOKE_V03_CONFIG_PATH) == PINNED_V03_CONFIG_SHA256
     assert _sha256(RUNTIME_SMOKE_V03_MANIFEST_PATH) == PINNED_V03_MANIFEST_SHA256
@@ -488,13 +510,11 @@ def test_runtime_smoke_v0_4_preserves_its_historical_binding_and_v0_3() -> None:
 def _assert_versioned_kernel_and_v4_freeze(
     profiles: list[dict[str, Any]], scenario_sets: list[dict[str, dict[str, Any]]]
 ) -> None:
-    """Every candidate profile selects wrapped_v2 and the same blocked v4 slots."""
+    """Every candidate profile selects wrapped_v2 and the same frozen v4 slots."""
     for payload, profile_scenarios in zip(profiles, scenario_sets, strict=True):
         assert [row["key"] for row in payload["planners"]] == EXPECTED_0_0_8_PLANNER_KEYS
         social_force = next(row for row in payload["planners"] if row["key"] == "social_force")
-        assert social_force["algo_config"] == (
-            "configs/algos/social_force_resolution_independent_v2_kernel_wrapped_v2.yaml"
-        )
+        assert social_force["algo_config"] == ("configs/algos/social_force_release_v0_0_8.yaml")
         assert (
             _algo_config(REPO_ROOT, social_force["algo_config"])["social_force_kernel_version"]
             == "wrapped_v2"
@@ -509,12 +529,12 @@ def _assert_versioned_kernel_and_v4_freeze(
                     _algo_config(REPO_ROOT, row["algo_config"])["release_parameter_freeze"][
                         "status"
                     ]
-                    == "unfrozen"
+                    == "frozen"
                 )
 
 
-def test_calibration_smoke_and_template_match_inputs_and_blocked_v4_slots() -> None:
-    """Runnable inputs match and all four v4 slots refuse resolution (#9850)."""
+def test_calibration_smoke_and_template_match_inputs_and_frozen_v4_slots() -> None:
+    """Runnable inputs match, with protocol-scoped admission provenance (#9850)."""
     assert _sha256(CAMPAIGN_TEMPLATE_PATH) == CAMPAIGN_TEMPLATE_SHA256
     paths = (CALIBRATION_CONFIG_PATH, RUNTIME_SMOKE_V05_CONFIG_PATH, CAMPAIGN_TEMPLATE_PATH)
     raw = [_load_yaml(path) for path in paths]
@@ -523,15 +543,19 @@ def test_calibration_smoke_and_template_match_inputs_and_blocked_v4_slots() -> N
         {row["name"]: row for row in _load_campaign_scenarios(config)} for config in configs
     ]
     calibration, smoke, template = raw
+    assert template["protocol_version"] == smoke["protocol_version"] == "0.0.8"
+    assert calibration["protocol_version"] == "0.0.8"
     assert calibration["planners"] == smoke["planners"] == template["planners"]
     _assert_versioned_kernel_and_v4_freeze(raw, scenarios)
     allowed_calibration_differences = {
+        "protocol_version",  # fixed-budget admission declaration; calibration is scheduled
         "arm_isolation",  # execution resource policy
         "export_publication_bundle",  # publication identity
         "name",  # publication identity
         "paper_facing",  # publication identity
         "seed_policy.mode",
         "seed_policy.seed_set",
+        "seed_policy.seed_sets_path",  # D-049 version-specific sealed schedule
         "seed_policy.seeds",
         "workers",  # execution resource policy
     }
@@ -553,6 +577,7 @@ def test_calibration_smoke_and_template_match_inputs_and_blocked_v4_slots() -> N
         "scenario_matrix",  # scenario subset
         "seed_policy.mode",
         "seed_policy.seed_set",
+        "seed_policy.seed_sets_path",  # D-049 version-specific sealed schedule
         "seed_policy.seeds",
         "snqi_contract.calibration_trials",  # bounded runtime resources
         "zenodo",  # publication identity
@@ -563,11 +588,19 @@ def test_calibration_smoke_and_template_match_inputs_and_blocked_v4_slots() -> N
     assert len(scenarios[0]) == len(scenarios[2]) == 48
     assert len(scenarios[1]) == 1
     assert len(configs[0].planners) == len(configs[1].planners) == len(configs[2].planners) == 14
-    assert {101, 102}.isdisjoint(range(111, 141))
+    assert {1001, 1002}.isdisjoint(range(111, 141))
     assert {103}.isdisjoint({101, 102} | set(range(111, 141)) | set(range(1001, 1031)))
-    assert {seed for row in scenarios[0].values() for seed in row["seeds"]} == {101, 102}
+    assert {seed for row in scenarios[0].values() for seed in row["seeds"]} == {1001, 1002}
     assert {seed for row in scenarios[1].values() for seed in row["seeds"]} == {103}
-    assert {seed for row in scenarios[2].values() for seed in row["seeds"]} == set(range(111, 141))
+    assert {seed for row in scenarios[2].values() for seed in row["seeds"]} == set(EVAL_SEEDS_0_0_8)
+    assert configs[2].horizon is None
+    assert {row["simulation_config"]["max_episode_steps"] for row in scenarios[2].values()} == {
+        400,
+        500,
+        600,
+        650,
+        700,
+    }
 
     mismatches: list[str] = []
     for index, label in ((0, "calibration"), (1, "smoke")):
@@ -583,9 +616,25 @@ def test_calibration_smoke_and_template_match_inputs_and_blocked_v4_slots() -> N
             right_scenario = dict(reference)
             left_scenario.pop("seeds", None)
             right_scenario.pop("seeds", None)
-            if left_scenario != right_scenario:
+            expected_scenario_differences = set()
+            actual_scenario_differences = _diff_paths(left_scenario, right_scenario)
+            if actual_scenario_differences != expected_scenario_differences:
                 mismatches.append(
-                    f"{label}.{name}.scenario: {_diff_paths(left_scenario, right_scenario)}"
+                    f"{label}.{name}.scenario: {actual_scenario_differences} "
+                    f"!= {expected_scenario_differences}"
+                )
+            if index == 0:
+                historical_schedule = scenario["metadata"]["scenario_horizon"]
+                current_schedule = reference["metadata"]["scenario_horizon"]
+                assert historical_schedule["sha256"] == configs[0].scenario_horizons_sha256
+                assert (
+                    historical_schedule["authored_max_episode_steps"]
+                    == reference["simulation_config"]["max_episode_steps"]
+                )
+                assert current_schedule["sha256"] == configs[2].scenario_horizons_sha256
+                assert (
+                    current_schedule["authored_max_episode_steps"]
+                    == (reference["simulation_config"]["max_episode_steps"])
                 )
             map_file = scenario.get("map_file")
             if map_file:
@@ -603,19 +652,24 @@ def test_calibration_smoke_and_template_match_inputs_and_blocked_v4_slots() -> N
 
 
 def test_runtime_smoke_v0_4_manifest_is_source_bound_and_refused_until_v4_freeze() -> None:
-    """The v0_4 manifest binds its smoke config and template; unfrozen v4 slots block it."""
+    """The historical v0_4 manifest remains bound to its blocked placeholder inputs."""
     template = _load_yaml(CAMPAIGN_TEMPLATE_PATH)
     manifest_payload = _load_yaml(RUNTIME_SMOKE_V04_MANIFEST_PATH)
     manifest = load_release_manifest(RUNTIME_SMOKE_V04_MANIFEST_PATH)
     validation = validate_release_manifest(manifest)
 
     # Issue #9751: the four v4 slots bind unfrozen placeholders until #9748, so the
-    # smoke manifest is refused with exactly those four blockers and nothing else.
+    # smoke manifest is refused for those four slots and the retired seed (D-049).
     assert validation["manifest_path"] == (
         "configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_4.yaml"
     )
     assert validation["status"] == "invalid"
-    assert validation["problem_count"] == len(REPLACED_V4_KEYS) == 4
+    assert len(REPLACED_V4_KEYS) == 4
+    assert validation["problem_count"] == 5
+    assert (
+        "retired evaluation seeds are forbidden for non-historical releases (D-049)"
+        in validation["problems"]
+    )
     for key in REPLACED_V4_KEYS:
         assert any(
             problem.startswith(f"planner {key}: release parameters are not frozen")
@@ -657,12 +711,20 @@ def test_runtime_smoke_v0_5_advances_wrapped_kernel_and_preserves_v0_4() -> None
     predecessor = _load_yaml(RUNTIME_SMOKE_V04_CONFIG_PATH)
     successor = _load_yaml(RUNTIME_SMOKE_V05_CONFIG_PATH)
     assert _diff_paths(predecessor, successor) == {
+        "protocol_version",
+        "horizon",
+        "scenario_horizons",
+        "scenario_horizons_sha256",
+        "comparability_mapping",
         "derived_from.config_sha256",
         "name",
         "planners",
         "release_tag",
         "scenario_matrix",
         "seed_policy.seeds",
+        "snqi_weights",
+        "snqi_baseline",
+        "snqi_contract.enabled",
     }
     assert successor["name"] == "paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_5"
     assert successor["release_tag"] == "paper-matrix-v2-h600-s30-runtime-smoke-v0_5"
@@ -683,6 +745,11 @@ def test_runtime_smoke_v0_5_advances_wrapped_kernel_and_preserves_v0_4() -> None
         "scenario.matrix_path",
         "scenario.matrix_sha256",
         "seed_policy.seeds",
+        "metrics.snqi_weights_path",
+        "metrics.snqi_weights_sha256",
+        "metrics.snqi_baseline_path",
+        "metrics.snqi_baseline_sha256",
+        "artifacts.required_paths",
     } | {f"planners.groups.{key}" for key in changed_group_keys}
     assert new_manifest["release_id"] == successor["name"]
     assert new_manifest["release_tag"] == successor["release_tag"]
@@ -693,17 +760,34 @@ def test_runtime_smoke_v0_5_advances_wrapped_kernel_and_preserves_v0_4() -> None
         REPO_ROOT / successor["scenario_matrix"]
     )
     assert new_manifest["planners"]["keys"] == EXPECTED_0_0_8_PLANNER_KEYS
+    assert new_manifest["artifacts"]["required_paths"] == [
+        "campaign_manifest.json",
+        "manifest.json",
+        "run_meta.json",
+        "preflight/validate_config.json",
+        "preflight/preview_scenarios.json",
+        "reports/campaign_summary.json",
+        "reports/campaign_report.md",
+        "reports/matrix_summary.json",
+        "reports/campaign_table.md",
+    ]
 
     manifest = load_release_manifest(RUNTIME_SMOKE_V05_MANIFEST_PATH)
     validation = validate_release_manifest(manifest)
     assert validation["manifest_path"] == (
         "configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_5.yaml"
     )
-    assert validation["status"] == "invalid"
-    assert validation["problem_count"] == len(REPLACED_V4_KEYS) == 4
-    for key in REPLACED_V4_KEYS:
-        assert any(
-            problem.startswith(f"planner {key}: release parameters are not frozen")
-            and "ll7/robot_sf_ll7#9748" in problem
-            for problem in validation["problems"]
-        ), key
+    assert validation["status"] == "valid"
+    assert validation["problem_count"] == 0
+
+
+def test_runtime_smoke_v0_5_spawn_preflight_resolves_only_seed_103() -> None:
+    """The release preflight must admit the fixed-list smoke seed before execution."""
+    manifest = load_release_manifest(RUNTIME_SMOKE_V05_MANIFEST_PATH)
+    _, scenarios, seeds = _release_manifest_inputs(manifest)
+    assert len(scenarios) == 1
+    assert seeds == (103,)
+    report = run_manifest_preflight(manifest, workers=1)
+    assert report["status"] == "valid", report.get("input_error")
+    assert report["seed_count"] == 1
+    assert report["blocked_cell_count"] == 0

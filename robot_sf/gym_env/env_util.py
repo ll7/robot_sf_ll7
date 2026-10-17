@@ -9,6 +9,7 @@ from typing import Any
 import numpy as np
 from gymnasium import spaces
 
+from robot_sf.benchmark.runtime_seed_guard import check_simulation_seed
 from robot_sf.gym_env.env_config import EnvSettings, PedEnvSettings, RobotEnvSettings
 from robot_sf.gym_env.observation_config import get_observation_stack_steps
 from robot_sf.gym_env.unified_config import PedestrianSimulationConfig, RobotSimulationConfig
@@ -67,6 +68,7 @@ def global_reset_seed(seed: int | None) -> Iterator[None]:
     a deterministic sensor config such as ``scan_noise=[0.0, 0.0]`` for
     Gymnasium's deterministic step checker.
     """
+    check_simulation_seed(seed, boundary="global_reset_seed")
     if seed is None:
         yield
         return

@@ -176,6 +176,26 @@ for retention classes, preservation proof, and cleanup-eligibility workflows.
   `1357ebd4084a5da077e10e5ab9ed74e5a4d9a9e4`, before strict certificate, map-registry, and
   actor-track checks. It cannot establish current selector acceptance and is retained only as
   historical audit context; the strict-gate gallery demo above is the current smoke reference.
+- `issue_9645_bounded_falsification_2026-09-24/`: diagnostic-only bounded falsification
+  receipt for the 64-run Random/TPE pilot. All four 16-candidate runs used the native `goal`
+  planner and stayed at objective 0.0, so the packet records **NO-GO for scaling #9648 under
+  the tested fixed-seed search domain**. It preserves a #1501 candidate regenerated from archived
+  parameters and replayed twice at its recorded regeneration revision; exact binding to the
+  historical execution remains unknown, so the candidate is not admitted to the corpus. It also
+  preserves the #9646 convergence report, candidate accounting, provenance, selected replay
+  traces, and five producer-exact comparison/manifest outputs. Separately, all 64 pilot candidate
+  episode records are retained as path-normalized report inputs under `payload/path_normalized_episode_records/`
+  (1.62 MB total); the exact producer bytes are withheld because they contain absolute host paths, and
+  the producer and normalized digests are both recorded. Route-path rewrites are explicitly
+  recorded. The rebuilt convergence report verifies a consistent source revision, while
+  severe-intrusion evidence is still absent and all pilot criticality remains unknown. Explicit
+  unknown-feasibility and claim-boundary caveats remain. This is not a planner ranking,
+  paper-facing benchmark result, or safety result.
+  `payload/metadata.json` declares the mixed conventions in `candidate_evaluations.csv`:
+  `distance_to_human_min_m` is center-to-center distance, while `min_clearance_m` is
+  surface clearance after subtracting the robot and pedestrian radii. Entries in
+  `distance_convention_by_column` override the scalar `distance_convention` for their named
+  columns; the scalar applies where no column override is listed.
 
 - `issue_6151_simulator_dependence_synthesis_2026-09-13/`: bounded negative synthesis for the
   #3207 validity-boundary parent. The only defensible verdict is `invalid_missing_evidence`:

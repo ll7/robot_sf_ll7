@@ -108,3 +108,16 @@ def test_completion_time_uses_native_success_metric() -> None:
     assert runner._completion_time_s(record, dt=0.1) == pytest.approx(13.4)
     with pytest.raises(ValueError, match="invalid success-only"):
         runner._completion_time_s({"horizon": 600, "metrics": {}}, dt=0.1)
+
+
+def test_v2_runner_preserves_authored_source_budgets():
+    """Future 0.0.8 development runs use H500/H400, never the v1 H600 extension."""
+    campaign = load_campaign_config(runner.CAMPAIGN_PATH)
+    assert campaign.horizon is None
+    scenarios = _load_campaign_scenarios(campaign)
+    assert {s["name"]: s["simulation_config"]["max_episode_steps"] for s in scenarios} == {
+        "issue_9748_dev_classic_doorway_medium": 500,
+        "issue_9748_dev_classic_group_crossing_medium": 500,
+        "issue_9748_dev_francis2023_perpendicular_traffic": 400,
+        "issue_9748_dev_francis2023_crowd_navigation": 400,
+    }

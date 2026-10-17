@@ -1,0 +1,20 @@
+{
+  "claim_boundary": "simulation-derived diagnostic metrics only; not physical measurements or a safety claim",
+  "distance_convention": "center_center",
+  "distance_convention_by_column": {
+    "distance_to_human_min_m": "center_center",
+    "min_clearance_m": "surface_clearance"
+  },
+  "distance_convention_precedence": "For a listed metric, distance_convention_by_column overrides distance_convention; otherwise distance_convention applies.",
+  "distance_semantics_by_column": {
+    "distance_to_human_min_m": "minimum robot-to-pedestrian center-to-center distance",
+    "min_clearance_m": "minimum center-to-center separation minus the sum of robot and pedestrian radii"
+  },
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "adversarial_candidate_series_metadata.v1",
+  "series_path": "candidate_evaluations.csv",
+  "units_by_column": {
+    "distance_to_human_min_m": "m",
+    "min_clearance_m": "m"
+  }
+}

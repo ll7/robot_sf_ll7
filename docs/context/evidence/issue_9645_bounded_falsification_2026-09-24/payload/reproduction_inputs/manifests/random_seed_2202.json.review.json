@@ -1,0 +1,7 @@
+{
+  "artifact_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/reproduction_inputs/manifests/random_seed_2202.json",
+  "artifact_sha256": "2c56663bf9385781a0a38e1338ec0ebb4ffa2146e55044066d0cc0a94bc7e9c8",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "evidence-review-marker.v1"
+}

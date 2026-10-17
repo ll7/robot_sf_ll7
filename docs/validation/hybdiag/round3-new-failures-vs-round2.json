@@ -1,0 +1,1591 @@
+[
+  {
+    "world": "crowd",
+    "scenario": "classic_cross_trap_high",
+    "seed": 1021,
+    "arm": "platform",
+    "outcome": "timeout",
+    "final_goal_distance_m": 11.177625660550085,
+    "final_diagnostics": {
+      "command": [
+        0.0,
+        0.0
+      ],
+      "feasible_moving_count": 0,
+      "stop_kind": "FORCED",
+      "constraints": [
+        {
+          "constraint": "exact_body_wall_overlap",
+          "threshold_name": "exclusion_radius_m",
+          "threshold": 1.2,
+          "rejected": 66
+        }
+      ],
+      "progress_windows": {
+        "1s": 0.0,
+        "3s": 0.0,
+        "5s": 0.0
+      },
+      "speed_safety": {
+        "model": "hybrid_rule_v4_clearance_braking",
+        "min_surface_clearance": 0.6145387855230657,
+        "level": "braking",
+        "band_cap": 2.0,
+        "braking_cap": 0.9193515430440327,
+        "speed_cap": 0.9193515430440327,
+        "reaction_time": 0.10000000149011612
+      }
+    }
+  },
+  {
+    "world": "crowd",
+    "scenario": "classic_cross_trap_high",
+    "seed": 1023,
+    "arm": "platform",
+    "outcome": "timeout",
+    "final_goal_distance_m": 16.60872734075532,
+    "final_diagnostics": {
+      "command": [
+        0.0,
+        0.0
+      ],
+      "feasible_moving_count": 0,
+      "stop_kind": "FORCED",
+      "constraints": [
+        {
+          "constraint": "exact_body_wall_overlap",
+          "threshold_name": "exclusion_radius_m",
+          "threshold": 1.2,
+          "rejected": 65
+        }
+      ],
+      "progress_windows": {
+        "1s": 0.0,
+        "3s": 0.0,
+        "5s": 0.0
+      },
+      "speed_safety": {
+        "model": "hybrid_rule_v4_clearance_braking",
+        "min_surface_clearance": 0.6128210785323964,
+        "level": "braking",
+        "band_cap": 2.0,
+        "braking_cap": 0.9176650501662804,
+        "speed_cap": 0.9176650501662804,
+        "reaction_time": 0.10000000149011612
+      }
+    }
+  },
+  {
+    "world": "crowd",
+    "scenario": "classic_station_platform_medium",
+    "seed": 1001,
+    "arm": "both",
+    "outcome": "timeout",
+    "final_goal_distance_m": 11.818800646319614,
+    "final_diagnostics": {
+      "command": [
+        2.0,
+        0.0018199952240927075
+      ],
+      "feasible_moving_count": 66,
+      "stop_kind": null,
+      "constraints": [],
+      "progress_windows": {
+        "1s": 1.7749551936401335,
+        "3s": 4.230528916777965,
+        "5s": 5.963981992462019
+      },
+      "speed_safety": {
+        "model": "hybrid_rule_v4_clearance_braking",
+        "min_surface_clearance": 3.984532956124916,
+        "level": "braking",
+        "band_cap": 2.0,
+        "braking_cap": 2.689097686391729,
+        "speed_cap": 2.0,
+        "reaction_time": 0.10000000149011612
+      }
+    }
+  },
+  {
+    "world": "crowd",
+    "scenario": "classic_station_platform_medium",
+    "seed": 1001,
+    "arm": "platform",
+    "outcome": "timeout",
+    "final_goal_distance_m": 13.937570172465934,
+    "final_diagnostics": {
+      "command": [
+        0.6895614668737997,
+        0.0
+      ],
+      "feasible_moving_count": 77,
+      "stop_kind": null,
+      "constraints": [],
+      "progress_windows": {
+        "1s": 0.5162647740106259,
+        "3s": 1.3580511025303608,
+        "5s": 1.6871062416945506
+      },
+      "speed_safety": {
+        "model": "hybrid_rule_v4_clearance_braking",
+        "min_surface_clearance": 0.4067036560134798,
+        "level": "moderate",
+        "band_cap": 0.6,
+        "braking_cap": 0.6895614668737997,
+        "speed_cap": 0.6,
+        "reaction_time": 0.10000000149011612
+      }
+    }
+  },
+  {
+    "world": "crowd",
+    "scenario": "classic_station_platform_medium",
+    "seed": 1003,
+    "arm": "both",
+    "outcome": "timeout",
+    "final_goal_distance_m": 13.09219433306001,
+    "final_diagnostics": {
+      "command": [
+        0.92207500055223,
+        -0.1991824747552834
+      ],
+      "feasible_moving_count": 66,
+      "stop_kind": null,
+      "constraints": [],
+      "progress_windows": {
+        "1s": 0.7782695487602052,
+        "3s": 1.6228083227430457,
+        "5s": -9.356789137674792
+      },
+      "speed_safety": {
+        "model": "hybrid_rule_v4_clearance_braking",
+        "min_surface_clearance": 0.6173186547509193,
+        "level": "braking",
+        "band_cap": 2.0,
+        "braking_cap": 0.92207500055223,
+        "speed_cap": 0.92207500055223,
+        "reaction_time": 0.10000000149011612
+      }
+    }
+  },
+  {
+    "world": "crowd",
+    "scenario": "classic_station_platform_medium",
+    "seed": 1003,
+    "arm": "platform",
+    "outcome": "timeout",
+    "final_goal_distance_m": 17.297550371604483,
+    "final_diagnostics": {
+      "command": [
+        0.43935882361094947,
+        0.0
+      ],
+      "feasible_moving_count": 103,
+      "stop_kind": null,
+      "constraints": [
+        {
+          "constraint": "dynamic_collision",
+          "threshold_name": "collision_radius_m",
+          "threshold": 1.6000000059604644,
+          "rejected": 8
+        }
+      ],
+      "progress_windows": {
+        "1s": 0.32934405380739307,
+        "3s": 0.7153548759099131,
+        "5s": 0.9844413861277737
+      },
+      "speed_safety": {
+        "model": "hybrid_rule_v4_clearance_braking",
+        "min_surface_clearance": 0.2917091062560029,
+        "level": "slow",
+        "band_cap": 0.15,
+        "braking_cap": 0.5272305883331394,
+        "speed_cap": 0.15,
+        "reaction_time": 0.10000000149011612
+      }
+    }
+  },
+  {
+    "world": "crowd",
+    "scenario": "classic_station_platform_medium",
+    "seed": 1004,
+    "arm": "both",
+    "outcome": "timeout",
+    "final_goal_distance_m": 9.115389712848835,
+    "final_diagnostics": {
+      "command": [
+        0.09999999999999999,
+        0.0
+      ],
+      "feasible_moving_count": 10,
+      "stop_kind": null,
+      "constraints": [
+        {
+          "constraint": "dynamic_collision",
+          "threshold_name": "collision_radius_m",
+          "threshold": 1.6000000059604644,
+          "rejected": 56
+        }
+      ],
+      "progress_windows": {
+        "1s": 0.032285291628474155,
+        "3s": 0.22515793710752874,
+        "5s": 3.0358574931449915
+      },
+      "speed_safety": {
+        "model": "hybrid_rule_v4_clearance_braking",
+        "min_surface_clearance": 0.38952887406001047,
+        "level": "moderate",
+        "band_cap": 0.6,
+        "braking_cap": 0.66750097467737,
+        "speed_cap": 0.6,
+        "reaction_time": 0.10000000149011612
+      }
+    }
+  },
+  {
+    "world": "crowd",
+    "scenario": "classic_station_platform_medium",
+    "seed": 1004,
+    "arm": "platform",
+    "outcome": "timeout",
+    "final_goal_distance_m": 8.991763052267034,
+    "final_diagnostics": {
+      "command": [
+        0.19999999999999998,
+        -0.10000000149011612
+      ],
+      "feasible_moving_count": 28,
+      "stop_kind": null,
+      "constraints": [
+        {
+          "constraint": "dynamic_collision",
+          "threshold_name": "collision_radius_m",
+          "threshold": 1.6000000059604644,
+          "rejected": 39
+        }
+      ],
+      "progress_windows": {
+        "1s": 0.13460357381417332,
+        "3s": 0.31980214906711524,
+        "5s": 3.2494792434893274
+      },
+      "speed_safety": {
+        "model": "hybrid_rule_v4_clearance_braking",
+        "min_surface_clearance": 0.4125389810834077,
+        "level": "moderate",
+        "band_cap": 0.6,
+        "braking_cap": 0.6969177875350998,
+        "speed_cap": 0.6,
+        "reaction_time": 0.10000000149011612
+      }
+    }
+  },
+  {
+    "world": "crowd",
+    "scenario": "classic_station_platform_medium",
+    "seed": 1005,
+    "arm": "platform",
+    "outcome": "timeout",
+    "final_goal_distance_m": 8.586466949484054,
+    "final_diagnostics": {
+      "command": [
+        0.7689216045535325,
+        0.20081753120517787
+      ],
+      "feasible_moving_count": 90,
+      "stop_kind": null,
+      "constraints": [],
+      "progress_windows": {
+        "1s": 0.68816681807062,
+        "3s": 2.175345412646374,
+        "5s": 5.25343659120651
+      },
+      "speed_safety": {
+        "model": "hybrid_rule_v4_clearance_braking",
+        "min_surface_clearance": 0.47251237857572526,
+        "level": "moderate",
+        "band_cap": 0.6,
+        "braking_cap": 0.7689216045535325,
+        "speed_cap": 0.6,
+        "reaction_time": 0.10000000149011612
+      }
+    }
+  },
+  {
+    "world": "crowd",
+    "scenario": "classic_station_platform_medium",
+    "seed": 1007,
+    "arm": "both",
+    "outcome": "timeout",
+    "final_goal_distance_m": 7.435685818129365,
+    "final_diagnostics": {
+      "command": [
+        0.300615789492925,
+        -0.3853938098806658
+      ],
+      "feasible_moving_count": 37,
+      "stop_kind": null,
+      "constraints": [
+        {
+          "constraint": "dynamic_collision",
+          "threshold_name": "collision_radius_m",
+          "threshold": 1.6000000059604644,
+          "rejected": 19
+        }
+      ],
+      "progress_windows": {
+        "1s": 0.47699039845134106,
+        "3s": 2.9091870235047255,
+        "5s": 4.6383164552805765
+      },
+      "speed_safety": {
+        "model": "hybrid_rule_v4_clearance_braking",
+        "min_surface_clearance": 1.2472716947489584,
+        "level": "braking",
+        "band_cap": 2.0,
+        "braking_cap": 1.4180722595686055,
+        "speed_cap": 1.4180722595686055,
+        "reaction_time": 0.10000000149011612
+      }
+    }
+  },
+  {
+    "world": "crowd",
+    "scenario": "classic_station_platform_medium",
+    "seed": 1007,
+    "arm": "platform",
+    "outcome": "timeout",
+    "final_goal_distance_m": 7.878863003894644,
+    "final_diagnostics": {
+      "command": [
+        0.3820908586184184,
+        5.587935447692871e-09
+      ],
+      "feasible_moving_count": 56,
+      "stop_kind": null,
+      "constraints": [],
+      "progress_windows": {
+        "1s": 0.8965549018916503,
+        "3s": 3.209383532114411,
+        "5s": 5.356138328893306
+      },
+      "speed_safety": {
+        "model": "hybrid_rule_v4_clearance_braking",
+        "min_surface_clearance": 1.6583126067258536,
+        "level": "braking",
+        "band_cap": 2.0,
+        "braking_cap": 1.6682265715908706,
+        "speed_cap": 1.6682265715908706,
+        "reaction_time": 0.10000000149011612
+      }
+    }
+  },
+  {
+    "world": "crowd",
+    "scenario": "classic_station_platform_medium",
+    "seed": 1008,
+    "arm": "both",
+    "outcome": "timeout",
+    "final_goal_distance_m": 4.267420042038684,
+    "final_diagnostics": {
+      "command": [
+        1.6416666626930236,
+        0.10081752971506097
+      ],
+      "feasible_moving_count": 66,
+      "stop_kind": null,
+      "constraints": [],
+      "progress_windows": {
+        "1s": 1.7779907978943053,
+        "3s": 5.77221503826213,
+        "5s": 9.601117510308853
+      },
+      "speed_safety": {
+        "model": "hybrid_rule_v4_clearance_braking",
+        "min_surface_clearance": 3.580854438260692,
+        "level": "braking",
+        "band_cap": 2.0,
+        "braking_cap": 2.540399376789505,
+        "speed_cap": 2.0,
+        "reaction_time": 0.10000000149011612
+      }
+    }
+  },
+  {
+    "world": "crowd",
+    "scenario": "classic_station_platform_medium",
+    "seed": 1008,
+    "arm": "platform",
+    "outcome": "timeout",
+    "final_goal_distance_m": 8.66988791959888,
+    "final_diagnostics": {
+      "command": [
+        2.0,
+        0.0
+      ],
+      "feasible_moving_count": 66,
+      "stop_kind": null,
+      "constraints": [],
+      "progress_windows": {
+        "1s": 1.7990655301495906,
+        "3s": 5.660044616477208,
+        "5s": 7.58345280772709
+      },
+      "speed_safety": {
+        "model": "hybrid_rule_v4_clearance_braking",
+        "min_surface_clearance": 6.5894417360378235,
+        "level": "braking",
+        "band_cap": 2.0,
+        "braking_cap": 3.50400935925989,
+        "speed_cap": 2.0,
+        "reaction_time": 0.10000000149011612
+      }
+    }
+  },
+  {
+    "world": "crowd",
+    "scenario": "classic_station_platform_medium",
+    "seed": 1009,
+    "arm": "platform",
+    "outcome": "timeout",
+    "final_goal_distance_m": 14.334092552842804,
+    "final_diagnostics": {
+      "command": [
+        1.640600895881653,
+        -0.0922141086829964
+      ],
+      "feasible_moving_count": 66,
+      "stop_kind": null,
+      "constraints": [],
+      "progress_windows": {
+        "1s": -11.828684194796764,
+        "3s": -7.876490868814613,
+        "5s": -3.8848893909143136
+      },
+      "speed_safety": {
+        "model": "hybrid_rule_v4_clearance_braking",
+        "min_surface_clearance": 4.1235303801846,
+        "level": "braking",
+        "band_cap": 2.0,
+        "braking_cap": 2.7384962131748294,
+        "speed_cap": 2.0,
+        "reaction_time": 0.10000000149011612
+      }
+    }
+  },
+  {
+    "world": "crowd",
+    "scenario": "classic_station_platform_medium",
+    "seed": 1010,
+    "arm": "both",
+    "outcome": "timeout",
+    "final_goal_distance_m": 9.333667917248857,
+    "final_diagnostics": {
+      "command": [
+        1.880555554231008,
+        0.39871510388284515
+      ],
+      "feasible_moving_count": 66,
+      "stop_kind": null,
+      "constraints": [],
+      "progress_windows": {
+        "1s": 1.7841168528918097,
+        "3s": 5.781683998883601,
+        "5s": 8.135788632091812
+      },
+      "speed_safety": {
+        "model": "hybrid_rule_v4_clearance_braking",
+        "min_surface_clearance": 3.812137368855426,
+        "level": "braking",
+        "band_cap": 2.0,
+        "braking_cap": 2.6265866444848243,
+        "speed_cap": 2.0,
+        "reaction_time": 0.10000000149011612
+      }
+    }
+  },
+  {
+    "world": "crowd",
+    "scenario": "classic_station_platform_medium",
+    "seed": 1011,
+    "arm": "both",
+    "outcome": "timeout",
+    "final_goal_distance_m": 15.3682186639321,
+    "final_diagnostics": {
+      "command": [
+        0.5940700250226537,
+        0.15000000000000002
+      ],
+      "feasible_moving_count": 111,
+      "stop_kind": null,
+      "constraints": [],
+      "progress_windows": {
+        "1s": 0.48232682572950303,
+        "3s": 1.377114236811467,
+        "5s": 1.8983879576707832
+      },
+      "speed_safety": {
+        "model": "hybrid_rule_v4_clearance_braking",
+        "min_surface_clearance": 0.3358666007027069,
+        "level": "slow",
+        "band_cap": 0.15,
+        "braking_cap": 0.5940700250226537,
+        "speed_cap": 0.15,
+        "reaction_time": 0.10000000149011612
+      }
+    }
+  },
+  {
+    "world": "crowd",
+    "scenario": "classic_station_platform_medium",
+    "seed": 1011,
+    "arm": "platform",
+    "outcome": "timeout",
+    "final_goal_distance_m": 14.969250059920217,
+    "final_diagnostics": {
+      "command": [
+        0.3014481981595357,
+        -0.10000000149011612
+      ],
+      "feasible_moving_count": 57,
+      "stop_kind": null,
+      "constraints": [],
+      "progress_windows": {
+        "1s": 0.48250018041314036,
+        "3s": 1.457118298087881,
+        "5s": 1.897019414238116
+      },
+      "speed_safety": {
+        "model": "hybrid_rule_v4_clearance_braking",
+        "min_surface_clearance": 0.9126840083377581,
+        "level": "braking",
+        "band_cap": 2.0,
+        "braking_cap": 1.1788150816917877,
+        "speed_cap": 1.1788150816917877,
+        "reaction_time": 0.10000000149011612
+      }
+    }
+  },
+  {
+    "world": "crowd",
+    "scenario": "classic_station_platform_medium",
+    "seed": 1013,
+    "arm": "both",
+    "outcome": "timeout",
+    "final_goal_distance_m": 11.194092121412003,
+    "final_diagnostics": {
+      "command": [
+        1.0595275399410373,
+        0.20081753120518187
+      ],
+      "feasible_moving_count": 66,
+      "stop_kind": null,
+      "constraints": [],
+      "progress_windows": {
+        "1s": 0.7423959527023474,
+        "3s": 2.3860965419699216,
+        "5s": 3.076776681258229
+      },
+      "speed_safety": {
+        "model": "hybrid_rule_v4_clearance_braking",
+        "min_surface_clearance": 0.7672520595196759,
+        "level": "braking",
+        "band_cap": 2.0,
+        "braking_cap": 1.0595275399410373,
+        "speed_cap": 1.0595275399410373,
+        "reaction_time": 0.10000000149011612
+      }
+    }
+  },
+  {
+    "world": "crowd",
+    "scenario": "classic_station_platform_medium",
+    "seed": 1013,
+    "arm": "platform",
+    "outcome": "timeout",
+    "final_goal_distance_m": 3.852546255837839,
+    "final_diagnostics": {
+      "command": [
+        2.0,
+        0.010244390160632832
+      ],
+      "feasible_moving_count": 66,
+      "stop_kind": null,
+      "constraints": [],
+      "progress_windows": {
+        "1s": 1.7982287611292342,
+        "3s": 5.279243250238828,
+        "5s": 7.434838909795026
+      },
+      "speed_safety": {
+        "model": "hybrid_rule_v4_clearance_braking",
+        "min_surface_clearance": 4.343713970689673,
+        "level": "braking",
+        "band_cap": 2.0,
+        "braking_cap": 2.8150348081952448,
+        "speed_cap": 2.0,
+        "reaction_time": 0.10000000149011612
+      }
+    }
+  },
+  {
+    "world": "crowd",
+    "scenario": "classic_station_platform_medium",
+    "seed": 1014,
+    "arm": "both",
+    "outcome": "timeout",
+    "final_goal_distance_m": 2.9411469495072087,
+    "final_diagnostics": {
+      "command": [
+        1.1948525606535003,
+        0.002390774253697714
+      ],
+      "feasible_moving_count": 56,
+      "stop_kind": null,
+      "constraints": [
+        {
+          "constraint": "dynamic_collision",
+          "threshold_name": "collision_radius_m",
+          "threshold": 1.6000000059604644,
+          "rejected": 10
+        }
+      ],
+      "progress_windows": {
+        "1s": 0.7871938259870852,
+        "3s": 2.9068503717991643,
+        "5s": 4.851643925716528
+      },
+      "speed_safety": {
+        "model": "hybrid_rule_v4_clearance_braking",
+        "min_surface_clearance": 0.9333215786959324,
+        "level": "braking",
+        "band_cap": 2.0,
+        "braking_cap": 1.1948525606535003,
+        "speed_cap": 1.1948525606535003,
+        "reaction_time": 0.10000000149011612
+      }
+    }
+  },
+  {
+    "world": "crowd",
+    "scenario": "classic_station_platform_medium",
+    "seed": 1014,
+    "arm": "platform",
+    "outcome": "timeout",
+    "final_goal_distance_m": 3.3505012163619905,
+    "final_diagnostics": {
+      "command": [
+        0.9105743785193595,
+        0.30000000447034836
+      ],
+      "feasible_moving_count": 64,
+      "stop_kind": null,
+      "constraints": [
+        {
+          "constraint": "dynamic_collision",
+          "threshold_name": "collision_radius_m",
+          "threshold": 1.6000000059604644,
+          "rejected": 2
+        }
+      ],
+      "progress_windows": {
+        "1s": 0.6941848692007273,
+        "3s": 2.965102577490047,
+        "5s": 5.072284587649723
+      },
+      "speed_safety": {
+        "model": "hybrid_rule_v4_clearance_braking",
+        "min_surface_clearance": 0.7301325595859995,
+        "level": "braking",
+        "band_cap": 2.0,
+        "braking_cap": 1.0270603870738784,
+        "speed_cap": 1.0270603870738784,
+        "reaction_time": 0.10000000149011612
+      }
+    }
+  },
+  {
+    "world": "crowd",
+    "scenario": "classic_station_platform_medium",
+    "seed": 1015,
+    "arm": "both",
+    "outcome": "timeout",
+    "final_goal_distance_m": 2.4307039423029306,
+    "final_diagnostics": {
+      "command": [
+        1.5882980942726135,
+        -0.025733838784415708
+      ],
+      "feasible_moving_count": 66,
+      "stop_kind": null,
+      "constraints": [],
+      "progress_windows": {
+        "1s": 1.7739191062467565,
+        "3s": 5.773744310404706,
+        "5s": 9.770670459430665
+      },
+      "speed_safety": {
+        "model": "hybrid_rule_v4_clearance_braking",
+        "min_surface_clearance": 7.453093557161482,
+        "level": "braking",
+        "band_cap": 2.0,
+        "braking_cap": 3.7361682840027126,
+        "speed_cap": 2.0,
+        "reaction_time": 0.10000000149011612
+      }
+    }
+  },
+  {
+    "world": "crowd",
+    "scenario": "classic_station_platform_medium",
+    "seed": 1015,
+    "arm": "platform",
+    "outcome": "timeout",
+    "final_goal_distance_m": 11.028997424964745,
+    "final_diagnostics": {
+      "command": [
+        0.0,
+        0.0
+      ],
+      "feasible_moving_count": 0,
+      "stop_kind": "FORCED",
+      "constraints": [
+        {
+          "constraint": "dynamic_collision",
+          "threshold_name": "collision_radius_m",
+          "threshold": 1.6000000059604644,
+          "rejected": 124
+        }
+      ],
+      "progress_windows": {
+        "1s": 0.05666209242071574,
+        "3s": 0.07699006558743982,
+        "5s": 0.24753150642579058
+      },
+      "speed_safety": {
+        "model": "hybrid_rule_v4_clearance_braking",
+        "min_surface_clearance": 0.3241244927426521,
+        "level": "slow",
+        "band_cap": 0.15,
+        "braking_cap": 0.5769409012357625,
+        "speed_cap": 0.15,
+        "reaction_time": 0.10000000149011612
+      }
+    }
+  },
+  {
+    "world": "crowd",
+    "scenario": "classic_station_platform_medium",
+    "seed": 1016,
+    "arm": "both",
+    "outcome": "timeout",
+    "final_goal_distance_m": 10.940785932785968,
+    "final_diagnostics": {
+      "command": [
+        2.0,
+        0.013810654730651906
+      ],
+      "feasible_moving_count": 66,
+      "stop_kind": null,
+      "constraints": [],
+      "progress_windows": {
+        "1s": 1.7981530787985722,
+        "3s": 5.16929219064426,
+        "5s": 6.872260564871283
+      },
+      "speed_safety": {
+        "model": "hybrid_rule_v4_clearance_braking",
+        "min_surface_clearance": 4.345496563651411,
+        "level": "braking",
+        "band_cap": 2.0,
+        "braking_cap": 2.815646260936251,
+        "speed_cap": 2.0,
+        "reaction_time": 0.10000000149011612
+      }
+    }
+  },
+  {
+    "world": "crowd",
+    "scenario": "classic_station_platform_medium",
+    "seed": 1016,
+    "arm": "platform",
+    "outcome": "timeout",
+    "final_goal_distance_m": 13.6034049636804,
+    "final_diagnostics": {
+      "command": [
+        0.807811356405037,
+        -0.19918247475528827
+      ],
+      "feasible_moving_count": 87,
+      "stop_kind": null,
+      "constraints": [],
+      "progress_windows": {
+        "1s": 0.5730713764583868,
+        "3s": -11.672380076612797,
+        "5s": -10.819196999089838
+      },
+      "speed_safety": {
+        "model": "hybrid_rule_v4_clearance_braking",
+        "min_surface_clearance": 0.5070607306127093,
+        "level": "moderate",
+        "band_cap": 0.6,
+        "braking_cap": 0.807811356405037,
+        "speed_cap": 0.6,
+        "reaction_time": 0.10000000149011612
+      }
+    }
+  },
+  {
+    "world": "crowd",
+    "scenario": "classic_station_platform_medium",
+    "seed": 1017,
+    "arm": "both",
+    "outcome": "timeout",
+    "final_goal_distance_m": 8.529526527056829,
+    "final_diagnostics": {
+      "command": [
+        0.6295292388178393,
+        0.3512207150874018
+      ],
+      "feasible_moving_count": 78,
+      "stop_kind": null,
+      "constraints": [],
+      "progress_windows": {
+        "1s": 0.6091404690295708,
+        "3s": 2.8764578810275427,
+        "5s": 4.482155796455276
+      },
+      "speed_safety": {
+        "model": "hybrid_rule_v4_clearance_braking",
+        "min_surface_clearance": 0.3611064560831396,
+        "level": "moderate",
+        "band_cap": 0.6,
+        "braking_cap": 0.6295292388178393,
+        "speed_cap": 0.6,
+        "reaction_time": 0.10000000149011612
+      }
+    }
+  },
+  {
+    "world": "crowd",
+    "scenario": "classic_station_platform_medium",
+    "seed": 1017,
+    "arm": "platform",
+    "outcome": "timeout",
+    "final_goal_distance_m": 7.359727032304114,
+    "final_diagnostics": {
+      "command": [
+        0.9708566531800751,
+        0.0003143376014998478
+      ],
+      "feasible_moving_count": 66,
+      "stop_kind": null,
+      "constraints": [],
+      "progress_windows": {
+        "1s": 0.5910848022919879,
+        "3s": 2.3102777776580847,
+        "5s": 4.211759857645314
+      },
+      "speed_safety": {
+        "model": "hybrid_rule_v4_clearance_braking",
+        "min_surface_clearance": 0.6683669872767051,
+        "level": "braking",
+        "band_cap": 2.0,
+        "braking_cap": 0.9708566531800751,
+        "speed_cap": 0.9708566531800751,
+        "reaction_time": 0.10000000149011612
+      }
+    }
+  },
+  {
+    "world": "crowd",
+    "scenario": "classic_station_platform_medium",
+    "seed": 1018,
+    "arm": "both",
+    "outcome": "timeout",
+    "final_goal_distance_m": 16.5173067075607,
+    "final_diagnostics": {
+      "command": [
+        0.6909804124936617,
+        0.15000000000000002
+      ],
+      "feasible_moving_count": 77,
+      "stop_kind": null,
+      "constraints": [],
+      "progress_windows": {
+        "1s": 0.6160909514917456,
+        "3s": 1.3009804400998668,
+        "5s": 1.3682220800088274
+      },
+      "speed_safety": {
+        "model": "hybrid_rule_v4_clearance_braking",
+        "min_surface_clearance": 0.40782500750396267,
+        "level": "moderate",
+        "band_cap": 0.6,
+        "braking_cap": 0.6909804124936617,
+        "speed_cap": 0.6,
+        "reaction_time": 0.10000000149011612
+      }
+    }
+  },
+  {
+    "world": "crowd",
+    "scenario": "classic_station_platform_medium",
+    "seed": 1018,
+    "arm": "platform",
+    "outcome": "timeout",
+    "final_goal_distance_m": 13.535614152222806,
+    "final_diagnostics": {
+      "command": [
+        1.145043317552117,
+        0.10094143706187098
+      ],
+      "feasible_moving_count": 51,
+      "stop_kind": null,
+      "constraints": [
+        {
+          "constraint": "dynamic_collision",
+          "threshold_name": "collision_radius_m",
+          "threshold": 1.6000000059604644,
+          "rejected": 15
+        }
+      ],
+      "progress_windows": {
+        "1s": 1.1881478913039327,
+        "3s": 3.311869268531538,
+        "5s": 4.624089970545199
+      },
+      "speed_safety": {
+        "model": "hybrid_rule_v4_clearance_braking",
+        "min_surface_clearance": 0.8700664329968384,
+        "level": "braking",
+        "band_cap": 2.0,
+        "braking_cap": 1.145043317552117,
+        "speed_cap": 1.145043317552117,
+        "reaction_time": 0.10000000149011612
+      }
+    }
+  },
+  {
+    "world": "crowd",
+    "scenario": "classic_station_platform_medium",
+    "seed": 1019,
+    "arm": "platform",
+    "outcome": "timeout",
+    "final_goal_distance_m": 16.649600176246196,
+    "final_diagnostics": {
+      "command": [
+        0.6444317346849301,
+        0.33750001098960636
+      ],
+      "feasible_moving_count": 78,
+      "stop_kind": null,
+      "constraints": [],
+      "progress_windows": {
+        "1s": 0.40559462360882037,
+        "3s": 0.8112547273731643,
+        "5s": 1.065850537021877
+      },
+      "speed_safety": {
+        "model": "hybrid_rule_v4_clearance_braking",
+        "min_surface_clearance": 0.37208930476328517,
+        "level": "moderate",
+        "band_cap": 0.6,
+        "braking_cap": 0.6444317346849301,
+        "speed_cap": 0.6,
+        "reaction_time": 0.10000000149011612
+      }
+    }
+  },
+  {
+    "world": "crowd",
+    "scenario": "classic_station_platform_medium",
+    "seed": 1021,
+    "arm": "both",
+    "outcome": "timeout",
+    "final_goal_distance_m": 6.513447203929368,
+    "final_diagnostics": {
+      "command": [
+        1.140007402216037,
+        0.7749999989755453
+      ],
+      "feasible_moving_count": 35,
+      "stop_kind": null,
+      "constraints": [
+        {
+          "constraint": "braking_infeasible",
+          "threshold_name": "collision_radius_m",
+          "threshold": 1.6000000059604644,
+          "rejected": 5
+        },
+        {
+          "constraint": "dynamic_collision",
+          "threshold_name": "collision_radius_m",
+          "threshold": 1.6000000059604644,
+          "rejected": 26
+        }
+      ],
+      "progress_windows": {
+        "1s": 1.3549401884772578,
+        "3s": 5.323093769926768,
+        "5s": 9.022356026631236
+      },
+      "speed_safety": {
+        "model": "hybrid_rule_v4_clearance_braking",
+        "min_surface_clearance": 1.2371649623261085,
+        "level": "braking",
+        "band_cap": 2.0,
+        "braking_cap": 1.4113999869147535,
+        "speed_cap": 1.4113999869147535,
+        "reaction_time": 0.10000000149011612
+      }
+    }
+  },
+  {
+    "world": "crowd",
+    "scenario": "classic_station_platform_medium",
+    "seed": 1021,
+    "arm": "platform",
+    "outcome": "timeout",
+    "final_goal_distance_m": 6.557034630714676,
+    "final_diagnostics": {
+      "command": [
+        0.23333331346511843,
+        -0.03049778651666335
+      ],
+      "feasible_moving_count": 43,
+      "stop_kind": null,
+      "constraints": [
+        {
+          "constraint": "dynamic_collision",
+          "threshold_name": "collision_radius_m",
+          "threshold": 1.6000000059604644,
+          "rejected": 23
+        }
+      ],
+      "progress_windows": {
+        "1s": 1.090548280923171,
+        "3s": 5.03825558470386,
+        "5s": 8.80679020818674
+      },
+      "speed_safety": {
+        "model": "hybrid_rule_v4_clearance_braking",
+        "min_surface_clearance": 1.239774337946304,
+        "level": "braking",
+        "band_cap": 2.0,
+        "braking_cap": 1.4131254646198925,
+        "speed_cap": 1.4131254646198925,
+        "reaction_time": 0.10000000149011612
+      }
+    }
+  },
+  {
+    "world": "crowd",
+    "scenario": "classic_station_platform_medium",
+    "seed": 1022,
+    "arm": "both",
+    "outcome": "timeout",
+    "final_goal_distance_m": 15.393823451386433,
+    "final_diagnostics": {
+      "command": [
+        0.2689955939207891,
+        0.0
+      ],
+      "feasible_moving_count": 83,
+      "stop_kind": null,
+      "constraints": [
+        {
+          "constraint": "dynamic_collision",
+          "threshold_name": "collision_radius_m",
+          "threshold": 1.6000000059604644,
+          "rejected": 28
+        }
+      ],
+      "progress_windows": {
+        "1s": 0.24106013314350605,
+        "3s": 0.7640536725523894,
+        "5s": 1.037438230196969
+      },
+      "speed_safety": {
+        "model": "hybrid_rule_v4_clearance_braking",
+        "min_surface_clearance": 0.2985163786834233,
+        "level": "slow",
+        "band_cap": 0.15,
+        "braking_cap": 0.5379911878415782,
+        "speed_cap": 0.15,
+        "reaction_time": 0.10000000149011612
+      }
+    }
+  },
+  {
+    "world": "crowd",
+    "scenario": "classic_station_platform_medium",
+    "seed": 1022,
+    "arm": "platform",
+    "outcome": "timeout",
+    "final_goal_distance_m": 16.225175397487916,
+    "final_diagnostics": {
+      "command": [
+        0.5568466318422519,
+        0.0
+      ],
+      "feasible_moving_count": 111,
+      "stop_kind": null,
+      "constraints": [],
+      "progress_windows": {
+        "1s": 0.47159187985466033,
+        "3s": 0.9319726838598434,
+        "5s": 1.1869204210041815
+      },
+      "speed_safety": {
+        "model": "hybrid_rule_v4_clearance_braking",
+        "min_surface_clearance": 0.31072374971102157,
+        "level": "slow",
+        "band_cap": 0.15,
+        "braking_cap": 0.5568466318422519,
+        "speed_cap": 0.15,
+        "reaction_time": 0.10000000149011612
+      }
+    }
+  },
+  {
+    "world": "crowd",
+    "scenario": "classic_station_platform_medium",
+    "seed": 1023,
+    "arm": "both",
+    "outcome": "timeout",
+    "final_goal_distance_m": 12.593323961616017,
+    "final_diagnostics": {
+      "command": [
+        0.5091464400291443,
+        -0.10000000149011612
+      ],
+      "feasible_moving_count": 65,
+      "stop_kind": null,
+      "constraints": [],
+      "progress_windows": {
+        "1s": 0.935552025919085,
+        "3s": -10.450047547092241,
+        "5s": -9.809534727991043
+      },
+      "speed_safety": {
+        "model": "hybrid_rule_v4_clearance_braking",
+        "min_surface_clearance": 1.7078506067532393,
+        "level": "braking",
+        "band_cap": 2.0,
+        "braking_cap": 1.696023721572723,
+        "speed_cap": 1.696023721572723,
+        "reaction_time": 0.10000000149011612
+      }
+    }
+  },
+  {
+    "world": "crowd",
+    "scenario": "classic_station_platform_medium",
+    "seed": 1023,
+    "arm": "platform",
+    "outcome": "timeout",
+    "final_goal_distance_m": 13.037252617960077,
+    "final_diagnostics": {
+      "command": [
+        0.0,
+        0.0
+      ],
+      "feasible_moving_count": 0,
+      "stop_kind": "FORCED",
+      "constraints": [
+        {
+          "constraint": "dynamic_collision",
+          "threshold_name": "collision_radius_m",
+          "threshold": 1.6000000059604644,
+          "rejected": 11
+        }
+      ],
+      "progress_windows": {
+        "1s": 0.0,
+        "3s": 0.09360441945776365,
+        "5s": 0.2153209757455219
+      },
+      "speed_safety": {
+        "model": "hybrid_rule_v4_clearance_braking",
+        "min_surface_clearance": 0.13130947401005688,
+        "level": "stop",
+        "band_cap": 0.0,
+        "braking_cap": 0.1694790298242646,
+        "speed_cap": 0.0,
+        "reaction_time": 0.10000000149011612
+      }
+    }
+  },
+  {
+    "world": "crowd",
+    "scenario": "classic_station_platform_medium",
+    "seed": 1024,
+    "arm": "both",
+    "outcome": "timeout",
+    "final_goal_distance_m": 14.49790582685796,
+    "final_diagnostics": {
+      "command": [
+        0.6207426251977404,
+        -0.20000000298023224
+      ],
+      "feasible_moving_count": 78,
+      "stop_kind": null,
+      "constraints": [],
+      "progress_windows": {
+        "1s": -12.519084415826173,
+        "3s": -11.883344856446044,
+        "5s": -10.79808394410056
+      },
+      "speed_safety": {
+        "model": "hybrid_rule_v4_clearance_braking",
+        "min_surface_clearance": 0.35473496681344385,
+        "level": "moderate",
+        "band_cap": 0.6,
+        "braking_cap": 0.6207426251977404,
+        "speed_cap": 0.6,
+        "reaction_time": 0.10000000149011612
+      }
+    }
+  },
+  {
+    "world": "crowd",
+    "scenario": "classic_station_platform_medium",
+    "seed": 1024,
+    "arm": "platform",
+    "outcome": "timeout",
+    "final_goal_distance_m": 13.688522085857086,
+    "final_diagnostics": {
+      "command": [
+        0.7214637701631563,
+        0.10000000149011612
+      ],
+      "feasible_moving_count": 90,
+      "stop_kind": null,
+      "constraints": [],
+      "progress_windows": {
+        "1s": 0.6265851705661802,
+        "3s": 1.2548303713284916,
+        "5s": 1.4345964159766158
+      },
+      "speed_safety": {
+        "model": "hybrid_rule_v4_clearance_braking",
+        "min_surface_clearance": 0.4324013639203983,
+        "level": "moderate",
+        "band_cap": 0.6,
+        "braking_cap": 0.7214637701631563,
+        "speed_cap": 0.6,
+        "reaction_time": 0.10000000149011612
+      }
+    }
+  },
+  {
+    "world": "crowd",
+    "scenario": "classic_station_platform_medium",
+    "seed": 1025,
+    "arm": "both",
+    "outcome": "timeout",
+    "final_goal_distance_m": 15.221359296770572,
+    "final_diagnostics": {
+      "command": [
+        0.8775731273815096,
+        -0.25000000149011614
+      ],
+      "feasible_moving_count": 66,
+      "stop_kind": null,
+      "constraints": [],
+      "progress_windows": {
+        "1s": 0.737357788065184,
+        "3s": 1.7298807009153716,
+        "5s": 1.932662090810636
+      },
+      "speed_safety": {
+        "model": "hybrid_rule_v4_clearance_braking",
+        "min_surface_clearance": 0.8607986845723197,
+        "level": "braking",
+        "band_cap": 2.0,
+        "braking_cap": 1.137577216077605,
+        "speed_cap": 1.137577216077605,
+        "reaction_time": 0.10000000149011612
+      }
+    }
+  },
+  {
+    "world": "crowd",
+    "scenario": "classic_station_platform_medium",
+    "seed": 1025,
+    "arm": "platform",
+    "outcome": "timeout",
+    "final_goal_distance_m": 16.073068327254056,
+    "final_diagnostics": {
+      "command": [
+        0.7918709509204448,
+        0.20000000298023224
+      ],
+      "feasible_moving_count": 90,
+      "stop_kind": null,
+      "constraints": [],
+      "progress_windows": {
+        "1s": 0.5574489506605715,
+        "3s": 1.2154481316212902,
+        "5s": 1.6470092701323793
+      },
+      "speed_safety": {
+        "model": "hybrid_rule_v4_clearance_braking",
+        "min_surface_clearance": 0.4927168977278489,
+        "level": "moderate",
+        "band_cap": 0.6,
+        "braking_cap": 0.7918709509204448,
+        "speed_cap": 0.6,
+        "reaction_time": 0.10000000149011612
+      }
+    }
+  },
+  {
+    "world": "crowd",
+    "scenario": "classic_station_platform_medium",
+    "seed": 1026,
+    "arm": "platform",
+    "outcome": "timeout",
+    "final_goal_distance_m": 15.084106754645592,
+    "final_diagnostics": {
+      "command": [
+        0.5008032670819097,
+        0.0
+      ],
+      "feasible_moving_count": 111,
+      "stop_kind": null,
+      "constraints": [],
+      "progress_windows": {
+        "1s": 0.4218241998086558,
+        "3s": 1.0753994037667347,
+        "5s": 1.2229945580351433
+      },
+      "speed_safety": {
+        "model": "hybrid_rule_v4_clearance_braking",
+        "min_surface_clearance": 0.2754822836144033,
+        "level": "slow",
+        "band_cap": 0.15,
+        "braking_cap": 0.5008032670819097,
+        "speed_cap": 0.15,
+        "reaction_time": 0.10000000149011612
+      }
+    }
+  },
+  {
+    "world": "crowd",
+    "scenario": "classic_station_platform_medium",
+    "seed": 1027,
+    "arm": "both",
+    "outcome": "timeout",
+    "final_goal_distance_m": 8.636509638590004,
+    "final_diagnostics": {
+      "command": [
+        1.1264106535406095,
+        0.20000000298023224
+      ],
+      "feasible_moving_count": 66,
+      "stop_kind": null,
+      "constraints": [],
+      "progress_windows": {
+        "1s": 0.7842030434634317,
+        "3s": 2.7989308841906997,
+        "5s": 6.3992174850619
+      },
+      "speed_safety": {
+        "model": "hybrid_rule_v4_clearance_braking",
+        "min_surface_clearance": 0.8470415472374353,
+        "level": "braking",
+        "band_cap": 2.0,
+        "braking_cap": 1.1264106535406095,
+        "speed_cap": 1.1264106535406095,
+        "reaction_time": 0.10000000149011612
+      }
+    }
+  },
+  {
+    "world": "crowd",
+    "scenario": "classic_station_platform_medium",
+    "seed": 1027,
+    "arm": "platform",
+    "outcome": "timeout",
+    "final_goal_distance_m": 9.443951055136685,
+    "final_diagnostics": {
+      "command": [
+        0.8810442342569953,
+        0.2695022495303456
+      ],
+      "feasible_moving_count": 99,
+      "stop_kind": null,
+      "constraints": [],
+      "progress_windows": {
+        "1s": 0.6598626180606928,
+        "3s": 3.274169612380881,
+        "5s": 6.4711163030911365
+      },
+      "speed_safety": {
+        "model": "hybrid_rule_v4_clearance_braking",
+        "min_surface_clearance": 0.5762238960973054,
+        "level": "moderate",
+        "band_cap": 0.6,
+        "braking_cap": 0.8810442342569953,
+        "speed_cap": 0.6,
+        "reaction_time": 0.10000000149011612
+      }
+    }
+  },
+  {
+    "world": "crowd",
+    "scenario": "classic_station_platform_medium",
+    "seed": 1028,
+    "arm": "both",
+    "outcome": "timeout",
+    "final_goal_distance_m": 15.066798585822134,
+    "final_diagnostics": {
+      "command": [
+        0.29111112356185914,
+        -0.25341300516891585
+      ],
+      "feasible_moving_count": 40,
+      "stop_kind": null,
+      "constraints": [
+        {
+          "constraint": "dynamic_collision",
+          "threshold_name": "collision_radius_m",
+          "threshold": 1.6000000059604644,
+          "rejected": 17
+        }
+      ],
+      "progress_windows": {
+        "1s": 0.12211322571578265,
+        "3s": 1.3965240325599684,
+        "5s": 2.705930045352945
+      },
+      "speed_safety": {
+        "model": "hybrid_rule_v4_clearance_braking",
+        "min_surface_clearance": 0.6564962213620218,
+        "level": "braking",
+        "band_cap": 2.0,
+        "braking_cap": 0.9597133762786403,
+        "speed_cap": 0.9597133762786403,
+        "reaction_time": 0.10000000149011612
+      }
+    }
+  },
+  {
+    "world": "crowd",
+    "scenario": "classic_station_platform_medium",
+    "seed": 1028,
+    "arm": "platform",
+    "outcome": "timeout",
+    "final_goal_distance_m": 15.031355065659449,
+    "final_diagnostics": {
+      "command": [
+        0.11999999955296516,
+        0.021275790011672457
+      ],
+      "feasible_moving_count": 34,
+      "stop_kind": null,
+      "constraints": [
+        {
+          "constraint": "dynamic_collision",
+          "threshold_name": "collision_radius_m",
+          "threshold": 1.6000000059604644,
+          "rejected": 23
+        }
+      ],
+      "progress_windows": {
+        "1s": 0.10594711425587633,
+        "3s": 1.30088748365592,
+        "5s": 2.7006387488337076
+      },
+      "speed_safety": {
+        "model": "hybrid_rule_v4_clearance_braking",
+        "min_surface_clearance": 0.6446460267712371,
+        "level": "braking",
+        "band_cap": 2.0,
+        "braking_cap": 0.9484712922707084,
+        "speed_cap": 0.9484712922707084,
+        "reaction_time": 0.10000000149011612
+      }
+    }
+  },
+  {
+    "world": "crowd",
+    "scenario": "classic_station_platform_medium",
+    "seed": 1029,
+    "arm": "both",
+    "outcome": "timeout",
+    "final_goal_distance_m": 12.628022080622241,
+    "final_diagnostics": {
+      "command": [
+        0.15,
+        0.0
+      ],
+      "feasible_moving_count": 27,
+      "stop_kind": null,
+      "constraints": [
+        {
+          "constraint": "dynamic_collision",
+          "threshold_name": "collision_radius_m",
+          "threshold": 1.6000000059604644,
+          "rejected": 50
+        }
+      ],
+      "progress_windows": {
+        "1s": 0.09642809362749283,
+        "3s": 0.7059984450812227,
+        "5s": -9.436838918142143
+      },
+      "speed_safety": {
+        "model": "hybrid_rule_v4_clearance_braking",
+        "min_surface_clearance": 0.5594642673157335,
+        "level": "moderate",
+        "band_cap": 0.6,
+        "braking_cap": 0.8638093857486108,
+        "speed_cap": 0.6,
+        "reaction_time": 0.10000000149011612
+      }
+    }
+  },
+  {
+    "world": "crowd",
+    "scenario": "classic_station_platform_medium",
+    "seed": 1029,
+    "arm": "platform",
+    "outcome": "timeout",
+    "final_goal_distance_m": 13.571526803334951,
+    "final_diagnostics": {
+      "command": [
+        0.1200231485068798,
+        -0.5500000014901161
+      ],
+      "feasible_moving_count": 28,
+      "stop_kind": null,
+      "constraints": [
+        {
+          "constraint": "dynamic_collision",
+          "threshold_name": "collision_radius_m",
+          "threshold": 1.6000000059604644,
+          "rejected": 28
+        }
+      ],
+      "progress_windows": {
+        "1s": 0.13573150031261783,
+        "3s": -10.769981212181508,
+        "5s": -8.200212339551726
+      },
+      "speed_safety": {
+        "model": "hybrid_rule_v4_clearance_braking",
+        "min_surface_clearance": 0.9569610510839346,
+        "level": "braking",
+        "band_cap": 2.0,
+        "braking_cap": 1.2129821394645477,
+        "speed_cap": 1.2129821394645477,
+        "reaction_time": 0.10000000149011612
+      }
+    }
+  }
+]

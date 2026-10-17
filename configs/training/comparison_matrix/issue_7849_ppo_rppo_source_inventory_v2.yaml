@@ -28,7 +28,7 @@ files:
   sha256: 0ebb99246b388575887f7ac0479d089778e69b1d5872b55a51cf2b9bb19a5f0d
   role: diagnostic recurrent Gate-1 canary config with shared evaluation seed manifest
 - path: pyproject.toml
-  sha256: 98087d5fc64348026d949f79c0691e5014ee0ea342ed56eaf1b5541c8abffe9c
+  sha256: 7c0fe064630cf90d35a3ebbf2a5f7fe88054bee1bc7e3a7183fc9c2af9954101
   role: dependency extra and package constraints
 - path: robot_sf/benchmark/map_runner_policies/map_runner_actions.py
   sha256: 90b14f637094210c261d17a556b71e0952ed74f90afbb7fbcc5409881b73c4ce
@@ -179,7 +179,7 @@ scenario_inputs:
   sha256: b76535a0060a6c4ebd9dfa4170b61621c0459fce7d0228c734c08a04059847be
   role: transitive scenario manifest input
 - path: configs/scenarios/single/francis2023_pedestrian_overtaking.yaml
-  sha256: dc1a403432195175031252af06ecadad661f61b35cc0715623d2814ca52d5057
+  sha256: 3f63bff32dc52321a6d7517916cb8eeeee0e2d58789e788c2d92527f22510520
   role: transitive scenario manifest input
 - path: configs/scenarios/single/francis2023_perpendicular_traffic.yaml
   sha256: cd9dab418641d5a1dc5e0755ab405ed15f8d3e1a0858a0729c3317026f63aa8f

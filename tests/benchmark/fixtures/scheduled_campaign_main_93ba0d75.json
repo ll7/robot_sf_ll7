@@ -1,0 +1,207 @@
+{
+  "config": "configs/benchmarks/paper_experiment_matrix_v1_scenario_horizons_h500.yaml",
+  "resolved_seeds": [
+    1001
+  ],
+  "rows": {
+    "classic_cross_trap_low": {
+      "config_hash": "9a5290224b87eee1",
+      "episode_id": "classic_cross_trap_low--1001--9a5290224b87eee1",
+      "row_fields": [
+        "algo",
+        "algorithm_metadata",
+        "config_hash",
+        "development_pedestrian_model",
+        "episode_id",
+        "evaluation_pedestrian_model",
+        "event_ledger",
+        "failure_mechanism",
+        "git_hash",
+        "horizon",
+        "integrity",
+        "interaction_exposure",
+        "metric_parameters",
+        "metric_values",
+        "metrics",
+        "observation_level",
+        "observation_mode",
+        "observation_noise",
+        "observation_noise_hash",
+        "observation_noise_stats",
+        "outcome",
+        "pedestrian_model",
+        "provenance",
+        "public_requirement",
+        "result_provenance",
+        "safety_predicates",
+        "scenario_id",
+        "scenario_params",
+        "seed",
+        "selected_map_identity",
+        "spawn_validity",
+        "status",
+        "steps",
+        "termination_reason",
+        "timestamps",
+        "timing",
+        "tracking_precision",
+        "tracking_precision_hash",
+        "version",
+        "wall_time_sec"
+      ],
+      "scenario_params": {
+        "algo": "goal",
+        "algo_config_hash": "44136fa355b3678a",
+        "id": "classic_cross_trap_low",
+        "map_file": "maps/svg_maps/classic_crossing.svg",
+        "map_id": "classic_cross_trap",
+        "metadata": {
+          "archetype": "cross_trap",
+          "density": "low",
+          "flow": "bi",
+          "groups": 0.0,
+          "label": "cross-trap local-minimum circulation",
+          "plausibility": {
+            "method": null,
+            "metrics": {
+              "force_q95": 0.9427403086029689,
+              "mean_distance": 5.9319317460258425,
+              "min_distance": 1.8367418245009373,
+              "ped_force_mean": 0.2749112167516942,
+              "robot_ped_within_5m_frac": 0.4599224586174748
+            },
+            "metrics_updated_on": "2026-01-30T14:19:28.225110+01:00",
+            "notes": null,
+            "status": "verified",
+            "verified_by": "ll7",
+            "verified_on": "2026-01-29"
+          },
+          "scenario_horizon": {
+            "bucket": "extended",
+            "recommended_horizon_steps": 514,
+            "source": "configs/policy_search/scenario_horizons_h500.yaml",
+            "status": "recommended"
+          }
+        },
+        "name": "classic_cross_trap_low",
+        "observation_level": "oracle_full_state",
+        "observation_mode": "goal_state",
+        "record_forces": true,
+        "record_planner_decision_trace": false,
+        "record_simulation_step_trace": false,
+        "robot_config": {},
+        "run_dt": 0.1,
+        "simulation_config": {
+          "max_episode_steps": 514,
+          "ped_density": 0.02,
+          "route_spawn_seed": 1001
+        }
+      },
+      "steps": 514,
+      "termination_reason": "terminated"
+    },
+    "francis2023_blind_corner": {
+      "config_hash": "feadeed0621c6e04",
+      "episode_id": "francis2023_blind_corner--1001--feadeed0621c6e04",
+      "row_fields": [
+        "algo",
+        "algorithm_metadata",
+        "config_hash",
+        "development_pedestrian_model",
+        "episode_id",
+        "evaluation_pedestrian_model",
+        "event_ledger",
+        "failure_mechanism",
+        "git_hash",
+        "horizon",
+        "integrity",
+        "interaction_exposure",
+        "metric_parameters",
+        "metric_values",
+        "metrics",
+        "observation_level",
+        "observation_mode",
+        "observation_noise",
+        "observation_noise_hash",
+        "observation_noise_stats",
+        "outcome",
+        "pedestrian_model",
+        "provenance",
+        "public_requirement",
+        "result_provenance",
+        "safety_predicates",
+        "scenario_id",
+        "scenario_params",
+        "seed",
+        "selected_map_identity",
+        "spawn_validity",
+        "status",
+        "steps",
+        "termination_reason",
+        "timestamps",
+        "timing",
+        "tracking_precision",
+        "tracking_precision_hash",
+        "version",
+        "wall_time_sec"
+      ],
+      "scenario_params": {
+        "algo": "goal",
+        "algo_config_hash": "44136fa355b3678a",
+        "id": "francis2023_blind_corner",
+        "map_file": "maps/svg_maps/francis2023/francis2023_blind_corner.svg",
+        "metadata": {
+          "archetype": "blind_corner",
+          "behavior": "none",
+          "figure": "7i",
+          "flow": "bi",
+          "plausibility": {
+            "method": null,
+            "metrics": {
+              "force_q95": 0.45482498070019484,
+              "mean_distance": 5.1063772493202,
+              "min_distance": 0.9603112090680298,
+              "ped_force_mean": 0.1153471107407407,
+              "robot_ped_within_5m_frac": 0.7185
+            },
+            "metrics_updated_on": "2026-01-30T14:19:28.225110+01:00",
+            "notes": null,
+            "status": "unverified",
+            "verified_by": null,
+            "verified_on": null
+          },
+          "scenario_horizon": {
+            "bucket": "long",
+            "recommended_horizon_steps": 316,
+            "source": "configs/policy_search/scenario_horizons_h500.yaml",
+            "status": "recommended"
+          }
+        },
+        "name": "francis2023_blind_corner",
+        "observation_level": "oracle_full_state",
+        "observation_mode": "goal_state",
+        "record_forces": true,
+        "record_planner_decision_trace": false,
+        "record_simulation_step_trace": false,
+        "robot_config": {},
+        "run_dt": 0.1,
+        "simulation_config": {
+          "max_episode_steps": 316,
+          "ped_density": 0.0,
+          "route_spawn_seed": 1001
+        },
+        "single_pedestrians": [
+          {
+            "goal_poi": "poi_h1_goal",
+            "id": "h1"
+          }
+        ]
+      },
+      "steps": 263,
+      "termination_reason": "collision"
+    }
+  },
+  "scenario_count": 48,
+  "scenarios_sha256": "b0464eb20bed34397d3e49b2d739c70bcd9da2d9b9bf0375b3e3308fef130df5",
+  "source_revision": "93ba0d75fbecc69ddeb62bbf77a435de385caa3b"
+}

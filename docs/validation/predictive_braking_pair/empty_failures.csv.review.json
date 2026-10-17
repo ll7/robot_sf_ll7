@@ -1,0 +1,7 @@
+{
+  "artifact_path": "docs/validation/predictive_braking_pair/empty_failures.csv",
+  "artifact_sha256": "9ce6bcd7b6a8ff97bb544f50a9b7612daf37dfc878755e077cdb10f79a678854",
+  "preserved_exact_bytes": false,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "evidence-review-marker.v1"
+}

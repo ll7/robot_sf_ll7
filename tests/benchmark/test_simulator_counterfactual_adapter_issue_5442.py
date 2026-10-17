@@ -9,9 +9,8 @@ where the native forward-acceleration baseline contacts but native braking
 avoids contact.
 
 The fail-closed ``unknown`` path for a nondeterministic baseline is already covered
-by the controlled-fixture tests (``nondeterministic_baseline_scenario``); here we
-additionally show that omitting the global-RNG capture seam makes a real baseline
-replay diverge, exercising the same guard on production state.
+by controlled fixtures; here a negative control omits private-generator restoration
+and makes a real respawn replay diverge.
 """
 
 from __future__ import annotations
@@ -26,6 +25,7 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
+from pysocialforce.config import BODY_EDGE_EXPONENTIAL_V3, LEGACY_SHIFTED_GRADIENT_V1
 
 from robot_sf.benchmark.last_avoidable_fixtures import (
     KinematicCollisionModel,
@@ -61,15 +61,15 @@ from robot_sf.sim.sim_config import SimulationSettings
 from robot_sf.sim.simulator import init_simulators
 
 # A genuine production fixture: the robot drives into a doorway crossing; the
-# forward-acceleration baseline contacts after 39 applied ticks, while native
-# braking clears it. The explicit global seed controls spawn-zone sampling.
+# forward-acceleration baseline contacts after 26 applied ticks, while native
+# braking clears it. The explicit pedestrian episode seed controls private spawn and respawn streams.
 _FIXTURE_MAP = Path(__file__).resolve().parents[2] / "maps/svg_maps/classic_doorway.svg"
 _FIXTURE_DENSITY = [0.06]
-_FIXTURE_SEED = 21
-_FIXTURE_GLOBAL_SEED = 25
-_DENSE_GLOBAL_SEED = 26
+_FIXTURE_SEED = 1005
+_FIXTURE_GLOBAL_SEED = 1005
+_DENSE_GLOBAL_SEED = 1006
 _FIXTURE_SPEED = 1.0
-_FIXTURE_CONTACT_STEP = 39
+_FIXTURE_CONTACT_STEP = 26
 _COLLISION_RADIUS = 0.5
 
 
@@ -81,14 +81,15 @@ def _preserve_numpy_rng():
     np.random.set_state(state)
 
 
-def _build_simulator() -> object:
+def _build_simulator(obstacle_force_law: str = LEGACY_SHIFTED_GRADIENT_V1) -> object:
     """Construct a deterministic, headless ``Simulator`` for the fixture map."""
     np.random.seed(_FIXTURE_GLOBAL_SEED)
     map_def = convert_map(str(_FIXTURE_MAP))
     sim_config = SimulationSettings(
+        obstacle_force_law=obstacle_force_law,
         difficulty=0,
         ped_density_by_difficulty=_FIXTURE_DENSITY,
-        route_spawn_seed=_FIXTURE_SEED,
+        pedestrian_seed=_FIXTURE_SEED,
     )
     cfg = RobotSimulationConfig(sim_config=sim_config)
     return init_simulators(cfg, map_def, num_robots=1, random_start_pos=False)[0]
@@ -97,16 +98,16 @@ def _build_simulator() -> object:
 def _build_dense_simulator() -> object:
     """Construct a denser doorway simulator where pedestrians respawn mid-episode.
 
-    The respawns draw from the global numpy RNG (via ``sample_zone``), so a replay
-    without the RNG-capture seam diverges — exercising the same guard the engine's
-    ``unknown`` determination relies on.
+    Respawns draw from owned private generators. Omitting their restoration
+    makes the replay diverge and exercises the engine's determinism guard.
     """
     np.random.seed(_DENSE_GLOBAL_SEED)
     map_def = convert_map(str(_FIXTURE_MAP))
     sim_config = SimulationSettings(
+        obstacle_force_law=LEGACY_SHIFTED_GRADIENT_V1,
         difficulty=0,
         ped_density_by_difficulty=[0.15],
-        route_spawn_seed=21,
+        pedestrian_seed=_DENSE_GLOBAL_SEED,
     )
     cfg = RobotSimulationConfig(sim_config=sim_config)
     return init_simulators(cfg, map_def, num_robots=1, random_start_pos=False)[0]
@@ -132,25 +133,32 @@ def _run_engine(model: SimulatorCounterfactualModel, *, determinism_replays: int
 
 
 # -- snapshot/restore seam ------------------------------------------------
-def test_snapshot_restore_reproduces_baseline_deterministically() -> None:
+@pytest.mark.parametrize(
+    ("law", "contact_step"),
+    [(LEGACY_SHIFTED_GRADIENT_V1, 26), (BODY_EDGE_EXPONENTIAL_V3, 29)],
+)
+def test_snapshot_restore_reproduces_baseline_deterministically(
+    law: str, contact_step: int
+) -> None:
     """Restoring a snapshot and replaying yields the same contact step every time."""
-    sim = _build_simulator()
+    # #10017 gives the new law a separate contact identity; the old fixture stays 26.
+    sim = _build_simulator(obstacle_force_law=law)
     model = SimulatorCounterfactualModel(sim, collision_radius=_COLLISION_RADIUS)
     snap0 = model.snapshot()
     contacts: list[int | None] = []
     for _ in range(4):
         model.restore(snap0)
         c = None
-        for i in range(_FIXTURE_CONTACT_STEP + 5):
+        for i in range(contact_step + 5):
             if model.collision():
                 c = i
                 break
             model.step((float(_FIXTURE_SPEED), 0.0))
         else:
             if model.collision():
-                c = _FIXTURE_CONTACT_STEP + 5
+                c = contact_step + 5
         contacts.append(c)
-    assert contacts == [_FIXTURE_CONTACT_STEP] * 4
+    assert contacts == [contact_step] * 4
 
 
 def test_snapshot_restores_groups_behavior_rng_and_residual_state() -> None:
@@ -252,8 +260,11 @@ def test_restore_resynchronizes_backend_groups_and_branch_outcomes() -> None:
     # behavior step, leaving the public and backend groupings on a branch.
     sim.groups.add_to_group(0, 1)
     sim.pysf_sim.peds.groups = sim.groups.groups_as_lists
-    assert sim.groups.groups_as_lists[:2] == [[1], [0, 2]]
-    assert sim.pysf_sim.peds.groups[:2] == [[1], [0, 2]]
+    branched_groups = sim.groups.groups_as_lists
+    assert branched_groups != expected_groups
+    assert 0 in branched_groups[1]
+    assert not any(0 in group for group in branched_groups[:1])
+    assert sim.pysf_sim.peds.groups == branched_groups
 
     first_forces, first_state, first_collision = run_branch()
     second_forces, second_state, second_collision = run_branch()
@@ -267,44 +278,29 @@ def test_restore_resynchronizes_backend_groups_and_branch_outcomes() -> None:
     assert (first_collision, second_collision) == (expected_collision, expected_collision)
 
 
-def test_rng_capture_seam_prevents_divergence() -> None:
-    """Without the global-RNG capture seam, a mid-episode respawn replay diverges.
+def test_rng_capture_seam_prevents_divergence(monkeypatch) -> None:
+    """Owned respawn streams must restore even when global capture is disabled.
 
-    A dense doorway scenario triggers pedestrian group respawns that draw from the
-    global numpy RNG (via ``sample_zone``). With the seam ``capture_rng=True`` the
-    snapshot restores that RNG so the replay's observable outcome is identical; with
-    ``capture_rng=False`` the same replay diverges by meters — exactly the
-    nondeterministic-baseline condition the engine's ``unknown`` guard protects
-    against.
+    A negative control omits generator restoration and must diverge on this
+    dense fixture, proving the snapshot seam protects an actual respawn.
     """
-    # With the seam: the observable replay outcome is reproducible.
+    import robot_sf.benchmark.simulator_counterfactual_adapter as adapter
+
     sim = _build_dense_simulator()
-    model = SimulatorCounterfactualModel(sim, collision_radius=_COLLISION_RADIUS, capture_rng=True)
-    snap0 = model.snapshot()
-    initial_positions = np.asarray(sim.ped_pos).copy()
-    np.random.seed(999)
-    model.restore(snap0)
-    for _ in range(100):
-        model.step((0.0, 0.0))
-    captured_positions = np.asarray(sim.ped_pos).copy()
+    model = SimulatorCounterfactualModel(sim, collision_radius=_COLLISION_RADIUS, capture_rng=False)
+    snapshot = model.snapshot()
 
-    # Without the seam: a perturbed global RNG makes the replay diverge.
-    sim2 = _build_dense_simulator()
-    model2 = SimulatorCounterfactualModel(
-        sim2, collision_radius=_COLLISION_RADIUS, capture_rng=False
-    )
-    snap0b = model2.snapshot()
-    assert np.array_equal(initial_positions, np.asarray(sim2.ped_pos))
-    model2.restore(snap0b)
-    np.random.seed(999)
-    for _ in range(100):
-        model2.step((0.0, 0.0))
-    uncaptured_positions = np.asarray(sim2.ped_pos).copy()
+    def replay():
+        model.restore(snapshot)
+        for _ in range(100):
+            model.step((0.0, 0.0))
+        return np.asarray(sim.ped_pos).copy()
 
-    assert not np.allclose(captured_positions, uncaptured_positions), (
-        "the RNG-capture seam must matter for this fixture; mid-episode respawn "
-        "should diverge without it"
-    )
+    expected = replay()
+    np.random.seed(1003)
+    np.testing.assert_array_equal(expected, replay())
+    monkeypatch.setattr(adapter, "_restore_behavior_rng_states", lambda *_args: None)
+    assert not np.allclose(expected, replay()), "fixture must consume owned respawn streams"
 
 
 # -- engine integration on a real production fixture ----------------------

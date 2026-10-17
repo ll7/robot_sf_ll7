@@ -1,0 +1,35 @@
+<!-- AI-GENERATED (10007, 2026-10-01) - NEEDS-REVIEW -->
+Shared-venv scratch preflight passed: path=/tmp available=98965556KiB required=1048576KiB
+Shared-venv selection gate acquired: producer-home/luttkule/aud/.git/robot-sf-venv-selection-6b91de2490d8.lockdir
+Shared-venv project package freshness preflight passed: package=pysocialforce venv=producer-home/luttkule/aud-work/.venv
+Shared-venv tool freshness preflight skipped: tool=pytest reason=interpreter-or-shell elapsed_ms=421 venv=producer-home/luttkule/aud-work/.venv
+....................................................................s... [ 21%]
+........s............................................................... [ 42%]
+........................................................................ [ 63%]
+........................................................................ [ 84%]
+...................................................                      [100%]
+============================= slowest 10 durations =============================
+5.48s call     tests/analysis_workbench/test_aud_9952.py::test_scan_accepts_20160_rows_above_old_source_cap
+1.05s call     tests/analysis_workbench/test_aud_9952.py::test_queue_loads_20160_candidates_above_old_byte_and_node_caps
+0.24s call     tests/analysis_workbench/test_audit_service_next.py::test_next_codex_next_restart_rejects_stale_resume_without_provider_work
+0.17s call     tests/analysis_workbench/test_audit_service_next.py::test_next_finalizes_explicit_original_context_and_competing_next_progresses
+0.15s call     tests/analysis_workbench/test_audit_service_next.py::test_outer_receipt_crash_keeps_owner_lease_and_terminalizes_blocked_session
+0.14s call     tests/analysis_workbench/test_audit_service_next.py::test_pending_recovery_after_writer_cleanup_preserves_stale_context_conflict
+0.14s call     tests/analysis_workbench/test_audit_service_next.py::test_unresolved_crash_blocks_a_second_authenticated_session
+0.14s call     tests/analysis_workbench/test_audit_service_next.py::test_two_services_serialize_next_and_stale_context_cas
+0.14s call     tests/analysis_workbench/test_audit_service_next.py::test_next_rejects_stale_queue_source_and_operation_collision
+0.13s call     tests/analysis_workbench/test_audit_service_next.py::test_next_context_race_before_transact_returns_is_historical
+
+Slow Test Report (soft<20s hard=60s, top 10)
+1) tests/analysis_workbench/test_aud_9952.py::test_scan_accepts_20160_rows_above_old_source_cap  5.48s
+2) tests/analysis_workbench/test_aud_9952.py::test_queue_loads_20160_candidates_above_old_byte_and_node_caps  1.05s
+3) tests/analysis_workbench/test_audit_service_next.py::test_next_codex_next_restart_rejects_stale_resume_without_provider_work  0.24s
+4) tests/analysis_workbench/test_audit_service_next.py::test_next_finalizes_explicit_original_context_and_competing_next_progresses  0.17s
+5) tests/analysis_workbench/test_audit_service_next.py::test_outer_receipt_crash_keeps_owner_lease_and_terminalizes_blocked_session  0.15s
+6) tests/analysis_workbench/test_audit_service_next.py::test_pending_recovery_after_writer_cleanup_preserves_stale_context_conflict  0.14s
+7) tests/analysis_workbench/test_audit_service_next.py::test_unresolved_crash_blocks_a_second_authenticated_session  0.14s
+8) tests/analysis_workbench/test_audit_service_next.py::test_two_services_serialize_next_and_stale_context_cas  0.14s
+9) tests/analysis_workbench/test_audit_service_next.py::test_next_rejects_stale_queue_source_and_operation_collision  0.14s
+10) tests/analysis_workbench/test_audit_service_next.py::test_next_context_race_before_transact_returns_is_historical  0.13s
+
+337 passed, 2 skipped in 12.01s

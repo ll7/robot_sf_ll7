@@ -2,7 +2,7 @@ scenarios:
 - name: francis2023_pedestrian_overtaking
   map_file: ../../../maps/svg_maps/francis2023/francis2023_ped_overtaking.svg
   simulation_config:
-    max_episode_steps: 400
+    max_episode_steps: 600
     ped_density: 0.0
   single_pedestrians:
   - id: h1
@@ -20,14 +20,18 @@ scenarios:
       verified_on: null
       verified_by: null
       method: null
-      notes: null
-      metrics:
-        min_distance: 2.2223542321899186
-        mean_distance: 8.737510755793421
-        robot_ped_within_5m_frac: 0.28587024062018307
-        ped_force_mean: 0.24676126309566468
-        force_q95: 1.208259633473192
-      metrics_updated_on: '2026-01-30T14:19:28.225110+01:00'
+      notes: >-
+        D-085 (author, 2026-10-02): report the 0.0.8
+        guarded_ppo / francis2023_pedestrian_overtaking cell with the caveat
+        that the policy runs outside its trained speed range: scenario cap
+        0.7 m/s versus the policy v_max 2.0 m/s. Speed-clamp saturation
+        (about 94% in the refute review), 0.5-1 m terminal misses and an
+        inactive guard explain the cell's cap/budget sensitivity; this is
+        not a parked-pedestrian mechanism or a planner-quality comparison.
+        Prior plausibility metrics are stale after the release successor
+        geometry, speed cap and authored 600-step budget changes.
+      metrics: null
+      metrics_updated_on: null
   seeds:
   - 207
   - 208

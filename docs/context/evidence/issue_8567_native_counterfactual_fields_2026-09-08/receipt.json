@@ -64,7 +64,7 @@
     "config": "configs/benchmarks/paired_effect_native_smoke_v1.yaml",
     "config_sha256": "1795c5528d9a41afc76abad59d7d99abe40d3bf3cc6163fc7e07770ff4ea684b",
     "campaign_id": "paired_effect_native_smoke_v1_20260909_020652",
-    "campaign_root": "output/validation/paired_effect_native_smoke/paired_effect_native_smoke_v1_20260909_020652",
+    "campaign_root": "<scratch-root>/validation/paired_effect_native_smoke/paired_effect_native_smoke_v1_20260909_020652",
     "scenario_matrix": "configs/scenarios/archetypes/classic_head_on_corridor.yaml",
     "scenario_matrix_sha256": "e70c3b18e085f09b1d08f80ae747e8a9967e247a9161ab88a9d145cd14fefca8",
     "scenario_matrix_internal_hash": "fbed5c9e0876",
@@ -82,7 +82,8 @@
     "total_arms": 2,
     "total_episodes": 2,
     "runtime_s": 25.9920053021051,
-    "command": "scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/tools/run_camera_ready_benchmark.py --config configs/benchmarks/paired_effect_native_smoke_v1.yaml --output-root output/validation/paired_effect_native_smoke --mode run --arm-isolation subprocess --skip-publication-bundle"
+    "command": "scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/tools/run_camera_ready_benchmark.py --config configs/benchmarks/paired_effect_native_smoke_v1.yaml --output-root <scratch-root>/validation/paired_effect_native_smoke --mode run --arm-isolation subprocess --skip-publication-bundle",
+    "command_is_reproduction_template": true
   },
   "arms": {
     "wrapper_off": {
@@ -213,8 +214,10 @@
   ],
   "artifact_provenance": {
     "durable_receipt": "docs/context/evidence/issue_8567_native_counterfactual_fields_2026-09-08/receipt.json",
-    "raw_output": "worktree-local output/validation/paired_effect_native_smoke is ignored and temporary; raw JSONL/traces are not promoted to Git",
-    "promotion_status": "compact receipt only; no raw benchmark artifact promotion"
+    "raw_output": "raw JSONL/traces were disposable git-ignored worktree-local scratch and are unavailable; they were not promoted to Git",
+    "promotion_status": "compact receipt only; no raw benchmark artifact promotion",
+    "raw_output_retained": false,
+    "durable_retrieval_pointer": null
   },
   "limitations": [
     "Only one fixed scenario/seed pair was acquired, so no scientific effect estimate or generalization claim is supported.",

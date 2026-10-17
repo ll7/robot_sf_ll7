@@ -195,7 +195,9 @@ Example freeze manifest:
 
 Typical workflow:
 1. Run pilot benchmarks and decide final contract.
-2. Create a concrete freeze manifest from the example file.
+2. Copy the example file, complete its placeholders, and set `FREEZE_MANIFEST` to
+   the resulting contract's path. The concrete contract is run-specific and is
+   not a checked-in config.
 3. Run final benchmarks with freeze validation enabled:
 
 ```bash
@@ -208,7 +210,7 @@ uv run python scripts/classic_benchmark_full.py \
   --bootstrap-samples 1000 \
   --bootstrap-confidence 0.95 \
   --metrics-subset success_rate,collision_rate,snqi,time_to_goal,path_efficiency \
-  --freeze-manifest configs/benchmarks/classic_benchmark_freeze.yaml
+  --freeze-manifest "${FREEZE_MANIFEST:?set FREEZE_MANIFEST to your completed contract}"
 ```
 
 If runtime settings drift from the freeze contract, the run continues but emits warnings and records

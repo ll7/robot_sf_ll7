@@ -374,6 +374,10 @@ def _core_preflight_reasons(
                 "failure": "changed_coverage_proof_failed",
                 "stale": "changed_coverage_proof_stale",
                 "malformed": "changed_coverage_proof_malformed",
+                # A skipped lane without a proven docs-only changed-file set
+                # carries no coverage proof, so it refuses under the same
+                # proof-failed code as a real failure (issue #10412).
+                "skipped": "changed_coverage_proof_failed",
             }.get(changed_coverage_status, "changed_coverage_proof_unknown")
         )
     if staleness_verdict == "stale":
@@ -608,10 +612,12 @@ def evaluate_merge_gate(  # noqa: C901, PLR0913, PLR0915 - explicit fail-closed 
             changed_coverage_head_sha = str(changed_coverage.get("head_sha") or "")
     changed_coverage_status = str(changed_coverage_status or "").lower() or "unknown"
     docs_only_scope_proven = _proven_docs_only_scope(changed_coverage)
-    if changed_coverage_status == "missing" and docs_only_scope_proven:
+    if changed_coverage_status in {"missing", "skipped"} and docs_only_scope_proven:
         # The workflow is intentionally skipped for exactly this path set;
         # accepting it is safe only after the live API proves the complete
         # changed-file list.  No source-changing PR receives this bypass.
+        # "missing" covers an absent check run; "skipped" covers the
+        # path-filtered run GitHub actually produces (issue #10412).
         changed_coverage_status = CHANGED_COVERAGE_NOT_REQUIRED
         changed_coverage_head_sha = ""
     elif changed_coverage_status == CHANGED_COVERAGE_NOT_REQUIRED and not docs_only_scope_proven:
@@ -853,6 +859,11 @@ def _classify_changed_coverage_checks(
         status = "stale"
     elif str(latest.get("status") or "").lower() != COMPLETED_STATUS:
         status = "pending"
+    elif str(latest.get("conclusion") or "").lower() == "skipped":
+        # A path-filtered workflow run reports skipped, which means "not
+        # applicable", not failure. Keep it distinct so the docs-only bypass
+        # can accept it on proof, while unproven scopes still refuse it below.
+        status = "skipped"
     elif str(latest.get("conclusion") or "").lower() != "success":
         status = "failure"
     else:
@@ -1518,8 +1529,14 @@ def fetch_pr_changed_file_marker_inventory(  # noqa: C901, PLR0912 - statuses ha
 def _attach_missing_coverage_scope(
     changed_coverage: dict[str, Any], pr_number: str | int, *, repo: str
 ) -> tuple[dict[str, Any], str | None]:
-    """Attach a complete changed-file proof when the exact coverage check is absent."""
-    if changed_coverage.get("status") != "missing":
+    """Attach a complete changed-file proof when coverage proof is absent.
+
+    Applies to an absent check run ("missing") and to a path-filtered run
+    ("skipped"): both carry no coverage signal, so both need the same
+    changed-file proof before the docs-only bypass may accept them
+    (issue #10412).
+    """
+    if changed_coverage.get("status") not in {"missing", "skipped"}:
         return changed_coverage, None
     changed_files, changed_files_err = _fetch_pr_changed_files(pr_number, repo=repo)
     if changed_files_err:

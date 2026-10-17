@@ -1022,8 +1022,35 @@ def _verify_sweep_metadata(output_dir: Path, source_sha: str) -> None:
             raise ValueError(f"{suite} has unsuccessful row execution")
 
 
+def _index_raw_episodes(
+    path: Path, cache: dict[Path, dict[tuple[Any, Any], list[dict[str, Any]]]]
+) -> dict[tuple[Any, Any], list[dict[str, Any]]]:
+    """Decode a raw file once, retaining duplicate identities for the existing check."""
+    if path in cache:
+        return cache[path]
+    index: dict[tuple[Any, Any], list[dict[str, Any]]] = {}
+    for line in path.read_text().splitlines():
+        if not line.strip():
+            continue
+        raw = json.loads(line)
+        identity = (raw.get("scenario_id"), raw.get("seed"))
+        try:
+            index.setdefault(identity, []).append(raw)
+        except TypeError:
+            # JSON arrays/objects cannot match a summary's (str, int) identity.
+            # The former linear scan ignored these nonmatching identities too.
+            continue
+    cache[path] = index
+    return index
+
+
 def _load_sweep_rows(sweep_dir: Path) -> dict[tuple[str, str, int], dict[str, Any]]:
+    """Join summaries to raw traces with an invocation-local index of each file.
+
+    There is no persistent cache: subsequent calls reread the current bytes.
+    """
     rows: dict[tuple[str, str, int], dict[str, Any]] = {}
+    raw_indexes: dict[Path, dict[tuple[Any, Any], list[dict[str, Any]]]] = {}
     for path in sorted(sweep_dir.glob("episodes_*.jsonl")):
         for line in path.read_text(encoding="utf-8").splitlines():
             if not line.strip():
@@ -1038,12 +1065,7 @@ def _load_sweep_rows(sweep_dir: Path) -> dict[tuple[str, str, int], dict[str, An
             source_path = (campaign / source).resolve()
             if not source_path.is_relative_to(campaign.resolve()):
                 raise ValueError("raw controller trace path escapes the campaign")
-            raw_rows = [
-                json.loads(item) for item in source_path.read_text().splitlines() if item.strip()
-            ]
-            matches = [
-                raw for raw in raw_rows if (raw.get("scenario_id"), raw.get("seed")) == key[1:]
-            ]
+            matches = _index_raw_episodes(source_path, raw_indexes).get(key[1:], [])
             if len(matches) != 1 or source_path.parent.name.split("__")[0] != key[0]:
                 raise ValueError(f"raw episode identity differs for {key}")
             raw = matches[0]
@@ -1410,7 +1432,11 @@ def _execution_evidence(row: dict[str, Any]) -> dict[str, Any]:
     ):
         if profile.get(f"supports_{mode}_commands") is not True:
             mode = "unknown"
-    marker = _controller_runtime_marker(row, metadata, algorithm)
+    marker = (
+        _controller_runtime_marker(row, metadata, algorithm)
+        if isinstance(algorithm, str)
+        else ("algorithm", "invalid")
+    )
     required = all(
         list(_runtime_objects(row, path)) == [(".".join(path), expected)]
         for path, (expected, _) in EXECUTION_EVIDENCE_LOCATIONS["required_values"].items()

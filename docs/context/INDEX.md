@@ -1,5 +1,10 @@
 # Context Retrieval Index
 
+Current-main positive control #10330: the seed-1001 near-miss window now replays
+exactly twice with a supported continuation repair. Persistence/corpus admission
+remains blocked, and the matched main audit has no introduced failures:
+[hardcase window repair and matched benchmark audit](evidence/hardcase_positive_control/followup/report.md).
+
 Guard/escape factorial ablation: 2,160 paired development episodes, independently
 confirmed numerical results, portable compact inputs and SHA-256 custody:
 [guard_escape_ablation/README.md](guard_escape_ablation/README.md).

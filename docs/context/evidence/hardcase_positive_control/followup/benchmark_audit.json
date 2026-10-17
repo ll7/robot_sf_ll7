@@ -1,0 +1,861 @@
+{
+  "baseline_failures_missing_on_branch": [],
+  "branch": {
+    "errors": 13,
+    "failed": 119,
+    "passed": 12116,
+    "skipped": 340
+  },
+  "branch_code_commit": "1baaa3eb08cfbc1866f18702eb939c1f60b400fd",
+  "full_command": "uv run pytest tests/benchmark -q --tb=short --continue-on-collection-errors --junitxml=../benchmark.xml",
+  "groups": [
+    {
+      "counts": {
+        "errors": 2,
+        "failed": 11
+      },
+      "issue": 10332,
+      "root_cause": "collection_torch_stub_pollution",
+      "tests": [
+        {
+          "id": "::tests.benchmark.test_prediction_planner_audit_contract",
+          "kind": "errors",
+          "main_message": "collection failure",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "::tests.benchmark.test_predictive_checkpoint_schema_audit",
+          "kind": "errors",
+          "main_message": "collection failure",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_benchmark_result_provenance::test_execution_context_preserves_torch_build_tag_without_importing_runtime",
+          "kind": "failed",
+          "main_message": "AttributeError: module 'torch' has no attribute '__version__'",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_doctor::test_doctor_cli_emits_json_and_can_skip_env_smoke",
+          "kind": "failed",
+          "main_message": "ValueError: torch.__spec__ is None",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_doctor::test_doctor_collect_report_marks_missing_optional_import",
+          "kind": "failed",
+          "main_message": "ValueError: torch.__spec__ is None",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_doctor::test_doctor_collect_report_fails_on_missing_required_binary",
+          "kind": "failed",
+          "main_message": "ValueError: torch.__spec__ is None",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_doctor::test_doctor_workspace_probe_uses_explicit_workspace_root",
+          "kind": "failed",
+          "main_message": "ValueError: torch.__spec__ is None",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_exact_repeat_executor::test_planner_step_process_handshake_and_lazy_loading",
+          "kind": "failed",
+          "main_message": "RuntimeError: planner step worker failed to initialize (AttributeError: module 'torch' has no attribute 'set_num_threads')",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_issue_4520_gpu_memory::test_serial_execute_map_jobs_gpu_teardown",
+          "kind": "failed",
+          "main_message": "AttributeError: <class 'tests.benchmark.test_map_runner_preflight_profiles._TorchCuda'> has no attribute 'empty_cache'",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_pinned_numerical_mode::test_float64_convolution_matches_independent_torch",
+          "kind": "failed",
+          "main_message": "AttributeError: module 'torch' has no attribute 'nn'",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_pinned_numerical_mode::test_pinned_actor_rejects_unsupported_layers",
+          "kind": "failed",
+          "main_message": "AttributeError: module 'torch' has no attribute 'nn'",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_ppo_release_robot_binding::test_release_robot_model_id_decodes_signed_delta_without_override",
+          "kind": "failed",
+          "main_message": "AttributeError: module 'torch' has no attribute 'set_num_threads'",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_predictive_foresight_fallback_metadata::test_run_episode_relays_ppo_child_foresight_fallback_metadata",
+          "kind": "failed",
+          "main_message": "AttributeError: module 'torch' has no attribute 'set_num_threads'",
+          "present_on_final_branch": true
+        }
+      ]
+    },
+    {
+      "counts": {
+        "failed": 23
+      },
+      "issue": 10207,
+      "root_cause": "historical_fixture_objects_missing",
+      "tests": [
+        {
+          "id": "tests.benchmark.test_result_interpretation_packet.TestFixturesValid::test_fixture_passes_schema_validation[issue_6474-packet_dict0]",
+          "kind": "failed",
+          "main_message": "AssertionError: issue_6474: [\"source 'preregistration': commit is unavailable: 2fc4498cc5499bd3569eb1ac941a3029e0f51040\", \"source 'preregistration': tracked_commit is unavailable: 2fc4498cc5499bd3569eb1ac941a3029e0f51040\", \"source 'preregistration': generation commit 2fc4498cc5499bd3569eb1ac941a3029e0f51040 does not contain command script scripts/benchmark/build_social_compliance_cross_planner_report_issue_6474.py\", \"source 'preregistration': tracked_commit does not contain docs/context/evidence/issue_6474_social_compliance_preregistration.json\"]",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_result_interpretation_packet.TestFixturesValid::test_fixture_passes_schema_validation[issue_6944-packet_dict1]",
+          "kind": "failed",
+          "main_message": "AssertionError: issue_6944: [\"source 'transition_summary': commit is unavailable: 8f9438632e794f084db72bb016a14b539bbca648\", \"source 'transition_summary': generation commit 8f9438632e794f084db72bb016a14b539bbca648 does not contain command script scripts/benchmark/run_brne_corridor_diagnostic_issue_6464.py\", \"source 'summary_review': commit is unavailable: 8f9438632e794f084db72bb016a14b539bbca648\"]",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_result_interpretation_packet.TestFixturesValid::test_fixture_loads_as_typed_packet[issue_6474-packet_dict0]",
+          "kind": "failed",
+          "main_message": "robot_sf.benchmark.result_interpretation_packet.ResultInterpretationPacketError: [\"source 'preregistration': commit is unavailable: 2fc4498cc5499bd3569eb1ac941a3029e0f51040\", \"source 'preregistration': tracked_commit is unavailable: 2fc4498cc5499bd3569eb1ac941a3029e0f51040\", \"source 'preregistration': generation commit 2fc4498cc5499bd3569eb1ac941a3029e0f51040 does not contain command script scripts/benchmark/build_social_compliance_cross_planner_report_issue_6474.py\", \"source 'preregistration': tracked_commit does not contain docs/context/evidence/issue_6474_social_compliance_preregistration.json\"]",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_result_interpretation_packet.TestFixturesValid::test_fixture_loads_as_typed_packet[issue_6944-packet_dict1]",
+          "kind": "failed",
+          "main_message": "robot_sf.benchmark.result_interpretation_packet.ResultInterpretationPacketError: [\"source 'transition_summary': commit is unavailable: 8f9438632e794f084db72bb016a14b539bbca648\", \"source 'transition_summary': generation commit 8f9438632e794f084db72bb016a14b539bbca648 does not contain command script scripts/benchmark/run_brne_corridor_diagnostic_issue_6464.py\", \"source 'summary_review': commit is unavailable: 8f9438632e794f084db72bb016a14b539bbca648\"]",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_result_interpretation_packet.TestFixturesValid::test_fixture_loads_from_disk[issue_6474_comfort_exposure_supported.json]",
+          "kind": "failed",
+          "main_message": "robot_sf.benchmark.result_interpretation_packet.ResultInterpretationPacketError: [\"source 'preregistration': commit is unavailable: 2fc4498cc5499bd3569eb1ac941a3029e0f51040\", \"source 'preregistration': tracked_commit is unavailable: 2fc4498cc5499bd3569eb1ac941a3029e0f51040\", \"source 'preregistration': generation commit 2fc4498cc5499bd3569eb1ac941a3029e0f51040 does not contain command script scripts/benchmark/build_social_compliance_cross_planner_report_issue_6474.py\", \"source 'preregistration': tracked_commit does not contain docs/context/evidence/issue_6474_social_compliance_preregistration.json\"]",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_result_interpretation_packet.TestFixturesValid::test_fixture_loads_from_disk[issue_6944_brne_candidate_transition_diagnostic.json]",
+          "kind": "failed",
+          "main_message": "robot_sf.benchmark.result_interpretation_packet.ResultInterpretationPacketError: [\"source 'transition_summary': commit is unavailable: 8f9438632e794f084db72bb016a14b539bbca648\", \"source 'transition_summary': generation commit 8f9438632e794f084db72bb016a14b539bbca648 does not contain command script scripts/benchmark/run_brne_corridor_diagnostic_issue_6464.py\", \"source 'summary_review': commit is unavailable: 8f9438632e794f084db72bb016a14b539bbca648\"]",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_result_interpretation_packet.TestFixturesValid::test_computed_digest_is_deterministic",
+          "kind": "failed",
+          "main_message": "robot_sf.benchmark.result_interpretation_packet.ResultInterpretationPacketError: [\"source 'preregistration': commit is unavailable: 2fc4498cc5499bd3569eb1ac941a3029e0f51040\", \"source 'preregistration': tracked_commit is unavailable: 2fc4498cc5499bd3569eb1ac941a3029e0f51040\", \"source 'preregistration': generation commit 2fc4498cc5499bd3569eb1ac941a3029e0f51040 does not contain command script scripts/benchmark/build_social_compliance_cross_planner_report_issue_6474.py\", \"source 'preregistration': tracked_commit does not contain docs/context/evidence/issue_6474_social_compliance_preregistration.json\"]",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_result_interpretation_packet.TestFixturesValid::test_post_review_digest_differs_when_reviewer_added",
+          "kind": "failed",
+          "main_message": "robot_sf.benchmark.result_interpretation_packet.ResultInterpretationPacketError: [\"source 'preregistration': commit is unavailable: 2fc4498cc5499bd3569eb1ac941a3029e0f51040\", \"source 'preregistration': tracked_commit is unavailable: 2fc4498cc5499bd3569eb1ac941a3029e0f51040\", \"source 'preregistration': generation commit 2fc4498cc5499bd3569eb1ac941a3029e0f51040 does not contain command script scripts/benchmark/build_social_compliance_cross_planner_report_issue_6474.py\", \"source 'preregistration': tracked_commit does not contain docs/context/evidence/issue_6474_social_compliance_preregistration.json\"]",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_result_interpretation_packet.TestFailClosedCaptionAssertion::test_observed_caption_status_accepted",
+          "kind": "failed",
+          "main_message": "AssertionError: observed should be valid: [\"figure 'ch7_matched_start_process_contrast': catalog generation_commit is unavailable: 4e513ebbbc3b11ef580cea76888fd6de43836c66\"]",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_result_interpretation_packet.TestFailClosedDecisionVocabulary::test_valid_outcomes_accepted[supported]",
+          "kind": "failed",
+          "main_message": "AssertionError: outcome 'supported' should be valid: [\"source 'preregistration': commit is unavailable: 2fc4498cc5499bd3569eb1ac941a3029e0f51040\", \"source 'preregistration': tracked_commit is unavailable: 2fc4498cc5499bd3569eb1ac941a3029e0f51040\", \"source 'preregistration': generation commit 2fc4498cc5499bd3569eb1ac941a3029e0f51040 does not contain command script scripts/benchmark/build_social_compliance_cross_planner_report_issue_6474.py\", \"source 'preregistration': tracked_commit does not contain docs/context/evidence/issue_6474_social_compliance_preregistration.json\"]",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_result_interpretation_packet.TestFailClosedDecisionVocabulary::test_valid_outcomes_accepted[not_supported]",
+          "kind": "failed",
+          "main_message": "AssertionError: outcome 'not_supported' should be valid: [\"source 'transition_summary': commit is unavailable: 8f9438632e794f084db72bb016a14b539bbca648\", \"source 'transition_summary': generation commit 8f9438632e794f084db72bb016a14b539bbca648 does not contain command script scripts/benchmark/run_brne_corridor_diagnostic_issue_6464.py\", \"source 'summary_review': commit is unavailable: 8f9438632e794f084db72bb016a14b539bbca648\"]",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_result_interpretation_packet.TestFailClosedDecisionVocabulary::test_valid_outcomes_accepted[inconclusive]",
+          "kind": "failed",
+          "main_message": "AssertionError: outcome 'inconclusive' should be valid: [\"source 'transition_summary': commit is unavailable: 8f9438632e794f084db72bb016a14b539bbca648\", \"source 'transition_summary': generation commit 8f9438632e794f084db72bb016a14b539bbca648 does not contain command script scripts/benchmark/run_brne_corridor_diagnostic_issue_6464.py\", \"source 'summary_review': commit is unavailable: 8f9438632e794f084db72bb016a14b539bbca648\"]",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_result_interpretation_packet.TestFailClosedDecisionVocabulary::test_valid_outcomes_accepted[invalid]",
+          "kind": "failed",
+          "main_message": "AssertionError: outcome 'invalid' should be valid: [\"source 'transition_summary': commit is unavailable: 8f9438632e794f084db72bb016a14b539bbca648\", \"source 'transition_summary': generation commit 8f9438632e794f084db72bb016a14b539bbca648 does not contain command script scripts/benchmark/run_brne_corridor_diagnostic_issue_6464.py\", \"source 'summary_review': commit is unavailable: 8f9438632e794f084db72bb016a14b539bbca648\"]",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_result_interpretation_packet.TestFailClosedDecisionVocabulary::test_valid_outcomes_accepted[unavailable]",
+          "kind": "failed",
+          "main_message": "AssertionError: outcome 'unavailable' should be valid: [\"source 'transition_summary': commit is unavailable: 8f9438632e794f084db72bb016a14b539bbca648\", \"source 'transition_summary': generation commit 8f9438632e794f084db72bb016a14b539bbca648 does not contain command script scripts/benchmark/run_brne_corridor_diagnostic_issue_6464.py\", \"source 'summary_review': commit is unavailable: 8f9438632e794f084db72bb016a14b539bbca648\"]",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_result_interpretation_packet.TestFailClosedDigestDrift::test_valid_hex_digests_accepted",
+          "kind": "failed",
+          "main_message": "robot_sf.benchmark.result_interpretation_packet.ResultInterpretationPacketError: [\"source 'preregistration': commit is unavailable: 2fc4498cc5499bd3569eb1ac941a3029e0f51040\", \"source 'preregistration': tracked_commit is unavailable: 2fc4498cc5499bd3569eb1ac941a3029e0f51040\", \"source 'preregistration': generation commit 2fc4498cc5499bd3569eb1ac941a3029e0f51040 does not contain command script scripts/benchmark/build_social_compliance_cross_planner_report_issue_6474.py\", \"source 'preregistration': tracked_commit does not contain docs/context/evidence/issue_6474_social_compliance_preregistration.json\"]",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_result_interpretation_packet.TestFailClosedFigureEncoding::test_available_figure_must_match_catalog_entry",
+          "kind": "failed",
+          "main_message": "AssertionError: catalog-bound fixture should validate: [\"figure 'ch7_matched_start_process_contrast': catalog generation_commit is unavailable: 4e513ebbbc3b11ef580cea76888fd6de43836c66\"]",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_result_interpretation_packet.TestFailClosedCaptionBinding::test_caption_file_bytes_must_match_rendered_packet_caption",
+          "kind": "failed",
+          "main_message": "robot_sf.benchmark.result_interpretation_packet.ResultInterpretationPacketError: [\"figure 'ch7_matched_start_process_contrast': catalog generation_commit is unavailable: 4e513ebbbc3b11ef580cea76888fd6de43836c66\"]",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_result_interpretation_packet.TestMutationTests::test_generation_command_accepts_python_flags_and_relative_script",
+          "kind": "failed",
+          "main_message": "AssertionError: valid Python invocation should pass: [\"source 'preregistration': commit is unavailable: 2fc4498cc5499bd3569eb1ac941a3029e0f51040\", \"source 'preregistration': tracked_commit is unavailable: 2fc4498cc5499bd3569eb1ac941a3029e0f51040\", \"source 'preregistration': generation commit 2fc4498cc5499bd3569eb1ac941a3029e0f51040 does not contain command script scripts/benchmark/build_social_compliance_cross_planner_report_issue_6474.py\", \"source 'preregistration': tracked_commit does not contain docs/context/evidence/issue_6474_social_compliance_preregistration.json\"]",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_result_interpretation_packet.TestCLI::test_cli_validate_only",
+          "kind": "failed",
+          "main_message": "assert 1 == 0",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_result_interpretation_packet.TestCLI::test_cli_output_writes_file",
+          "kind": "failed",
+          "main_message": "assert 1 == 0",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_result_interpretation_packet.TestCLI::test_cli_output_without_comparator_can_be_reloaded",
+          "kind": "failed",
+          "main_message": "AssertionError: assert 1 == 0",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_result_interpretation_packet.TestCLI::test_cli_show_digest",
+          "kind": "failed",
+          "main_message": "assert 1 == 0",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_result_interpretation_packet.TestScriptCLI::test_script_cli_validate_only",
+          "kind": "failed",
+          "main_message": "assert 1 == 0",
+          "present_on_final_branch": true
+        }
+      ]
+    },
+    {
+      "counts": {
+        "failed": 3
+      },
+      "issue": null,
+      "root_cause": "intentional_simulator_interlock",
+      "tests": [
+        {
+          "id": "tests.benchmark.test_scenario_criticality_optimization::test_effective_workers_capped_at_candidate_count",
+          "kind": "failed",
+          "main_message": "_pickle.PicklingError: Can't pickle <class 'Skipped'>: attribute lookup Skipped on builtins failed",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_scenario_criticality_optimization::test_shared_planner_resolution_is_called_once",
+          "kind": "failed",
+          "main_message": "_pickle.PicklingError: Can't pickle <class 'Skipped'>: attribute lookup Skipped on builtins failed",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_socnavbench_canary::test_cli_canary_runner_consumes_export_across_process_boundary",
+          "kind": "failed",
+          "main_message": "AssertionError: 2026-10-12 14:52:40.179 | DEBUG    | robot_sf.sensor.registry:register_sensor:98 - Registered sensor 'dummy_constant' in registry",
+          "present_on_final_branch": true
+        }
+      ]
+    },
+    {
+      "counts": {
+        "errors": 11,
+        "failed": 82
+      },
+      "issue": 7640,
+      "root_cause": "optional_dependency_profile",
+      "tests": [
+        {
+          "id": "::tests.benchmark.test_candidate_trace_resolution_issue_5615",
+          "kind": "errors",
+          "main_message": "collection failure",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "::tests.benchmark.test_continual_adaptation_campaign",
+          "kind": "errors",
+          "main_message": "collection failure",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "::tests.benchmark.test_finite_checks",
+          "kind": "errors",
+          "main_message": "collection failure",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "::tests.benchmark.test_issue_6412_real_reexport",
+          "kind": "errors",
+          "main_message": "collection failure",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "::tests.benchmark.test_map_runner_distributional_rl",
+          "kind": "errors",
+          "main_message": "collection failure",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "::tests.benchmark.test_parquet_export",
+          "kind": "errors",
+          "main_message": "collection failure",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "::tests.benchmark.test_render_sim_view",
+          "kind": "errors",
+          "main_message": "collection failure",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "::tests.benchmark.test_risk_aware_trajectory_ranker_comparison",
+          "kind": "errors",
+          "main_message": "collection failure",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "::tests.benchmark.test_trace_dossier_package",
+          "kind": "errors",
+          "main_message": "collection failure",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "::tests.benchmark.test_trace_dossier_selection",
+          "kind": "errors",
+          "main_message": "collection failure",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "::tests.benchmark.test_worked_example_trace_pipeline_issue_5756",
+          "kind": "errors",
+          "main_message": "collection failure",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_adversarial_package_b_manifest_run::test_manifest_drives_27_cell_budget_matched_run",
+          "kind": "failed",
+          "main_message": "RuntimeError: OptunaCandidateSampler requires optuna. Install project dependencies with `uv sync --all-extras` before using the optimizer-backed adversarial sampler.",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_adversarial_package_b_manifest_run::test_package_b_pipeline_produces_artifacts_and_passes_gates",
+          "kind": "failed",
+          "main_message": "RuntimeError: OptunaCandidateSampler requires optuna. Install project dependencies with `uv sync --all-extras` before using the optimizer-backed adversarial sampler.",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_adversarial_package_b_manifest_run::test_confirmation_sidecar_is_censored_and_artifact_bound",
+          "kind": "failed",
+          "main_message": "RuntimeError: OptunaCandidateSampler requires optuna. Install project dependencies with `uv sync --all-extras` before using the optimizer-backed adversarial sampler.",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_adversarial_package_b_manifest_run::test_issue_5326_manifest_drives_multi_objective_synthetic_run",
+          "kind": "failed",
+          "main_message": "RuntimeError: OptunaCandidateSampler requires optuna. Install project dependencies with `uv sync --all-extras` before using the optimizer-backed adversarial sampler.",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_adversarial_package_b_manifest_run::test_issue_5326_canonical_example_command_emits_durable_table",
+          "kind": "failed",
+          "main_message": "RuntimeError: OptunaCandidateSampler requires optuna. Install project dependencies with `uv sync --all-extras` before using the optimizer-backed adversarial sampler.",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_adversarial_package_b_manifest_run::test_issue_5326_orchestrator_writes_durable_table_when_declared",
+          "kind": "failed",
+          "main_message": "RuntimeError: OptunaCandidateSampler requires optuna. Install project dependencies with `uv sync --all-extras` before using the optimizer-backed adversarial sampler.",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_camera_ready_campaign::test_run_campaign_writes_core_artifacts",
+          "kind": "failed",
+          "main_message": "robot_sf.benchmark.campaign.campaign_runtime_preflight.CampaignPolicyDependencyPreflightError: Campaign policy-dependency preflight failed for 1 import(s):",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_camera_ready_campaign::test_run_campaign_continues_after_not_available_when_stop_enabled",
+          "kind": "failed",
+          "main_message": "robot_sf.benchmark.campaign.campaign_runtime_preflight.CampaignPolicyDependencyPreflightError: Campaign policy-dependency preflight failed for 1 import(s):",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_camera_ready_campaign::test_run_campaign_skips_dependency_gated_planner_before_execution",
+          "kind": "failed",
+          "main_message": "robot_sf.benchmark.campaign.campaign_runtime_preflight.CampaignPolicyDependencyPreflightError: Campaign policy-dependency preflight failed for 1 import(s):",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_camera_ready_campaign::test_campaign_table_and_arm_identity_artifacts_published",
+          "kind": "failed",
+          "main_message": "robot_sf.benchmark.campaign.campaign_runtime_preflight.CampaignPolicyDependencyPreflightError: Campaign policy-dependency preflight failed for 2 import(s):",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_camera_ready_checkpoint_submit_preflight::test_prepare_enforced_staged_invokes_stage_true",
+          "kind": "failed",
+          "main_message": "robot_sf.benchmark.campaign.campaign_runtime_preflight.CampaignPolicyDependencyPreflightError: Campaign policy-dependency preflight failed for 1 import(s):",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_camera_ready_checkpoint_submit_preflight::test_prepare_metadata_only_writes_resolvability_report",
+          "kind": "failed",
+          "main_message": "robot_sf.benchmark.campaign.campaign_runtime_preflight.CampaignPolicyDependencyPreflightError: Campaign policy-dependency preflight failed for 1 import(s):",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_camera_ready_checkpoint_submit_preflight::test_prepare_enforced_staged_fails_closed_when_staging_fails",
+          "kind": "failed",
+          "main_message": "robot_sf.benchmark.campaign.campaign_runtime_preflight.CampaignPolicyDependencyPreflightError: Campaign policy-dependency preflight failed for 1 import(s):",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_camera_ready_tuning_effort_issue_5143::test_prepare_campaign_preflight_writes_tuning_blocks_and_summary",
+          "kind": "failed",
+          "main_message": "robot_sf.benchmark.campaign.campaign_runtime_preflight.CampaignPolicyDependencyPreflightError: Campaign policy-dependency preflight failed for 1 import(s):",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_campaign_checkpoint_preflight::test_prepare_campaign_preflight_rejects_missing_checkpoint_before_scenarios",
+          "kind": "failed",
+          "main_message": "robot_sf.benchmark.campaign.campaign_runtime_preflight.CampaignPolicyDependencyPreflightError: Campaign policy-dependency preflight failed for 1 import(s):",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_case_workbench::test_case_workbench_is_deterministic_and_excludes_missing_provenance",
+          "kind": "failed",
+          "main_message": "AssertionError: assert False",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_case_workbench::test_campaign_result_store_v2_emits_all_tables_and_unavailable_adapter",
+          "kind": "failed",
+          "main_message": "robot_sf.benchmark.parquet_export.ParquetDependencyError: Parquet export requires optional analytics dependencies. Install them with `uv sync --extra analytics` or `uv sync --all-extras`.",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_case_workbench::test_v2_read_adapter_rechecks_coverage_when_state_table_is_missing",
+          "kind": "failed",
+          "main_message": "robot_sf.benchmark.parquet_export.ParquetDependencyError: Parquet export requires optional analytics dependencies. Install them with `uv sync --extra analytics` or `uv sync --all-extras`.",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_case_workbench::test_campaign_result_store_v2_pair_receipt_derives_only_compatible_deltas",
+          "kind": "failed",
+          "main_message": "robot_sf.benchmark.parquet_export.ParquetDependencyError: Parquet export requires optional analytics dependencies. Install them with `uv sync --extra analytics` or `uv sync --all-extras`.",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_case_workbench::test_source_gate_receipt_controls_preview_and_binds_digest",
+          "kind": "failed",
+          "main_message": "assert None",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_cli_typed_error_contract::test_missing_input_fails_closed[export-parquet]",
+          "kind": "failed",
+          "main_message": "robot_sf.benchmark.parquet_export.ParquetDependencyError: Parquet export requires optional analytics dependencies. Install them with `uv sync --extra analytics` or `uv sync --all-extras`.",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_cli_typed_error_contract::test_malformed_input_fails_closed[export-parquet]",
+          "kind": "failed",
+          "main_message": "robot_sf.benchmark.parquet_export.ParquetDependencyError: Parquet export requires optional analytics dependencies. Install them with `uv sync --extra analytics` or `uv sync --all-extras`.",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_exact_repeat_executor::test_native_ppo_runs_offline_after_model_preflight",
+          "kind": "failed",
+          "main_message": "Failed: stable_baselines3 is required for the offline exact-repeat proof: No module named 'stable_baselines3'",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_guarded_summary_identity::test_unbound_contributor_halts_guarded_campaign[False-True-missing]",
+          "kind": "failed",
+          "main_message": "robot_sf.benchmark.campaign.campaign_runtime_preflight.CampaignPolicyDependencyPreflightError: Campaign policy-dependency preflight failed for 1 import(s):",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_guarded_summary_identity::test_unbound_contributor_halts_guarded_campaign[False-True-null]",
+          "kind": "failed",
+          "main_message": "robot_sf.benchmark.campaign.campaign_runtime_preflight.CampaignPolicyDependencyPreflightError: Campaign policy-dependency preflight failed for 1 import(s):",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_guarded_summary_identity::test_unbound_contributor_halts_guarded_campaign[False-True-list]",
+          "kind": "failed",
+          "main_message": "robot_sf.benchmark.campaign.campaign_runtime_preflight.CampaignPolicyDependencyPreflightError: Campaign policy-dependency preflight failed for 1 import(s):",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_guarded_summary_identity::test_unbound_contributor_halts_guarded_campaign[False-True-empty]",
+          "kind": "failed",
+          "main_message": "robot_sf.benchmark.campaign.campaign_runtime_preflight.CampaignPolicyDependencyPreflightError: Campaign policy-dependency preflight failed for 1 import(s):",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_guarded_summary_identity::test_unbound_contributor_halts_guarded_campaign[False-False-missing]",
+          "kind": "failed",
+          "main_message": "robot_sf.benchmark.campaign.campaign_runtime_preflight.CampaignPolicyDependencyPreflightError: Campaign policy-dependency preflight failed for 1 import(s):",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_guarded_summary_identity::test_unbound_contributor_halts_guarded_campaign[False-False-null]",
+          "kind": "failed",
+          "main_message": "robot_sf.benchmark.campaign.campaign_runtime_preflight.CampaignPolicyDependencyPreflightError: Campaign policy-dependency preflight failed for 1 import(s):",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_guarded_summary_identity::test_unbound_contributor_halts_guarded_campaign[False-False-list]",
+          "kind": "failed",
+          "main_message": "robot_sf.benchmark.campaign.campaign_runtime_preflight.CampaignPolicyDependencyPreflightError: Campaign policy-dependency preflight failed for 1 import(s):",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_guarded_summary_identity::test_unbound_contributor_halts_guarded_campaign[False-False-empty]",
+          "kind": "failed",
+          "main_message": "robot_sf.benchmark.campaign.campaign_runtime_preflight.CampaignPolicyDependencyPreflightError: Campaign policy-dependency preflight failed for 1 import(s):",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_guarded_summary_identity::test_unbound_contributor_halts_guarded_campaign[True-True-missing]",
+          "kind": "failed",
+          "main_message": "robot_sf.benchmark.campaign.campaign_runtime_preflight.CampaignPolicyDependencyPreflightError: Campaign policy-dependency preflight failed for 1 import(s):",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_guarded_summary_identity::test_unbound_contributor_halts_guarded_campaign[True-True-null]",
+          "kind": "failed",
+          "main_message": "robot_sf.benchmark.campaign.campaign_runtime_preflight.CampaignPolicyDependencyPreflightError: Campaign policy-dependency preflight failed for 1 import(s):",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_guarded_summary_identity::test_unbound_contributor_halts_guarded_campaign[True-True-list]",
+          "kind": "failed",
+          "main_message": "robot_sf.benchmark.campaign.campaign_runtime_preflight.CampaignPolicyDependencyPreflightError: Campaign policy-dependency preflight failed for 1 import(s):",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_guarded_summary_identity::test_unbound_contributor_halts_guarded_campaign[True-True-empty]",
+          "kind": "failed",
+          "main_message": "robot_sf.benchmark.campaign.campaign_runtime_preflight.CampaignPolicyDependencyPreflightError: Campaign policy-dependency preflight failed for 1 import(s):",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_guarded_summary_identity::test_unbound_contributor_halts_guarded_campaign[True-False-missing]",
+          "kind": "failed",
+          "main_message": "robot_sf.benchmark.campaign.campaign_runtime_preflight.CampaignPolicyDependencyPreflightError: Campaign policy-dependency preflight failed for 1 import(s):",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_guarded_summary_identity::test_unbound_contributor_halts_guarded_campaign[True-False-null]",
+          "kind": "failed",
+          "main_message": "robot_sf.benchmark.campaign.campaign_runtime_preflight.CampaignPolicyDependencyPreflightError: Campaign policy-dependency preflight failed for 1 import(s):",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_guarded_summary_identity::test_unbound_contributor_halts_guarded_campaign[True-False-list]",
+          "kind": "failed",
+          "main_message": "robot_sf.benchmark.campaign.campaign_runtime_preflight.CampaignPolicyDependencyPreflightError: Campaign policy-dependency preflight failed for 1 import(s):",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_guarded_summary_identity::test_unbound_contributor_halts_guarded_campaign[True-False-empty]",
+          "kind": "failed",
+          "main_message": "robot_sf.benchmark.campaign.campaign_runtime_preflight.CampaignPolicyDependencyPreflightError: Campaign policy-dependency preflight failed for 1 import(s):",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_helper_catalog::test_load_trained_policy_success",
+          "kind": "failed",
+          "main_message": "ModuleNotFoundError: No module named 'stable_baselines3'",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_helper_catalog::test_load_trained_policy_not_found",
+          "kind": "failed",
+          "main_message": "RuntimeError: stable_baselines3 PPO import failed. Install with 'uv add stable-baselines3' to use this helper.",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_map_runner_utils::test_build_policy_learned_prediction_mpc_registers_diagnostic_adapter",
+          "kind": "failed",
+          "main_message": "ModuleNotFoundError: learned short-horizon predictor requires torch for checkpoint or smoke mode",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_optional_moviepy_imports::test_unreadable_moviepy_configuration_disables_encoder[robot_sf.render.sim_view-MOVIEPY_AVAILABLE-False]",
+          "kind": "failed",
+          "main_message": "ModuleNotFoundError: No module named 'pygame'",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_optional_moviepy_imports::test_unexpected_moviepy_import_failure_propagates[robot_sf.render.sim_view]",
+          "kind": "failed",
+          "main_message": "ModuleNotFoundError: No module named 'pygame'",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_optional_moviepy_imports::test_real_moviepy_import_tolerates_unreadable_ancestor_dotenv[robot_sf.benchmark.full_classic.encode-ImageSequenceClip]",
+          "kind": "failed",
+          "main_message": "AssertionError: Traceback (most recent call last):",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_optional_moviepy_imports::test_real_moviepy_import_tolerates_unreadable_ancestor_dotenv[robot_sf.benchmark.full_classic.videos-ImageSequenceClip]",
+          "kind": "failed",
+          "main_message": "AssertionError: Traceback (most recent call last):",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_optional_moviepy_imports::test_real_moviepy_import_tolerates_unreadable_ancestor_dotenv[robot_sf.render.sim_view-MOVIEPY_AVAILABLE]",
+          "kind": "failed",
+          "main_message": "AssertionError: Traceback (most recent call last):",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_pinned_numerical_mode::test_manifest_records_actor_mode",
+          "kind": "failed",
+          "main_message": "ModuleNotFoundError: No module named 'threadpoolctl'",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_pinned_numerical_mode::test_full_float64_actor_matches_independent_torch",
+          "kind": "failed",
+          "main_message": "ModuleNotFoundError: No module named 'stable_baselines3'",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_scenario_criticality_optimization::test_cma_es_optimizer_accepted",
+          "kind": "failed",
+          "main_message": "ImportError: cma_es optimizer requires the 'cma' package. Install with: uv pip install -e \".[criticality]\"",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_scenario_criticality_optimization::test_cma_es_requires_continuous_params",
+          "kind": "failed",
+          "main_message": "ImportError: cma_es optimizer requires the 'cma' package. Install with: uv pip install -e \".[criticality]\"",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_scenario_criticality_optimization::test_cma_es_manifest_fields",
+          "kind": "failed",
+          "main_message": "ImportError: cma_es optimizer requires the 'cma' package. Install with: uv pip install -e \".[criticality]\"",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_scenario_criticality_optimization::test_cma_es_seed_fallback",
+          "kind": "failed",
+          "main_message": "ImportError: cma_es optimizer requires the 'cma' package. Install with: uv pip install -e \".[criticality]\"",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_scenario_criticality_optimization::test_cma_es_optimum_score_finite",
+          "kind": "failed",
+          "main_message": "ImportError: cma_es optimizer requires the 'cma' package. Install with: uv pip install -e \".[criticality]\"",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_trace_reexport_packaging::test_resolver_mapping_receipt_adapts_a_complete_package",
+          "kind": "failed",
+          "main_message": "ModuleNotFoundError: No module named 'pandas'",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_trace_reexport_packaging::test_resolver_mapping_validation_failure_leaves_no_receipt",
+          "kind": "failed",
+          "main_message": "ModuleNotFoundError: No module named 'pandas'",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_trace_reexport_packaging::test_resolver_cli_default_preserves_complete_package",
+          "kind": "failed",
+          "main_message": "ModuleNotFoundError: No module named 'pandas'",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_snqi_context_fix_round::test_post_freeze_external_receipt_admits_same_source_through_release_cli",
+          "kind": "failed",
+          "main_message": "AssertionError: {'mode': 'preflight', 'status': 'snqi_v2_execution_context_refused', 'status_reason': 'SNQI-v2 calibration execution context missing torch_version', 'benchmark_success': False, ...}",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_snqi_context_fix_round::test_production_release_census_refuses_a_missing_manifest_learned_arm[guarded_ppo]",
+          "kind": "failed",
+          "main_message": "AssertionError: missing learned arm passed context census",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_snqi_context_fix_round::test_production_release_census_refuses_a_missing_manifest_learned_arm[prediction_planner]",
+          "kind": "failed",
+          "main_message": "AssertionError: missing learned arm passed context census",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_snqi_context_fix_round::test_production_release_census_refuses_a_missing_manifest_learned_arm[predictive_mppi]",
+          "kind": "failed",
+          "main_message": "AssertionError: missing learned arm passed context census",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_snqi_context_fix_round::test_production_release_census_refuses_a_missing_manifest_learned_arm[socnav_sampling]",
+          "kind": "failed",
+          "main_message": "AssertionError: missing learned arm passed context census",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_snqi_context_fix_round::test_release_census_normalizes_recorded_algorithm",
+          "kind": "failed",
+          "main_message": "FileNotFoundError: [Errno 2] No such file or directory: '/tmp/pytest-of-luttkule/wt-f130430963/proc-3612219/pytest-of-luttkule/pytest-0/test_release_census_normalizes0/out/campaign_release/release/release_result.json'",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_snqi_context_fix_round::test_fresh_gate_observation_keeps_inference_stack_unloaded",
+          "kind": "failed",
+          "main_message": "AssertionError: Traceback (most recent call last):",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_snqi_execution_context::test_release_cli_refuses_before_source_admission_or_campaign[valid-preflight]",
+          "kind": "failed",
+          "main_message": "AssertionError: assert 'mismatch: cpu_model' in 'SNQI-v2 calibration execution context missing torch_version'",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_snqi_execution_context::test_release_cli_refuses_before_source_admission_or_campaign[valid-run]",
+          "kind": "failed",
+          "main_message": "AssertionError: assert 'mismatch: cpu_model' in 'SNQI-v2 calibration execution context missing torch_version'",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_snqi_execution_context::test_recorded_context_gate_precedes_full_release_acceptance[missing]",
+          "kind": "failed",
+          "main_message": "AssertionError: assert 'snqi_v2_exec...ntext_refused' == 'snqi_v2_epis...ntext_refused'",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_snqi_execution_context::test_recorded_context_gate_precedes_full_release_acceptance[different]",
+          "kind": "failed",
+          "main_message": "AssertionError: assert 'snqi_v2_exec...ntext_refused' == 'snqi_v2_epis...ntext_refused'",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_snqi_execution_context::test_recorded_context_gate_precedes_full_release_acceptance[equal]",
+          "kind": "failed",
+          "main_message": "FileNotFoundError: [Errno 2] No such file or directory: '/tmp/pytest-of-luttkule/wt-f130430963/proc-3612219/pytest-of-luttkule/pytest-0/test_recorded_context_gate_pre2/out/campaign_release/release/release_result.json'",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_benchmark_result_provenance::test_build_manifest_records_execution_context",
+          "kind": "failed",
+          "main_message": "AssertionError: assert {'cpu_model',...latform', ...} == {'cpu_model',...latform', ...}",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_benchmark_result_provenance::test_execution_context_records_installed_learned_policy_versions",
+          "kind": "failed",
+          "main_message": "ModuleNotFoundError: No module named 'stable_baselines3'",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_benchmark_result_provenance::test_execution_context_falls_back_for_originless_torch",
+          "kind": "failed",
+          "main_message": "KeyError: 'torch_version'",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_benchmark_result_provenance::test_execution_context_falls_back_for_unreadable_torch_version[__version__: str = '9.8.7+cpu']",
+          "kind": "failed",
+          "main_message": "KeyError: 'torch_version'",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_benchmark_result_provenance::test_execution_context_falls_back_for_unreadable_torch_version[__version__ = '9.8.7' + '+cpu']",
+          "kind": "failed",
+          "main_message": "KeyError: 'torch_version'",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_benchmark_result_provenance::test_execution_context_falls_back_for_unreadable_torch_version[__version__ =]",
+          "kind": "failed",
+          "main_message": "KeyError: 'torch_version'",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_benchmark_result_provenance::test_execution_context_falls_back_for_unreadable_torch_version[None]",
+          "kind": "failed",
+          "main_message": "KeyError: 'torch_version'",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_benchmark_result_provenance::test_execution_context_digest_binds_runtime_versions[numpy_version]",
+          "kind": "failed",
+          "main_message": "KeyError: 'torch_version'",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_benchmark_result_provenance::test_execution_context_digest_binds_runtime_versions[numba_version]",
+          "kind": "failed",
+          "main_message": "KeyError: 'torch_version'",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_benchmark_result_provenance::test_execution_context_digest_binds_runtime_versions[torch_version]",
+          "kind": "failed",
+          "main_message": "KeyError: 'torch_version'",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_benchmark_result_provenance::test_execution_context_digest_binds_runtime_versions[stable_baselines3_version]",
+          "kind": "failed",
+          "main_message": "KeyError: 'torch_version'",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_snqi_context_reference_policy_fields::test_production_selector_refuses_before_preflight[planner_selector_v2]",
+          "kind": "failed",
+          "main_message": "AssertionError: assert 'calibrated execution refuses planner_selector_v2' in 'SNQI-v2 calibration execution context missing torch_version'",
+          "present_on_final_branch": true
+        },
+        {
+          "id": "tests.benchmark.test_snqi_context_reference_policy_fields::test_production_selector_refuses_before_preflight[planner_selector_v2_diagnostic]",
+          "kind": "failed",
+          "main_message": "AssertionError: assert 'calibrated execution refuses planner_selector_v2' in 'SNQI-v2 calibration execution context missing torch_version'",
+          "present_on_final_branch": true
+        }
+      ]
+    }
+  ],
+  "guard_sha256": "893dbe2247843e94cf4d78eb482774c72d79425f116dc5912fe451ef74c447fe",
+  "introduced_failures_or_errors": [],
+  "junit_sha256": {
+    "benchmark.xml": "6999a5bd7fd3535a6581b3c9a2efa1a5fb9a45a28c0e38f37f28233f0b50dc11",
+    "main_benchmark.xml": "6509cff448f1cf151e2bc74eee8fd8d383d60d3d442ac904ccb40ecd62b0e6ce"
+  },
+  "main": {
+    "errors": 13,
+    "failed": 119,
+    "passed": 12116,
+    "skipped": 336
+  },
+  "main_commit": "53721be3248600e08641a9816d094b605e3c93e4",
+  "profile": "same shared interpreter/dependencies, distinct checkout imports, all simulator-entry calls skipped before reset",
+  "same_kind_for_shared_ids": true,
+  "schema_version": "hardcase-benchmark-baseline.v1",
+  "skip_difference": "four new seed1001 tests skipped by broad-audit interlock; all four separately executed and passed with seed1001",
+  "source_identity_verification": "main_import_identity.log confirms main-baseline robot_sf and pysocialforce paths"
+}

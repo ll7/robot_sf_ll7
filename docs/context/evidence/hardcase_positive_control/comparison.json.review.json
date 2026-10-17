@@ -1,0 +1,7 @@
+{
+  "artifact_path": "docs/context/evidence/hardcase_positive_control/comparison.json",
+  "artifact_sha256": "01f69996c6c5d8c7f92cba94b5cc4a7074ba2a458ab5ac6c830271f250b0da5a",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "evidence-review-marker.v1"
+}

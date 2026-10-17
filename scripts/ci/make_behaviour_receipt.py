@@ -465,6 +465,16 @@ EXECUTION_EVIDENCE_LOCATIONS: dict[str, Any] = {
     },
     "non_runtime_emissions": {
         (
+            "robot_sf/benchmark/map_runner/map_runner_episode.py",
+            "_restore_generated_window",
+            "restore_status",
+        ): "Checkpoint restoration provenance, not a controller decision or fallback; failed restoration raises before execution.",
+        (
+            "robot_sf/benchmark/scenario_generation/replay_adapter.py",
+            "_materialize_continuation",
+            "replay_status",
+        ): "Continuation materialization contract, not controller execution or a replay-parity verdict.",
+        (
             "robot_sf/benchmark/forecast/forecast_heavy_model_adapter.py",
             "<module>",
             "degraded_status",

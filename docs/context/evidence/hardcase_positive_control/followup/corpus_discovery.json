@@ -1,0 +1,31 @@
+{
+  "admission_status": "not_admitted",
+  "base_commit": "53721be3248600e08641a9816d094b605e3c93e4",
+  "blocker": "no landed versioned corpus admission implementation on the pinned main; existing whole-episode persistence CLI cannot admit a source-bound continuation window",
+  "broker_status": "used; literal candidates verified against bytes; discovery alone does not establish absence",
+  "case_count_change": 0,
+  "checked_tracked_paths": [
+    {
+      "commit": "53721be3248600e08641a9816d094b605e3c93e4",
+      "exists": false,
+      "path": "robot_sf/adversarial/counterexample_corpus.py",
+      "returncode": 128
+    },
+    {
+      "commit": "53721be3248600e08641a9816d094b605e3c93e4",
+      "exists": false,
+      "path": "tests/adversarial/test_counterexample_corpus.py",
+      "returncode": 128
+    }
+  ],
+  "issue_receipts": [
+    "https://github.com/ll7/robot_sf_ll7/issues/9652#issuecomment-6125063538",
+    "https://github.com/ll7/robot_sf_ll7/issues/5600#issuecomment-6125063906"
+  ],
+  "owner_issue": "https://github.com/ll7/robot_sf_ll7/issues/9652",
+  "persistence_verdict": "reject",
+  "perturbation_cells": "nine unknown; no independent perturbation execution",
+  "schema_version": "hardcase-corpus-discovery.v1",
+  "tracked_tree_command": "git ls-tree -r --name-only origin/main | rg counterexample_corpus",
+  "tracked_tree_matches": []
+}

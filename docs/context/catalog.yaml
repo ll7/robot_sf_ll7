@@ -25,6 +25,14 @@ entries:
   freshness: evidence
   area: benchmark_evidence
   description: Development-only planner admission and continuous-interval safety diagnostics; historical revisions retained, current proof in revision3.
+- path: docs/context/guard_escape_ablation/README.md
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/guard_escape_ablation/SHA256SUMS
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
 - path: docs/context/robsweep/README.md
   status: evidence
   freshness: evidence

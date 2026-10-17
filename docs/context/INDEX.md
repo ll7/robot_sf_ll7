@@ -5,6 +5,15 @@ failing-old/passing-new behavior regression, all six affected development cells,
 and paired empty-world accounting with residual limits:
 [continuous-interval safety revision](evidence/issue_10318/revision3/README.md).
 
+Guard/escape factorial ablation: 2,160 paired development episodes, independently
+confirmed numerical results, portable compact inputs and SHA-256 custody:
+[guard_escape_ablation/README.md](guard_escape_ablation/README.md).
+
+Preregistered guard/escape replication: 2,160 fresh paired development episodes,
+registered rule outcome, original comparison, secondary 60-seed pooling and
+checksum-verified W&B custody:
+[guard_escape_replication/README.md](guard_escape_replication/README.md).
+
 Issue #10211 cross-CPU reconstruction: 12,000 native development episodes on EPYC
 9354P and dual Xeon Silver 4310, default/kernel-pinned/float64 comparisons, and
 checksum-verified external evidence:

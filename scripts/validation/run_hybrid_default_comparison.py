@@ -17,6 +17,7 @@ import time
 from concurrent.futures import FIRST_COMPLETED, ProcessPoolExecutor, wait
 from importlib.metadata import distributions
 from pathlib import Path
+from typing import Any
 
 from loguru import logger
 
@@ -237,7 +238,7 @@ def summarize(results, output):
     summary = {"evidence_status": "diagnostic-only", "failures": [], "comparisons": {}}
     for empty in (True, False):
         subset = [r for r in results if r["empty"] is empty]
-        arms = {}
+        arms: dict[str, dict[str, Any]] = {}
         for arm in ("off", "current_defaults"):
             values = [r for r in subset if r["arm"] == arm]
             successes = [r["duration_s"] for r in values if r["outcome"] == "success"]

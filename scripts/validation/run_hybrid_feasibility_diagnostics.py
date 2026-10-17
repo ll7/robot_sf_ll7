@@ -17,6 +17,7 @@ import os
 import subprocess
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import yaml
@@ -237,7 +238,7 @@ def run_cell(task):  # noqa: C901, PLR0915 -- native episode custody stays withi
     planner = policy._planner_adapter
     env = make_robot_env(config=cfg, seed=seed, debug=False)
     shadow = None
-    rows = []
+    rows: list[dict[str, Any]] = []
     first_segment = first_horizon = None
     try:
         obs, _ = env.reset(seed=seed)

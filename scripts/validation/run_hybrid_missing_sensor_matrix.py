@@ -14,6 +14,7 @@ import subprocess
 import sys
 from concurrent.futures import FIRST_COMPLETED, ProcessPoolExecutor, wait
 from pathlib import Path
+from typing import Any
 
 ROOT = Path.cwd()
 sys.path.insert(0, str(ROOT))
@@ -42,6 +43,7 @@ def probe(task):
         cfg = native._build_env_config(scenario, scenario_path=matrix)
         cfg.include_goal_next_valid = False
         mapping = native.hybrid_config(scenario, enabled=False, goal_validity=True)
+        policy: Any
         policy, _ = native._build_policy(
             "hybrid_rule_local_planner", mapping, robot_kinematics="differential_drive"
         )

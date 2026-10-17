@@ -1,0 +1,7 @@
+{
+  "artifact_path": "docs/context/evidence/issue_10318/native_probe_after.json",
+  "artifact_sha256": "90f10602219d1ec8e6656852aadf72c8602c0994637fa854cffea8d0b38340bf",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "evidence-review-marker.v1"
+}

@@ -1,10 +1,12 @@
 """Focused coverage for the extracted Prediction planner-family module."""
 
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 import numpy as np
 import pytest
+import yaml
 
 from robot_sf.planner import socnav
 from robot_sf.planner import socnav_prediction as prediction
@@ -256,3 +258,225 @@ def test_flat_observation_pedestrian_velocity_stays_ego_native_in_model_input() 
     # ... and must not have been rotated into world frame.
     rotated = np.array([-ego_velocity[0, 1], ego_velocity[0, 0]])
     assert not np.allclose(state[0, 2:], rotated, atol=1e-6)
+
+
+@pytest.mark.parametrize("pedestrian_x,should_progress", [(2.27, True), (1.4, False)])
+def test_sequence_search_preserves_clear_near_field_progress(
+    pedestrian_x: float, should_progress: bool
+) -> None:
+    """A clear near-field forecast permits motion; a touching body still yields.
+
+    The clear case approximates the seed-1001 following-human audit at 10 s:
+    a pedestrian at (2.27, 0.42) relative to a stopped robot, forecast to move
+    0.12 m away and 0.06 m laterally over the horizon. Five stationary
+    actions rank ahead of all motion under the single-action speed margin,
+    although the sequence objective prefers safe forward progress.
+    """
+    config_path = (
+        Path(__file__).resolve().parents[2] / "configs/algos/prediction_planner_release_v0_0_8.yaml"
+    )
+    config = prediction.SocNavPlannerConfig(**yaml.safe_load(config_path.read_text()))
+    adapter = prediction.PredictionPlannerAdapter(config)
+    observation = prediction_contracts._make_obs(goal=(30.0, 0.0))
+    lateral = 0.42 if should_progress else 0.0
+    future = np.tile([pedestrian_x, lateral], (1, 8, 1))
+    if should_progress:
+        future[0, :, 0] += np.linspace(0.0, 0.12, 8)
+        future[0, :, 1] += np.linspace(0.0, 0.06, 8)
+    v, w = adapter._plan_sequence_search(
+        observation=observation,
+        future_batch=future[None],
+        mask=np.ones(1),
+        steps=8,
+    )
+    if should_progress:
+        assert v >= 0.1, "Clear forward progress was pruned out of the sequence search"
+        # Independent unicycle geometry: even the full constant command stays
+        # outside the 1.0 + 0.4 m physical bodies over the supported 0.8 s.
+        angles = w * 0.1 * np.arange(1, 9)
+        robot_xy = np.cumsum(v * 0.1 * np.column_stack((np.cos(angles), np.sin(angles))), axis=0)
+        clearance = np.linalg.norm(future[0] - robot_xy, axis=1) - 1.4
+        assert np.min(clearance) >= config.predictive_safe_distance
+    else:
+        assert v == 0.0
+
+
+@pytest.mark.parametrize(
+    "forecast_x",
+    [1.8, 10.0, 2.1],
+    ids=["forecast-close", "forecast-misses-close-actor", "compliant-progress"],
+)
+def test_sequence_search_enforces_surface_margin_under_goal_pressure(forecast_x: float) -> None:
+    """Goal pressure cannot admit motion into an observed 0.4 m surface gap.
+
+    The second case represents a learned forecast missing an observed close
+    actor; the population-capacity regression below covers actor truncation.
+    """
+    config_path = (
+        Path(__file__).resolve().parents[2] / "configs/algos/prediction_planner_release_v0_0_8.yaml"
+    )
+    config = prediction.SocNavPlannerConfig(**yaml.safe_load(config_path.read_text()))
+    config.predictive_goal_weight = 100.0
+    adapter = prediction.PredictionPlannerAdapter(config)
+    positions = [(1.8, 0.0)] if forecast_x == 10.0 else [(forecast_x, 0.0)]
+    observation = prediction_contracts._make_obs_with_peds(positions, goal=(30.0, 0.0))
+    forecast_agents = min(len(positions), config.predictive_max_agents)
+    future = np.tile([forecast_x, 0.0], (forecast_agents, 8, 1))
+    v, w = adapter._plan_sequence_search(
+        observation=observation, future_batch=future[None], mask=np.ones(forecast_agents), steps=8
+    )
+    if forecast_x == 2.1:
+        assert v > 0.0, "The margin guard must retain compliant slow progress"
+        angles = w * 0.1 * np.arange(1, 9)
+        robot_xy = np.cumsum(v * 0.1 * np.column_stack((np.cos(angles), np.sin(angles))), axis=0)
+        clearance = np.linalg.norm(future[0] - robot_xy, axis=1) - 1.4
+        assert np.min(clearance) >= config.predictive_safe_distance, (
+            "Selected motion spends its surface safety margin"
+        )
+    else:
+        assert v == 0.0, "A moving candidate spends the configured surface safety margin"
+        unsafe_action_score = adapter._score_action(
+            observation=observation,
+            future_peds=future,
+            mask=np.ones(forecast_agents),
+            v=0.4,
+            w=0.0,
+            steps=8,
+        )
+        assert np.isinf(unsafe_action_score), (
+            "Constant-action selection must enforce the same margin"
+        )
+
+
+def test_sequence_search_brakes_when_observed_population_exceeds_forecast_capacity() -> None:
+    """An incomplete learned forecast cannot authorize motion, even before actors approach."""
+    config_path = (
+        Path(__file__).resolve().parents[2] / "configs/algos/prediction_planner_release_v0_0_8.yaml"
+    )
+    config = prediction.SocNavPlannerConfig(**yaml.safe_load(config_path.read_text()))
+    adapter = prediction.PredictionPlannerAdapter(config)
+    observation = prediction_contracts._make_obs_with_peds([(10.0, 0.0)] * 17)
+    future = np.tile([10.0, 0.0], (16, 8, 1))
+    v, w = adapter._plan_sequence_search(
+        observation=observation, future_batch=future[None], mask=np.ones(16), steps=8
+    )
+    assert (v, w) == (0.0, 0.0), "Incomplete population forecasts must brake"
+
+
+@pytest.mark.parametrize("source", ["both", "learned", "observed"])
+@pytest.mark.parametrize("path", ["action", "sequence", "command"])
+def test_prediction_rejects_submargin_between_clear_samples(monkeypatch, source, path):
+    """The exact review witness crosses the margin only inside its first interval."""
+    from types import SimpleNamespace
+
+    from robot_sf.robot.differential_drive import DifferentialDriveSettings
+
+    config_path = (
+        Path(__file__).resolve().parents[2] / "configs/algos/prediction_planner_release_v0_0_8.yaml"
+    )
+    config = prediction.SocNavPlannerConfig(**yaml.safe_load(config_path.read_text()))
+    config.predictive_goal_weight = 100.0
+    adapter = prediction.PredictionPlannerAdapter(config)
+    adapter.bind_env(
+        SimpleNamespace(
+            simulator=SimpleNamespace(
+                robots=[SimpleNamespace(config=DifferentialDriveSettings(radius=1.0))]
+            )
+        )
+    )
+    origin = np.array([1.7498, -0.04])
+    velocity = np.array([1.04, 0.8])
+    obs = prediction_contracts._make_obs_with_peds([tuple(origin)], goal=(30.0, 0.0))
+    obs["robot"]["speed"] = np.array([1.04])
+    obs["robot"]["angular_velocity"] = np.array([0.0])
+    obs["sim"] = {"timestep": [0.1]}
+    obs["pedestrians"]["velocities"] = velocity[None].copy()
+    times = 0.1 * np.arange(1, 9)
+    future = np.zeros((config.predictive_max_agents, 8, 2))
+    future[0] = origin + times[:, None] * velocity
+    if source == "learned":
+        # The observed CV source is clear: constant relative (x,y).
+        obs["pedestrians"]["velocities"][0, 1] = 0.0
+    elif source == "observed":
+        # The learned source is clear from the measured origin onward.
+        future[0] = origin + times[:, None] * [1.04, 0.0]
+    mask = np.zeros(config.predictive_max_agents)
+    mask[0] = 1.0
+    # Independent relative geometry, including the measured origin. The
+    # minimum is at t=0.05, before the first prediction sample.
+    sample_times = 0.1 * np.arange(9)
+    sampled_gaps = np.hypot(1.7498, -0.04 + 0.8 * sample_times) - 1.4
+    assert np.min(sampled_gaps) == pytest.approx(0.350257135, abs=1e-9)
+    assert 1.7498 - 1.4 == pytest.approx(0.3498)
+    assert np.min(sampled_gaps) > config.predictive_safe_distance > 0.3498
+    kwargs = {"observation": obs, "future_peds": future, "mask": mask, "steps": 8}
+    if path == "action":
+        assert adapter._score_action(**kwargs, v=1.04, w=0.0) == float("inf")
+    elif path == "sequence":
+        assert adapter._score_action_sequence(**kwargs, sequence=[(1.04, 0.0)]) == float("inf")
+    else:
+        monkeypatch.setattr(adapter, "_predict_trajectories", lambda _state, _mask: future)
+        v, w = adapter.plan(obs)
+        # Independently integrate the bound drive's first acceleration step.
+        t = np.linspace(0.0, 0.1, 1001)
+        accel = np.clip((v - 1.04) / 0.1, -1.0, 1.0)
+        angular_accel = np.clip(w / 0.1, -1.0, 1.0)
+        distance = 1.04 * t + 0.5 * accel * t**2
+        angle = 0.25 * angular_accel * t**2
+        robot_xy = distance[:, None] * np.column_stack([np.cos(angle), np.sin(angle)])
+        witness_ped = origin + t[:, None] * velocity
+        gap = np.linalg.norm(witness_ped - robot_xy, axis=1) - 1.4
+        assert np.min(gap) >= config.predictive_safe_distance, (v, w, np.min(gap))
+
+
+@pytest.mark.parametrize("path", ["action", "sequence"])
+@pytest.mark.parametrize("control_dt", [0.1, 0.025])
+def test_prediction_covers_curved_motion_between_samples(path, control_dt):
+    """The drive curve can approach a body between clear prediction endpoints."""
+    from types import SimpleNamespace
+
+    from robot_sf.robot.differential_drive import DifferentialDriveSettings
+
+    config = prediction.SocNavPlannerConfig(
+        predictive_clearance_model="surface_v2",
+        predictive_robot_radius=1.0,
+        predictive_pedestrian_radius=0.4,
+        predictive_safe_distance=0.35,
+        predictive_rollout_dt=0.1,
+    )
+    adapter = prediction.PredictionPlannerAdapter(config)
+    adapter.bind_env(
+        SimpleNamespace(
+            simulator=SimpleNamespace(
+                robots=[SimpleNamespace(config=DifferentialDriveSettings(radius=1.0))]
+            )
+        )
+    )
+
+    # Independent constant-wheel-speed mid-heading odometry at control times.
+    def position(t):
+        full_steps = int(np.floor((t + 1e-12) / control_dt))
+        angles = control_dt * (np.arange(1, full_steps + 1) - 0.5)
+        xy = control_dt * np.column_stack([np.cos(angles), np.sin(angles)]).sum(axis=0)
+        remainder = max(0.0, t - full_steps * control_dt)
+        partial_heading = (full_steps * control_dt + t) / 2
+        return xy + remainder * np.array([np.cos(partial_heading), np.sin(partial_heading)])
+
+    middle = position(0.05)
+    # Outward normal to the intervening motion; all sample endpoints are clear.
+    tangent_angle = 0.025 + np.arctan(0.025) if control_dt == 0.1 else 0.05
+    outward = np.array([np.sin(tangent_angle), -np.cos(tangent_angle)])
+    pedestrian = middle + 1.7498 * outward
+    assert np.linalg.norm(pedestrian - middle) - 1.4 == pytest.approx(0.3498)
+    sampled = np.array([position(t) for t in [0.0, 0.1, 0.2]])
+    assert np.min(np.linalg.norm(sampled - pedestrian, axis=1) - 1.4) > 0.35
+    obs = prediction_contracts._make_obs_with_peds([tuple(pedestrian)])
+    obs["robot"]["speed"] = [1.0]
+    obs["robot"]["angular_velocity"] = [1.0]
+    obs["sim"] = {"timestep": [control_dt]}
+    future = np.tile(pedestrian, (1, 2, 1))
+    kwargs = {"observation": obs, "future_peds": future, "mask": np.ones(1), "steps": 2}
+    if path == "action":
+        assert adapter._score_action(**kwargs, v=1.0, w=1.0) == float("inf")
+    else:
+        assert adapter._score_action_sequence(**kwargs, sequence=[(1.0, 1.0)]) == float("inf")

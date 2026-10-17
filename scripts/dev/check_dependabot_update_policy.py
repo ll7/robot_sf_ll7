@@ -1333,15 +1333,23 @@ def sync_workflow_action_pins(
         report["message"] = "no stale workflow action pins to sync"
         return report
 
-    rows_by_file: dict[str, list[dict[str, Any]]] = {}
+    rows_by_file: dict[str, dict[str, dict[str, Any]]] = {}
     for row in stale_rows:
         for relative_path in row["matching_paths"]:
-            rows_by_file.setdefault(relative_path, []).append(row)
+            file_replacements = rows_by_file.setdefault(relative_path, {})
+            previous = file_replacements.get(row["old_ref"])
+            if previous is not None and previous["new_ref"] != row["new_ref"]:
+                raise WorkflowActionPinSyncError(
+                    f"cannot sync {row['old_ref']} in {relative_path}: conflicting destinations "
+                    f"{previous['new_ref']} and {row['new_ref']}; manual review required",
+                    report,
+                )
+            file_replacements[row["old_ref"]] = row
     file_rows: list[dict[str, Any]] = []
     new_texts: dict[str, str] = {}
     for relative_path in sorted(rows_by_file):
         file_row, updated = _rewrite_pin_file(
-            repo_root, relative_path, rows_by_file[relative_path], report
+            repo_root, relative_path, list(rows_by_file[relative_path].values()), report
         )
         file_rows.append(file_row)
         new_texts[relative_path] = updated

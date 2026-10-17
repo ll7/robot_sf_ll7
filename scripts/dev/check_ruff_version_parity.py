@@ -123,14 +123,18 @@ def read_pyproject_dev_dep_pin(path: Path) -> str:
 def _read_run_ruff_pins(run: str, location: str) -> list[tuple[str, str]]:
     """Account for every Ruff mention before returning any pins from a step.
 
-    Deliberate indirection (variables, eval, command substitution, called scripts)
-    is out of scope and tracked in #10433.
+    Mention detection removes every non-ASCII-alphanumeric character and folds
+    case. Incidental matches are intentional; any real-workflow exception needs
+    an explicit allowlist entry with a reason. Launcher recognition uses the
+    original joined line.
+
+    Indirection (variables, eval, command substitution, called scripts, encoded
+    command names such as ANSI-C hex escapes) is out of scope; see #10433.
     """
     pins: list[tuple[str, str]] = []
     for line in run.replace("\\\n", "").splitlines():
-        # Detect literal shell spellings, then apply the original launcher grammar.
-        mention_line = re.sub(r"""\$''|\$""|['"\\]""", "", line)
-        if "ruff" not in mention_line.lower():
+        skeleton = re.sub(r"[^a-zA-Z0-9]", "", line).lower()
+        if "ruff" not in skeleton:
             continue
         match = RUFF_WORKFLOW_PIN_PATTERN.fullmatch(line)
         if match is None or "ruff" in match.group("args").lower():
@@ -150,8 +154,9 @@ def read_workflow_ruff_pins(workflows_dir: Path) -> list[tuple[str, str]]:
     every step's parsed ``run`` string. YAML scalar folding/quoting happens
     before shell backslash-newline continuations are joined. Locations name
     the workflow, job and zero-based step index rather than physical YAML lines.
-    Each logical line mentioning ``ruff`` (case-insensitively, even in comments
-    or filenames) must fully match the pinned ``uvx --from ruff==X.Y.Z ruff
+    Each logical line whose ASCII-alphanumeric skeleton contains ``ruff``
+    (case-insensitively, even across punctuation, comments or filenames) must
+    fully match the pinned ``uvx --from ruff==X.Y.Z ruff
     check|format`` launcher grammar. Other shells' continuation forms are
     unrecognised and rejected, rather than silently skipped. YAML metadata
     outside ``run`` is not scanned. There are no implicit allowlist exceptions.

@@ -1,4 +1,4 @@
-"""Public-entry-point regressions for all four reviews and fail-closed scanning."""
+"""Public-entry-point regressions for five reviews and fail-closed scanning."""
 
 from __future__ import annotations
 
@@ -149,6 +149,14 @@ def test_unknown_mentions_fail_under_any_shell(
         pytest.param(r"ru\ff", id="backslash-escape"),
         pytest.param("r$''uff", id="ansi-empty"),
         pytest.param('r$""uff', id="locale-empty"),
+        pytest.param("r$'uff'", id="round5-reviewer-ansi-suffix"),
+        pytest.param('r$"uff"', id="round5-reviewer-locale-suffix"),
+        pytest.param("$'r'uff", id="round5-ansi-prefix"),
+        pytest.param('$"ru"ff', id="round5-locale-prefix"),
+        pytest.param("r`u`ff", id="round5-backticks"),
+        pytest.param("r_u.f-f", id="round5-punctuation"),
+        pytest.param("R U F F", id="round5-spaces-uppercase"),
+        pytest.param("rüuff", id="round5-nonascii-removal"),
     ],
 )
 @pytest.mark.parametrize("advisory", [False, True], ids=["strict", "advisory"])
@@ -174,6 +182,11 @@ def test_literal_shell_spellings_cannot_hide_stale_launcher(
     assert "unrecognised" in output.lower()
     assert "0.16.10" in output
     assert "OK: all four" not in output
+
+
+def test_real_workflows_have_no_skeleton_false_positives() -> None:
+    """Scan all real run lines so incidental skeleton matches need explicit reasons."""
+    assert guard.main([]) == 0
 
 
 def test_unknown_mentions_also_fail_in_advisory_mode(

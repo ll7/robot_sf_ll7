@@ -25,6 +25,7 @@ from robot_sf.analysis_workbench.simulation_trace_export import (
     SimulationTraceExportValidationError,
     load_simulation_trace_export,
 )
+from robot_sf.benchmark.footprint_metrics import footprint_enabled, trace_radii
 
 if TYPE_CHECKING:
     from collections.abc import Iterator, Mapping, Sequence
@@ -2116,6 +2117,9 @@ def _draw_timeline(
     time = episode.time_s
     ax.plot(time, episode.min_robot_ped_distance_m, color=INK, linewidth=1.3)
     envelope_style = _reference_line_style(RED, 0.8)
+    if footprint_enabled(dict(episode.metadata)):
+        collision_envelope_m = sum(trace_radii(dict(episode.metadata)))
+        comfort_distance_m = collision_envelope_m + 0.5
     ax.axhline(collision_envelope_m, zorder=1, **envelope_style)
     key_handles = [
         Line2D([], [], label=f"collision envelope ({collision_envelope_m:g} m)", **envelope_style)
@@ -2332,6 +2336,9 @@ def render_scene(  # noqa: PLR0913 - public rendering controls are explicit keyw
         Path | tuple[Path, Figure]: Output path, plus the open Figure when requested.
     """
 
+    if footprint_enabled(dict(episode.metadata)):
+        collision_envelope_m = sum(trace_radii(dict(episode.metadata)))
+        comfort_distance_m = collision_envelope_m + 0.5
     if dpi <= 0:
         raise ValueError("dpi must be greater than zero")
     if collision_envelope_m <= 0 or comfort_distance_m <= 0:

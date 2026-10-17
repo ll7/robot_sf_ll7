@@ -35,8 +35,9 @@ import sys
 import textwrap
 import tokenize
 from dataclasses import dataclass
-from decimal import Decimal, InvalidOperation
+from decimal import ROUND_CEILING, ROUND_FLOOR, Decimal, InvalidOperation
 from difflib import SequenceMatcher
+from itertools import product
 from pathlib import Path
 
 import yaml
@@ -719,19 +720,42 @@ def _unallowlisted_sealed_reference(path: str, content: str) -> bool:
     )
 
 
-def _integer_seed_bound(value: object) -> int:
-    """Normalize numeric seed bounds without rounding or truncating fractions."""
+def _yaml_seed_number(value: object) -> Decimal:
+    """Normalize resolved YAML numbers and consumer-coercible strings/bytes exactly.
+
+    SafeLoader resolves YAML 1.1 integers, but leaves YAML 1.2 octal and some
+    exponent spellings as strings. Quoted numeric spellings and !!binary values
+    also reach consumers that call int(). Keep fractions for boundary checks.
+    """
+    if isinstance(value, bytes):
+        value = value.decode("ascii")
     if type(value) not in (int, float, str):
-        raise ValueError("seed range bound must be numeric")
-    number = Decimal(str(value))
-    if not number.is_finite() or number != number.to_integral_value():
-        raise ValueError("seed range bound must be a finite integer")
-    return int(number)
+        raise ValueError("seed value must be numeric")
+    text = str(value).strip().replace("_", "")
+    if re.fullmatch(r"[+-]?0(?:[bB][01]+|[oO][0-7]+|[xX][0-9a-fA-F]+)", text):
+        number = Decimal(int(text, 0))
+    elif re.fullmatch(r"[+-]?[0-9]+(?::[0-5]?[0-9])+(?:\.[0-9]*)?", text):
+        sign = -1 if text.startswith("-") else 1
+        number = Decimal(0)
+        for part in text.lstrip("+-").split(":"):
+            number = number * 60 + Decimal(part)
+        number *= sign
+    else:
+        number = Decimal(text)
+    if not number.is_finite():
+        raise ValueError("seed value must be finite")
+    return number
 
 
 def _yaml_indirection(source: str) -> list[tuple[int, int, str, str]]:
     """Locate actual YAML indirection tokens, including alias occurrence marks."""
-    found = []
+    # An event may begin at a tag on an earlier line than its anchor property.
+    # Token marks locate the actual property line for byte-identical custody.
+    found = [
+        (token.start_mark.line + 1, token.start_mark.column, "anchor", token.value)
+        for token in yaml.scan(source, Loader=yaml.SafeLoader)
+        if isinstance(token, yaml.tokens.AnchorToken)
+    ]
     # Each frame records whether it is a mapping and whether its next node is a key.
     stack: list[tuple[bool, bool]] = []
     for event in yaml.parse(source, Loader=yaml.SafeLoader):
@@ -744,8 +768,6 @@ def _yaml_indirection(source: str) -> list[tuple[int, int, str, str]]:
             kind = ""
             if isinstance(event, yaml.events.AliasEvent):
                 kind = "alias"
-            elif event.anchor is not None:
-                kind = "anchor"
             elif (
                 isinstance(event, yaml.events.ScalarEvent)
                 and is_key
@@ -807,18 +829,36 @@ def _yaml_semantic_findings(  # noqa: C901 - graph traversal, range checks and s
         number = node.start_mark.line + 1
         findings[number] = Finding(path, number, lines[number - 1].strip())
 
-    def overlaps(values):
-        try:
-            if any(type(value) not in (int, float, str) for value in values):
-                return False
-            low, high = sorted(Decimal(str(value)) for value in values)
-            return (
-                low.is_finite()
-                and high.is_finite()
-                and any(low <= seed <= high for seed in HELD_OUT_SEEDS)
-            )
-        except (ValueError, InvalidOperation):
-            return False
+    def numbers(node):
+        resolved = loader.construct_object(node, deep=True)
+        values = [resolved]
+        if isinstance(node, yaml.ScalarNode) and node.tag in (
+            "tag:yaml.org,2002:int",
+            "tag:yaml.org,2002:float",
+        ):
+            # Retain raw spelling too: YAML 1.2 treats leading-zero integers as
+            # decimal, and binary floats can lose exact fractional boundaries.
+            values.append(node.value)
+        candidates = set()
+        for value in values:
+            try:
+                candidates.add(_yaml_seed_number(value))
+                if isinstance(value, (str, bytes)):
+                    text = value.decode("ascii") if isinstance(value, bytes) else value
+                    text = text.strip().replace("_", "")
+                    if re.fullmatch(r"[+-]?0[0-7]+", text):
+                        # Consider YAML 1.1 octal as well as decimal consumers.
+                        candidates.add(Decimal(int(text, 8)))
+            except (ValueError, InvalidOperation):
+                pass
+        return candidates
+
+    def overlaps(nodes):
+        options = [numbers(node) for node in nodes]
+        return len(options) == 2 and any(
+            any(min(bounds) <= seed <= max(bounds) for seed in HELD_OUT_SEEDS)
+            for bounds in product(*options)
+        )
 
     def visit(node, seen):  # noqa: C901 - handle scalar, mapping and sequence nodes
         if id(node) in seen:
@@ -826,14 +866,18 @@ def _yaml_semantic_findings(  # noqa: C901 - graph traversal, range checks and s
         seen.add(id(node))
         resolved = loader.construct_object(node, deep=True)
         if isinstance(node, yaml.ScalarNode):
-            try:
-                if not exempt(node) and _integer_seed_bound(resolved) in HELD_OUT_SEEDS:
-                    report(node)
-            except (ValueError, InvalidOperation):
-                pass
+            adjacent = {
+                int(number.to_integral_value(rounding=rounding))
+                for number in numbers(node)
+                for rounding in (ROUND_FLOOR, ROUND_CEILING)
+            }
+            # Fractions are not seeds, but consumers may round or truncate them.
+            if not exempt(node) and adjacent & HELD_OUT_SEEDS:
+                report(node)
             return
         if isinstance(node, yaml.MappingNode):
-            if isinstance(resolved, dict) and len(resolved) == 2 and overlaps(resolved.values()):
+            value_nodes = {loader.construct_object(key): value for key, value in node.value}
+            if len(value_nodes) == 2 and overlaps(value_nodes.values()):
                 if not all(exempt(value) for _, value in node.value):
                     report(node)
             for lower, upper in (
@@ -845,7 +889,7 @@ def _yaml_semantic_findings(  # noqa: C901 - graph traversal, range checks and s
                 if (
                     lower in resolved
                     and upper in resolved
-                    and overlaps((resolved[lower], resolved[upper]))
+                    and overlaps((value_nodes[lower], value_nodes[upper]))
                 ):
                     bounds = [value for key, value in node.value if key.value in (lower, upper)]
                     if not all(exempt(value) for value in bounds):
@@ -854,7 +898,7 @@ def _yaml_semantic_findings(  # noqa: C901 - graph traversal, range checks and s
         else:
             if (
                 len(resolved) == 2
-                and overlaps(resolved)
+                and overlaps(node.value)
                 and not all(exempt(value) for value in node.value)
             ):
                 report(node)

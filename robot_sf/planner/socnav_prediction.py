@@ -6,11 +6,17 @@ from typing import Any
 
 import numpy as np
 from loguru import logger
+from shapely.geometry import LineString, MultiLineString
 
 from robot_sf.common.forecast_variants import FORECAST_VARIANT_CHOICES
 from robot_sf.common.math_utils import wrap_angle_pi
 from robot_sf.models import get_registry_entry
 from robot_sf.planner import socnav as _socnav
+from robot_sf.planner.clearance_geometry import (
+    CENTER_CLEARANCE_V1,
+    pedestrian_clearance,
+    validate_clearance_model,
+)
 from robot_sf.planner.obstacle_features import (
     PREDICTIVE_OBSTACLE_FEATURE_SCHEMA,
     LocalObstacleFeatureExtractor,
@@ -20,6 +26,7 @@ from robot_sf.planner.obstacle_features import (
     obstacle_lines_from_observation,
     validate_predictive_runtime_feature_schema,
 )
+from robot_sf.robot.differential_drive import DifferentialDriveRobot, DifferentialDriveSettings
 
 SamplingPlannerAdapter = _socnav.SamplingPlannerAdapter
 SocNavPlannerConfig = _socnav.SocNavPlannerConfig
@@ -50,12 +57,15 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
     def __init__(self, config: SocNavPlannerConfig | None = None, *, allow_fallback: bool = False):
         """Initialize predictive planner adapter and deferred model loading."""
         self.config = config or SocNavPlannerConfig()
+        validate_clearance_model(self.config.predictive_clearance_model)
         self._allow_fallback = bool(allow_fallback)
         self._model: PredictiveTrajectoryModel | None = None
         self._load_error: Exception | None = None
         self._fallback_warned = False
         self._device = self._resolve_device()
         self._bound_obstacle_lines: list = []
+        self._static_obstacle_geometry: MultiLineString | None = None
+        self._prediction_drive_settings: DifferentialDriveSettings | None = None
         self._obstacle_feature_extractor = LocalObstacleFeatureExtractor()
         self._baseline_predictor: Any | None = None
         self._forecast_variant_execution_mode = self._init_forecast_variant()
@@ -270,11 +280,19 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
     def bind_obstacle_lines(self, obstacle_lines: Any) -> None:
         """Bind explicit runtime obstacle-line geometry for obstacle-feature inputs."""
         self._bound_obstacle_lines = normalize_obstacle_lines(obstacle_lines)
+        self._static_obstacle_geometry = (
+            MultiLineString(self._bound_obstacle_lines) if self._bound_obstacle_lines else None
+        )
         self._obstacle_feature_extractor.precompute(self._bound_obstacle_lines)
 
     def bind_env(self, env: Any) -> None:
         """Bind static map obstacle geometry from a live Robot SF environment."""
         simulator = getattr(env, "simulator", None)
+        robots = getattr(simulator, "robots", None)
+        settings = getattr(robots[0], "config", None) if robots else None
+        self._prediction_drive_settings = (
+            settings if isinstance(settings, DifferentialDriveSettings) else None
+        )
         map_def = getattr(env, "map_def", None)
         if map_def is None:
             map_def = getattr(simulator, "map_def", None)
@@ -283,8 +301,7 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             iter_segments = getattr(simulator, "iter_obstacle_segments", None)
             if callable(iter_segments):
                 lines = normalize_obstacle_lines(iter_segments())
-        self._bound_obstacle_lines = lines
-        self._obstacle_feature_extractor.precompute(lines)
+        self.bind_obstacle_lines(lines)
 
     def _resolve_device(self) -> str:
         """Resolve runtime device string for predictive model inference.
@@ -787,6 +804,14 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             return float("inf")
         valid = future_peds[valid_idx, :t_max, :]
         dist = np.linalg.norm(valid, axis=2)
+        if self.config.predictive_clearance_model != CENTER_CLEARANCE_V1:
+            dist = pedestrian_clearance(
+                dist,
+                model=self.config.predictive_clearance_model,
+                robot_radius=self.config.predictive_robot_radius,
+                pedestrian_radius=self.config.predictive_pedestrian_radius,
+            )
+            assert isinstance(dist, np.ndarray)
         return float(np.min(dist)) if dist.size > 0 else float("inf")
 
     def _effective_rollout_steps(self, *, future_peds: np.ndarray, mask: np.ndarray) -> int:
@@ -903,12 +928,23 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         )
         max_v = float(self.config.max_linear_speed) * float(np.clip(cap_ratio, 0.1, 1.0))
         candidates: list[tuple[float, float]] = []
+        heading_duration = dt
+        if self.config.predictive_heading_lattice_version == "horizon_scaled_v2":
+            steps = self._effective_rollout_steps(future_peds=future_peds, mask=mask)
+            # Treat deltas as horizon yaw changes. Uniformly scale the whole set
+            # when outer deltas exceed reachable yaw, preserving distinct options.
+            # This scales robot controls only; it does not extend pedestrian forecasts.
+            heading_duration = max(
+                steps * dt,
+                max((abs(delta) for delta in heading_deltas), default=0.0)
+                / max(float(self.config.max_angular_speed), self._EPS),
+            )
         for ratio in speed_ratios:
             v = float(np.clip(ratio * self.config.max_linear_speed, min_v, max_v))
             for delta in heading_deltas:
                 omega = float(
                     np.clip(
-                        delta / dt,
+                        delta / heading_duration,
                         -self.config.max_angular_speed,
                         self.config.max_angular_speed,
                     )
@@ -918,15 +954,45 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         # Keep deterministic ordering for stable benchmark outputs.
         return sorted(set(candidates), key=lambda x: (round(x[0], 6), round(x[1], 6)))
 
-    @staticmethod
+    def _bound_drive_rollout(self, commands, dt, observation):
+        """Integrate bound wheel odometry at the observed control clock.
+
+        Returns:
+            tuple: Local positions and headings at each prediction sample.
+        """
+        if observation is None and len(commands) > 0:
+            raise ValueError("Bound prediction requires a measured-motion observation")
+        state, _, _ = self._socnav_fields(observation or {})
+        drive = DifferentialDriveRobot(self._prediction_drive_settings)
+        drive.state.velocity = (
+            float(self._as_1d_float(state.get("speed", [0.0]), pad=1)[0]),
+            float(self._as_1d_float(state.get("angular_velocity", [0.0]), pad=1)[0]),
+        )
+        drive.state.wheel_speeds = drive.movement._resulting_wheel_speeds(drive.current_speed)
+        control_dt = self._simulation_timestep(observation) if observation is not None else dt
+        positions, headings = [], []
+        for command in commands:
+            remaining = dt
+            while remaining > 1e-12:
+                step_dt = min(control_dt, remaining)
+                drive.apply_action(
+                    tuple((np.asarray(command) - drive.current_speed) / step_dt), step_dt
+                )
+                remaining -= step_dt
+            positions.append(drive.pos)
+            headings.append(drive.pose[1])
+        return np.asarray(positions), np.asarray(headings)
+
     def _rollout_robot(
+        self,
         *,
         v: float,
         w: float,
         dt: float,
         steps: int,
+        observation: dict | None = None,
     ) -> np.ndarray:
-        """Roll out robot trajectory in its local frame under unicycle dynamics.
+        """Forecast the bound differential drive, or an unbound unicycle command.
 
         Returns:
             np.ndarray: Trajectory ``(steps, 2)`` in local robot frame.
@@ -936,6 +1002,15 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         v = float(v)
         w = float(w)
         dt = float(dt)
+        if self._prediction_drive_settings is not None:
+            if steps == 0:
+                return np.zeros((0, 2))
+            positions, _ = self._bound_drive_rollout(
+                np.tile((v, w), (steps, 1)),
+                dt,
+                observation,
+            )
+            return positions
 
         # Closed-form cumulative unicycle integration that reproduces the legacy
         # sequential scalar recurrence (heading is not wrapped here, so the
@@ -1002,8 +1077,11 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         steps_val = max(
             1, int(steps if steps is not None else self.config.predictive_horizon_steps)
         )
-        radius_margin = float(self.config.predictive_robot_radius) + float(
-            self.config.predictive_pedestrian_radius
+        radius_margin = (
+            float(self.config.predictive_robot_radius)
+            + float(self.config.predictive_pedestrian_radius)
+            if self.config.predictive_clearance_model == CENTER_CLEARANCE_V1
+            else 0.0
         )
         speed_margin = float(self.config.predictive_speed_clearance_gain) * abs(float(v))
         safe_dist = float(self.config.predictive_safe_distance) + radius_margin + speed_margin
@@ -1015,8 +1093,17 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             limit = min(steps_val, future_peds.shape[1], valid_dists.shape[1])
             if limit <= 0 or valid_dists[:, :limit].size == 0:
                 return 0.0, 0.0
-            collisions = float(np.sum(np.maximum(0.0, safe_dist - valid_dists[:, :limit])))
-            near_misses = float(np.sum(np.maximum(0.0, near_dist - valid_dists[:, :limit])))
+            distances = valid_dists[:, :limit]
+            if self.config.predictive_clearance_model != CENTER_CLEARANCE_V1:
+                distances = pedestrian_clearance(
+                    distances,
+                    model=self.config.predictive_clearance_model,
+                    robot_radius=self.config.predictive_robot_radius,
+                    pedestrian_radius=self.config.predictive_pedestrian_radius,
+                )
+                assert isinstance(distances, np.ndarray)
+            collisions = float(np.sum(np.maximum(0.0, safe_dist - distances)))
+            near_misses = float(np.sum(np.maximum(0.0, near_dist - distances)))
             return collisions, near_misses
 
         dt = max(float(self.config.predictive_rollout_dt), 1e-3)
@@ -1035,6 +1122,14 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
 
         delta = ped - robot_traj[:horizon].reshape(1, horizon, 2)
         dist = np.linalg.norm(delta, axis=2)
+        if self.config.predictive_clearance_model != CENTER_CLEARANCE_V1:
+            dist = pedestrian_clearance(
+                dist,
+                model=self.config.predictive_clearance_model,
+                robot_radius=self.config.predictive_robot_radius,
+                pedestrian_radius=self.config.predictive_pedestrian_radius,
+            )
+            assert isinstance(dist, np.ndarray)
         collisions = float(np.sum(np.maximum(0.0, safe_dist - dist)))
         near_misses = float(np.sum(np.maximum(0.0, near_dist - dist)))
         return collisions, near_misses
@@ -1052,10 +1147,21 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         """Compute minimum predicted robot-pedestrian clearance for a candidate.
 
         Returns:
-            float: Minimum center-to-center clearance in meters.
+            float: Minimum clearance in meters, according to the configured model.
         """
         if valid_dists is not None:
-            return float(np.min(valid_dists)) if valid_dists.size > 0 else float("inf")
+            if valid_dists.size == 0:
+                return float("inf")
+            distances = valid_dists
+            if self.config.predictive_clearance_model != CENTER_CLEARANCE_V1:
+                distances = pedestrian_clearance(
+                    distances,
+                    model=self.config.predictive_clearance_model,
+                    robot_radius=self.config.predictive_robot_radius,
+                    pedestrian_radius=self.config.predictive_pedestrian_radius,
+                )
+                assert isinstance(distances, np.ndarray)
+            return float(np.min(distances))
 
         dt = max(float(self.config.predictive_rollout_dt), 1e-3)
         robot_traj = self._rollout_robot(v=v, w=w, dt=dt, steps=max(1, int(steps)))
@@ -1067,6 +1173,14 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             return float("inf")
         delta = ped - robot_traj.reshape(1, robot_traj.shape[0], 2)
         dist = np.linalg.norm(delta, axis=2)
+        if self.config.predictive_clearance_model != CENTER_CLEARANCE_V1:
+            dist = pedestrian_clearance(
+                dist,
+                model=self.config.predictive_clearance_model,
+                robot_radius=self.config.predictive_robot_radius,
+                pedestrian_radius=self.config.predictive_pedestrian_radius,
+            )
+            assert isinstance(dist, np.ndarray)
         return float(np.min(dist)) if dist.size > 0 else float("inf")
 
     def _ttc_penalty(
@@ -1084,8 +1198,11 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         Returns:
             float: Penalty that increases for earlier/closer predicted encounters.
         """
-        radius_margin = float(self.config.predictive_robot_radius) + float(
-            self.config.predictive_pedestrian_radius
+        radius_margin = (
+            float(self.config.predictive_robot_radius)
+            + float(self.config.predictive_pedestrian_radius)
+            if self.config.predictive_clearance_model == CENTER_CLEARANCE_V1
+            else 0.0
         )
         speed_margin = float(self.config.predictive_speed_clearance_gain) * abs(float(v))
         threshold = float(self.config.predictive_ttc_distance) + radius_margin + speed_margin
@@ -1101,6 +1218,14 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             if limit <= 0 or valid_dists[:, :limit].size == 0:
                 return 0.0
             valid_slice = valid_dists[:, :limit]
+            if self.config.predictive_clearance_model != CENTER_CLEARANCE_V1:
+                valid_slice = pedestrian_clearance(
+                    valid_slice,
+                    model=self.config.predictive_clearance_model,
+                    robot_radius=self.config.predictive_robot_radius,
+                    pedestrian_radius=self.config.predictive_pedestrian_radius,
+                )
+                assert isinstance(valid_slice, np.ndarray)
             shortfall = np.maximum(0.0, threshold - valid_slice)
             time_indices = np.arange(1, limit + 1, dtype=float).reshape(1, limit)
             time_weights = 1.0 / (time_indices * dt + self._EPS)
@@ -1122,11 +1247,43 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
 
         delta = ped - robot_traj[:horizon].reshape(1, horizon, 2)
         dist = np.linalg.norm(delta, axis=2)
+        if self.config.predictive_clearance_model != CENTER_CLEARANCE_V1:
+            dist = pedestrian_clearance(
+                dist,
+                model=self.config.predictive_clearance_model,
+                robot_radius=self.config.predictive_robot_radius,
+                pedestrian_radius=self.config.predictive_pedestrian_radius,
+            )
+            assert isinstance(dist, np.ndarray)
         shortfall = np.maximum(0.0, threshold - dist)
         time_indices = np.arange(1, horizon + 1, dtype=float).reshape(1, horizon)
         time_weights = 1.0 / (time_indices * dt + self._EPS)
         penalty = float(np.sum(shortfall * time_weights))
         return penalty
+
+    def _static_footprint_clearance(self, observation: dict, local_traj: np.ndarray) -> float:
+        """Measure swept body clearance against the bound map, including between samples.
+
+        Returns:
+            float: Static surface gap; infinity when native geometry is unbound.
+        """
+        if self._prediction_drive_settings is None or self._static_obstacle_geometry is None:
+            return float("inf")
+        state, _, _ = self._socnav_fields(observation)
+        position = np.asarray(state.get("position", [0.0, 0.0]), dtype=float)[:2]
+        heading = float(self._as_1d_float(state.get("heading", [0.0]), pad=1)[0])
+        cos_h, sin_h = np.cos(heading), np.sin(heading)
+        rotation = np.array([[cos_h, sin_h], [-sin_h, cos_h]])
+        # Include the measured origin: a zero command still has a braking path,
+        # and testing only endpoints misses thin walls crossed between samples.
+        points = np.vstack([np.zeros(2), local_traj]) @ rotation + position
+        if len(points) == 1:
+            points = np.repeat(points, 2, axis=0)
+        swept_center = LineString(points)
+        return (
+            float(swept_center.distance(self._static_obstacle_geometry))
+            - self._prediction_drive_settings.radius
+        )
 
     def _score_action(
         self,
@@ -1145,7 +1302,9 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         """
         dt = max(float(self.config.predictive_rollout_dt), 1e-3)
         steps_val = max(1, int(steps))
-        robot_traj = self._rollout_robot(v=v, w=w, dt=dt, steps=steps_val)
+        robot_traj = self._rollout_robot(v=v, w=w, dt=dt, steps=steps_val, observation=observation)
+        if self._static_footprint_clearance(observation, robot_traj) <= 0.0:
+            return float("inf")
 
         valid_idx = np.where(mask > 0.5)[0]
         if valid_idx.size > 0:
@@ -1198,6 +1357,8 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         robot_heading = float(self._as_1d_float(robot_state.get("heading", [0.0]), pad=1)[0])
         candidate_heading = robot_heading + w * dt
         direction = np.array([np.cos(candidate_heading), np.sin(candidate_heading)], dtype=float)
+        # The historical pedestrian occupancy cost follows the independent
+        # swept static-footprint veto above; it cannot waive a wall contact.
         _, occ_penalty = self._path_penalty(
             robot_pos=robot_pos,
             direction=direction,
@@ -1226,12 +1387,16 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         sequence: list[tuple[float, float]],
         segment_steps: int,
         dt: float,
+        observation: dict | None = None,
     ) -> tuple[np.ndarray, np.ndarray]:
         """Roll out a piecewise-constant action sequence in the robot local frame.
 
         Returns:
             tuple[np.ndarray, np.ndarray]: Local positions and headings for rollout steps.
         """
+        if self._prediction_drive_settings is not None and sequence:
+            commands = np.repeat(sequence, max(1, segment_steps), axis=0)
+            return self._bound_drive_rollout(commands, dt, observation)
         pos = np.zeros(2, dtype=float)
         heading = 0.0
         traj = np.zeros((max(1, len(sequence) * max(1, segment_steps)), 2), dtype=float)
@@ -1272,13 +1437,19 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             sequence=sequence,
             segment_steps=segment_steps,
             dt=dt,
+            observation=observation,
         )
         horizon = min(local_traj.shape[0], int(steps), int(future_peds.shape[1]))
         local_traj = local_traj[:horizon]
         local_headings = local_headings[:horizon]
+        if self._static_footprint_clearance(observation, local_traj) <= 0.0:
+            return float("inf")
 
-        radius_margin = float(self.config.predictive_robot_radius) + float(
-            self.config.predictive_pedestrian_radius
+        radius_margin = (
+            float(self.config.predictive_robot_radius)
+            + float(self.config.predictive_pedestrian_radius)
+            if self.config.predictive_clearance_model == CENTER_CLEARANCE_V1
+            else 0.0
         )
         min_clearance = float("inf")
         collision_pen = 0.0
@@ -1294,6 +1465,14 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             if ped.size > 0:
                 delta = ped - local_traj.reshape(1, horizon, 2)
                 dist = np.linalg.norm(delta, axis=2)
+                if self.config.predictive_clearance_model != CENTER_CLEARANCE_V1:
+                    dist = pedestrian_clearance(
+                        dist,
+                        model=self.config.predictive_clearance_model,
+                        robot_radius=self.config.predictive_robot_radius,
+                        pedestrian_radius=self.config.predictive_pedestrian_radius,
+                    )
+                    assert isinstance(dist, np.ndarray)
                 min_clearance = float(np.min(dist)) if dist.size > 0 else float("inf")
                 collision_pen = float(np.sum(np.maximum(0.0, safe_dist - dist)))
                 near_pen = float(np.sum(np.maximum(0.0, near_dist - dist)))
@@ -1319,6 +1498,7 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         direction = final_world - robot_pos
         if np.linalg.norm(direction) <= self._EPS:
             direction = np.array([np.cos(robot_heading), np.sin(robot_heading)], dtype=float)
+        # Keep the same pedestrian-only cost as action scoring (weight 1.0).
         _, occ_penalty = self._path_penalty(
             robot_pos=robot_pos,
             direction=direction,
@@ -1748,8 +1928,16 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         return best
 
     def diagnostics(self) -> dict[str, Any]:
-        """Return execution diagnostics."""
-        return {"planner_type": "PredictionPlannerAdapter"}
+        """Return execution diagnostics, including before adapter initialization."""
+        return {
+            "planner_type": "PredictionPlannerAdapter",
+            "prediction_execution_contract": (
+                "native_motion_static_footprint_v2"
+                if getattr(self, "_prediction_drive_settings", None) is not None
+                else "unbound_command_rollout_v1"
+            ),
+            "static_geometry_bound": getattr(self, "_static_obstacle_geometry", None) is not None,
+        }
 
 
 def make_prediction_policy(

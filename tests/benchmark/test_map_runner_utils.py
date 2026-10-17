@@ -2224,7 +2224,7 @@ def test_policy_command_to_env_action_passthroughs_world_velocity_for_holonomic_
             max_angular_speed=1.5,
             command_mode="vx_vy",
         ),
-        sim_config=SimpleNamespace(time_per_step_in_secs=0.1),
+        sim_config=SimpleNamespace(max_sim_steps=600, time_per_step_in_secs=0.1),
     )
     robot = SimpleNamespace(pose=((0.0, 0.0), 0.7), current_speed=(0.0, 0.0))
     env = SimpleNamespace(simulator=SimpleNamespace(robots=[robot]))
@@ -2247,7 +2247,7 @@ def test_policy_command_to_env_action_converts_world_velocity_for_differential_d
             max_angular_speed=1.5,
             allow_backwards=False,
         ),
-        sim_config=SimpleNamespace(time_per_step_in_secs=0.1),
+        sim_config=SimpleNamespace(max_sim_steps=600, time_per_step_in_secs=0.1),
     )
     robot = SimpleNamespace(pose=((0.0, 0.0), 0.4), current_speed=(0.3, -0.1))
     env = SimpleNamespace(simulator=SimpleNamespace(robots=[robot]))
@@ -2917,7 +2917,11 @@ def test_run_map_episode_smoke(monkeypatch: pytest.MonkeyPatch) -> None:
             return None
 
     map_def = _minimal_map_def()
-    dummy_config = type("Cfg", (), {"sim_config": type("SC", (), {"time_per_step_in_secs": 0.1})()})
+    dummy_config = type(
+        "Cfg",
+        (),
+        {"sim_config": type("SC", (), {"max_sim_steps": 600, "time_per_step_in_secs": 0.1})()},
+    )
     episode_hook_names = (
         "_build_env_config",
         "make_robot_env",
@@ -3074,7 +3078,11 @@ def test_run_map_episode_excludes_live_foresight_fallback_from_evidence(
         _policy._planner_stats = lambda: foresight
         return _policy, {"status": "ok", "planner_kinematics": {"robot_kinematics": "unknown"}}
 
-    dummy_config = type("Cfg", (), {"sim_config": type("SC", (), {"time_per_step_in_secs": 0.1})()})
+    dummy_config = type(
+        "Cfg",
+        (),
+        {"sim_config": type("SC", (), {"max_sim_steps": 600, "time_per_step_in_secs": 0.1})()},
+    )
     monkeypatch.setattr(
         "robot_sf.benchmark.map_runner.map_runner._build_env_config",
         lambda scenario, scenario_path: dummy_config,
@@ -3127,6 +3135,7 @@ def test_run_map_episode_excludes_live_foresight_fallback_from_evidence(
             record,
             {
                 "episode_id": "healthy-foresight",
+                "metric_schema_version": record["metric_schema_version"],
                 "scenario_id": "foresight-fallback",
                 "algo": "prediction_planner",
                 "metrics": {"success": 1.0},
@@ -3200,7 +3209,7 @@ def test_run_map_episode_tracking_precision_clamps_and_records(
         return 1.5, 0.0
 
     dummy_config = SimpleNamespace(
-        sim_config=SimpleNamespace(time_per_step_in_secs=0.1, ped_radius=0.4),
+        sim_config=SimpleNamespace(max_sim_steps=600, time_per_step_in_secs=0.1, ped_radius=0.4),
         robot_config=DifferentialDriveSettings(max_linear_speed=2.0),
     )
     monkeypatch.setattr(
@@ -3284,7 +3293,11 @@ def test_run_map_episode_closes_env_when_reset_fails(monkeypatch: pytest.MonkeyP
             self.closed = True
 
     env = _FailingResetEnv()
-    dummy_config = type("Cfg", (), {"sim_config": type("SC", (), {"time_per_step_in_secs": 0.1})()})
+    dummy_config = type(
+        "Cfg",
+        (),
+        {"sim_config": type("SC", (), {"max_sim_steps": 600, "time_per_step_in_secs": 0.1})()},
+    )
 
     monkeypatch.setattr(
         "robot_sf.benchmark.map_runner.map_runner._build_env_config",
@@ -3360,7 +3373,7 @@ def test_run_map_episode_records_synthetic_actuation_metrics(
     )
     map_def = _minimal_map_def()
     dummy_config = SimpleNamespace(
-        sim_config=SimpleNamespace(time_per_step_in_secs=0.1, ped_radius=0.4),
+        sim_config=SimpleNamespace(max_sim_steps=600, time_per_step_in_secs=0.1, ped_radius=0.4),
         robot_config=DifferentialDriveSettings(max_linear_speed=1.0),
     )
     monkeypatch.setattr(
@@ -3434,7 +3447,7 @@ def test_run_map_episode_records_synthetic_actuation_metrics(
     assert any(step["command_clipped"] is True for step in trace["steps"])
     assert any(step["yaw_rate_saturated"] is True for step in trace["steps"])
     step_trace = record["algorithm_metadata"]["simulation_step_trace"]
-    assert step_trace["schema_version"] == "simulation-step-trace.v1"
+    assert step_trace["schema_version"] == "simulation-step-trace.v2"
     assert step_trace["dt"] == pytest.approx(0.1)
     assert len(step_trace["steps"]) == 4
     first_frame = step_trace["steps"][0]
@@ -3495,7 +3508,11 @@ def test_run_map_episode_calls_planner_reset_hook(monkeypatch: pytest.MonkeyPatc
             """Record or accept cleanup from map-runner code."""
             return None
 
-    dummy_config = type("Cfg", (), {"sim_config": type("SC", (), {"time_per_step_in_secs": 0.1})()})
+    dummy_config = type(
+        "Cfg",
+        (),
+        {"sim_config": type("SC", (), {"max_sim_steps": 600, "time_per_step_in_secs": 0.1})()},
+    )
     reset_calls: list[int] = []
 
     def _build_policy_stub(*args, **kwargs):
@@ -3595,7 +3612,11 @@ def test_run_map_episode_merges_planner_runtime_stats(monkeypatch: pytest.Monkey
             """Record or accept cleanup from map-runner code."""
             return None
 
-    dummy_config = type("Cfg", (), {"sim_config": type("SC", (), {"time_per_step_in_secs": 0.1})()})
+    dummy_config = type(
+        "Cfg",
+        (),
+        {"sim_config": type("SC", (), {"max_sim_steps": 600, "time_per_step_in_secs": 0.1})()},
+    )
 
     def _build_policy_stub(*args, **kwargs):
         """Return a policy stub for episode-runtime tests."""
@@ -3734,7 +3755,11 @@ def test_run_map_episode_snapshots_planner_runtime_before_close(
             """Record or accept cleanup from map-runner code."""
             return None
 
-    dummy_config = type("Cfg", (), {"sim_config": type("SC", (), {"time_per_step_in_secs": 0.1})()})
+    dummy_config = type(
+        "Cfg",
+        (),
+        {"sim_config": type("SC", (), {"max_sim_steps": 600, "time_per_step_in_secs": 0.1})()},
+    )
 
     def _build_policy_stub(*args, **kwargs):
         """Return a policy stub for episode-runtime tests."""
@@ -3844,7 +3869,11 @@ def test_run_map_episode_does_not_stop_on_waypoint_only_success(
             return None
 
     map_def = _minimal_map_def()
-    dummy_config = type("Cfg", (), {"sim_config": type("SC", (), {"time_per_step_in_secs": 0.1})()})
+    dummy_config = type(
+        "Cfg",
+        (),
+        {"sim_config": type("SC", (), {"max_sim_steps": 600, "time_per_step_in_secs": 0.1})()},
+    )
     dummy_env = _DummyEnv(map_def)
 
     monkeypatch.setattr(
@@ -3952,7 +3981,11 @@ def test_run_map_episode_stops_immediately_on_route_complete(
             return None
 
     map_def = _minimal_map_def()
-    dummy_config = type("Cfg", (), {"sim_config": type("SC", (), {"time_per_step_in_secs": 0.1})()})
+    dummy_config = type(
+        "Cfg",
+        (),
+        {"sim_config": type("SC", (), {"max_sim_steps": 600, "time_per_step_in_secs": 0.1})()},
+    )
     dummy_env = _DummyEnv(map_def)
 
     monkeypatch.setattr(
@@ -4048,7 +4081,11 @@ def test_run_map_episode_collision_wins_over_route_complete(
             return None
 
     map_def = _minimal_map_def()
-    dummy_config = type("Cfg", (), {"sim_config": type("SC", (), {"time_per_step_in_secs": 0.1})()})
+    dummy_config = type(
+        "Cfg",
+        (),
+        {"sim_config": type("SC", (), {"max_sim_steps": 600, "time_per_step_in_secs": 0.1})()},
+    )
     dummy_env = _DummyEnv(map_def)
 
     monkeypatch.setattr(
@@ -4138,7 +4175,11 @@ def test_run_map_episode_floors_exact_obstacle_collision_metrics(
             return None
 
     map_def = _minimal_map_def()
-    dummy_config = type("Cfg", (), {"sim_config": type("SC", (), {"time_per_step_in_secs": 0.1})()})
+    dummy_config = type(
+        "Cfg",
+        (),
+        {"sim_config": type("SC", (), {"max_sim_steps": 600, "time_per_step_in_secs": 0.1})()},
+    )
     dummy_env = _DummyEnv(map_def)
 
     monkeypatch.setattr(
@@ -5583,7 +5624,7 @@ def test_run_map_batch_hrvo_smoke_writes_episode_jsonl(
         "Cfg",
         (),
         {
-            "sim_config": type("SC", (), {"time_per_step_in_secs": 0.1})(),
+            "sim_config": type("SC", (), {"max_sim_steps": 600, "time_per_step_in_secs": 0.1})(),
             "robot_config": HolonomicDriveSettings(
                 max_speed=1.0,
                 max_angular_speed=1.0,
@@ -5713,7 +5754,7 @@ def test_run_map_episode_skips_force_buffer_reads_when_not_recording(
         "Cfg",
         (),
         {
-            "sim_config": type("SC", (), {"time_per_step_in_secs": 0.1})(),
+            "sim_config": type("SC", (), {"max_sim_steps": 600, "time_per_step_in_secs": 0.1})(),
             "robot_config": HolonomicDriveSettings(
                 max_speed=1.0,
                 max_angular_speed=1.0,
@@ -5756,7 +5797,7 @@ def test_run_map_episode_skips_force_buffer_reads_when_not_recording(
 
     record = _run_map_episode(
         {"name": "no_force_recording", "simulation_config": {"max_episode_steps": 1}},
-        123,
+        1013,
         horizon=1,
         dt=0.1,
         record_forces=False,
@@ -5849,7 +5890,7 @@ def test_run_map_batch_repeated_runs_produce_stable_metrics(
         "Cfg",
         (),
         {
-            "sim_config": type("SC", (), {"time_per_step_in_secs": 0.1})(),
+            "sim_config": type("SC", (), {"max_sim_steps": 600, "time_per_step_in_secs": 0.1})(),
             "robot_config": HolonomicDriveSettings(
                 max_speed=1.0,
                 max_angular_speed=1.0,
@@ -6010,7 +6051,9 @@ def test_analysis_trace_profile_does_not_change_recorded_actions_or_outcome(
         "Cfg",
         (),
         {
-            "sim_config": type("SC", (), {"time_per_step_in_secs": 0.1, "ped_radius": 0.4})(),
+            "sim_config": type(
+                "SC", (), {"max_sim_steps": 600, "time_per_step_in_secs": 0.1, "ped_radius": 0.4}
+            )(),
             "robot_config": HolonomicDriveSettings(
                 max_speed=1.0, max_angular_speed=1.0, command_mode="vx_vy"
             ),
@@ -6290,7 +6333,7 @@ def test_map_episode_visibility_trace_feeds_occlusion_near_miss_predicate(monkey
     from robot_sf.gym_env.unified_config import ObservationVisibilitySettings
 
     dummy_config = SimpleNamespace(
-        sim_config=SimpleNamespace(time_per_step_in_secs=0.1),
+        sim_config=SimpleNamespace(max_sim_steps=600, time_per_step_in_secs=0.1),
         robot_config=HolonomicDriveSettings(max_speed=1.0, max_angular_speed=1.0),
         observation_visibility=ObservationVisibilitySettings(enabled=True),
     )

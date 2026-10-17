@@ -75,7 +75,26 @@ OUTPUT_FLAGS = {
     "--out-md",
     "--out-csv",
     "--out-dir-json",
+    "--render-provenance-json",
 }
+
+# Issue #6770 approved execution of these nine stable command identities only. Newly discovered
+# commands remain inventoried but excluded until their own domain-aware approval expands this set.
+# This keeps the recurrence guard's execution scope from silently growing when discovery learns a
+# new output flag or a new source manifest is added.
+APPROVED_RECURRENCE_COMMAND_IDS = frozenset(
+    {
+        "docs_context_evidence_issue_2837_horizon_timestep_ablation_2026-06-15_README_md__cmd1_7fa1f21a",
+        "docs_context_evidence_issue_2865_forecast_calibration_report_2026-06-15_README_md__cmd1_ae6ca2f2",
+        "docs_context_evidence_issue_2868_semantic_metadata_fixtures_2026-06-15_README_md__cmd1_447840f3",
+        "docs_context_evidence_issue_2869_forecast_risk_calibration_filter_2026-06-15_README_md__cmd1_fb074256",
+        "docs_context_evidence_issue_2903_horizon_denominator_health_2026-06-16_README_md__cmd1_13b50431",
+        "docs_context_evidence_issue_2937_horizon_denominator_health_2026-06-16_README_md__cmd1_28236d14",
+        "docs_context_evidence_issue_3207_simulator_dependence_validity_boundary_packet_2026-06-29_README_md__cmd1_8d846b56",
+        "docs_context_evidence_issue_3482_event_ledger_reconciliation_guard_README_md__cmd1_92e66dae",
+        "docs_context_evidence_issue_3482_event_ledger_reconciliation_guard_README_md__cmd2_fccbfb79",
+    }
+)
 
 ALLOWED_EXCLUSION_REASONS = frozenset(
     {
@@ -87,6 +106,7 @@ ALLOWED_EXCLUSION_REASONS = frozenset(
         "unsafe_command",
         "historical_only",
         "superseded",
+        "not_in_approved_execution_scope",
     }
 )
 
@@ -401,6 +421,12 @@ def classify(source: CommandSource, command_index: int, raw: str, head: str | No
     if reason is None and not expected_outputs:
         notes.append("command declares no explicit expected output")
         reason = "non_deterministic_contract"
+
+    if reason is None and source.source_path.startswith("docs/context/evidence/"):
+        command_id = _stable_id(source, command_index, raw)
+        if command_id not in APPROVED_RECURRENCE_COMMAND_IDS:
+            notes.append("not included in issue #6770's approved nine-command execution scope")
+            reason = "not_in_approved_execution_scope"
 
     eligible = reason is None
     return Entry(

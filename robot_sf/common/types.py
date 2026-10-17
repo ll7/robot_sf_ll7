@@ -42,6 +42,21 @@ is used for spawn/goal/crowded zones in map definitions.
 
 Zone = Rect
 """Semantic alias for Rect used when the intent is a "zone" (spawn/goal/crowded)."""
+
+
+class TriangleZone(tuple):
+    """Three-vertex zone that bounds a true triangle, not an implied rectangle.
+
+    A plain three-corner :data:`Zone` encodes a full rectangle (see :data:`Rect`).
+    Geometry that really is triangular (authored three-vertex crowded-zone paths,
+    synthetic crowd triangles) is wrapped in this marker so zone samplers keep it
+    triangular. It is a plain tuple otherwise, so every consumer that unpacks or
+    serializes a zone keeps working.
+    """
+
+    __slots__ = ()
+
+
 PolarVec2D = tuple[float, float]
 Range = tuple[float, float]
 """Type alias for a range represented as a tuple of two floats"""

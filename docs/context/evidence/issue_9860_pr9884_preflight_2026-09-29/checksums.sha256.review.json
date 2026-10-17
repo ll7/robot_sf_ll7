@@ -1,0 +1,7 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/issue_9860_pr9884_preflight_2026-09-29/checksums.sha256",
+  "artifact_sha256": "0d79811a43bcc4662bc176f4bcabfb26bed6fbe2f3f640fe6544d9ea4f58b767",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW"
+}

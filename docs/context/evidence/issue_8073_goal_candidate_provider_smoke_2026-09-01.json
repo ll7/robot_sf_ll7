@@ -5,7 +5,7 @@
   "claim_boundary": "implementation_integrity_and_candidate_coverage_only",
   "evidence_status": "smoke evidence",
   "config_hash": "fdde86f16f453a2755c2afac3b6311cf8af07f27557ab2766aab7b86def621cd",
-  "command": "scripts/dev/run_worktree_shared_venv.sh --profile all-extras -- uv run python scripts/research/run_goal_candidate_provider_smoke.py --output-json output/issue-8073-goal-candidate-smoke.json",
+  "command": "scripts/dev/run_worktree_shared_venv.sh --profile all-extras -- uv run python scripts/research/run_goal_candidate_provider_smoke.py --output-json <scratch-root>/issue-8073-goal-candidate-smoke.json",
   "candidate_row_format": "candidate_id|role|source|parent_destination_id_or_dash",
   "candidate_rows": {
     "blocked_destination": [
@@ -128,5 +128,7 @@
         "path_tangent_vs_direct_line_angle_rad": null
       }
     }
-  }
+  },
+  "command_is_reproduction_template": true,
+  "raw_output_disposition": {"storage": "disposable git-ignored worktree-local scratch", "retained": false, "durable_retrieval_pointer": null}
 }

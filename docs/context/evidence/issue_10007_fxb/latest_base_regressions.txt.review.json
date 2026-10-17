@@ -1,0 +1,7 @@
+{
+  "artifact_path": "docs/context/evidence/issue_10007_fxb/latest_base_regressions.txt",
+  "artifact_sha256": "6ad8be069c6afd5cb9b99a4a4dba299b1c2322f9736dbe76c98d7f63a64702ed",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "evidence-review-marker.v1"
+}

@@ -1,6 +1,8 @@
 name: PR Contract Check
 
 on:
+  merge_group:
+    types: [checks_requested]
   pull_request:
     types: [opened, edited, reopened, synchronize, ready_for_review]
 
@@ -10,39 +12,52 @@ permissions:
   pull-requests: write
 
 concurrency:
-  group: pr-contract-check-${{ github.event.pull_request.number }}
+  group: pr-contract-check-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
   pr-contract-check:
-    if: github.event.pull_request.draft == false
+    if: github.event_name == 'merge_group' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Acknowledge merge-group contract
+        if: github.event_name == 'merge_group'
+        run: |
+          echo "::notice::Merge group has no pull_request payload. PR contracts are checked on each ready PR before queue admission; no PR-specific validation runs here."
+          echo "Merge-group contract check passes without PR data." >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Fetch base ref
+      - if: github.event_name == 'pull_request'
+        name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Keep the default merge checkout for existing current-base checks.
+          # The published software baseline must resolve by its immutable tag.
+          fetch-depth: 0
+
+      - if: github.event_name == 'pull_request'
+        name: Fetch base ref
         env:
           BASE_REF: ${{ github.base_ref }}
         run: |
           set -euo pipefail
-          # On pull_request the default checkout is a shallow merge-ref with no
-          # origin/<base> ref, so `git diff origin/main` / `git show origin/main:path`
-          # error and the contract check mis-flags modified evidence files as new
-          # (issue #5464). Fetch the base branch so origin/<base> resolves locally.
-          git fetch --no-tags --depth=1 origin \
+          # Refresh the moving base for current-base checks; immutable budget
+          # measurement uses pull_request.base.sha separately below. Checkout
+          # already hydrated history and tags for source-bound receipts.
+          git fetch origin \
             "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}" \
             || echo "::warning::Failed to fetch base ref '${BASE_REF}'; contract check will use authoritative added-files list"
 
-      - name: Set up CI Python environment
+      - if: github.event_name == 'pull_request'
+        name: Set up CI Python environment
         uses: ./.github/actions/setup-ci-python
         with:
           install-system-packages: "false"
           migrate-artifacts: "false"
           sync-args: "--frozen"
 
-      - name: Collect changed files
+      - if: github.event_name == 'pull_request'
+        name: Collect changed files
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -61,7 +76,8 @@ jobs:
             --out-files-status "$RUNNER_TEMP/pr_files_status.tsv" \
             --out-added-files "$RUNNER_TEMP/pr_added_files.txt"
 
-      - name: Validate dependency update policy
+      - if: github.event_name == 'pull_request'
+        name: Validate dependency update policy
         env:
           BASE_REF: origin/${{ github.base_ref }}
         run: |
@@ -71,7 +87,15 @@ jobs:
             --changed-files-file "$RUNNER_TEMP/pr_changed_files.txt" \
             --json
 
-      - name: Validate PR body contracts (advisory)
+      - if: github.event_name == 'pull_request'
+        name: Enforce evaluation seed holdout
+        run: |
+          set -euo pipefail
+          uv run python scripts/validation/check_seed_holdout_diff.py \
+            --base-ref "origin/${{ github.base_ref }}"
+
+      - if: github.event_name == 'pull_request'
+        name: Validate PR body contracts (advisory)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -84,9 +108,34 @@ jobs:
             --require-open-issues \
             --advisory
 
-      - name: Run PR Contract Check
+      - if: github.event_name == 'pull_request'
+        name: Validate behaviour receipt with base policy
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BEHAVIOUR_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          # Before first installation the gate is not active. Never substitute
+          # PR-head policy for missing base policy, schema or owner inventory.
+          git cat-file -e "$PR_BASE_SHA^{commit}"
+          if ! git cat-file -e "$PR_BASE_SHA:scripts/ci/behaviour_receipt.py"; then
+            echo "::notice::Behaviour receipt gate is not installed on the event base; activation follows installation"
+            exit 0
+          fi
+          TRUSTED_GATE="$RUNNER_TEMP/behaviour-gate-base"
+          git worktree add --detach "$TRUSTED_GATE" "$PR_BASE_SHA"
+          PYTHONPATH="$TRUSTED_GATE:$TRUSTED_GATE/fast-pysf" UV_NO_SYNC=1 \
+            uv run python "$TRUSTED_GATE/scripts/ci/behaviour_receipt.py" \
+            --github-event-path "$GITHUB_EVENT_PATH" \
+            --repo-root "$GITHUB_WORKSPACE" \
+            --base-ref "$PR_BASE_SHA"
+
+      - if: github.event_name == 'pull_request'
+        name: Run PR Contract Check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           set -euo pipefail
           uv run python scripts/ci/pr_contract_check.py \
@@ -94,4 +143,5 @@ jobs:
             --changed-files-file "$RUNNER_TEMP/pr_changed_files.txt" \
             --added-files-file "$RUNNER_TEMP/pr_added_files.txt" \
             --base-ref "origin/${{ github.base_ref }}" \
+            --budget-base-sha "$PR_BASE_SHA" \
             --post-comment

@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from robot_sf.benchmark.release_protocol import (
+    DEVELOPMENT_REHEARSAL_KIND,
     resolve_campaign_artifact_path,
     resolve_regular_directory_path,
 )
@@ -444,6 +445,15 @@ def validate_release_publication_contract(  # noqa: C901, PLR0912, PLR0915
         release_result = _read_json(release_result_path)
         publication = _read_json(manifest_path)
         campaign = _campaign_block(summary)
+        if release_result.get("release_kind") == DEVELOPMENT_REHEARSAL_KIND or (
+            release_result.get("benchmark_release", {}).get("release_kind")
+            == DEVELOPMENT_REHEARSAL_KIND
+        ):
+            return {
+                "schema_version": CONTRACT_SCHEMA_VERSION,
+                "status": "blocked",
+                "blockers": ["development rehearsal cannot be published as a release"],
+            }
     except (OSError, ValueError) as exc:
         blockers.append(str(exc))
         return {

@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 
 from robot_sf.benchmark.aggregate import read_jsonl
+from robot_sf.benchmark.metric_definitions import require_uniform_metric_schema
 from robot_sf.benchmark.runner import run_batch
 
 if TYPE_CHECKING:
@@ -53,15 +54,16 @@ def _extract_metric_values(records: list[dict[str, Any]], key: str) -> list[floa
 def compute_baseline_stats_from_records(
     records: list[dict[str, Any]],
     metrics: Iterable[str] | None = None,
-) -> dict[str, dict[str, float]]:
+) -> dict[str, Any]:
     """Compute per-metric median and p95 statistics.
 
     Returns:
         Mapping of metric name to summary statistics.
     """
+    version = require_uniform_metric_schema(records)
     if metrics is None:
         metrics = tuple(DEFAULT_METRICS)
-    stats: dict[str, dict[str, float]] = {}
+    stats: dict[str, Any] = {"_metadata": {"metric_schema_version": version}}
     for key in metrics:
         vals = _extract_metric_values(records, key)
         if len(vals) == 0:
@@ -93,7 +95,7 @@ def run_and_compute_baseline(  # noqa: PLR0913
     workers: int = 1,
     resume: bool = True,
     progress_cb: Callable | None = None,
-) -> dict[str, dict[str, float]]:
+) -> dict[str, Any]:
     # Optionally run batch to collect JSONL
     """Run episodes as needed and write baseline stats to JSON.
 

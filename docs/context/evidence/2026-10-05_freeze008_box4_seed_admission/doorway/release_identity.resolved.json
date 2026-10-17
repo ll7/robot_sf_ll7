@@ -1,0 +1,323 @@
+{
+  "determinism_receipt": {
+    "path": "output/release-008/calibration/determinism-receipt.json",
+    "sha256": "cd29d6c9a3213e4dbfabc1b8b8c23305066a6a39c5eb088f54d8f8d539827464"
+  },
+  "publication": {
+    "concept_doi": "10.5281/zenodo.23150471",
+    "metadata_file": "zenodo_metadata.resolved.json",
+    "metadata_path": "output/release-008/doorway/zenodo_metadata.resolved.json",
+    "metadata_sha256": "819335ea5b096d8592b0d5c4c71408e4e3649f39632fd8e165d176480ff4ce37",
+    "metadata_template_path": "configs/benchmarks/releases/three_width_doorway_release_0_0_8_v1_zenodo_metadata.template.json",
+    "metadata_template_sha256": "f3806581db53a826857ca9091e9fbc27f15303a37f3a154d313dab66f1c134dd",
+    "version_doi": "10.5281/zenodo.23150472"
+  },
+  "release_tag": "paper-matrix-v2-h600-s30-2026-10-66f402ba176b13e45210d0da0b2cf20fcdc0cc02",
+  "resolved_manifest": {
+    "artifacts": {
+      "required_paths": [
+        "campaign_manifest.json",
+        "manifest.json",
+        "run_meta.json",
+        "preflight/validate_config.json",
+        "preflight/preview_scenarios.json",
+        "reports/campaign_summary.json",
+        "reports/campaign_report.md",
+        "reports/matrix_summary.json",
+        "reports/campaign_table.md",
+        "reports/snqi_diagnostics.json"
+      ]
+    },
+    "benchmark_protocol_version": "0.1.0",
+    "canonical_campaign_config": "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_three_width_doorway_v2.yaml",
+    "canonical_campaign_config_sha256": "e3a26ccfb9df1cea343fba9f83aba1e9505494cbead7121132922bffb5c75039",
+    "canonical_campaign_name": "paper_experiment_matrix_v2_h600_s30_three_width_doorway_v2",
+    "identity_resolution": {
+      "metadata_template_path": "configs/benchmarks/releases/three_width_doorway_release_0_0_8_v1_zenodo_metadata.template.json",
+      "metadata_template_sha256": "f3806581db53a826857ca9091e9fbc27f15303a37f3a154d313dab66f1c134dd",
+      "schema_version": "benchmark-release-resolved-identity.v1",
+      "template_path": "configs/benchmarks/releases/three_width_doorway_release_0_0_8_v1.template.yaml",
+      "template_sha256": "cb9dd1cdd7c7bc0098e0ce5746bff2867487ce5728cbed9124b1c78b824053f0"
+    },
+    "kinematics": {
+      "holonomic_command_mode": null,
+      "matrix": [
+        "differential_drive"
+      ]
+    },
+    "latest_main_base_commit": "1261295887901e566a93da87a4559ea1040808a7",
+    "matrix": {
+      "dt": 0.1,
+      "expected_episode_cells": 1260,
+      "horizon_steps": null,
+      "planner_arms": 14,
+      "scenario_horizons": "configs/benchmarks/horizon_schedules/three_width_doorway_release_0_0_8_authored_v1.yaml",
+      "scenario_horizons_sha256": "e420f41636e59dd1169bf2da048c482ec78ba9ccf8ec5dc2721534c61c8191c9",
+      "scenarios": 3,
+      "seeds": 30
+    },
+    "maturity": "pre-1.0",
+    "metrics": {
+      "snqi_baseline_path": null,
+      "snqi_baseline_sha256": null,
+      "snqi_v2_binding": {
+        "acquisition_config": {
+          "path": "configs/benchmarks/snqi_v2/calibration.dev1001_1002_scheduled_acquisition.yaml",
+          "sha256": "fe55f5efb6fd885ae86fc978dffc01afd5928fba75128442a6dcd88ae9e94ff3"
+        },
+        "anchors": {
+          "path": "configs/benchmarks/snqi_v2/anchors.v2.0.json",
+          "sha256": "bb1a526c818efca16c6d4237127c27dc7812947758f78a18c8f1d28c2a65fa4c"
+        },
+        "determinism_receipt": {
+          "path": "output/release-008/calibration/determinism-receipt.json",
+          "sha256": "cd29d6c9a3213e4dbfabc1b8b8c23305066a6a39c5eb088f54d8f8d539827464"
+        },
+        "family": {
+          "path": "configs/benchmarks/snqi_v2/family.v2.0.yaml",
+          "sha256": "6ba0e5f4c1e1d5530e4ae773e22f811e2af9ee39f975c4e42554ca167ea09942"
+        },
+        "weights": {
+          "path": "configs/benchmarks/snqi_v2/weights.v2.0.json",
+          "sha256": "684db941093dbd05dc87f3e59e9492494e6f2876f2d05997341a4291de033a25"
+        }
+      },
+      "snqi_weights_path": null,
+      "snqi_weights_sha256": null
+    },
+    "paper_facing": true,
+    "paper_interpretation_profile": "doorway-width-slice",
+    "paper_profile_version": "paper-matrix-v1",
+    "planners": {
+      "config_identities": [
+        {
+          "algo": "prediction_planner",
+          "key": "prediction_planner",
+          "path": "configs/algos/prediction_planner_camera_ready.yaml",
+          "sha256": "a5f3775110b7c1351e183016afe8a17348a66d35088eeb6ff55a182dc924a481"
+        },
+        {
+          "algo": "goal",
+          "key": "goal",
+          "path": null,
+          "sha256": null
+        },
+        {
+          "algo": "social_force",
+          "key": "social_force",
+          "path": "configs/algos/social_force_resolution_independent_v2_kernel_wrapped_v2.yaml",
+          "sha256": "43e1e61d6fc50b22a95bbb698d612a63cf229052c043c1d2347c2d7271567c35"
+        },
+        {
+          "algo": "orca",
+          "key": "orca",
+          "path": null,
+          "sha256": null
+        },
+        {
+          "algo": "ppo",
+          "key": "ppo",
+          "path": "configs/baselines/ppo_release_robot_0_0_8_cpu.yaml",
+          "sha256": "a5a25bcbba51215acfc808e6cd707c146df5333073d477908e32dff5289b194a"
+        },
+        {
+          "algo": "socnav_sampling",
+          "key": "socnav_sampling",
+          "path": "configs/algos/socnav_sampling_bounded_v2.yaml",
+          "sha256": "9c52dc30d3894220caabaf1ac80d01561d6c1318d56c50e5ad7fa27d9c7999b3"
+        },
+        {
+          "algo": "sacadrl",
+          "key": "sacadrl",
+          "path": null,
+          "sha256": null
+        },
+        {
+          "algo": "hybrid_rule_local_planner",
+          "key": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+          "path": "configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4_s30_h600_release_0_0_8_frozen.yaml",
+          "sha256": "28aafe6352543e4c4d24a146bd3ba7260105362052505af9308f6d45d9d94458"
+        },
+        {
+          "algo": "hybrid_rule_local_planner",
+          "key": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+          "path": "configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard_v4_s30_h600_release_0_0_8_frozen.yaml",
+          "sha256": "54435e7fd39e592d4684fe40f804ab1c080f39925dceb0781dd68c1ce172ef94"
+        },
+        {
+          "algo": "hybrid_rule_local_planner",
+          "key": "hybrid_rule_v4_fast_progress_static_escape",
+          "path": "configs/policy_search/candidates/hybrid_rule_v4_fast_progress_static_escape_s30_h600_release_0_0_8_frozen.yaml",
+          "sha256": "1329d3934decb0bf50a803071af69b99e3f12e534083fc3d82e20d4706c76811"
+        },
+        {
+          "algo": "hybrid_rule_local_planner",
+          "key": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+          "path": "configs/policy_search/candidates/hybrid_rule_v4_fast_progress_static_escape_continuous_s30_h600_release_0_0_8_frozen.yaml",
+          "sha256": "044931a38f31a7b7c01ba8a750a1d34a79a58200309806e538761a94eff94888"
+        },
+        {
+          "algo": "guarded_ppo",
+          "key": "guarded_ppo",
+          "path": "configs/algos/guarded_ppo_camera_ready_cpu.yaml",
+          "sha256": "69f273f311590009a344f3a88592cb19f54524d252f469ab5fc66f7cf2c9e772"
+        },
+        {
+          "algo": "predictive_mppi",
+          "key": "predictive_mppi",
+          "path": "configs/algos/predictive_mppi_camera_ready.yaml",
+          "sha256": "5213a9e44c74cb79f78466d414645f6ca233d761e8fa5b77e5cfc3161ed94adb"
+        },
+        {
+          "algo": "risk_dwa",
+          "key": "risk_dwa",
+          "path": "configs/algos/risk_dwa_camera_ready.yaml",
+          "sha256": "1351439539ed02334891f6a1ef6ac652745791b1b830a5f8616850fbd5ccb37c"
+        }
+      ],
+      "groups": {
+        "goal": "core",
+        "guarded_ppo": "experimental",
+        "hybrid_rule_v4_fast_progress_static_escape": "experimental",
+        "hybrid_rule_v4_fast_progress_static_escape_continuous": "experimental",
+        "orca": "core",
+        "ppo": "experimental",
+        "prediction_planner": "experimental",
+        "predictive_mppi": "experimental",
+        "risk_dwa": "experimental",
+        "sacadrl": "experimental",
+        "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4": "experimental",
+        "scenario_adaptive_hybrid_orca_v2_collision_guard_v4": "experimental",
+        "social_force": "core",
+        "socnav_sampling": "experimental"
+      },
+      "keys": [
+        "prediction_planner",
+        "goal",
+        "social_force",
+        "orca",
+        "ppo",
+        "socnav_sampling",
+        "sacadrl",
+        "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+        "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+        "hybrid_rule_v4_fast_progress_static_escape",
+        "hybrid_rule_v4_fast_progress_static_escape_continuous",
+        "guarded_ppo",
+        "predictive_mppi",
+        "risk_dwa"
+      ]
+    },
+    "planning_base_sha": "1261295887901e566a93da87a4559ea1040808a7",
+    "provenance": {
+      "citation_path": "CITATION.cff",
+      "concept_doi": "10.5281/zenodo.23150471",
+      "doi": "10.5281/zenodo.23150472",
+      "latest_main_base_commit": "1261295887901e566a93da87a4559ea1040808a7",
+      "metadata_path": "output/release-008/doorway/zenodo_metadata.resolved.json",
+      "metadata_sha256": "819335ea5b096d8592b0d5c4c71408e4e3649f39632fd8e165d176480ff4ce37",
+      "planning_base_sha": "1261295887901e566a93da87a4559ea1040808a7",
+      "publication_channel": "direct_zenodo_benchmark_dataset",
+      "release_checklist_path": "docs/RELEASE.md",
+      "repository_url": "https://github.com/ll7/robot_sf_ll7",
+      "source_commit": "66f402ba176b13e45210d0da0b2cf20fcdc0cc02",
+      "source_sha": "66f402ba176b13e45210d0da0b2cf20fcdc0cc02",
+      "version_doi": "10.5281/zenodo.23150472"
+    },
+    "release_contract": {
+      "resolved_seeds": [
+        50036,
+        50140,
+        50331,
+        50403,
+        50813,
+        51339,
+        51709,
+        51767,
+        52094,
+        52175,
+        52257,
+        52671,
+        52850,
+        52971,
+        53020,
+        53198,
+        53239,
+        53636,
+        53671,
+        53779,
+        55022,
+        55379,
+        55568,
+        56170,
+        56966,
+        57077,
+        57113,
+        57494,
+        57943,
+        59019
+      ],
+      "route_certification_path": "configs/benchmarks/route_clearance_certifications_v1.yaml",
+      "route_certification_sha256": "8923d0560d17e92133e74792931539bd9a650629ae94d57798adb809046c567a",
+      "seed_sets_sha256": "a8803bade9f39d504d508ba530208ca66acc343376304afd586b82d3308ce706",
+      "snqi_claim_policy": "advisory_no_ranking",
+      "suite_policy_path": "configs/benchmarks/releases/paper_experiment_matrix_v1_release_v0_1_suite_policy.yaml",
+      "suite_policy_sha256": "b5eb0a0cd6e07c7ef285781adcda207457e423f3bfb381cc78cd313c62dd6395"
+    },
+    "release_id": "three_width_doorway_0_0_8_v1",
+    "release_kind": "benchmark-doorway-width-slice.v1",
+    "release_tag": "paper-matrix-v2-h600-s30-2026-10-66f402ba176b13e45210d0da0b2cf20fcdc0cc02",
+    "scenario": {
+      "matrix_path": "configs/scenarios/francis2023_narrow_doorway_three_width_release_0_0_8_v1.yaml",
+      "matrix_sha256": "9de1d058c6a9145f76c84be63787d5c704be1db288b47fd9c1d31f3f56367778"
+    },
+    "schema_version": "benchmark-release-manifest.v0.2",
+    "seed_policy": {
+      "mode": "seed-set",
+      "resolved_seeds": [
+        50036,
+        50140,
+        50331,
+        50403,
+        50813,
+        51339,
+        51709,
+        51767,
+        52094,
+        52175,
+        52257,
+        52671,
+        52850,
+        52971,
+        53020,
+        53198,
+        53239,
+        53636,
+        53671,
+        53779,
+        55022,
+        55379,
+        55568,
+        56170,
+        56966,
+        57077,
+        57113,
+        57494,
+        57943,
+        59019
+      ],
+      "seed_set": "release_eval_0_0_8",
+      "seed_sets_path": "configs/benchmarks/seed_sets_0_0_8.yaml",
+      "seed_sets_sha256": "a8803bade9f39d504d508ba530208ca66acc343376304afd586b82d3308ce706",
+      "seeds": []
+    },
+    "source_sha": "66f402ba176b13e45210d0da0b2cf20fcdc0cc02"
+  },
+  "resolved_manifest_sha256": "57bf6f3af35631d6215bcea2e3f447b3b163a68715d58ec3be2e3e6a91a58db5",
+  "schema_version": "benchmark-release-resolved-identity.v1",
+  "source_commit": "66f402ba176b13e45210d0da0b2cf20fcdc0cc02",
+  "template": {
+    "path": "configs/benchmarks/releases/three_width_doorway_release_0_0_8_v1.template.yaml",
+    "sha256": "cb9dd1cdd7c7bc0098e0ce5746bff2867487ce5728cbed9124b1c78b824053f0"
+  }
+}

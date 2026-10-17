@@ -152,13 +152,22 @@ def _metrics(rows: Sequence[Mapping[str, Any]]) -> dict[str, float]:
     collisions = [_collision_value(row) for row in rows]
     near_misses = [_metric_float(row, "near_misses", default=0.0) for row in rows]
     clearances = [_metric_float(row, "min_clearance", "min_clearance_m") for row in rows]
-    path_efficiencies = [_metric_float(row, "path_efficiency") for row in rows]
+    # Efficiency is defined only for successful episodes; failures serialize it
+    # as JSON null (issue #10022 item 3). Average the finite values only.
+    path_efficiencies = [
+        efficiency
+        for row in rows
+        if (efficiency := _metric_float_or_none(row, "path_efficiency")) is not None
+    ]
+    if not path_efficiencies:
+        raise ValueError("no rows with a finite path_efficiency (no successful episodes)")
     return {
         "success_rate": _mean(successes),
         "collision_rate": _mean(collisions),
         "near_miss_rate": _mean([1.0 if value > 0.0 else 0.0 for value in near_misses]),
         "mean_min_clearance": _mean(clearances),
         "mean_path_efficiency": _mean(path_efficiencies),
+        "path_efficiency_sample_count": len(path_efficiencies),
     }
 
 
@@ -218,6 +227,16 @@ def _metric_float(row: Mapping[str, Any], *keys: str, default: float | None = No
     if default is not None:
         return default
     raise ValueError(f"row missing metric keys {keys!r}")
+
+
+def _metric_float_or_none(row: Mapping[str, Any], *keys: str) -> float | None:
+    """Return the first present non-null metric value, else None (issue #10022 item 3)."""
+    metrics = row.get("metrics")
+    if isinstance(metrics, Mapping):
+        for key in keys:
+            if key in metrics and metrics[key] is not None:
+                return _as_float(metrics[key])
+    return None
 
 
 def _checkpoint_path(metadata: Mapping[str, Any]) -> str:

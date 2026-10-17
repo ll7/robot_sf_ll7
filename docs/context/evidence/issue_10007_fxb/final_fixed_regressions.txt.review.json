@@ -1,0 +1,7 @@
+{
+  "artifact_path": "docs/context/evidence/issue_10007_fxb/final_fixed_regressions.txt",
+  "artifact_sha256": "c668a4bc5195c67449ae177769fd9ece1e23370a31cbf069aee169ab541a6726",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "evidence-review-marker.v1"
+}

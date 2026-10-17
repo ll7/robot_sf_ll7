@@ -1057,7 +1057,7 @@ def test_checked_in_fixture_supports_offline_rank_and_select() -> None:
     assert len(dataset.candidates) == 4
     assert result is not None
     assert result.packet.primary.planner_id == "ppo"
-    assert result.packet.policy_version == "audit-queue.fixed.v1"
+    assert result.packet.policy_version == "audit-queue.fixed.v1.1"
     assert result.context.accounting["expected_rows"] == 4
     assert result.context.scan_summary_id == "scan-summary-4"
     assert result.context.seed == 11

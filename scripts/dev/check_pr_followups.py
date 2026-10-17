@@ -1212,9 +1212,9 @@ def _resolve_title(args: argparse.Namespace) -> str:
 
     event_path: Path | None = args.github_event_path
     if event_path:
-        event_title = _read_event_title(event_path)
-        if event_title is not None:
-            return event_title
+        # Keep title and body bound to the same explicit event. An absent title
+        # must not import metadata from the unrelated event hosting this command.
+        return _read_event_title(event_path) or ""
 
     env_event_path = os.environ.get("GITHUB_EVENT_PATH")
     if env_event_path:

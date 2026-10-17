@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import os
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -31,6 +33,11 @@ exclude_patterns = [
     "Thumbs.db",
     ".DS_Store",
 ]
+# The curated builder sends the exact complement through a file to avoid exec's
+# argument-size limit. Replace defaults, matching the old -D override semantics.
+if exclusions_file := os.environ.get("ROBOT_SF_SPHINX_EXCLUSIONS_FILE"):
+    exclude_patterns = json.loads(Path(exclusions_file).read_text(encoding="utf-8"))
+
 # Warning-class suppressions are intentionally absent. The canonical documentation
 # build is the curated strict build (scripts/dev/sphinx_strict_build.sh): it builds
 # only the docs/index.rst toctree closure, promotes warnings to errors, and allows

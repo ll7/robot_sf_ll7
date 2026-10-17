@@ -321,6 +321,7 @@ def run_corridor_trace(
         ped_density_by_difficulty=[0.0],
         difficulty=0,
         route_spawn_seed=fixture.seed,
+        pedestrian_seed=fixture.seed,
         max_total_pedestrians=2,
         pedestrian_model=model,
         zanlungo_collision_prediction=zanlungo,

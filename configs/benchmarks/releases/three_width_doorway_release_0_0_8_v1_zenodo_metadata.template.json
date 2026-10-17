@@ -1,0 +1,36 @@
+{
+  "metadata": {
+    "title": "Robot SF three-width doorway S30/H600 evaluation slice",
+    "upload_type": "dataset",
+    "access_right": "open",
+    "license": "GPL-3.0-only",
+    "description": "Three-width doorway slice of the sealed Robot SF 0.0.8 evaluation: 14 planner arms, widths 2.2/2.8/3.6 m, and 30 seeds at requested horizon 600 with dt=0.1 and differential-drive kinematics (1,260 expected episode identities). The scenario horizon cap is 400 steps. Source commit {{source_sha}}, freeze-branch base (first parent of the source commit) {{latest_main_base_commit}}, release tag {{release_tag}}, concept DOI {{concept_doi}}, and version DOI {{version_doi}} bind this slice to the main campaign freeze. This slice is reported with raw metrics only; its SNQI v2 diagnostics are advisory and not validated for this slice, and support no ranking or comparison claim.",
+    "creators": [
+      {
+        "name": "Luttkus, Lennart"
+      },
+      {
+        "name": "Tröster, Marco"
+      }
+    ],
+    "keywords": [
+      "social navigation",
+      "robotics",
+      "benchmark dataset",
+      "motion planning",
+      "simulation"
+    ],
+    "related_identifiers": [
+      {
+        "identifier": "https://github.com/ll7/robot_sf_ll7/releases/tag/{{release_tag}}",
+        "relation": "isSupplementTo",
+        "scheme": "url"
+      },
+      {
+        "identifier": "https://github.com/ll7/robot_sf_ll7/commit/{{source_sha}}",
+        "relation": "isDerivedFrom",
+        "scheme": "url"
+      }
+    ]
+  }
+}

@@ -16,6 +16,11 @@ Every execution path refuses such a config:
 
 Loading or inspecting the template stays possible, so contract tests and
 tooling can still read the roster.
+
+``ARM_SLOTS_0_0_7_TO_0_0_8`` owns cross-release lineage independently of
+immutable frozen parameter files. The pinned comparator verifies template
+bindings and v4 implementation identity against this source-bound map; an
+optional ``replaces_0_0_7_slot`` declaration must agree with it.
 """
 
 from __future__ import annotations

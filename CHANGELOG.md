@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+* **0.1.0 prediction-planner default (#10181).** Binding a differential-drive environment
+  selects native-motion prediction; binding static geometry also makes the
+  `native_motion_static_footprint_v2` swept-footprint veto always on, with no opt-in flag.
+  The accepted development gate (48 empty-world scenarios, seeds 1001–1030) improves
+  successes from 1,138 to 1,407 and reduces static-contact slots from 302 to 9, with
+  269 failure-to-success conversions, no success losses and no new contact slots.
+  The cost remains explicit: 24 new contact-free stopped timeouts, all in
+  `francis2023_narrow_doorway`, replace wall-contact failures; 124 shared successes
+  take 1–4 extra steps (0.1–0.4 simulation seconds). Stopping instead of hitting a
+  wall is the accepted safer failure for 0.1.0. This is development diagnostic evidence,
+  not a populated-scenario, full-roster, release or global safety proof; nine contacts
+  remain. A populated-scenario or full-roster run showing success losses or new contacts
+  reopens the 2026-10-08 ruling. Populated bounded-sampler grids also reject missing or
+  out-of-range static obstacle channels rather than supplying infinite clearance;
+  absent and zero-sized grids retain their compatibility behavior.
+
+* **Overtaking parked-goal clearance (OVTFIX2, #10063).** h1 passes the slower robot along the original lane before exiting up and back from (33, 6.6) to park at (20, 9.9). Parking retreats longitudinally from the final approach as well as laterally; the upper exit provides wall clearance. This addresses parked-pedestrian influence in guarded PPO's unbounded tracked-agent observations as well as physical obstruction. The robot route, pedestrian start and initial speed and 0.7 m/s cap are retained; the author-granted 600-step budget now lives in the source scenario and is inherited by the release matrix. The guarded-PPO cell carries its out-of-training-speed-range reporting caveat. Historical evidence remains identified by its original source; development verification is reported with PR #10067.
+
+* **0.0.8 endpoint overlap repair (#10063).** Versioned release maps narrow the pedestrian-overtaking robot spawn to y=4.0–4.5, move the pedestrian lane from y=6 to y=6.6 (1.6 m passing separation from the unchanged robot route). The pedestrian keeps its original start x=1.5 and 0.8 m/s initial speed (effective SFM target 1.04 m/s); a 0.7 m/s robot cap and 600-step budget preserve an actual overtake from behind. Station-platform reverse-flow crowd spawn moves to y=16.5–19.5, clear of the robot goal; its bend at x=74 also clears the full 3 m route-spawn spread; the 4 m detour changes the density-derived population from 26 to 27; robot-crowding spawn moves to x=6.5–14.5, with density 0.21 preserving 24 pedestrians. Historical maps remain intact. CI audits every full robot spawn/goal rectangle across all 48 release scenarios and three doorway widths against radius-expanded single-pedestrian lanes and crowd spawn zones and the actual axis-clipped route-anchor spawn support; intended interactions require exact geometry-bound dispositions, including forced-population overrides so dormant zones cannot silently activate.
+
+* **Development CI seed discipline (#10063).** Wheel-install smoke now uses seed 1001, and benchmark reproducibility smoke generates seeds 1001–1002 instead of retired evaluation seeds 123–124. Native PPO repeat proofs also use a separately identified dev-1001 variant while retaining historical fixture identities. Static CI contract witnesses guard these defaults without stepping retired seeds. Existing retired-seed tests run under the author’s 2026-10-01 rule.
+
 ### Software release preparation
 
 * **Planned v0.0.6 software metadata (#8019).** Staged non-authorizing citation, version-alignment,
@@ -383,6 +405,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   safety-performance claim is included.
 
 ### Fixed
+
+* **Scenario and map review fixes (changes seeded resets).** Three-corner rectangle zones
+  (every SVG `rect` spawn, goal and crowded zone) are sampled uniformly over the full
+  rectangle again instead of only the triangle half below its diagonal; true triangles
+  (authored three-vertex `crowded_zone` paths, synthetic crowd triangles) are marked
+  `TriangleZone` and stay triangular. This moves robot starts, robot goals, route
+  respawns and crowded-zone spawns for every map that uses rectangle zones. Pedestrian
+  spawns and route respawns now reject centres whose pedestrian-radius footprint overlaps
+  an obstacle; crowded-zone behaviours keep the map obstacles for goals re-sampled during
+  the episode. Scenarios that opt into `archetype_composition` without `archetype_seed`
+  take the episode seed. An included manifest's relative `map_file` resolves beside that
+  manifest first, and a same-named file beside the root manifest is rejected as ambiguous.
+  SVG zone indices with an unfillable gap are rejected instead of compacted.
+  Full-rectangle sampling intentionally changes scenario difficulty. In the development
+  sweep of 48 release scenarios (seeds 1001-1030, H600, dt 0.1), goal-planner success
+  changes from 614/1440 on main to 624/1440 after these repairs; ORCA changes from
+  1242/1440 to 1223/1440. ORCA narrow_hallway changes from 27/30 to 17/30 and
+  robot_crowding from 17/30 to 11/30. These are development diagnostics, not held-out
+  release results. Zoned crowds reserve buffered robot spawn zones for their spawns
+  and goals, keeping robot goal zones available. This zoned sampling path adds the
+  reaction buffer; synthesized crowds retain their radius-only spawn/goal-zone
+  reservations without that extra buffer. Actual-start reset checks and route
+  respawns keep one second at the initialized walking-speed cap/current speed plus
+  0.1 m (0.75 m on these maps). The common buffer calculation uses nominal spawn
+  speed times the speed multiplier before population speeds are initialized.
+  Robot zones and maps are unchanged. Missing route-zone fallbacks now encode a
+  proper B-corner rectangle. Remaining goal-wall and bottleneck goal-zone geometry
+  work is tracked for 0.0.9 in #10037.
 
 * **Issue #9725 spawn defects (changes seeded resets).** Robot starts are now sampled
   only where the robot radius plus a 0.1 m margin clears every wall and map bound
@@ -2594,7 +2644,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   inventory, fail-closed durable-pointer checks, unsupported local snapshots, JSON CLI output, and a
   mocked model/factory step smoke (#3469).
 * Added a lightweight PR body-contract workflow (#3472):
-  [`.github/workflows/pr-body-contracts.yml`](.github/workflows/pr-body-contracts.yml)
+  `.github/workflows/pr-body-contracts.yml` (historical workflow, since removed)
   now validates live pull-request bodies with
   [`scripts/dev/check_pr_followups.py`](scripts/dev/check_pr_followups.py), requiring body input,
   open linked follow-up issues for declared residual work, domain-aware approval for

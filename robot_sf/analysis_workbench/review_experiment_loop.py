@@ -1061,6 +1061,11 @@ def _remaining_pair_executions_for_operations(
     return required
 
 
+def _default_clock() -> float:
+    """Return the production monotonic time used for the wall budget."""
+    return time.monotonic()
+
+
 class ExperimentLoop:
     """Run one finite candidate set against a durable session journal.
 
@@ -1088,8 +1093,14 @@ class ExperimentLoop:
         cancel: Callable[[], bool] | Any | None = None,
         supported_factors: set[str] | frozenset[str] | None = None,
         supported_measurements: set[str] | frozenset[str] | None = None,
+        clock: Callable[[], float] | None = None,
     ) -> None:
-        """Create a journal owner around one already-admitted source."""
+        """Create a journal owner around one already-admitted source.
+
+        ``clock`` is the monotonic time source for the wall budget.  It defaults
+        to :func:`time.monotonic`; tests inject a fake clock so a stalled host
+        cannot consume the budget.
+        """
         self.request = request
         self.recipe = dict(recipe)
         self.budget = budget
@@ -1135,8 +1146,9 @@ class ExperimentLoop:
         self.supported_measurements = set(supported_measurements or _SUPPORTED_MEASUREMENTS)
         self.candidates = _candidate_order(self.recipe)
         self.measurement = self._measurement()
+        self._clock: Callable[[], float] = clock or _default_clock
         self._elapsed_base = 0.0
-        self._started_at = time.monotonic()
+        self._started_at = self._clock()
         self._session_lock_path = journal_path.with_name(SESSION_LOCK_FILENAME)
         self._session_lock_fd = -1
         # A fresh invocation reports an ordinary output collision before it
@@ -1311,7 +1323,7 @@ class ExperimentLoop:
         }
 
     def _elapsed(self) -> float:
-        return self._elapsed_base + max(0.0, time.monotonic() - self._started_at)
+        return self._elapsed_base + max(0.0, self._clock() - self._started_at)
 
     def _persist(self) -> None:
         elapsed = self._elapsed()
@@ -2274,7 +2286,7 @@ class ExperimentLoop:
             raise ExperimentLoopError("cannot resume: elapsed accounting is not monotonic")
         self._journal["elapsed_floor_s"] = float(elapsed_floor)
         self._elapsed_base = float(elapsed)
-        self._started_at = time.monotonic()
+        self._started_at = self._clock()
         self._persist()
 
     def _cancelled(self) -> bool:
@@ -4457,6 +4469,7 @@ def run(
     executor: Any | None = None,
     source_admission: Mapping[str, Any] | None = None,
     cancel: Callable[[], bool] | Any | None = None,
+    clock: Callable[[], float] | None = None,
 ) -> ComponentResult:
     """Run one authorised bounded experiment session.
 
@@ -4588,6 +4601,7 @@ def run(
             session_id=validated.session_id,
             resume=resume,
             cancel=cancel,
+            clock=clock,
         )
         return loop.run()
     except ExperimentLoopError as error:

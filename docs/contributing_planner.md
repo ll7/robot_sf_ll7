@@ -158,3 +158,78 @@ BASE_REF=origin/main scripts/dev/check_docs_proof_consistency_diff.sh
 Add a smoke command, such as the `reference_adapter` or policy-search candidate smoke above, before
 claiming the planner runs in this repository. For docs-only guide updates, `git diff --check`, path
 existence checks, and docs proof consistency are enough unless the guide changes a command contract.
+
+## Hybrid feasibility diagnostics
+
+The hybrid evaluator supports `debug_candidate_evaluator: true` (default: false).
+Each decision then includes `candidate_evaluator_debug`: rejection counts grouped
+by constraint and actual threshold, the highest-scoring feasible moving command,
+and `FORCED` versus `PREFERRED` translation stops. A translation command with
+absolute speed at most 1e-9 m/s is a stop; turning in place is included. Goal stops
+are labeled `GOAL`. The proximity speed cap and conditional constraint thresholds
+are also recorded. These diagnostic fields are absent when the flag is absent.
+
+For hybrid v4 with bound exact-map geometry and continuous static checking,
+`physical_static_exclusion_enabled: true` (default: false) separates physical
+body exclusion from the soft static clearance preference. Hard exclusion uses
+the observed body radius; clearance preference uses the occupancy-grid estimate
+of surface gap divided by `desired_static_clearance`, clamped to [0, 1]. The
+coarse estimate affects preference, while exact geometry determines wall contact.
+Every rollout interval uses the observed plant timestep, trapezoidal velocity,
+and midpoint heading. The swept segment is expanded by an arc bound:
+`arc_length * abs(turn_angle) / 8`, which is at least the circular-arc sagitta.
+This also covers the first committed step. Unbound geometry and older variants
+retain the existing exclusion policy.
+
+`goal_next_validity_enabled: true` is a separate, default-false planner flag.
+Use it with the default-false environment option `include_goal_next_valid: true`.
+The sensor then emits `goal.next_valid` (float32 array of shape (1,), 0 for absent,
+1 for present). The hybrid and its grid route guide use that bit; a legitimate
+successor at world origin remains valid. The production flattened reader and
+map observation bridge preserve the optional bit. Without the field, they retain legacy
+selection. Physical exclusion alone does not change goal selection. Default
+observations, observation spaces and frozen 0.0.8 policy remain unchanged.
+
+The wall flag also checks the complete committed-step-plus-braking tail against
+physical map geometry. Limited reverse from main is respected by this sweep.
+The platform candidate-injection experiment was removed after round 3: with the
+current-position braking cap enforced it adds no meaningful success benefit and
+increases near misses. Historical measurements and the braking audit remain in
+`docs/validation/hybdiag/`; they are not an adoption recommendation.
+
+The 1.60 m threshold in these scenarios is a **candidate rejection radius applied
+to constant-velocity predicted pedestrian positions at rollout endpoints**.
+It is not a hard limit on executed separation. Plant/pedestrian evolution can
+differ from prediction; report actual minimum separation and near misses rather
+than inferring them from this threshold. The physical radius sum here is 1.40 m.
+These experimental flags require paired collision, pedestrian-separation and
+empty-world validation; none changes the release config.
+
+The development-only driver uses the benchmark environment and action adapter:
+
+```bash
+uv run python -m scripts.validation.run_hybrid_feasibility_diagnostics \
+  --scenarios francis2023_narrow_doorway_width_2p20 --seeds 1001 \
+  --arms off static_only static_plus_goal_validity --workers 1 --output output/hybrid_feasibility
+```
+
+It validates resolved seeds before environment creation and permits only
+1001-1030. Local runs permit at most two workers; Slurm runs permit at most 32.
+The default comparison budget is 600 steps at 0.1 s, explicitly independent of
+release authored budgets. `--empty` uses the existing actor-removal hook.
+Summary JSON and compressed per-step JSONL retain forced/preferred decisions,
+actual-plant stopped-time fraction (speed <= 0.05 m/s), time without a feasible
+moving command, longest stationary interval, and diagnostic freezing (stationary
+for >10 s, or net displacement <0.5 m across a window longer than 10 s).
+The three comparison arms are `off`, `static_only` (only
+`physical_static_exclusion_enabled`), and `static_plus_goal_validity` (also
+`goal_next_validity_enabled` and `include_goal_next_valid`). Native pedestrian minimum center separation
+and near-miss steps/events are retained. A near miss has a surface gap in
+`[0, 0.50)` m; an event starts when the per-step near-miss indicator turns on.
+
+ORCA output separately reports the first rejected *executed* endpoint segment
+and the first rejected hypothetical constant-command horizon. The latter is not
+an executed-path counterexample. Dynamic segment replay uses the hybrid's
+constant-velocity pedestrian prediction. Feasible unsampled forward probes
+explain candidate omissions without entering the action-selection set. Outputs
+are diagnostic-only development evidence and do not alter release inputs.

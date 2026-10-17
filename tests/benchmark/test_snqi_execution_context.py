@@ -1,0 +1,526 @@
+"""Context admission uses recorded data, setup fences and a dev1004 fixture environment."""
+# evidence-writer-exempt: only exact-byte producer copies and intentional digest corruption
+# use raw writes; each is marked with the shared write_review_sidecar. Other fixtures use write_json.
+
+import hashlib
+import json
+from copy import deepcopy
+from pathlib import Path
+
+import pytest
+
+from robot_sf.benchmark.map_runner import map_runner_episode as episode
+from robot_sf.benchmark.result_provenance import build_execution_context_provenance
+from robot_sf.evidence.writers import write_json, write_review_sidecar
+from tests.tools.test_run_benchmark_release import synthetic_execution_admission  # noqa: F401
+
+ROOT = Path(__file__).resolve().parents[2]
+EVIDENCE = ROOT / "docs/context/evidence/2026-10-04_freeze008_calibration"
+ENV = "ROBOT_SF_SNQI_V2_CALIBRATION_CONTEXT"
+
+
+@pytest.fixture(autouse=True)
+def single_thread_context(monkeypatch):
+    """Give synthetic admission contexts explicit, caller-independent thread caps."""
+    for variable in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
+        monkeypatch.setenv(variable, "1")
+
+
+def test_worker_refuses_context_difference_before_episode_setup(monkeypatch):
+    """Base reaches the setup fence; the fixed worker must refuse without setup/reset."""
+    context = build_execution_context_provenance()
+    context["cpu_model"] = "deliberately different CPU"
+    monkeypatch.setenv(ENV, json.dumps(context))
+    reached = []
+
+    def setup(**kwargs):
+        reached.append("setup")
+        raise AssertionError("episode setup reached before execution-context admission")
+
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(
+        episode, "_resolve_episode_run_context", lambda **_kw: SimpleNamespace(algo="ppo")
+    )
+    monkeypatch.setattr(episode, "telemetry_from_scenario", setup)
+    with pytest.raises(ValueError, match="execution context mismatch: cpu_model"):
+        episode.run_map_episode(
+            {},
+            1004,
+            horizon=1,
+            dt=0.1,
+            record_forces=True,
+            snqi_weights=None,
+            snqi_baseline=None,
+            algo="ppo",
+            scenario_path=Path("dev.yaml"),
+            policy_builder=lambda *a: pytest.fail("planner construction forbidden"),
+        )
+    assert reached == []
+
+
+def asset_binding(root=EVIDENCE):
+    import hashlib
+
+    path = root / "determinism-receipt.json"
+    return {
+        "determinism_receipt_path": path,
+        "determinism_receipt_sha256": hashlib.sha256(
+            (EVIDENCE / path.name).read_bytes()
+        ).hexdigest(),
+    }
+
+
+def reference():
+    return json.loads((EVIDENCE / "determinism-receipt.json").read_bytes())["execution_contexts"][
+        "original"
+    ]
+
+
+def complete_context_asset_binding(root):
+    """Create a marked synthetic current-context reference; never modify historical evidence."""
+    root.mkdir(parents=True, exist_ok=True)
+    anchors = root / "anchors.v2.0.acquired.json"
+    write_json(anchors, json.loads((EVIDENCE / anchors.name).read_bytes()))
+    receipt = json.loads((EVIDENCE / "determinism-receipt.json").read_bytes())
+    context = build_execution_context_provenance()
+    receipt["execution_contexts"] = {"original": context, "repeat": dict(context)}
+    receipt["fixture_kind"] = "synthetic-current-context-admission"
+    receipt_path = root / "determinism-receipt.json"
+    write_json(receipt_path, receipt)
+    digest = hashlib.sha256(receipt_path.read_bytes()).hexdigest()
+    proof = json.loads((EVIDENCE / "acquisition-proof.json").read_bytes())
+    proof["anchors_sha256"] = hashlib.sha256(anchors.read_bytes()).hexdigest()
+    proof["determinism_receipt"] = {"path": receipt_path.name, "sha256": digest}
+    write_json(root / "acquisition-proof.json", proof)
+    return {"determinism_receipt_path": receipt_path, "determinism_receipt_sha256": digest}
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        "cpu_model",
+        "platform",
+        "python_version",
+        "numpy_version",
+        "numba_version",
+        "kernel",
+        "glibc",
+        "thread_env",
+        "torch_version",
+        "stable_baselines3_version",
+    ],
+)
+def test_same_node_cannot_bypass_a_numerical_context_difference(field, monkeypatch):
+    from robot_sf.benchmark import result_provenance
+    from robot_sf.benchmark.snqi.execution_context import assert_context_equal
+
+    versions = {"torch": "9.8.7+fixture", "stable-baselines3": "2.9.1+fixture"}
+    monkeypatch.setattr(result_provenance, "_installed_version", versions.__getitem__)
+    expected = build_execution_context_provenance()
+    expected.update(
+        torch_version=versions["torch"], stable_baselines3_version=versions["stable-baselines3"]
+    )
+    observed = build_execution_context_provenance()
+    for name in ("torch_version", "stable_baselines3_version"):
+        assert observed.get(name) == expected[name], f"production builder omitted {name}"
+    # Explicit kernel/glibc fields are supported by the comparison if a receipt records them.
+    if field in {"kernel", "glibc"}:
+        expected[field] = "recorded"
+    if field in {"torch_version", "stable_baselines3_version"}:
+        missing = dict(observed)
+        missing.pop(field)
+        with pytest.raises(ValueError, match=field):
+            assert_context_equal(missing, expected)
+    observed[field] = {"OMP_NUM_THREADS": "2"} if field == "thread_env" else "changed"
+    with pytest.raises(ValueError, match=field):
+        assert_context_equal(observed, expected)
+
+
+def test_equal_numerical_context_on_another_node_is_admissible():
+    from robot_sf.benchmark.snqi.execution_context import assert_context_equal
+
+    expected = reference()
+    observed = deepcopy(expected)
+    observed["node_identity_sha256"] = "a" * 64
+    assert_context_equal(observed, expected)
+
+
+@pytest.mark.parametrize(
+    "field",
+    ["cpu_model", "platform", "python_version", "numpy_version", "numba_version", "thread_env"],
+)
+def test_missing_reference_context_refuses(field):
+    from robot_sf.benchmark.snqi.execution_context import assert_context_equal
+
+    expected = reference()
+    expected.pop(field)
+    with pytest.raises(ValueError, match="missing " + field):
+        assert_context_equal(reference(), expected)
+
+
+@pytest.mark.parametrize("mutation", ["none", "anchors", "receipt", "missing"])
+def test_actual_delivered_proof_binds_context_bytes(tmp_path, mutation):
+    from robot_sf.benchmark.snqi.execution_context import load_calibration_context
+
+    for name in [
+        "anchors.v2.0.acquired.json",
+        "acquisition-proof.json",
+        "determinism-receipt.json",
+    ]:
+        (tmp_path / name).write_bytes((EVIDENCE / name).read_bytes())
+        write_review_sidecar(tmp_path / name)
+    anchors = tmp_path / "anchors.v2.0.acquired.json"
+    if mutation == "anchors":
+        anchors.write_bytes(anchors.read_bytes() + b" ")
+        write_review_sidecar(anchors)
+    if mutation == "receipt":
+        p = tmp_path / "determinism-receipt.json"
+        p.write_bytes(p.read_bytes() + b" ")
+        write_review_sidecar(p)
+    if mutation == "missing":
+        (tmp_path / "acquisition-proof.json").unlink()
+    if mutation == "none":
+        # Historical receipts remain readable, but are no longer production references.
+        with pytest.raises(ValueError, match="calibration execution context missing torch_version"):
+            load_calibration_context(anchors, asset_binding(tmp_path))
+    else:
+        with pytest.raises((ValueError, FileNotFoundError)):
+            load_calibration_context(anchors, asset_binding(tmp_path))
+
+
+def test_guard_restores_environment_and_records_worker_context(monkeypatch):
+    from robot_sf.benchmark.snqi.execution_context import (
+        admit_episode_context,
+        episode_context_guard,
+    )
+    from scripts.dev.build_snqi_v2_determinism_receipt import metric_row_sha256
+    from tests.benchmark.test_map_runner_episode_algo_meta_isolation import _patch_episode_runtime
+
+    _patch_episode_runtime(monkeypatch)
+    fake_environment = episode.make_robot_env
+
+    def dev_environment(config, seed, debug):
+        assert seed == 1004
+        return fake_environment(config, seed, debug)
+
+    monkeypatch.setattr(episode, "make_robot_env", dev_environment)
+    for variable in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
+        monkeypatch.setenv(variable, "1")
+    live = build_execution_context_provenance()
+    monkeypatch.setenv(ENV, "prior")
+    with episode_context_guard(live):
+        record = admit_episode_context("ppo")
+        assert record["cpu_model"] == live["cpu_model"] and "hostname" not in record
+        assert admit_episode_context("goal") is None
+        with monkeypatch.context() as clocks:
+            clocks.setattr(episode.time, "time", lambda: 1700000000.0)
+            clocks.setattr(episode.time, "perf_counter", lambda: 1700000000.0)
+            row = episode.run_map_episode(
+                {"name": "ctxfix-dev1004", "simulation_config": {"max_episode_steps": 1}},
+                seed=1004,
+                horizon=1,
+                dt=0.1,
+                record_forces=False,
+                snqi_weights=None,
+                snqi_baseline=None,
+                algo="ppo",
+                scenario_path=Path("dev1004.yaml"),
+                adapter_impact_eval=True,
+                policy_builder=lambda *_a, **_k: (lambda _obs: (1.0, 0.0), {"algorithm": "ppo"}),
+            )
+        assert row["algorithm_metadata"]["execution_context"] == record
+        assert row["steps"] == 1 and row["status"] == "success"
+        # Independently measured on the same fake episode at main eaa3cc8f.
+        assert metric_row_sha256(row) == (
+            "501404c39096faa42edddc6bca7e280f0ceaee37088808e9394abd3210265d9e"
+        )
+    assert __import__("os").environ[ENV] == "prior"
+    with episode_context_guard(None):
+        assert admit_episode_context("ppo") is None
+
+
+@pytest.mark.parametrize("mutation", ["none", "missing", "different", "empty"])
+def test_every_learned_row_is_checked_not_only_batch_context(tmp_path, mutation):
+    from robot_sf.benchmark.snqi.execution_context import verify_episode_contexts
+
+    ctx = reference()
+    rows = [
+        {"algo": "ppo", "seed": 1004, "algorithm_metadata": {"execution_context": deepcopy(ctx)}},
+        {
+            "algo": "guarded_ppo",
+            "seed": 1005,
+            "algorithm_metadata": {"execution_context": deepcopy(ctx)},
+        },
+    ]
+    if mutation == "missing":
+        rows[1]["algorithm_metadata"].pop("execution_context")
+    if mutation == "different":
+        rows[1]["algorithm_metadata"]["execution_context"]["numpy_version"] = "changed"
+    if mutation == "empty":
+        rows = []
+    for row in rows:
+        path = tmp_path / "runs" / row["algo"] / "episodes.jsonl"
+        path.parent.mkdir(parents=True)
+        write_json(path, row, indent=None)
+    if mutation == "none":
+        assert verify_episode_contexts(tmp_path, ctx, ("ppo", "guarded_ppo")) == 2
+    else:
+        with pytest.raises(ValueError, match="execution context"):
+            verify_episode_contexts(tmp_path, ctx, ("ppo", "guarded_ppo"))
+
+
+@pytest.mark.parametrize("mode", ["preflight", "run"])
+@pytest.mark.parametrize("custody", ["valid", "missing"])
+def test_release_cli_refuses_before_source_admission_or_campaign(
+    monkeypatch, capsys, tmp_path, mode, custody
+):
+    """Exercise the actual production CLI, with unchanged paired evidence and no episodes."""
+    from types import SimpleNamespace
+
+    from robot_sf.benchmark.snqi import v2_binding
+    from scripts.tools import run_benchmark_release as runner
+
+    manifest = SimpleNamespace(
+        canonical_campaign_config_path=Path("dev.yaml"), source_sha="a" * 40, planner_keys=("ppo",)
+    )
+    binding = complete_context_asset_binding(tmp_path / "current-reference")
+    cfg = SimpleNamespace(snqi_v2_binding=binding, snqi_v2_spec=SimpleNamespace(diagnostic=False))
+    monkeypatch.setattr(runner, "load_release_manifest", lambda _path: manifest)
+    monkeypatch.setattr(runner, "load_campaign_config", lambda _path: cfg)
+    monkeypatch.setattr(v2_binding, "bind_acquired_anchors", lambda cfg, **_kw: cfg)
+    observed = build_execution_context_provenance()
+    observed["cpu_model"] = "different CPU despite the same recorded node"
+    monkeypatch.setattr(runner, "build_execution_context_provenance", lambda: observed)
+
+    def forbidden(*_args, **_kwargs):
+        pytest.fail("context refusal must precede source admission and campaign execution")
+
+    monkeypatch.setattr(runner, "_current_source_commit", forbidden)
+    monkeypatch.setattr(runner, "run_campaign", forbidden)
+    args = ["--manifest", "dev.yaml", "--mode", mode]
+    if custody == "valid":
+        args.extend(
+            ["--snqi-v2-anchors", str(tmp_path / "current-reference/anchors.v2.0.acquired.json")]
+        )
+    assert runner.main(args) == 2
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "snqi_v2_execution_context_refused"
+    assert payload["campaign_execution_status"] == "not_started"
+    assert payload["benchmark_success"] is False
+    reason = "mismatch: cpu_model" if custody == "valid" else "requires acquired anchor custody"
+    assert reason in payload["status_reason"]
+
+
+def test_learned_family_absent_from_readiness_catalog_refuses(monkeypatch):
+    """A learned family the catalog cannot resolve must fail fast instead of being skipped."""
+    from robot_sf.benchmark.snqi import execution_context
+
+    family = "sac"
+    assert family in execution_context._LEARNED_FAMILIES
+    real = execution_context.get_algorithm_readiness
+    monkeypatch.setattr(
+        execution_context,
+        "get_algorithm_readiness",
+        lambda name: None if name == family else real(name),
+    )
+    with pytest.raises(ValueError, match=f"absent from readiness catalog: {family}"):
+        execution_context._learned_algorithm_names()
+    # The catalog lookup must still fail closed for every other family as well.
+    monkeypatch.setattr(execution_context, "get_algorithm_readiness", lambda _name: None)
+    with pytest.raises(ValueError, match="absent from readiness catalog"):
+        execution_context._learned_algorithm_names()
+
+
+def test_malformed_worker_reference_refuses(monkeypatch):
+    from robot_sf.benchmark.snqi.execution_context import admit_episode_context
+
+    monkeypatch.setenv(ENV, "[]")
+    with pytest.raises(ValueError, match="must be a mapping"):
+        admit_episode_context("ppo")
+
+
+@pytest.mark.parametrize("context_rows", ["missing", "different", "equal"])
+@pytest.mark.usefixtures("synthetic_execution_admission")
+def test_recorded_context_gate_precedes_full_release_acceptance(
+    monkeypatch,
+    capsys,
+    tmp_path: Path,
+    context_rows: str | None,
+) -> None:
+    """Missing/different learned-row context cannot reach release acceptance/publication."""
+    from types import SimpleNamespace
+
+    from scripts.tools import run_benchmark_release
+    from tests.tools.test_run_benchmark_release import (
+        _admit_checkpoint_receipt,
+        _default_spawn_matrix_preflight_passes,
+        _make_campaign_tree,
+        _manifest_fixture,
+    )
+
+    _default_spawn_matrix_preflight_passes.__wrapped__(monkeypatch)
+    campaign_root = _make_campaign_tree(tmp_path)
+    manifest = SimpleNamespace(
+        **_manifest_fixture().__dict__,
+        schema_version="benchmark-release-manifest.v0.2",
+    )
+    cfg = SimpleNamespace(export_publication_bundle=True)
+    context_args = []
+    if context_rows is not None:
+        manifest.__dict__.update(source_sha=None, planner_keys=manifest.planner_keys or ("ppo",))
+        from robot_sf.benchmark.snqi import v2_binding
+
+        evidence = tmp_path / "current-reference"
+        binding = complete_context_asset_binding(evidence)
+        context = build_execution_context_provenance()
+        monkeypatch.setattr(
+            run_benchmark_release, "_snqi_v2_evaluation_seed_receipt", lambda *_a, **_kw: {}
+        )
+        cfg.snqi_v2_binding = binding
+        cfg.snqi_v2_spec = SimpleNamespace(diagnostic=False)
+        monkeypatch.setattr(v2_binding, "bind_acquired_anchors", lambda cfg, **_kw: cfg)
+        monkeypatch.setattr(
+            run_benchmark_release, "build_execution_context_provenance", lambda: context
+        )
+        context_args = ["--snqi-v2-anchors", str(evidence / "anchors.v2.0.acquired.json")]
+        if context_rows != "missing":
+            recorded = dict(context)
+            if context_rows == "different":
+                recorded["numpy_version"] = "different"
+            path = campaign_root / "runs/ppo/episodes.jsonl"
+            path.parent.mkdir(parents=True)
+            write_json(
+                path,
+                {
+                    "algo": "ppo",
+                    "seed": 1004,
+                    "algorithm_metadata": {"execution_context": recorded},
+                },
+                indent=None,
+            )
+    monkeypatch.setattr(run_benchmark_release, "load_release_manifest", lambda path: manifest)
+    monkeypatch.setattr(run_benchmark_release, "load_campaign_config", lambda path: cfg)
+    monkeypatch.setattr(run_benchmark_release, "check_orca_rvo2_preflight", lambda cfg: None)
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "validate_release_manifest",
+        lambda *args, **kwargs: {"status": "valid", "problem_count": 0, "problems": []},
+    )
+    monkeypatch.setattr(
+        run_benchmark_release, "build_resolved_release_manifest", lambda *a, **k: {}
+    )
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "run_campaign",
+        lambda *args, **kwargs: {
+            "campaign_root": str(campaign_root),
+            "benchmark_success": True,
+            "status": "benchmark_success",
+            "status_reason": "core rows passed",
+            "exit_code": 0,
+        },
+    )
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "build_release_provenance",
+        lambda *args, **kwargs: {
+            "benchmark_protocol_version": "0.1.0",
+            "release_id": "full",
+            "release_tag": manifest.release_tag,
+            "manifest_path": "manifest.yaml",
+            "manifest_sha256": "a" * 64,
+            "canonical_campaign_config": "campaign.yaml",
+        },
+    )
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "validate_full_benchmark_release_acceptance",
+        lambda *args, **kwargs: {
+            "status": "invalid",
+            "benchmark_success": False,
+            "blockers": ["independent scientific sources are not admitted"],
+        },
+    )
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "_build_publication_payload",
+        lambda **kwargs: (_ for _ in ()).throw(
+            AssertionError("publication must be blocked by full acceptance")
+        ),
+    )
+    receipt = _admit_checkpoint_receipt(monkeypatch, tmp_path)
+    smoke_receipt = tmp_path / "runtime_smoke_result.json"
+    write_json(smoke_receipt, {})
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "validate_runtime_smoke_result",
+        lambda *args, **kwargs: {
+            "schema_version": "benchmark-runtime-smoke-admission.v1",
+            "status": "admitted",
+        },
+    )
+    monkeypatch.setattr(run_benchmark_release, "_current_source_commit", lambda: "a" * 40)
+
+    exit_code = run_benchmark_release.main(
+        [
+            "--manifest",
+            "manifest.yaml",
+            "--checkpoint-receipt",
+            str(receipt),
+            "--runtime-smoke-receipt",
+            str(smoke_receipt),
+            *context_args,
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    if context_rows in {"missing", "different"}:
+        assert exit_code == 2
+        assert payload["status"] == "snqi_v2_episode_context_refused"
+        assert payload["benchmark_success"] is False
+        expected_reason = (
+            "census missing arms" if context_rows == "missing" else "mismatch: numpy_version"
+        )
+        assert expected_reason in payload["status_reason"]
+        assert not (campaign_root / "release" / "release_result.json").exists()
+        return
+    persisted = json.loads(
+        (campaign_root / "release" / "release_result.json").read_text(encoding="utf-8")
+    )
+    assert exit_code == 2
+    assert payload["campaign_benchmark_success"] is True
+    assert payload["benchmark_success"] is False
+    assert payload["release_benchmark_success"] is False
+    assert payload["release_status"] == "full_release_acceptance_failed"
+    assert payload["release_exit_code"] == 2
+    assert payload["publication_bundle"] is None
+    assert persisted["release_acceptance"]["blockers"] == [
+        "independent scientific sources are not admitted"
+    ]
+
+
+def test_rehashed_caller_receipt_cannot_redefine_calibration_context(tmp_path):
+    """Coupled custody hashes are insufficient; only the spec-pinned calibration record is used."""
+    import hashlib
+
+    from robot_sf.benchmark.snqi.execution_context import load_calibration_context
+
+    for name in [
+        "anchors.v2.0.acquired.json",
+        "acquisition-proof.json",
+        "determinism-receipt.json",
+    ]:
+        (tmp_path / name).write_bytes((EVIDENCE / name).read_bytes())
+        write_review_sidecar(tmp_path / name)
+    receipt = json.loads((tmp_path / "determinism-receipt.json").read_bytes())
+    receipt["execution_contexts"]["original"]["cpu_model"] = "caller-chosen CPU"
+    receipt["execution_contexts"]["repeat"]["cpu_model"] = "caller-chosen CPU"
+    write_json(tmp_path / "determinism-receipt.json", receipt)
+    proof = json.loads((tmp_path / "acquisition-proof.json").read_bytes())
+    proof["determinism_receipt"]["sha256"] = hashlib.sha256(
+        (tmp_path / "determinism-receipt.json").read_bytes()
+    ).hexdigest()
+    write_json(tmp_path / "acquisition-proof.json", proof)
+    with pytest.raises(ValueError, match="differs from pinned calibration reference"):
+        load_calibration_context(tmp_path / "anchors.v2.0.acquired.json", asset_binding(tmp_path))

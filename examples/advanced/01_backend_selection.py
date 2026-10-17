@@ -28,7 +28,7 @@ def demo_fast_pysf_backend():
     config.peds_have_obstacle_forces = True
 
     env = make_robot_env(config=config, debug=False)
-    obs, _info = env.reset(seed=123)
+    obs, _info = env.reset(seed=1013)
     obs_size = len(obs) if isinstance(obs, dict) else obs.shape
     print(f"Reset complete. Observation: {obs_size}")
 

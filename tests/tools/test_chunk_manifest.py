@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import ctypes
+import errno
 import hashlib
 import json
 import os
@@ -159,6 +161,24 @@ def _make_sparse(root: Path) -> None:
         pytest.skip("filesystem does not report sparse allocation")
 
 
+def _preallocate_beyond_eof(path: Path) -> None:
+    """Hide a real in-file hole from the st_blocks hint with kept-size allocation."""
+    fallocate = getattr(ctypes.CDLL(None, use_errno=True), "fallocate", None)
+    if fallocate is None:
+        pytest.skip("fallocate is unavailable")
+    fallocate.argtypes = (ctypes.c_int, ctypes.c_int, ctypes.c_longlong, ctypes.c_longlong)
+    fallocate.restype = ctypes.c_int
+    size = path.stat().st_size
+    fd = os.open(path, os.O_RDWR)
+    try:
+        if fallocate(fd, 1, size, size) != 0:  # FALLOC_FL_KEEP_SIZE
+            pytest.skip(f"kept-size preallocation unavailable: {ctypes.get_errno()}")
+    finally:
+        os.close(fd)
+    if path.stat().st_blocks * 512 < size:
+        pytest.skip("preallocation did not mask the low-block hint")
+
+
 @pytest.mark.parametrize(
     ("setup", "code"),
     [
@@ -175,6 +195,559 @@ def test_unsafe_members_fail_closed(tmp_path: Path, setup, code: str) -> None:
     with pytest.raises(cm.ChunkManifestError) as error:
         _build(root)
     assert error.value.code == code
+
+
+def test_dense_file_is_never_checked_for_sparse_holes(tmp_path: Path) -> None:
+    path = tmp_path / "dense.bin"
+    path.write_bytes(hashlib.shake_256(b"dense fixture").digest(128 * 1024))
+    if cm._looks_sparse_by_blocks(path.stat()):
+        pytest.skip("filesystem reports low allocation for the dense fixture")
+    assert cm._stat_checked(path, path.name)[0] == path.stat().st_size
+
+
+def test_fiemap_full_encoded_mapping_is_accepted(tmp_path: Path, monkeypatch) -> None:
+    path = tmp_path / "compressed.bin"
+    path.write_bytes(b"x" * 4096)
+    size = path.stat().st_size
+    flags = cm._FIEMAP_EXTENT_ENCODED | cm._FIEMAP_EXTENT_LAST
+    monkeypatch.setattr(
+        cm, "_fiemap_extents", lambda _fd, _size: [cm._FiemapExtent(0, size, flags)]
+    )
+    assert cm._has_sparse_hole(path, size) is False
+
+
+def test_fiemap_gap_is_rejected(tmp_path: Path, monkeypatch) -> None:
+    path = tmp_path / "gap.bin"
+    path.write_bytes(b"x" * 4096)
+    size = path.stat().st_size
+    flags = cm._FIEMAP_EXTENT_ENCODED | cm._FIEMAP_EXTENT_LAST
+    monkeypatch.setattr(
+        cm, "_fiemap_extents", lambda _fd, _size: [cm._FiemapExtent(100, size - 100, flags)]
+    )
+    assert cm._has_sparse_hole(path, size) is True
+
+
+def test_fiemap_unavailable_mapping_is_rejected(tmp_path: Path, monkeypatch) -> None:
+    path = tmp_path / "unavailable.bin"
+    path.write_bytes(b"x" * 4096)
+    size = path.stat().st_size
+    monkeypatch.setattr(cm, "_fiemap_extents", lambda _fd, _size: None)
+    assert cm._has_sparse_hole(path, size) is True
+
+
+def test_fiemap_non_linux_platform_is_unavailable(monkeypatch) -> None:
+    monkeypatch.setattr(cm.sys, "platform", "darwin")
+    assert cm._fiemap_extents(-1, 4096) is None
+
+
+def test_fiemap_ambiguous_extent_flags_are_rejected(tmp_path: Path, monkeypatch) -> None:
+    path = tmp_path / "ambiguous.bin"
+    path.write_bytes(b"x" * 4096)
+    size = path.stat().st_size
+    flags = cm._FIEMAP_EXTENT_ENCODED | cm._FIEMAP_EXTENT_UNWRITTEN | cm._FIEMAP_EXTENT_LAST
+    monkeypatch.setattr(
+        cm, "_fiemap_extents", lambda _fd, _size: [cm._FiemapExtent(0, size, flags)]
+    )
+    assert cm._has_sparse_hole(path, size) is True
+
+
+def test_fiemap_incomplete_coverage_is_rejected(tmp_path: Path, monkeypatch) -> None:
+    path = tmp_path / "incomplete.bin"
+    path.write_bytes(b"x" * 4096)
+    size = path.stat().st_size
+    flags = cm._FIEMAP_EXTENT_ENCODED | cm._FIEMAP_EXTENT_LAST
+    monkeypatch.setattr(
+        cm, "_fiemap_extents", lambda _fd, _size: [cm._FiemapExtent(0, size - 100, flags)]
+    )
+    assert cm._has_sparse_hole(path, size) is True
+
+
+def test_fiemap_without_encoded_extent_is_rejected(tmp_path: Path, monkeypatch) -> None:
+    path = tmp_path / "no_encoded.bin"
+    path.write_bytes(b"x" * 4096)
+    size = path.stat().st_size
+    monkeypatch.setattr(
+        cm,
+        "_fiemap_extents",
+        lambda _fd, _size: [cm._FiemapExtent(0, size, cm._FIEMAP_EXTENT_LAST)],
+    )
+    assert cm._has_sparse_hole(path, size) is True
+
+
+def test_fiemap_zero_length_trailing_extent_is_rejected(tmp_path: Path, monkeypatch) -> None:
+    path = tmp_path / "trailing_zero.bin"
+    path.write_bytes(b"x" * 4096)
+    size = path.stat().st_size
+    flags = cm._FIEMAP_EXTENT_ENCODED
+    last_flags = cm._FIEMAP_EXTENT_ENCODED | cm._FIEMAP_EXTENT_LAST
+    monkeypatch.setattr(
+        cm,
+        "_fiemap_extents",
+        lambda _fd, _size: [
+            cm._FiemapExtent(0, size, flags),
+            cm._FiemapExtent(size, 0, last_flags),
+        ],
+    )
+    assert cm._has_sparse_hole(path, size) is True
+
+
+def test_fiemap_missing_terminal_last_flag_is_rejected(tmp_path: Path, monkeypatch) -> None:
+    path = tmp_path / "no_last.bin"
+    path.write_bytes(b"x" * 4096)
+    size = path.stat().st_size
+    flags = cm._FIEMAP_EXTENT_ENCODED
+    monkeypatch.setattr(
+        cm, "_fiemap_extents", lambda _fd, _size: [cm._FiemapExtent(0, size, flags)]
+    )
+    assert cm._has_sparse_hole(path, size) is True
+
+
+def test_fiemap_last_flag_on_earlier_extent_is_rejected(tmp_path: Path, monkeypatch) -> None:
+    path = tmp_path / "early_last.bin"
+    path.write_bytes(b"x" * 8192)
+    size = path.stat().st_size
+    half = size // 2
+    flags = cm._FIEMAP_EXTENT_ENCODED | cm._FIEMAP_EXTENT_LAST
+    monkeypatch.setattr(
+        cm,
+        "_fiemap_extents",
+        lambda _fd, _size: [
+            cm._FiemapExtent(0, half, flags),
+            cm._FiemapExtent(half, size - half, flags),
+        ],
+    )
+    assert cm._has_sparse_hole(path, size) is True
+
+
+def test_sparse_file_rejected_even_if_seek_data_hole_report_dense(
+    tmp_path: Path, monkeypatch
+) -> None:
+    root = tmp_path / "root"
+    root.mkdir()
+    _make_sparse(root)
+    size = (root / "sparse.bin").stat().st_size
+
+    def fake_lseek(_fd, offset, whence):
+        if whence == os.SEEK_DATA:
+            return 0
+        if whence == os.SEEK_HOLE:
+            return size
+        raise AssertionError(f"unexpected whence: {whence}")
+
+    monkeypatch.setattr(cm.os, "lseek", fake_lseek)
+    with pytest.raises(cm.ChunkManifestError) as error:
+        _build(root)
+    assert error.value.code == "sparse_file"
+
+
+def test_stat_checked_accepts_low_block_hint_confirmed_by_fiemap(
+    tmp_path: Path, monkeypatch
+) -> None:
+    path = tmp_path / "compressed.bin"
+    path.write_bytes(b"x" * 4096)
+    size = path.stat().st_size
+    flags = cm._FIEMAP_EXTENT_ENCODED | cm._FIEMAP_EXTENT_LAST
+    monkeypatch.setattr(cm, "_looks_sparse_by_blocks", lambda _st: True)
+    monkeypatch.setattr(
+        cm, "_fiemap_extents", lambda _fd, _size: [cm._FiemapExtent(0, size, flags)]
+    )
+    identity = cm._stat_checked(path, path.name)
+    assert identity[0] == size
+
+
+def _gpfs_like_source(tmp_path: Path, monkeypatch, data: bytes) -> tuple[Path, Path, dict]:
+    """Make FIEMAP return EOPNOTSUPP for one low-allocation source inode."""
+    if cm.fcntl is None:
+        pytest.skip("FIEMAP needs fcntl")
+    source_root = tmp_path / "source"
+    destination_root = tmp_path / "destination"
+    source_root.mkdir()
+    destination_root.mkdir()
+    source_file = source_root / "output.bin"
+    source_file.write_bytes(data)
+    source_inode = source_file.stat().st_ino
+    real_hint = cm._looks_sparse_by_blocks
+    real_ioctl = cm.fcntl.ioctl
+    monkeypatch.setattr(
+        cm, "_looks_sparse_by_blocks", lambda st: st.st_ino == source_inode or real_hint(st)
+    )
+
+    def unsupported_source(fd, request, buffer, mutate):
+        if os.fstat(fd).st_ino == source_inode:
+            raise OSError(errno.EOPNOTSUPP, "FIEMAP unsupported")
+        return real_ioctl(fd, request, buffer, mutate)
+
+    monkeypatch.setattr(cm.fcntl, "ioctl", unsupported_source)
+    manifest = _build(source_root, chunk_size=128)
+    return source_root, destination_root, manifest
+
+
+def test_gpfs_like_source_dense_destination_passes_custody(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    data = b"compressed output" * 50
+    source_root, destination_root, manifest = _gpfs_like_source(tmp_path, monkeypatch, data)
+    (destination_root / "output.bin").write_bytes(data)
+    record = manifest["files"][0]
+    expected_sha = hashlib.sha256(data).hexdigest()
+    assert record["allocation_status"] == cm.ALLOCATION_UNVERIFIED
+    assert record["file_sha256"] == expected_sha
+    assert record["mode"] == "chunked"
+
+    source = cm.verify_manifest(source_root, manifest=manifest, require_allocation=False)
+    destination = cm.verify_manifest(destination_root, manifest=manifest, require_allocation=True)
+    assert source["status"] == destination["status"] == "ok"
+    assert source["files"][0]["allocation_status"] == cm.ALLOCATION_UNVERIFIED
+    assert destination["files"][0]["allocation_status"] == cm.ALLOCATION_VERIFIED
+    assert source["files"][0]["file_sha256"] == destination["files"][0]["file_sha256"]
+    receipt = cm.build_custody_receipt(
+        manifest, source, destination, source_root=source_root, destination_root=destination_root
+    )
+    assert receipt["allocation_unverified_source"] == [
+        {
+            "path": "output.bin",
+            "source_sha256": expected_sha,
+            "destination_sha256": expected_sha,
+            "destination_allocation_status": cm.ALLOCATION_VERIFIED,
+        }
+    ]
+
+    manifest_path = tmp_path / "manifest.json"
+    source_path = tmp_path / "source-verify.json"
+    destination_path = tmp_path / "destination-verify.json"
+    receipt_path = tmp_path / "custody.json"
+    for path, payload in (
+        (manifest_path, manifest),
+        (source_path, source),
+        (destination_path, destination),
+    ):
+        path.write_text(json.dumps(payload), encoding="utf-8")
+    source_args = ["verify", "--root", str(source_root), "--manifest", str(manifest_path), "--json"]
+    assert cm.main(source_args) == cm.EXIT_FAILED
+    assert json.loads(capsys.readouterr().out)["error"]["code"] == (
+        "allocation_unverifiable_destination"
+    )
+    assert cm.main([*source_args, "--side", "source"]) == cm.EXIT_OK
+    assert json.loads(capsys.readouterr().out)["allocation_policy"] == "source"
+    assert (
+        cm.main(
+            [
+                "verify",
+                "--side",
+                "destination",
+                "--root",
+                str(destination_root),
+                "--manifest",
+                str(manifest_path),
+                "--json",
+            ]
+        )
+        == cm.EXIT_OK
+    )
+    assert json.loads(capsys.readouterr().out)["allocation_policy"] == "destination"
+    assert (
+        cm.main(
+            [
+                "custody",
+                "--manifest",
+                str(manifest_path),
+                "--source-verification",
+                str(source_path),
+                "--destination-verification",
+                str(destination_path),
+                "--source-root",
+                str(source_root),
+                "--destination-root",
+                str(destination_root),
+                "--output",
+                str(receipt_path),
+            ]
+        )
+        == cm.EXIT_OK
+    )
+    written = json.loads(receipt_path.read_text(encoding="utf-8"))
+    digest = written.pop("receipt_sha256")
+    assert (
+        digest
+        == hashlib.sha256(
+            json.dumps(written, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+    )
+
+
+def test_gpfs_like_source_destination_hash_mismatch_fails(tmp_path: Path, monkeypatch) -> None:
+    data = b"compressed output" * 50
+    source_root, destination_root, manifest = _gpfs_like_source(tmp_path, monkeypatch, data)
+    changed = bytearray(data)
+    changed[200] ^= 1
+    (destination_root / "output.bin").write_bytes(changed)
+    source = cm.verify_manifest(source_root, manifest=manifest, require_allocation=False)
+    destination = cm.verify_manifest(destination_root, manifest=manifest, require_allocation=True)
+    assert destination["status"] == "failed"
+    assert "file_digest_mismatch" in {failure["code"] for failure in destination["failures"]}
+    with pytest.raises(cm.ChunkManifestError) as error:
+        cm.build_custody_receipt(
+            manifest,
+            source,
+            destination,
+            source_root=source_root,
+            destination_root=destination_root,
+        )
+    assert error.value.code == "custody_verification_invalid"
+
+
+def test_gpfs_like_source_sparse_destination_fails(tmp_path: Path, monkeypatch) -> None:
+    data = b"\0" * (1024 * 1024) + b"x"
+    source_root, destination_root, manifest = _gpfs_like_source(tmp_path, monkeypatch, data)
+    destination_file = destination_root / "output.bin"
+    with destination_file.open("wb") as handle:
+        handle.seek(len(data) - 1)
+        handle.write(b"x")
+    if not cm._looks_sparse_by_blocks(destination_file.stat()):
+        pytest.skip("filesystem does not report sparse allocation")
+    assert (
+        cm.verify_manifest(source_root, manifest=manifest, require_allocation=False)["status"]
+        == "ok"
+    )
+    with pytest.raises(cm.ChunkManifestError) as error:
+        cm.verify_manifest(destination_root, manifest=manifest, require_allocation=True)
+    assert error.value.code == "sparse_file"
+
+
+@pytest.mark.parametrize("without_fiemap", (False, True))
+def test_destination_hole_fails_even_with_blocks_beyond_eof(
+    tmp_path: Path, monkeypatch, without_fiemap: bool
+) -> None:
+    data = b"\0" * (1024 * 1024) + b"x"
+    source_root = tmp_path / "source"
+    destination_root = tmp_path / "destination"
+    source_root.mkdir()
+    destination_root.mkdir()
+    (source_root / "output.bin").write_bytes(data)
+    manifest = _build(source_root)
+    destination_file = destination_root / "output.bin"
+    with destination_file.open("wb") as handle:
+        handle.seek(len(data) - 1)
+        handle.write(b"x")
+    _preallocate_beyond_eof(destination_file)
+    assert destination_file.stat().st_blocks * 512 >= len(data)
+    if without_fiemap:
+        monkeypatch.setattr(cm, "_fiemap_extents", lambda _fd, _size: None)
+    else:
+        with destination_file.open("rb") as handle:
+            extents = cm._fiemap_extents(handle.fileno(), len(data))
+        if extents is None:
+            pytest.skip("FIEMAP unavailable on test filesystem")
+        assert extents and extents[0].logical > 0
+    with pytest.raises(cm.ChunkManifestError) as error:
+        cm.verify_manifest(destination_root, manifest=manifest, require_allocation=True)
+    assert error.value.code == "sparse_file"
+
+
+def test_destination_without_fiemap_rejects_coarse_seek_on_sparse_file(
+    tmp_path: Path, monkeypatch
+) -> None:
+    source_root = tmp_path / "source"
+    destination_root = tmp_path / "destination"
+    source_root.mkdir()
+    destination_root.mkdir()
+    data = b"\0" * (1024 * 1024) + b"x"
+    (source_root / "output.bin").write_bytes(data)
+    manifest = _build(source_root)
+    destination_file = destination_root / "output.bin"
+    with destination_file.open("wb") as handle:
+        handle.seek(len(data) - 1)
+        handle.write(b"x")
+    if not cm._looks_sparse_by_blocks(destination_file.stat()):
+        pytest.skip("filesystem does not report sparse allocation")
+    monkeypatch.setattr(cm, "_fiemap_extents", lambda _fd, _size: None)
+
+    def coarse_seek(_fd, _offset, whence):
+        return 0 if whence == os.SEEK_DATA else len(data)
+
+    monkeypatch.setattr(cm.os, "lseek", coarse_seek)
+    with pytest.raises(cm.ChunkManifestError) as error:
+        cm.verify_manifest(destination_root, manifest=manifest)
+    assert error.value.code == "allocation_unverifiable_destination"
+
+
+def test_destination_without_fiemap_rejects_dense_file(tmp_path: Path, monkeypatch) -> None:
+    root = tmp_path / "destination"
+    root.mkdir()
+    (root / "output.bin").write_bytes(b"dense data" * 100)
+    manifest = _build(root)
+    monkeypatch.setattr(cm, "_fiemap_extents", lambda _fd, _size: None)
+    with pytest.raises(cm.ChunkManifestError) as error:
+        cm.verify_manifest(root, manifest=manifest)
+    assert error.value.code == "allocation_unverifiable_destination"
+
+
+def test_source_mapping_with_holes_still_fails(tmp_path: Path, monkeypatch) -> None:
+    root = tmp_path / "source"
+    root.mkdir()
+    path = root / "output.bin"
+    path.write_bytes(b"x" * 4096)
+    monkeypatch.setattr(cm, "_looks_sparse_by_blocks", lambda _st: True)
+    monkeypatch.setattr(
+        cm,
+        "_fiemap_extents",
+        lambda _fd, size: [
+            cm._FiemapExtent(64, size - 64, cm._FIEMAP_EXTENT_ENCODED | cm._FIEMAP_EXTENT_LAST)
+        ],
+    )
+    with pytest.raises(cm.ChunkManifestError) as error:
+        _build(root)
+    assert error.value.code == "sparse_file"
+
+
+@pytest.mark.parametrize(
+    "tamper", ("missing_destination", "unverified_destination", "wrong_hash", "cached_receipt")
+)
+def test_custody_rejects_incomplete_destination_proof(
+    tmp_path: Path, monkeypatch, tamper: str
+) -> None:
+    data = b"compressed output" * 50
+    source_root, destination_root, manifest = _gpfs_like_source(tmp_path, monkeypatch, data)
+    (destination_root / "output.bin").write_bytes(data)
+    source = cm.verify_manifest(source_root, manifest=manifest, require_allocation=False)
+    destination = cm.verify_manifest(destination_root, manifest=manifest, require_allocation=True)
+    if tamper == "missing_destination":
+        destination["files"] = []
+    elif tamper == "unverified_destination":
+        destination["files"][0]["allocation_status"] = cm.ALLOCATION_UNVERIFIED
+    elif tamper == "cached_receipt":
+        destination["state_ref"] = {"kind": cm.STATE_SCHEMA_VERSION}
+    else:
+        destination["files"][0]["file_sha256"] = "0" * 64
+    with pytest.raises(cm.ChunkManifestError):
+        cm.build_custody_receipt(
+            manifest,
+            source,
+            destination,
+            source_root=source_root,
+            destination_root=destination_root,
+        )
+
+
+@pytest.mark.parametrize(
+    ("side", "mutation"),
+    (
+        ("source", "delete"),
+        ("source", "modify"),
+        ("destination", "delete"),
+        ("destination", "modify"),
+        ("destination", "sparse"),
+    ),
+)
+def test_custody_rechecks_roots_after_verification(
+    tmp_path: Path, side: str, mutation: str
+) -> None:
+    source_root = tmp_path / "source"
+    destination_root = tmp_path / "destination"
+    source_root.mkdir()
+    destination_root.mkdir()
+    data = b"\0" * (1024 * 1024) + b"x" if mutation == "sparse" else b"copy evidence" * 100
+    (source_root / "output.bin").write_bytes(data)
+    destination_file = destination_root / "output.bin"
+    destination_file.write_bytes(data)
+    manifest = _build(source_root)
+    source = cm.verify_manifest(source_root, manifest=manifest, require_allocation=False)
+    destination = cm.verify_manifest(destination_root, manifest=manifest, require_allocation=True)
+    assert source["status"] == destination["status"] == "ok"
+    manifest_path = tmp_path / "manifest.json"
+    source_path = tmp_path / "source-verify.json"
+    destination_path = tmp_path / "destination-verify.json"
+    receipt_path = tmp_path / "custody.json"
+    for path, payload in (
+        (manifest_path, manifest),
+        (source_path, source),
+        (destination_path, destination),
+    ):
+        path.write_text(json.dumps(payload), encoding="utf-8")
+    changed_file = (source_root / "output.bin") if side == "source" else destination_file
+    if mutation == "delete":
+        changed_file.unlink()
+    elif mutation == "sparse":
+        with changed_file.open("wb") as handle:
+            handle.seek(len(data) - 1)
+            handle.write(b"x")
+        _preallocate_beyond_eof(changed_file)
+    else:
+        changed_file.write_bytes(b"x" * len(data))
+    result = cm.main(
+        [
+            "custody",
+            "--manifest",
+            str(manifest_path),
+            "--source-verification",
+            str(source_path),
+            "--destination-verification",
+            str(destination_path),
+            "--source-root",
+            str(source_root),
+            "--destination-root",
+            str(destination_root),
+            "--output",
+            str(receipt_path),
+        ]
+    )
+    assert result == cm.EXIT_FAILED
+    assert not receipt_path.exists()
+
+
+@pytest.mark.parametrize("side", ("source", "destination"))
+def test_custody_cli_rejects_symlinked_root(tmp_path: Path, capsys, side: str) -> None:
+    source_root = tmp_path / "source"
+    destination_root = tmp_path / "destination"
+    source_root.mkdir()
+    destination_root.mkdir()
+    data = b"copy evidence" * 100
+    (source_root / "output.bin").write_bytes(data)
+    (destination_root / "output.bin").write_bytes(data)
+    manifest = _build(source_root)
+    source = cm.verify_manifest(source_root, manifest=manifest, require_allocation=False)
+    destination = cm.verify_manifest(destination_root, manifest=manifest, require_allocation=True)
+    paths = {
+        "manifest": tmp_path / "manifest.json",
+        "source": tmp_path / "source-verify.json",
+        "destination": tmp_path / "destination-verify.json",
+    }
+    for path, payload in (
+        (paths["manifest"], manifest),
+        (paths["source"], source),
+        (paths["destination"], destination),
+    ):
+        path.write_text(json.dumps(payload), encoding="utf-8")
+    linked_root = tmp_path / f"{side}-link"
+    linked_root.symlink_to(
+        source_root if side == "source" else destination_root, target_is_directory=True
+    )
+    roots = {"source": source_root, "destination": destination_root}
+    roots[side] = linked_root
+    output = tmp_path / "custody.json"
+    assert (
+        cm.main(
+            [
+                "custody",
+                "--manifest",
+                str(paths["manifest"]),
+                "--source-verification",
+                str(paths["source"]),
+                "--destination-verification",
+                str(paths["destination"]),
+                "--source-root",
+                str(roots["source"]),
+                "--destination-root",
+                str(roots["destination"]),
+                "--output",
+                str(output),
+                "--json",
+            ]
+        )
+        == cm.EXIT_FAILED
+    )
+    assert json.loads(capsys.readouterr().out)["error"]["code"] == "symlink_root"
+    assert not output.exists()
 
 
 def test_source_mutation_guard_fails_closed(tmp_path: Path, monkeypatch) -> None:

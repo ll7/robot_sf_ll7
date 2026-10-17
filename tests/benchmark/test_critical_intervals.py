@@ -59,6 +59,35 @@ def _make_trace(
     return trace
 
 
+def test_v2_nested_trace_retains_positions_and_closest_approach() -> None:
+    """Accept v2 recordings; a pedestrian at x=4 is two metres from the final x=2 sample."""
+    trace = {
+        "schema_version": "simulation-step-trace.v2",
+        "dt": 0.1,
+        "steps": [
+            {
+                "step": i,
+                "time_s": (i + 1) * 0.1,
+                "robot": {"position": [float(i), 0.0], "velocity": [1.0, 0.0]},
+                "pedestrians": [{"id": 1, "position": [4.0, 0.0], "velocity": [0.0, 0.0]}],
+            }
+            for i in range(3)
+        ],
+    }
+    intervals = extract_critical_intervals(
+        trace,
+        {
+            "critical_intervals": {
+                "closest_approach": {"enabled": True, "before_s": 0.1, "after_s": 0.1}
+            }
+        },
+    )
+    report = summarize_interval_metrics(trace, intervals)
+    assert intervals[0].anchor_step == 2
+    assert report.whole_run["n_steps"] == 3
+    assert report.whole_run["min_distance_m"] == pytest.approx(2.0)
+
+
 def _make_approaching_trace(dt: float = 0.1) -> dict[str, object]:
     """Trace where robot and pedestrian approach, closest at step 5."""
     n = 10

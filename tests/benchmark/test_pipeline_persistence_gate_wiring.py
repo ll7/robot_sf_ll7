@@ -27,6 +27,63 @@ if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
 
+def test_distiller_preserves_v2_record_identity_and_elapsed_samples(tmp_path: Path) -> None:
+    """A v2 row survives JSONL loading and distillation without dropping its trace meaning."""
+    from robot_sf.benchmark.scenario_generation.pipeline import (
+        _distiller_episode,
+        _load_jsonl,
+        _write_jsonl,
+    )
+    from robot_sf.benchmark.scenario_generation.random_sampler import SampledEpisode
+    from robot_sf.evidence.writers import write_review_sidecar
+
+    steps = [{"step": 0, "time_s": 0.1, "robot": {"position": [1.0, 0.0]}, "pedestrians": []}]
+    record = {
+        "episode_id": "dev-1001",
+        "seed": 1001,
+        "algorithm_metadata": {
+            "simulation_step_trace": {"schema_version": "simulation-step-trace.v2", "steps": steps}
+        },
+    }
+    path = tmp_path / "v2.jsonl"
+    _write_jsonl(path, [record])
+    write_review_sidecar(path)
+    loaded = _load_jsonl(path)
+    assert loaded == [record]
+    sample = SampledEpisode(0, "dev", "maps/dev.svg", 1001, {})
+    assert _distiller_episode(loaded[0], sample) == {
+        "episode_id": "dev-1001",
+        "seed": 1001,
+        "source_map": "maps/dev.svg",
+        "schema_version": "simulation-step-trace.v2",
+        "steps": steps,
+    }
+    unsupported = {
+        **record,
+        "algorithm_metadata": {
+            "simulation_step_trace": {"schema_version": "simulation-step-trace.v3", "steps": steps}
+        },
+    }
+    with pytest.raises(ValueError, match="missing a supported simulation-step trace"):
+        _distiller_episode(unsupported, sample)
+
+
+def test_pipeline_jsonl_refuses_mixed_trace_meanings_before_distillation(tmp_path: Path) -> None:
+    """The persisted input boundary rejects v1/v2 pooling before segment extraction."""
+    from robot_sf.benchmark.scenario_generation.pipeline import _load_jsonl, _write_jsonl
+    from robot_sf.evidence.writers import write_review_sidecar
+
+    rows = [
+        {"algorithm_metadata": {"simulation_step_trace": {"schema_version": version, "steps": []}}}
+        for version in ("simulation-step-trace.v1", "simulation-step-trace.v2")
+    ]
+    path = tmp_path / "mixed.jsonl"
+    _write_jsonl(path, rows)
+    write_review_sidecar(path)
+    with pytest.raises(ValueError, match="trace_schema_version_mismatch"):
+        _load_jsonl(path)
+
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 _PERSISTENCE_CONFIG = "configs/analysis/issue_5600_persistence_gate.yaml"
 _FROZEN_CONFIG_ID = "issue-5600-persistence-gate"

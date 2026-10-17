@@ -183,6 +183,8 @@ def _scenario_rows(  # noqa: C901
     """Build scenario difficulty and candidate-vs-core rows."""
     grouped: dict[str, list[dict[str, str]]] = defaultdict(list)
     for row in scenario_breakdown:
+        if int(row["episodes"]) == 0:
+            continue
         grouped[row["scenario_id"]].append(row)
 
     difficulty_rows: list[dict[str, Any]] = []
@@ -258,6 +260,10 @@ def _scenario_rows(  # noqa: C901
                 "scenario_family": scenario_family,
                 "planner_count": len(rows),
                 "episodes": sum(int(row["episodes"]) for row in rows),
+                "episodes_total": sum(
+                    int(row.get("episodes_total", row["episodes"])) for row in rows
+                ),
+                "episodes_excluded": sum(int(row.get("episodes_excluded", 0)) for row in rows),
                 "success_mean_all": _round(all_mean),
                 "success_mean_core": _round(core_mean),
                 "success_mean_candidates": _round(candidate_mean),

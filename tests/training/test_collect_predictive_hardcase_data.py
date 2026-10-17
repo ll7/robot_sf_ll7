@@ -17,6 +17,7 @@ def _frame(
     *,
     ped_positions: list[tuple[float, float]] | None = None,
     ped_velocities: list[tuple[float, float]] | None = None,
+    ped_ids: tuple[str, ...] | None = None,
 ) -> collect.Frame:
     """Build one hardcase frame fixture."""
     positions_source = [(1.0, 1.0)] if ped_positions is None else ped_positions
@@ -31,8 +32,13 @@ def _frame(
         robot_speed=np.asarray((0.0, 0.0), dtype=np.float32),
         goal_current=np.asarray((3.0, 4.0), dtype=np.float32),
         ped_positions_world=positions,
-        ped_velocities_world=velocities,
+        ped_velocities_ego=velocities,
         ped_count=int(positions.shape[0]),
+        ped_ids=(
+            ped_ids
+            if ped_ids is not None
+            else tuple(f"episode-0:slot-{i}" for i in range(positions.shape[0]))
+        ),
     )
 
 

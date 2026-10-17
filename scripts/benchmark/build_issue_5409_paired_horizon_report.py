@@ -98,6 +98,7 @@ BLOCKED_ROW_MARKERS = frozenset(
 DEFAULT_SCENARIO_COUNT = 48
 DEFAULT_SEEDS = (111, 112, 113)
 DEFAULT_ROWS_PER_ARM = 1728
+# Historical preregistration pin, not the current authored-input identity (OVTFIX2/D-085).
 DEFAULT_SCENARIO_MATRIX_HASH = "c10df617a87c"
 DEFAULT_BOOTSTRAP_SAMPLES = 300
 DEFAULT_BOOTSTRAP_SEED = 123
@@ -476,7 +477,10 @@ def _validate_arm_metadata(  # noqa: C901, PLR0912, PLR0913, PLR0915
     if campaign_id != expected_campaign_id:
         blockers.append(f"{role}: campaign_id={campaign_id!r}, expected {expected_campaign_id!r}")
 
-    if manifest.get("schema_version") != "benchmark-camera-ready-campaign.v1":
+    if manifest.get("schema_version") not in (
+        "benchmark-camera-ready-campaign.v1",
+        "benchmark-camera-ready-campaign.v2",
+    ):
         blockers.append(f"{role}: unsupported campaign manifest schema")
 
     scenario_hash = str(manifest.get("scenario_matrix_hash") or "").strip()

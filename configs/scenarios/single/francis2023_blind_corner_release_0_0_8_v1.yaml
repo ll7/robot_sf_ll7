@@ -1,0 +1,5 @@
+# Seed-103 smoke subset of the exact corrected 0.0.8 main-grid inputs.
+includes:
+  - ../classic_interactions_francis2023_release_0_0_8_v1.yaml
+select_scenarios:
+  - francis2023_blind_corner

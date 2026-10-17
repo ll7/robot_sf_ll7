@@ -3,7 +3,7 @@
 # The selected cells are a deliberately small, predeclared diagnostic slice.  They
 # were chosen from cells that reported a positive native hybrid fallback counter in
 # all four hybrid arms in issue4365/job13376-original and, where available, in the
-# rejected issue7742 job14730.  The campaign config fixes the common seed to 116.
+# rejected issue7742 job14730.  The campaign config fixes the common seed to 1001.
 # This file selects scenario definitions only; the campaign config owns the seed
 # override and production horizon.
 schema_version: robot_sf.scenario_matrix.v1

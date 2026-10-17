@@ -5,7 +5,7 @@ The command requires the selected release manifest. It does not fall back to the
 development scenario matrix or accept a seed override::
 
     uv run python scripts/benchmark/preflight_spawn_clearance.py \
-        --manifest configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml \
+        --manifest configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_5.yaml \
         --workers 8 \
         --json-output output/preflight/spawn_matrix.json \
         --markdown-output output/preflight/spawn_matrix.md

@@ -131,10 +131,14 @@ def test_one_step_advances_every_robot_once() -> None:
 
 def test_reordered_packets_give_identical_worlds() -> None:
     """Stable-ID remapping makes packet order unobservable in the world."""
+    # Crowd goals re-sampled during a step still draw from the ambient NumPy RNG, which
+    # the reset seed does not own; pin it so only the packet order differs.
     first = _make_runner(2)
     ids = first.agent_ids
+    np.random.seed(1001)
     first.step([(ids[0], np.array([2.0, 0.1])), (ids[1], np.array([0.0, -0.2]))])
     second = _make_runner(2)
+    np.random.seed(1001)
     second.step([(ids[1], np.array([0.0, -0.2])), (ids[0], np.array([2.0, 0.1]))])
     np.testing.assert_array_equal(first.robot_positions(), second.robot_positions())
     np.testing.assert_array_equal(first.ped_positions(), second.ped_positions())

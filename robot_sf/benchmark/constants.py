@@ -33,6 +33,10 @@ EPISODE_SCHEMA_VERSION: str = "v1"
 COLLISION_DIST: float = 0.25
 NEAR_MISS_DIST: float = 0.50
 
+# D-055 geometric standstill and short-path curvature normalization (meters).
+CURVATURE_MIN_DISPLACEMENT_M: float = 1e-3
+CURVATURE_LENGTH_FLOOR_M: float = 1.0
+
 # --- Force thresholds ---
 # Comfort force threshold: social-force magnitude above which interaction is
 # considered discomfort / high-exposure. Chosen empirically; see research.md.
@@ -41,6 +45,8 @@ COMFORT_FORCE_THRESHOLD: float = 2.0
 __all__ = [
     "COLLISION_DIST",
     "COMFORT_FORCE_THRESHOLD",
+    "CURVATURE_LENGTH_FLOOR_M",
+    "CURVATURE_MIN_DISPLACEMENT_M",
     "EPISODE_SCHEMA_VERSION",
     "NEAR_MISS_DIST",
 ]

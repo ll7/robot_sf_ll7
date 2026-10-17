@@ -62,11 +62,13 @@ def test_null_metrics_and_zero_exposure_are_not_invented():
     assert report["largest_rank_disagreements"][0]["observed_pattern"] == "no_pedestrians_exposed"
 
 
-def test_trace_duration_distinguishes_pair_exposure_from_elapsed_time():
+@pytest.mark.parametrize("section", ["algorithm_metadata", "metrics"])
+def test_trace_duration_distinguishes_pair_exposure_from_elapsed_time(section):
     row = {
         "scenario_params": {"run_dt": 0.1},
         "termination_reason": "collision",
-        "metrics": {
+        "metrics": {},
+        section: {
             "robot_force_samples": [
                 {"forces": [[3, 4], [0, 2]]},
                 {"forces": [[0, 0], [0, 2]]},

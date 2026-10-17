@@ -1,0 +1,7 @@
+{
+  "artifact_path": "docs/validation/predictive_braking_pair/station/episodes.csv",
+  "artifact_sha256": "acc0529b2b5196f4437d5d59fb520fc78c4b2c24c6f6923b03e9a797beb88fd1",
+  "preserved_exact_bytes": false,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "evidence-review-marker.v1"
+}

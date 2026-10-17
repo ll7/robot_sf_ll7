@@ -1,0 +1,406 @@
+{
+  "base_sha": "93ba0d75fbecc69ddeb62bbf77a435de385caa3b",
+  "behavior_source_sha": "de8f8a105ab91ad665773bbed204d7d25c9c6c30",
+  "changed_outcome_count": 63,
+  "changed_outcomes_artifact": "changed_outcomes.json",
+  "complete_matrix": true,
+  "definitions": {
+    "C": "outcome.collision_event",
+    "S": "outcome.route_complete and no collision",
+    "T": "outcome.timeout_event without collision or completion",
+    "frozen": "mean over episodes of fraction of physical post-step velocity norm <0.01 m/s",
+    "no_admissible": "mean over episodes of recorded step boolean; guarded PPO now counts fallback_best_effort as infeasible, whereas base sometimes omitted it"
+  },
+  "diagnostic_only": true,
+  "distance_convention": "center_center",
+  "episode_count_per_condition": 720,
+  "episode_seeds": [
+    1001,
+    1002,
+    1003,
+    1004,
+    1005
+  ],
+  "field_distance_conventions": {
+    "goal_distance": "controller_target_center_distance",
+    "min_obs_clear": "surface_clearance",
+    "min_ped_clear": "surface_clearance",
+    "nearest_ped_center": "center_center"
+  },
+  "goal_distance_caveat": "Recorded controller-target distance may change with active waypoint; do not interpret it as terminal route-goal remaining.",
+  "held_out_stepping": false,
+  "inspected_trace_artifact": "trace_samples.json",
+  "location": "Raw compact archives producer-home/luttkule/admfix_evidence; original native episodes imech192:producer-home/luttkule/admfix/out and /direct; compact selected evidence tracked in this bundle",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "sample_count": 10,
+  "tables": [
+    {
+      "arm": "risk_dwa",
+      "base": {
+        "by_outcome": {
+          "C": {
+            "command_zero_fraction": 1.0,
+            "episodes": 1,
+            "frozen_fraction": 1.0,
+            "infeasible_branch_fraction": 1.0,
+            "no_admissible_fraction": 1.0
+          },
+          "S": {
+            "command_zero_fraction": 0.004947313021119773,
+            "episodes": 203,
+            "frozen_fraction": 0.0040591724545377995,
+            "infeasible_branch_fraction": 0.0038757387413170716,
+            "no_admissible_fraction": 0.0038757387413170716
+          },
+          "T": {
+            "command_zero_fraction": 0.47143518518518523,
+            "episodes": 36,
+            "frozen_fraction": 0.4121620370370371,
+            "infeasible_branch_fraction": 0.13821153846153844,
+            "no_admissible_fraction": 0.13821153846153844
+          }
+        },
+        "command_zero_steps": 7932,
+        "episodes": 240,
+        "frozen_steps": 7025,
+        "mean_episode_fractions": {
+          "command_zero": 0.07906654670814159,
+          "frozen": 0.06942435559001878,
+          "infeasible_branch": 0.0281766264545948,
+          "no_admissible": 0.0281766264545948
+        },
+        "no_admissible_steps": 2478,
+        "outcomes": {
+          "C": 1,
+          "S": 203,
+          "T": 36
+        },
+        "pooled_fractions": {
+          "command_zero": 0.11946322876033556,
+          "frozen": 0.10580297302588973,
+          "no_admissible": 0.03732096329653448
+        },
+        "raw_path": "producer-home/luttkule/admfix/out/base_2/runs/risk_dwa__differential_drive/episodes.jsonl",
+        "raw_sha256": "f5c2e266c39ff567aaddbac860e1d73d52e1131f461512e9395801fede713f26",
+        "scenarios": 48,
+        "seeds": [
+          1001,
+          1002,
+          1003,
+          1004,
+          1005
+        ],
+        "source_shas": [
+          "93ba0d75fbecc69ddeb62bbf77a435de385caa3b"
+        ],
+        "steps": 66397
+      },
+      "changed_outcomes": 1,
+      "pr": {
+        "by_outcome": {
+          "S": {
+            "command_zero_fraction": 0.003963871014517707,
+            "episodes": 204,
+            "frozen_fraction": 0.003123273159964197,
+            "infeasible_branch_fraction": 0.004050817859700845,
+            "no_admissible_fraction": 0.004050817859700845
+          },
+          "T": {
+            "command_zero_fraction": 0.45589351851851856,
+            "episodes": 36,
+            "frozen_fraction": 0.3952453703703704,
+            "infeasible_branch_fraction": 0.1383792735042735,
+            "no_admissible_fraction": 0.1383792735042735
+          }
+        },
+        "command_zero_steps": 7674,
+        "episodes": 240,
+        "frozen_steps": 6742,
+        "mean_episode_fractions": {
+          "command_zero": 0.07175331814011783,
+          "frozen": 0.061941587741525125,
+          "infeasible_branch": 0.02420008620638675,
+          "no_admissible": 0.02420008620638675
+        },
+        "no_admissible_steps": 2474,
+        "outcomes": {
+          "S": 204,
+          "T": 36
+        },
+        "pooled_fractions": {
+          "command_zero": 0.1154714255620091,
+          "frozen": 0.10144753077131421,
+          "no_admissible": 0.03722651900448404
+        },
+        "raw_path": "producer-home/luttkule/admfix/direct/final_2/episodes.jsonl",
+        "raw_sha256": "befe075cc52a496c6ce2f93b483fc61af60c7e5a3db7d60ca3e3a6980acbad5c",
+        "scenarios": 48,
+        "seeds": [
+          1001,
+          1002,
+          1003,
+          1004,
+          1005
+        ],
+        "source_shas": [
+          "de8f8a105ab91ad665773bbed204d7d25c9c6c30"
+        ],
+        "steps": 66458
+      },
+      "transitions": {
+        "C->S": 1,
+        "S->S": 203,
+        "T->T": 36
+      },
+      "worse_collision_count": false,
+      "worse_success_count": false
+    },
+    {
+      "arm": "predictive_mppi",
+      "base": {
+        "by_outcome": {
+          "C": {
+            "command_zero_fraction": 1.0,
+            "episodes": 1,
+            "frozen_fraction": 1.0,
+            "infeasible_branch_fraction": 1.0,
+            "no_admissible_fraction": 1.0
+          },
+          "S": {
+            "command_zero_fraction": 0.07971097095096084,
+            "episodes": 105,
+            "frozen_fraction": 0.06978007848472323,
+            "infeasible_branch_fraction": 0.07316099694045228,
+            "no_admissible_fraction": 0.07316099694045228
+          },
+          "T": {
+            "command_zero_fraction": 0.6128037696134712,
+            "episodes": 134,
+            "frozen_fraction": 0.5877383139248811,
+            "infeasible_branch_fraction": 0.18648939369088624,
+            "no_admissible_fraction": 0.18648939369088624
+          }
+        },
+        "command_zero_steps": 41938,
+        "episodes": 240,
+        "frozen_steps": 40099,
+        "mean_episode_fractions": {
+          "command_zero": 0.3811889878252334,
+          "frozen": 0.3628493429451247,
+          "infeasible_branch": 0.14029784763885933,
+          "no_admissible": 0.14029784763885933
+        },
+        "no_admissible_steps": 13484,
+        "outcomes": {
+          "C": 1,
+          "S": 105,
+          "T": 134
+        },
+        "pooled_fractions": {
+          "command_zero": 0.4646766830651952,
+          "frozen": 0.444300403315162,
+          "no_admissible": 0.149403891326508
+        },
+        "raw_path": "producer-home/luttkule/admfix/out/base_1/runs/predictive_mppi__differential_drive/episodes.jsonl",
+        "raw_sha256": "445c098d1a29e0ea42b4994cc843195ef13c9e26f733e1e0bb3288720568c73e",
+        "scenarios": 48,
+        "seeds": [
+          1001,
+          1002,
+          1003,
+          1004,
+          1005
+        ],
+        "source_shas": [
+          "93ba0d75fbecc69ddeb62bbf77a435de385caa3b"
+        ],
+        "steps": 90252
+      },
+      "changed_outcomes": 46,
+      "pr": {
+        "by_outcome": {
+          "S": {
+            "command_zero_fraction": 0.07255903185818882,
+            "episodes": 149,
+            "frozen_fraction": 0.06313928939471486,
+            "infeasible_branch_fraction": 0.07615258918091686,
+            "no_admissible_fraction": 0.07615258918091686
+          },
+          "T": {
+            "command_zero_fraction": 0.5310774866159482,
+            "episodes": 91,
+            "frozen_fraction": 0.5049143420681882,
+            "infeasible_branch_fraction": 0.15415215553677092,
+            "no_admissible_fraction": 0.15415215553677092
+          }
+        },
+        "command_zero_steps": 27463,
+        "episodes": 240,
+        "frozen_steps": 25936,
+        "mean_episode_fractions": {
+          "command_zero": 0.24641394595383925,
+          "frozen": 0.2306456635334069,
+          "infeasible_branch": 0.10572742475751157,
+          "no_admissible": 0.10572742475751157
+        },
+        "no_admissible_steps": 9725,
+        "outcomes": {
+          "S": 149,
+          "T": 91
+        },
+        "pooled_fractions": {
+          "command_zero": 0.32987796088982846,
+          "frozen": 0.31153605919377314,
+          "no_admissible": 0.11681401047422284
+        },
+        "raw_path": "producer-home/luttkule/admfix/direct/final_1/episodes.jsonl",
+        "raw_sha256": "0903d1e7ea17da94e09ec5a685c5b6162a3d39135df2c6a9ae8672bfa9f0f405",
+        "scenarios": 48,
+        "seeds": [
+          1001,
+          1002,
+          1003,
+          1004,
+          1005
+        ],
+        "source_shas": [
+          "de8f8a105ab91ad665773bbed204d7d25c9c6c30"
+        ],
+        "steps": 83252
+      },
+      "transitions": {
+        "C->S": 1,
+        "S->S": 104,
+        "S->T": 1,
+        "T->S": 44,
+        "T->T": 90
+      },
+      "worse_collision_count": false,
+      "worse_success_count": false
+    },
+    {
+      "arm": "guarded_ppo",
+      "base": {
+        "by_outcome": {
+          "C": {
+            "command_zero_fraction": 1.0,
+            "episodes": 1,
+            "frozen_fraction": 1.0,
+            "infeasible_branch_fraction": 1.0,
+            "no_admissible_fraction": 1.0
+          },
+          "S": {
+            "command_zero_fraction": 0.08223948514795534,
+            "episodes": 146,
+            "frozen_fraction": 0.030734154459027784,
+            "infeasible_branch_fraction": 0.046002167147713414,
+            "no_admissible_fraction": 0.040830002566436464
+          },
+          "T": {
+            "command_zero_fraction": 0.5892512505415731,
+            "episodes": 93,
+            "frozen_fraction": 0.5446790145338533,
+            "infeasible_branch_fraction": 0.46128358738036157,
+            "no_admissible_fraction": 0.4569535625664658
+          }
+        },
+        "command_zero_steps": 28905,
+        "episodes": 240,
+        "frozen_steps": 24738,
+        "mean_episode_fractions": {
+          "command_zero": 0.28253054638319913,
+          "frozen": 0.2339263954277767,
+          "infeasible_branch": 0.2108987084580824,
+          "no_admissible": 0.20607442372242105
+        },
+        "no_admissible_steps": 21186,
+        "outcomes": {
+          "C": 1,
+          "S": 146,
+          "T": 93
+        },
+        "pooled_fractions": {
+          "command_zero": 0.34513432835820895,
+          "frozen": 0.29537910447761195,
+          "no_admissible": 0.2529671641791045
+        },
+        "raw_path": "producer-home/luttkule/admfix/out/base_0/runs/guarded_ppo__differential_drive/episodes.jsonl",
+        "raw_sha256": "b383126aa5fef48b0f7ddb7766cd3398ed1c1f73357dea07df041886aff95781",
+        "scenarios": 48,
+        "seeds": [
+          1001,
+          1002,
+          1003,
+          1004,
+          1005
+        ],
+        "source_shas": [
+          "93ba0d75fbecc69ddeb62bbf77a435de385caa3b"
+        ],
+        "steps": 83750
+      },
+      "changed_outcomes": 16,
+      "pr": {
+        "by_outcome": {
+          "S": {
+            "command_zero_fraction": 0.07058199299256362,
+            "episodes": 152,
+            "frozen_fraction": 0.0230044591382971,
+            "infeasible_branch_fraction": 0.04366319003966662,
+            "no_admissible_fraction": 0.04366319003966662
+          },
+          "T": {
+            "command_zero_fraction": 0.5167792207792208,
+            "episodes": 88,
+            "frozen_fraction": 0.4627225482850483,
+            "infeasible_branch_fraction": 0.38035083666333663,
+            "no_admissible_fraction": 0.38035083666333663
+          }
+        },
+        "command_zero_steps": 24012,
+        "episodes": 240,
+        "frozen_steps": 19773,
+        "mean_episode_fractions": {
+          "command_zero": 0.23418764318100468,
+          "frozen": 0.18423442515877253,
+          "infeasible_branch": 0.1671153271350123,
+          "no_admissible": 0.1671153271350123
+        },
+        "no_admissible_steps": 16929,
+        "outcomes": {
+          "S": 152,
+          "T": 88
+        },
+        "pooled_fractions": {
+          "command_zero": 0.292490407454778,
+          "frozen": 0.24085510688836104,
+          "no_admissible": 0.20621231500091358
+        },
+        "raw_path": "producer-home/luttkule/admfix/direct/final_0/episodes.jsonl",
+        "raw_sha256": "073d4d3de198733b2f42bb5c0c930331cc98e339035f3b022214763106d44112",
+        "scenarios": 48,
+        "seeds": [
+          1001,
+          1002,
+          1003,
+          1004,
+          1005
+        ],
+        "source_shas": [
+          "de8f8a105ab91ad665773bbed204d7d25c9c6c30"
+        ],
+        "steps": 82095
+      },
+      "transitions": {
+        "C->S": 1,
+        "S->S": 141,
+        "S->T": 5,
+        "T->S": 10,
+        "T->T": 83
+      },
+      "worse_collision_count": false,
+      "worse_success_count": false
+    }
+  ],
+  "unexpected_admissible_divergences": []
+}

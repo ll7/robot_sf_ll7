@@ -127,6 +127,21 @@ def _normalize_zanlungo_collision_prediction_config(
     )
 
 
+def _normalize_shared_pedestrian_radius(value: Any) -> float | None:
+    """Validate an explicit physical/force radius before simulator construction.
+
+    Returns:
+        Positive radius, or None when the override is absent.
+    """
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        raise TypeError("pedestrian_radius_m must be a positive finite number")
+    if not isfinite(value) or value <= 0:
+        raise ValueError("pedestrian_radius_m must be a positive finite number")
+    return float(value)
+
+
 def _pedestrian_model_ttc_config(
     pedestrian_model: str,
     ttc_config: TtcPredictiveForceConfig,
@@ -462,6 +477,13 @@ class SimulationSettings:
     obstacle_force_profile: InitVar[str | None] = None
     """Opt-in wall calibration; missing preserves released parameters and hashes."""
 
+    pedestrian_radius_m: InitVar[float | None] = None
+    """Opt-in shared body radius for placement, physical metrics and force geometry.
+
+    Missing preserves the historical physical 0.40 / force 0.35 m split and hashes.
+    Explicit selection overrides ``ped_radius`` at every physical consumer.
+    """
+
     episode_step_limit: InitVar[int | None] = field(default=None, kw_only=True)
     """Explicit whole-step episode budget; None retains duration-based ceiling semantics.
 
@@ -474,6 +496,11 @@ class SimulationSettings:
 
     def __setattr__(self, name: str, value: Any) -> None:
         """Resolve law assignments immediately and retain selector provenance."""
+        if name == "pedestrian_radius_m":
+            object.__setattr__(
+                self, "_pedestrian_radius_m", _normalize_shared_pedestrian_radius(value)
+            )
+            return
         if name == "obstacle_force_profile":
             resolved = resolve_obstacle_force_profile(value)
             object.__setattr__(self, "_obstacle_force_profile", resolved)
@@ -507,6 +534,8 @@ class SimulationSettings:
         Returns:
             The resolved selector for ``social_force_kernel_version`` or the requested attribute.
         """
+        if name in {"ped_radius", "pedestrian_radius_m"}:
+            return self._shared_radius_value(name)
         if name == "obstacle_force_profile":
             try:
                 return object.__getattribute__(self, "_obstacle_force_profile")
@@ -529,6 +558,17 @@ class SimulationSettings:
                 return None
         return object.__getattribute__(self, name)
 
+    def _shared_radius_value(self, name: str) -> float | None:
+        """Resolve shared radius while preserving the legacy physical field.
+
+        Returns:
+            Selected shared radius or the original physical radius.
+        """
+        radius = object.__getattribute__(self, "__dict__").get("_pedestrian_radius_m")
+        if name == "pedestrian_radius_m" or radius is not None:
+            return radius
+        return object.__getattribute__(self, "ped_radius")
+
     def _config_hash_overrides(self) -> dict[str, Any]:
         """Include explicit selectors and step budgets while omitting legacy defaults.
 
@@ -536,6 +576,8 @@ class SimulationSettings:
             Explicit runtime overrides, or an empty mapping for legacy defaults.
         """
         overrides: dict[str, Any] = {}
+        if self.pedestrian_radius_m is not None:
+            overrides["pedestrian_radius_m"] = self.pedestrian_radius_m
         if self.social_force_kernel_resolution_mode != "defaulted_missing":
             overrides["social_force_kernel_version"] = str(self.social_force_kernel_version)
         if self.group_allocation_mode != "legacy":
@@ -651,10 +693,11 @@ class SimulationSettings:
         if init_vars:
             self.social_force_kernel_version = init_vars[0]
         self.obstacle_force_profile = init_vars[1] if len(init_vars) > 1 else None
-        if len(init_vars) > 2:
-            self.episode_step_limit = init_vars[2]
+        self.pedestrian_radius_m = init_vars[2] if len(init_vars) > 2 else None
         if len(init_vars) > 3:
-            self.group_allocation_mode = init_vars[3]
+            self.episode_step_limit = init_vars[3]
+        if len(init_vars) > 4:
+            self.group_allocation_mode = init_vars[4]
         # Check that the simulation time is positive
         if self.sim_time_in_secs <= 0:
             raise ValueError("Simulation length for episodes mustn't be negative or zero!")

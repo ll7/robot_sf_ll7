@@ -1,0 +1,20 @@
+Shared-venv scratch preflight passed: path=/tmp available=525607852KiB required=1048576KiB
+Shared-venv project package freshness preflight passed: package=pysocialforce venv=<environment-path>
+Shared-venv tool freshness preflight skipped: tool=pytest reason=interpreter-or-shell elapsed_ms=252 venv=<environment-path>
+bringing up nodes...
+bringing up nodes...
+
+........................................................................ [ 59%]
+..................................................                       [100%]
+============================= slowest 10 durations =============================
+0.71s call     tests/benchmark/test_map_runner_resume_identity.py::test_resume_identity_is_algorithm_aware
+0.71s call     tests/benchmark/test_map_runner_batch_runner.py::TestExecuteMapJobsSerial::test_serial_execution_writes_all
+0.57s call     tests/validation/test_examiner_robustness_analysis.py::test_equal_episode_counts_do_not_become_floating_point_ranks
+0.56s call     tests/validation/test_examiner_robustness_analysis.py::test_complete_matched_reversal
+0.53s call     tests/benchmark/test_map_runner_resume_identity.py::test_resume_identity_includes_algo_config_hash
+0.51s call     tests/benchmark/test_map_runner_resume_identity.py::test_resume_identity_uses_identity_benchmark_track
+0.29s call     tests/validation/test_examiner_robustness_analysis.py::test_incomplete_pair_withholds_ranking[fallback]
+0.28s call     tests/validation/test_examiner_robustness_analysis.py::test_incomplete_pair_withholds_ranking[missing]
+0.27s call     tests/benchmark/test_map_runner_resume_identity.py::test_resume_identity_uses_effective_latency_profile_dt
+0.24s call     tests/benchmark/test_map_runner_batch_runner.py::TestExecuteMapJobsSerial::test_serial_execution_records_failures
+122 passed in 10.20s

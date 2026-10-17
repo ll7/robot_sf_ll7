@@ -1,0 +1,581 @@
+{
+  "schema": "ppo-wall-probe-dev.v2",
+  "review_status": "AI-GENERATED NEEDS-REVIEW",
+  "source_head": "12c5245e4e164ad5539989091923e3121d64fbfb",
+  "producer_path": "scripts/analysis/ppo_wall_probe_dev.py",
+  "producer_sha256": "2b41527c564ab48fa6a1694e5875f8c28be67f7246e6c381a7e7b343feaca457",
+  "scenario_path": "configs/scenarios/single/francis2023_narrow_doorway.yaml",
+  "scenario_sha256": "d7b52f76128f366a74801c2441cb47e3f4af588c64566fb044eb3e2c54e43671",
+  "artifacts": {
+    "ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417": {
+      "registry_path": "model/registry.yaml",
+      "registry_model_id": "ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417",
+      "source": "github_release",
+      "location": "github_release",
+      "repo": "ll7/robot_sf_ll7",
+      "tag": "artifact/models-2026-05-registry-v1",
+      "asset_name": "ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417-model.zip",
+      "artifact_uri": "https://github.com/ll7/robot_sf_ll7/releases/download/artifact/models-2026-05-registry-v1/ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417-model.zip",
+      "sha256": "2b30df812bfcc737924b126b0763d69c567fe20716dc1c1eba8f56f926b49c1d",
+      "size_bytes": 93662266,
+      "metadata_asset": "ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417-metadata.json",
+      "published_at_utc": "2026-05-24T05:32:03+00:00"
+    },
+    "predictive_proxy_selected_v2_full": {
+      "registry_path": "model/registry.yaml",
+      "registry_model_id": "predictive_proxy_selected_v2_full",
+      "source": "github_release",
+      "location": "github_release",
+      "repo": "ll7/robot_sf_ll7",
+      "tag": "artifact/models-2026-05-registry-v1",
+      "asset_name": "predictive_proxy_selected_v2_full-predictive_model.pt",
+      "artifact_uri": "https://github.com/ll7/robot_sf_ll7/releases/download/artifact/models-2026-05-registry-v1/predictive_proxy_selected_v2_full-predictive_model.pt",
+      "sha256": "a28aed6d6ad7e1ebf597277ade1cf908efa6da038d0a9fcfdf80c7c31d8d1be1",
+      "size_bytes": 4958329,
+      "metadata_asset": "predictive_proxy_selected_v2_full-metadata.json",
+      "published_at_utc": "2026-05-24T05:32:03+00:00"
+    }
+  },
+  "fallback_used": false,
+  "observation_normalization": "none; released PPO uses raw dict observations",
+  "scope": "diagnostic only; narrow doorway, five dev seeds; no causal or population claim",
+  "action_semantics": "velocity_delta; Gaussian means are signed deltas, adapter_command is the absolute target (v, omega)",
+  "criterion": "all four pre-contact absolute adapter target speeds >=1.85 m/s and final forward occupied cell nearer than first",
+  "results": [
+    {
+      "seed": 1001,
+      "contact_step": 58,
+      "rows": [
+        {
+          "offset": 20,
+          "step": 38,
+          "forward_wall_cell_m": 4.949747744367698,
+          "physical_wall_clearance_m": 1.9125680646256815,
+          "raw_actor_velocity_delta_mean": [
+            3.3609330654144287,
+            -1.395194172859192
+          ],
+          "adapter_command": [
+            2.0,
+            -0.9754536710679531
+          ],
+          "native_action": [
+            0.0,
+            -10.000000007450579
+          ],
+          "critic_value": -11.20513916015625,
+          "static_ablated_velocity_delta_mean": [
+            1.7398701906204224,
+            -0.6042250394821167
+          ],
+          "static_ablated_critic_value": 8.261350631713867,
+          "executed_speed_m_s": 2.0
+        },
+        {
+          "offset": 10,
+          "step": 48,
+          "forward_wall_cell_m": 3.1016127606795068,
+          "physical_wall_clearance_m": 2.02388255011083,
+          "raw_actor_velocity_delta_mean": [
+            3.0057716369628906,
+            1.3599066734313965
+          ],
+          "adapter_command": [
+            2.0,
+            1.0
+          ],
+          "native_action": [
+            0.0,
+            9.75453670322895
+          ],
+          "critic_value": -13.685638427734375,
+          "static_ablated_velocity_delta_mean": [
+            1.809467077255249,
+            0.8050439357757568
+          ],
+          "static_ablated_critic_value": 11.670392036437988,
+          "executed_speed_m_s": 2.0
+        },
+        {
+          "offset": 5,
+          "step": 53,
+          "forward_wall_cell_m": 2.1023797488949385,
+          "physical_wall_clearance_m": 1.042890301878864,
+          "raw_actor_velocity_delta_mean": [
+            2.888537883758545,
+            0.5728884935379028
+          ],
+          "adapter_command": [
+            2.0,
+            1.0
+          ],
+          "native_action": [
+            0.0,
+            4.7545367032289505
+          ],
+          "critic_value": -14.583409309387207,
+          "static_ablated_velocity_delta_mean": [
+            1.7086807489395142,
+            -2.0141663551330566
+          ],
+          "static_ablated_critic_value": 9.90311050415039,
+          "executed_speed_m_s": 2.0
+        },
+        {
+          "offset": 1,
+          "step": 57,
+          "forward_wall_cell_m": 1.208304733754612,
+          "physical_wall_clearance_m": 0.26967290745816874,
+          "raw_actor_velocity_delta_mean": [
+            2.386547803878784,
+            -1.2382274866104126
+          ],
+          "adapter_command": [
+            2.0,
+            -0.6300698518753052
+          ],
+          "native_action": [
+            0.0,
+            -9.999999977648258
+          ],
+          "critic_value": -14.917859077453613,
+          "static_ablated_velocity_delta_mean": [
+            1.483261227607727,
+            0.33265331387519836
+          ],
+          "static_ablated_critic_value": 9.202259063720703,
+          "executed_speed_m_s": 2.0
+        }
+      ],
+      "result": "holds"
+    },
+    {
+      "seed": 1002,
+      "contact_step": 61,
+      "rows": [
+        {
+          "offset": 20,
+          "step": 41,
+          "forward_wall_cell_m": 4.052160272439885,
+          "physical_wall_clearance_m": 1.6538395715706842,
+          "raw_actor_velocity_delta_mean": [
+            2.9284186363220215,
+            3.2645440101623535
+          ],
+          "adapter_command": [
+            2.0,
+            1.0
+          ],
+          "native_action": [
+            0.0,
+            6.427472226321696
+          ],
+          "critic_value": -12.354915618896484,
+          "static_ablated_velocity_delta_mean": [
+            2.5709950923919678,
+            1.377404808998108
+          ],
+          "static_ablated_critic_value": 12.896587371826172,
+          "executed_speed_m_s": 2.0
+        },
+        {
+          "offset": 10,
+          "step": 51,
+          "forward_wall_cell_m": 2.1954499596021404,
+          "physical_wall_clearance_m": 1.228734969688027,
+          "raw_actor_velocity_delta_mean": [
+            1.845124363899231,
+            -1.6023207902908325
+          ],
+          "adapter_command": [
+            2.0,
+            -0.2941909432411194
+          ],
+          "native_action": [
+            0.0,
+            -10.000000029802322
+          ],
+          "critic_value": -13.189115524291992,
+          "static_ablated_velocity_delta_mean": [
+            0.9642282128334045,
+            -1.628408670425415
+          ],
+          "static_ablated_critic_value": 2.364656448364258,
+          "executed_speed_m_s": 2.0
+        },
+        {
+          "offset": 5,
+          "step": 56,
+          "forward_wall_cell_m": 2.121320644909619,
+          "physical_wall_clearance_m": 0.48354704284379024,
+          "raw_actor_velocity_delta_mean": [
+            1.7767680883407593,
+            -3.048870086669922
+          ],
+          "adapter_command": [
+            2.0,
+            -0.7941909432411194
+          ],
+          "native_action": [
+            0.0,
+            -10.000000029802322
+          ],
+          "critic_value": 1.8460307121276855,
+          "static_ablated_velocity_delta_mean": [
+            1.6250348091125488,
+            -2.696495294570923
+          ],
+          "static_ablated_critic_value": 12.875295639038086,
+          "executed_speed_m_s": 2.0
+        },
+        {
+          "offset": 1,
+          "step": 60,
+          "forward_wall_cell_m": 1.3341667122169225,
+          "physical_wall_clearance_m": 0.26723434970802606,
+          "raw_actor_velocity_delta_mean": [
+            1.9614815711975098,
+            -2.466411590576172
+          ],
+          "adapter_command": [
+            2.0,
+            -1.0
+          ],
+          "native_action": [
+            0.0,
+            -8.058090597391129
+          ],
+          "critic_value": -4.84984016418457,
+          "static_ablated_velocity_delta_mean": [
+            1.0897012948989868,
+            -0.7856444120407104
+          ],
+          "static_ablated_critic_value": 12.447210311889648,
+          "executed_speed_m_s": 2.0
+        }
+      ],
+      "result": "holds"
+    },
+    {
+      "seed": 1003,
+      "contact_step": 66,
+      "rows": [
+        {
+          "offset": 20,
+          "step": 46,
+          "forward_wall_cell_m": 4.701064012761622,
+          "physical_wall_clearance_m": 2.241464529584257,
+          "raw_actor_velocity_delta_mean": [
+            2.9959797859191895,
+            2.783357620239258
+          ],
+          "adapter_command": [
+            2.0,
+            0.10000002384185791
+          ],
+          "native_action": [
+            0.0,
+            10.000000238418577
+          ],
+          "critic_value": -10.841020584106445,
+          "static_ablated_velocity_delta_mean": [
+            2.720841884613037,
+            1.094445824623108
+          ],
+          "static_ablated_critic_value": 13.33127498626709,
+          "executed_speed_m_s": 2.0
+        },
+        {
+          "offset": 10,
+          "step": 56,
+          "forward_wall_cell_m": 2.9154763016188423,
+          "physical_wall_clearance_m": 1.8291695002010147,
+          "raw_actor_velocity_delta_mean": [
+            2.1076133251190186,
+            3.077645778656006
+          ],
+          "adapter_command": [
+            2.0,
+            1.0
+          ],
+          "native_action": [
+            0.0,
+            9.0
+          ],
+          "critic_value": -11.511367797851562,
+          "static_ablated_velocity_delta_mean": [
+            3.3467750549316406,
+            3.4750454425811768
+          ],
+          "static_ablated_critic_value": 13.481725692749023,
+          "executed_speed_m_s": 2.0
+        },
+        {
+          "offset": 5,
+          "step": 61,
+          "forward_wall_cell_m": 2.0248460329945335,
+          "physical_wall_clearance_m": 1.0135610225405305,
+          "raw_actor_velocity_delta_mean": [
+            1.0361260175704956,
+            2.1422204971313477
+          ],
+          "adapter_command": [
+            2.0,
+            1.0
+          ],
+          "native_action": [
+            0.0,
+            4.000000000000001
+          ],
+          "critic_value": -14.54665756225586,
+          "static_ablated_velocity_delta_mean": [
+            2.0243980884552,
+            1.532236933708191
+          ],
+          "static_ablated_critic_value": 13.37153148651123,
+          "executed_speed_m_s": 2.0
+        },
+        {
+          "offset": 1,
+          "step": 65,
+          "forward_wall_cell_m": 1.3038407564714694,
+          "physical_wall_clearance_m": 0.29736155448235735,
+          "raw_actor_velocity_delta_mean": [
+            2.4388070106506348,
+            2.852036237716675
+          ],
+          "adapter_command": [
+            2.0,
+            1.0
+          ],
+          "native_action": [
+            0.0,
+            2.0000000000000018
+          ],
+          "critic_value": -14.048357009887695,
+          "static_ablated_velocity_delta_mean": [
+            1.8958677053451538,
+            -0.2194899022579193
+          ],
+          "static_ablated_critic_value": 15.014076232910156,
+          "executed_speed_m_s": 1.9999998807907104
+        }
+      ],
+      "result": "holds"
+    },
+    {
+      "seed": 1004,
+      "contact_step": 58,
+      "rows": [
+        {
+          "offset": 20,
+          "step": 38,
+          "forward_wall_cell_m": 4.701064012761622,
+          "physical_wall_clearance_m": 2.1562355271917983,
+          "raw_actor_velocity_delta_mean": [
+            3.3660411834716797,
+            0.17830896377563477
+          ],
+          "adapter_command": [
+            2.0,
+            0.9783089756965637
+          ],
+          "native_action": [
+            0.0,
+            1.7830897569656379
+          ],
+          "critic_value": -11.769057273864746,
+          "static_ablated_velocity_delta_mean": [
+            2.897639274597168,
+            -1.3046931028366089
+          ],
+          "static_ablated_critic_value": 11.346101760864258,
+          "executed_speed_m_s": 2.0
+        },
+        {
+          "offset": 10,
+          "step": 48,
+          "forward_wall_cell_m": 2.9427880322064355,
+          "physical_wall_clearance_m": 1.8796534779267615,
+          "raw_actor_velocity_delta_mean": [
+            1.9765180349349976,
+            -2.2653188705444336
+          ],
+          "adapter_command": [
+            2.0,
+            -0.7999999970197678
+          ],
+          "native_action": [
+            0.0,
+            -9.999999970197678
+          ],
+          "critic_value": -4.648784160614014,
+          "static_ablated_velocity_delta_mean": [
+            1.7462506294250488,
+            -3.464656352996826
+          ],
+          "static_ablated_critic_value": 7.722174167633057,
+          "executed_speed_m_s": 2.0
+        },
+        {
+          "offset": 5,
+          "step": 53,
+          "forward_wall_cell_m": 1.9646884696076146,
+          "physical_wall_clearance_m": 1.0509472589723474,
+          "raw_actor_velocity_delta_mean": [
+            1.2569295167922974,
+            -1.521788239479065
+          ],
+          "adapter_command": [
+            2.0,
+            -1.0
+          ],
+          "native_action": [
+            0.0,
+            -6.999999999999999
+          ],
+          "critic_value": -6.404512882232666,
+          "static_ablated_velocity_delta_mean": [
+            1.2370725870132446,
+            -3.0099778175354004
+          ],
+          "static_ablated_critic_value": 10.411757469177246,
+          "executed_speed_m_s": 2.0
+        },
+        {
+          "offset": 1,
+          "step": 57,
+          "forward_wall_cell_m": 1.3038407198997355,
+          "physical_wall_clearance_m": 0.2674637775767539,
+          "raw_actor_velocity_delta_mean": [
+            2.0262298583984375,
+            -2.9359893798828125
+          ],
+          "adapter_command": [
+            2.0,
+            -1.0
+          ],
+          "native_action": [
+            0.0,
+            -3.0000000000000004
+          ],
+          "critic_value": -13.056601524353027,
+          "static_ablated_velocity_delta_mean": [
+            1.4355815649032593,
+            -1.4502172470092773
+          ],
+          "static_ablated_critic_value": 12.441462516784668,
+          "executed_speed_m_s": 1.9999998807907104
+        }
+      ],
+      "result": "holds"
+    },
+    {
+      "seed": 1005,
+      "contact_step": 84,
+      "rows": [
+        {
+          "offset": 20,
+          "step": 64,
+          "forward_wall_cell_m": 2.319482941090738,
+          "physical_wall_clearance_m": 0.3706806767737414,
+          "raw_actor_velocity_delta_mean": [
+            3.1219630241394043,
+            0.6268395781517029
+          ],
+          "adapter_command": [
+            2.0,
+            1.0
+          ],
+          "native_action": [
+            0.0,
+            0.0
+          ],
+          "critic_value": 7.045513153076172,
+          "static_ablated_velocity_delta_mean": [
+            0.8641638159751892,
+            -1.2101609706878662
+          ],
+          "static_ablated_critic_value": 6.156116962432861,
+          "executed_speed_m_s": 1.9999998807907104
+        },
+        {
+          "offset": 10,
+          "step": 74,
+          "forward_wall_cell_m": 2.846050087350155,
+          "physical_wall_clearance_m": 0.2451084514995685,
+          "raw_actor_velocity_delta_mean": [
+            2.286428451538086,
+            -1.5739015340805054
+          ],
+          "adapter_command": [
+            2.0,
+            -0.699999988079071
+          ],
+          "native_action": [
+            0.0,
+            -9.999999880790712
+          ],
+          "critic_value": -10.8204927444458,
+          "static_ablated_velocity_delta_mean": [
+            0.5046072602272034,
+            -2.1160829067230225
+          ],
+          "static_ablated_critic_value": -2.054050922393799,
+          "executed_speed_m_s": 2.0
+        },
+        {
+          "offset": 5,
+          "step": 79,
+          "forward_wall_cell_m": 1.9235386331467772,
+          "physical_wall_clearance_m": 0.4984293659632453,
+          "raw_actor_velocity_delta_mean": [
+            1.7235146760940552,
+            -0.8557578921318054
+          ],
+          "adapter_command": [
+            2.0,
+            -1.0
+          ],
+          "native_action": [
+            0.0,
+            -8.000000000000002
+          ],
+          "critic_value": -11.360115051269531,
+          "static_ablated_velocity_delta_mean": [
+            0.4660612642765045,
+            -1.5984342098236084
+          ],
+          "static_ablated_critic_value": -2.792509078979492,
+          "executed_speed_m_s": 2.0
+        },
+        {
+          "offset": 1,
+          "step": 83,
+          "forward_wall_cell_m": 1.1045363340316663,
+          "physical_wall_clearance_m": 0.20430113657126636,
+          "raw_actor_velocity_delta_mean": [
+            0.8497273325920105,
+            -1.4759076833724976
+          ],
+          "adapter_command": [
+            2.0,
+            -1.0
+          ],
+          "native_action": [
+            0.0,
+            -4.000000000000001
+          ],
+          "critic_value": -9.79362964630127,
+          "static_ablated_velocity_delta_mean": [
+            0.2225620448589325,
+            -2.160520315170288
+          ],
+          "static_ablated_critic_value": 0.6797768473625183,
+          "executed_speed_m_s": 1.9999998807907104
+        }
+      ],
+      "result": "holds"
+    }
+  ]
+}

@@ -13,7 +13,7 @@ import json
 from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import yaml
 
@@ -32,7 +32,7 @@ def _integers(values: object, role: str) -> tuple[int, ...]:
         raise ValueError(f"{role} seeds must be a nonempty integer sequence")
     if any(type(value) is not int for value in values):
         raise ValueError(f"{role} seeds must contain integers")
-    seeds = tuple(values)
+    seeds = cast("tuple[int, ...]", tuple(values))
     if len(set(seeds)) != len(seeds):
         raise ValueError(f"{role} seeds must be unique")
     return seeds

@@ -7,9 +7,33 @@ import json
 import os
 import subprocess
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 import yaml
+
+
+@pytest.fixture(autouse=True)
+def current_primary_checkout(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep requirement tests independent of the hosting checkout's ancestry.
+
+    The real stale/current checkout behavior is covered with disposable Git
+    repositories in test_primary_checkout_staleness.py.
+    """
+    monkeypatch.syspath_prepend(str(Path(__file__).parents[2] / "scripts/dev"))
+    worktree_hygiene_snapshot = importlib.import_module("worktree_hygiene_snapshot")
+
+    monkeypatch.setattr(
+        worktree_hygiene_snapshot,
+        "primary_checkout_staleness",
+        lambda: SimpleNamespace(
+            head_sha="a" * 40,
+            origin_main_sha="a" * 40,
+            head_attached=True,
+            head_behind_origin_main=0,
+            stale_primary_checkout=False,
+        ),
+    )
 
 
 def _load_check_skills_module():

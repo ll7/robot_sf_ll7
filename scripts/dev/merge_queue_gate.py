@@ -1316,18 +1316,32 @@ def _fetch_pr_base_sha(pr_number: str | int, *, repo: str) -> tuple[str | None, 
     return sha, None
 
 
-def _fetch_pr_mergeability(pr_number: str | int, *, repo: str) -> tuple[str, str]:
+def _fetch_pr_mergeability(
+    pr_number: str | int, *, repo: str, head_sha: str, base_sha: str
+) -> tuple[str, str]:
     """Return ``(mergeable, mergeable_state)`` from the REST pull endpoint.
 
     Used as a bounded re-read when the GraphQL snapshot reports a transient
     ``UNKNOWN`` mergeability. Returns ``("", "")`` on any read failure so the
-    caller keeps its prior classification rather than inventing a value.
+    caller keeps its prior classification rather than inventing a value. Only
+    accept a calculation bound to the snapshot's exact head and base SHAs.
     """
     result = _gh(["api", f"repos/{repo}/pulls/{pr_number}"])
     if result.returncode != 0:
         return "", ""
     payload, err = _parse_json(result.stdout)
     if err or not isinstance(payload, dict):
+        return "", ""
+    head = payload.get("head")
+    base = payload.get("base")
+    if (
+        not head_sha
+        or not base_sha
+        or not isinstance(head, dict)
+        or not isinstance(base, dict)
+        or head.get("sha") != head_sha
+        or base.get("sha") != base_sha
+    ):
         return "", ""
     mergeable = payload.get("mergeable")
     mergeable_state = payload.get("mergeable_state")
@@ -1338,17 +1352,20 @@ def _fetch_pr_mergeability(pr_number: str | int, *, repo: str) -> tuple[str, str
 
 
 def _resolve_snapshot_mergeability(
-    payload: dict[str, Any], pr_number: str | int, *, repo: str
+    payload: dict[str, Any], pr_number: str | int, *, repo: str, base_sha: str
 ) -> str:
     """Normalize snapshot mergeability, re-reading once when GitHub reports UNKNOWN.
 
     GitHub computes mergeability asynchronously; one bounded REST re-read
     resolves most transient ``UNKNOWN`` responses without turning them into a
-    hard conflict (issue #10421).
+    hard conflict (issue #10421). Missing or changed reread identities preserve
+    the blocking unknown classification.
     """
     status = _normalize_mergeability(payload.get("mergeable"), payload.get("mergeStateStatus"))
     if status == "unknown":
-        rest_mergeable, rest_state = _fetch_pr_mergeability(pr_number, repo=repo)
+        rest_mergeable, rest_state = _fetch_pr_mergeability(
+            pr_number, repo=repo, head_sha=str(payload.get("headRefOid") or ""), base_sha=base_sha
+        )
         status = _normalize_mergeability(rest_mergeable, rest_state) or status
     return status
 
@@ -2139,7 +2156,9 @@ def fetch_pr_snapshot(  # noqa: C901, PLR0912 - validates several independent li
         return {}, f"failed to fetch PR base SHA: {base_err}"
 
     head_sha = str(payload.get("headRefOid") or "")
-    mergeable_status = _resolve_snapshot_mergeability(payload, pr_number, repo=repo)
+    mergeable_status = _resolve_snapshot_mergeability(
+        payload, pr_number, repo=repo, base_sha=base_sha
+    )
     changed_coverage, changed_coverage_err = _fetch_exact_head_changed_coverage(head_sha, repo=repo)
     if changed_coverage_err:
         return {}, f"failed to fetch exact-head changed coverage: {changed_coverage_err}"

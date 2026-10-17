@@ -1,0 +1,31 @@
+# VV-2 diagnostic oracle over the pinned S30/H600 benchmark-data release matrix.
+# This does not change the canonical release manifest or admit publication evidence.
+schema_version: reference-planner-oracles.v1
+release_manifest: configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml
+expected_scenarios: 48
+expected_seeds: [111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140]
+horizon: 600
+dt: 0.1
+workers: 16
+
+# Probe exemptions require an explicit issue decision. None are established yet;
+# even an infeasible or stress scenario is reported as a finding until declared.
+probe_scenario_ids: []
+# This release cell is deliberately empty in the source matrix (density zero,
+# no fixed actors). Keep it in coverage, but exclude it from the conditional
+# stationary-with-pedestrians contact denominator.
+stationary_no_pedestrian_scenario_ids: [classic_bottleneck_low]
+
+goal_key: goal_ped_free
+stationary_key: stand_still_peds
+aware_keys: [social_force_ped_free, orca_ped_free]
+runs:
+  - {key: goal_ped_free, algo: goal, population: pedestrian_free_v1, benchmark_profile: baseline-safe}
+  - {key: stand_still_peds, algo: stand_still, population: original, benchmark_profile: baseline-safe}
+  - {key: social_force_ped_free, algo: social_force, population: pedestrian_free_v1, benchmark_profile: baseline-safe}
+  - {key: orca_ped_free, algo: orca, population: pedestrian_free_v1, benchmark_profile: baseline-safe}
+
+thresholds:
+  max_goal_failure_count: 0
+  max_stationary_contact_rate: 0.0
+  max_dominance_regressions: 0

@@ -85,6 +85,112 @@
         }
     ],
     "properties": {
+        "pedestrian_group_provenance": {
+            "type": "object",
+            "description": "Reset-time simulator slot memberships; optional for historical rows. Empty and singleton groups retain their IDs. This is not a persistent actor identity.",
+            "required": [
+                "schema_version",
+                "status",
+                "capture_phase",
+                "pedestrian_id_scope"
+            ],
+            "properties": {
+                "schema_version": {
+                    "const": "pedestrian_group_provenance.v1"
+                },
+                "status": {
+                    "enum": [
+                        "recorded",
+                        "unavailable"
+                    ]
+                },
+                "capture_phase": {
+                    "const": "reset"
+                },
+                "pedestrian_id_scope": {
+                    "const": "reset_simulator_slot"
+                },
+                "reason": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "pedestrian_count": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "groups": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "required": [
+                            "group_id",
+                            "pedestrian_ids",
+                            "member_count"
+                        ],
+                        "properties": {
+                            "group_id": {
+                                "type": "integer"
+                            },
+                            "pedestrian_ids": {
+                                "type": "array",
+                                "items": {
+                                    "type": "integer",
+                                    "minimum": 0
+                                },
+                                "uniqueItems": true
+                            },
+                            "member_count": {
+                                "type": "integer",
+                                "minimum": 0
+                            }
+                        },
+                        "additionalProperties": false
+                    }
+                },
+                "unassigned_pedestrian_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer",
+                        "minimum": 0
+                    },
+                    "uniqueItems": true
+                },
+                "multi_member_group_count": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "pedestrians_in_multi_member_groups": {
+                    "type": "integer",
+                    "minimum": 0
+                }
+            },
+            "allOf": [
+                {
+                    "if": {
+                        "properties": {
+                            "status": {
+                                "const": "recorded"
+                            }
+                        }
+                    },
+                    "then": {
+                        "required": [
+                            "pedestrian_count",
+                            "groups",
+                            "unassigned_pedestrian_ids",
+                            "multi_member_group_count",
+                            "pedestrians_in_multi_member_groups"
+                        ]
+                    },
+                    "else": {
+                        "required": [
+                            "reason"
+                        ]
+                    }
+                }
+            ],
+            "additionalProperties": false
+        },
         "version": {
             "const": "v1"
         },

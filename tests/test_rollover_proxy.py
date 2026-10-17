@@ -283,6 +283,7 @@ class _StepState:
     """Minimal state double for ``RobotEnv.step`` rollover fixtures."""
 
     d_t = 0.25
+    distance_to_goal = 1.0
     is_terminal = False
 
     def step(self) -> np.ndarray:
@@ -325,7 +326,12 @@ def _make_step_env(
     env.state = _StepState()
     env.occupancy_grid = None
     env._asymmetric_critic_enabled = False
-    env._snqi_proxy = SimpleNamespace(compute_step_metrics=lambda *args, **kwargs: {})
+    env._snqi_proxy = SimpleNamespace(
+        prime=lambda *args, **kwargs: None,
+        compute_step_metrics=lambda *args, **kwargs: {},
+    )
+    # Match the constructor/reset initialization even though this fixture uses __new__.
+    env._prime_snqi_proxy_state()
     env.action_space = SimpleNamespace()
     env.last_action = None
     env._action_latency_steps = 0

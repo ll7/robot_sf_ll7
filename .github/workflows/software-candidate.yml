@@ -274,7 +274,7 @@ jobs:
 
       - name: Upload checked candidate bundle once
         id: upload
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ${{ env.ARTIFACT_NAME }}
           path: ${{ runner.temp }}/robot-sf-software-candidate/bundle/
@@ -313,7 +313,7 @@ jobs:
 
       - name: Upload rights-admission receipt separately
         id: upload-rights
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ${{ env.RIGHTS_ARTIFACT_NAME }}
           path: ${{ runner.temp }}/robot-sf-software-candidate/rights-admission/
@@ -357,7 +357,7 @@ jobs:
           (env.STRICT_RIGHTS_EXIT != '0' && env.STRICT_RIGHTS_EXIT != 'not-run' ||
            env.DEPENDENCY_EXIT != '0' && env.DEPENDENCY_EXIT != 'not-run' ||
            env.RIGHTS_ADMISSION_EXIT != '0' && env.RIGHTS_ADMISSION_EXIT != 'not-run') }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ${{ env.REJECTED_DIAGNOSTIC_ARTIFACT_NAME }}
           path: ${{ runner.temp }}/robot-sf-software-candidate/rejected-diagnostic/

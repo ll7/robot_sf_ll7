@@ -213,11 +213,11 @@ stress_smoke_contract:
   - path: ../../scenarios/single/francis2023_intersection_wait.yaml
     sha256: 608fc06727c57731febd214a9c84a3839b799701f53eaaf3d6cd9e329648ba75
   - path: ../../scenarios/single/francis2023_join_group.yaml
-    sha256: a1139933e4acf2b6066fe0a9d66c7e69e58ea6596ead7df92dd65e61bc15a208
+    sha256: 1d22521f506f016cff9d7dc2c7df8b65a3da54215d2077ce8320d5bc24df4420
   - path: ../../scenarios/single/francis2023_leading_human.yaml
     sha256: a30b54b4677086968d10742edba95db4f1ba7157e39329c5244b562f0658d7b8
   - path: ../../scenarios/single/francis2023_leave_group.yaml
-    sha256: 4427dc9f9afa38a9ae76254d9ec8dbdb44706da4fccec8c93f1bb0c8e8f6cb43
+    sha256: b01d37201e350bf98151efc8a96c38f6c9a3e9ab97f174b9875041a07b47f4fe
   - path: ../../scenarios/single/francis2023_narrow_doorway.yaml
     sha256: d7b52f76128f366a74801c2441cb47e3f4af588c64566fb044eb3e2c54e43671
   - path: ../../scenarios/single/francis2023_narrow_hallway.yaml

@@ -237,12 +237,18 @@ class ScenarioSwitchingEnv(Env):
         self._current_env: Env | None = None
         self._current_scenario_id: str | None = None
         self._has_reset = False
+        self._last_reset_seed: int | None = None
         self._warned_obs_bounds = False
 
         env, scenario_id = self._build_env(seed=seed)
         self._activate_env(env, scenario_id)
         self.metadata = getattr(self._current_env, "metadata", {})
         self.render_mode = getattr(self._current_env, "render_mode", None)
+
+    @property
+    def episode_seed(self) -> int | None:
+        """Return the seed actually passed to the last successful episode reset."""
+        return self._last_reset_seed
 
     @property
     def scenario_coverage(self) -> dict[str, int]:
@@ -365,7 +371,9 @@ class ScenarioSwitchingEnv(Env):
             if self._episode_seed_pool is not None
             else seed
         )
-        return self._current_env.reset(seed=reset_seed, options=options)
+        result = self._current_env.reset(seed=reset_seed, options=options)
+        self._last_reset_seed = reset_seed
+        return result
 
     def step(self, action) -> tuple[Any, SupportsFloat, bool, bool, dict[str, Any]]:
         """Step the active scenario environment.

@@ -2,7 +2,7 @@
 # VV-5 ten-fault diagnostic matrix (#9735)
 
 **Scope:** Ten controlled synthetic fault classes were replayed on source commit
-`03f96dbf4907622ea0ec7f865db4adf1630ede7a` (current `origin/main`). The applicable checks
+`03f96dbf4907622ea0ec7f865db4adf1630ede7a` (the historical comparison source). The applicable checks
 detected **8/10**. This is fixture-level sensitivity across different checks,
 not a pooled statistical estimate, nominal campaign evidence, or 0.0.8
 release admission. The machine-readable controls, mutants, checker outputs, and
@@ -40,14 +40,22 @@ across exposed steps, and then confirm with a stopped-robot multi-seed trace.
 Legitimate zero magnitude must remain possible. This is a proposed release
 gate, not a result obtained here.
 
-For the doubled collision total, recompute `total_collision_count` and
-`collisions` from typed components and the event ledger, and reject a mismatch
-before aggregation. Issue #9855 tracks that release blocker. The earlier
+The recorded doubled-total miss is historical. Current main includes #9867’s
+opt-in strict component-total gate; #9855 still owns candidate-wide receipts and
+independent acceptance. The old 8/10 fixture result is not reclassified as a
+measurement of that newer gate. The earlier
 [four-fault packet](issue_9735_vv5_fault_injection.md) also identifies
 outcome-dependent reset-overlap and unavailable-clearance gaps owned by #9861;
-those are distinct from this ten-class sensitivity count.
+those are distinct from this ten-class sensitivity count. #9861 is closed after
+merged #9873; it is not outstanding implementation work for this PR.
 
 ## Reproduction and custody
+
+**Historical recipe; blocked under the current seed policy.** Some producers
+use the sealed legacy seed schedule. Do not execute these commands for a current
+validation run. A separately authorized replay must use a versioned development
+seed artifact and preserve this original report. No producer or simulator was
+rerun during the 2026-10-17 takeover.
 
 The four source scripts and the compactor are tracked under
 `scripts/validation/`. Use the shared-venv wrapper from the repository root
@@ -89,3 +97,21 @@ report are `tracked-compact-evidence`; generated fixtures and packet logs are
 `ignored-cache`; nominal release rows and full-oracle success evidence were not
 produced. Keep #9735 open until independent review and the missed gates receive
 their own evidence.
+
+
+## Takeover status — 2026-10-17
+
+Main was merged normally. The JSON, its existing review-marker sidecar, and all
+four replay/compaction scripts retain their original bytes. The sidecar binds
+JSON SHA-256 `1b9b111a187e523ef98527a28713c11c5dd992b56f1a996ee945832119f7bffb`.
+The older PR description named another artifact; this note and the current
+matrix are authoritative for the historical source and packet identities.
+
+The canonical registry check retains 492 findings, with only a three-file tree
+addition. Its pre-write review guard refuses baseline replacement until the
+evidence-tree review companion is completed separately. No override, approval,
+new finding allowance or human companion edit is made here. Domain approval
+remains pending; the earlier bounded review does not approve this changed head.
+The disabled-force expectation/roster gate, current-source permitted-seed replay,
+candidate-wide receipts and independent acceptance remain outside the supplied
+historical fixture proof. No nominal or release evidence is admitted.

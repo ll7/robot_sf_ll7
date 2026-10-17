@@ -1,4 +1,4 @@
-"""Public-entry-point regressions for all three reviews and fail-closed scanning."""
+"""Public-entry-point regressions for all four reviews and fail-closed scanning."""
 
 from __future__ import annotations
 
@@ -137,6 +137,42 @@ def test_unknown_mentions_fail_under_any_shell(
     output = captured.out + captured.err
     assert "ci.yaml:jobs.lint.steps[1].run" in output
     assert "unrecognised" in output.lower()
+    assert "OK: all four" not in output
+
+
+@pytest.mark.parametrize(
+    "tool",
+    [
+        pytest.param('ru""ff', id="round4-reviewer-double-empty"),
+        pytest.param("r''uff", id="single-empty"),
+        pytest.param('"ru"ff', id="quoted-prefix"),
+        pytest.param(r"ru\ff", id="backslash-escape"),
+        pytest.param("r$''uff", id="ansi-empty"),
+        pytest.param('r$""uff', id="locale-empty"),
+    ],
+)
+@pytest.mark.parametrize("advisory", [False, True], ids=["strict", "advisory"])
+def test_literal_shell_spellings_cannot_hide_stale_launcher(
+    parity_inputs: tuple[Path, list[str]],
+    capsys: pytest.CaptureFixture[str],
+    tool: str,
+    advisory: bool,
+) -> None:
+    """Literal concatenation and escapes cannot conceal a stale pin beside a good one."""
+    workflows, args = parity_inputs
+    (workflows / "ci.yml").write_text(
+        "name: parity-probe\non: push\njobs:\n  lint:\n    runs-on: ubuntu-latest\n"
+        "    steps:\n      - shell: bash\n        run: |\n"
+        "          uvx --from ruff==0.17.0 ruff check .\n"
+        f"          uvx --from {tool}==0.16.10 {tool} check .\n"
+    )
+
+    assert guard.main(args + (["--advisory"] if advisory else [])) == 1
+    captured = capsys.readouterr()
+    output = captured.out + captured.err
+    assert "ci.yml:jobs.lint.steps[0].run" in output
+    assert "unrecognised" in output.lower()
+    assert "0.16.10" in output
     assert "OK: all four" not in output
 
 

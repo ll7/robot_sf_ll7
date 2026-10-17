@@ -121,10 +121,16 @@ def read_pyproject_dev_dep_pin(path: Path) -> str:
 
 
 def _read_run_ruff_pins(run: str, location: str) -> list[tuple[str, str]]:
-    """Account for every Ruff mention before returning any pins from a step."""
+    """Account for every Ruff mention before returning any pins from a step.
+
+    Deliberate indirection (variables, eval, command substitution, called scripts)
+    is out of scope and tracked in #10433.
+    """
     pins: list[tuple[str, str]] = []
     for line in run.replace("\\\n", "").splitlines():
-        if "ruff" not in line.lower():
+        # Detect literal shell spellings, then apply the original launcher grammar.
+        mention_line = re.sub(r"""\$''|\$""|['"\\]""", "", line)
+        if "ruff" not in mention_line.lower():
             continue
         match = RUFF_WORKFLOW_PIN_PATTERN.fullmatch(line)
         if match is None or "ruff" in match.group("args").lower():

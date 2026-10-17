@@ -1,0 +1,10 @@
+{
+  "pairs": 18,
+  "before_successes": 3,
+  "after_successes": 3,
+  "trace_changes": 0,
+  "contacts": 0,
+  "minimum_surface_clearance_m": 0.5170955095566826,
+  "newly_sub_margin_minima": 0,
+  "newly_sub_margin_terminal_gaps": 0
+}

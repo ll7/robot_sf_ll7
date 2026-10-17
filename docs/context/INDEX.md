@@ -1,5 +1,10 @@
 # Context Retrieval Index
 
+Issue #10318 prediction planner freeze: confirmed beam admission objective mismatch,
+failing-old/passing-new behavior regression, all six affected development cells,
+and paired empty-world accounting with residual limits:
+[continuous-interval safety revision](evidence/issue_10318/revision3/README.md).
+
 Guard/escape factorial ablation: 2,160 paired development episodes, independently
 confirmed numerical results, portable compact inputs and SHA-256 custody:
 [guard_escape_ablation/README.md](guard_escape_ablation/README.md).

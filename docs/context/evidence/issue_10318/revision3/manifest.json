@@ -1,0 +1,70 @@
+{
+  "schema": "issue-10318-continuous-interval.v1",
+  "base_sha": "53721be3248600e08641a9816d094b605e3c93e4",
+  "reviewed_sha": "65a3f648b428332cf582d0a2253e4363bab3b528",
+  "affected_runtime_sha": "0a14638084e6cf3b8fc25910e17623be34cc4a5c",
+  "empty_runtime_sha": "a3d7cb219bc9fb1fbcb813e39d3a817225e96d4d",
+  "production_configs_identical_between_runtime_heads": true,
+  "seeds": [
+    1001,
+    1002,
+    1003
+  ],
+  "safe_surface_margin_m": 0.35,
+  "predictor_sha256": "a28aed6d6ad7e1ebf597277ade1cf908efa6da038d0a9fcfdf80c7c31d8d1be1",
+  "affected": {
+    "pairs": 18,
+    "before_successes": 3,
+    "after_successes": 3,
+    "trace_changes": 0,
+    "contacts": 0,
+    "minimum_surface_clearance_m": 0.5170955095566826,
+    "newly_sub_margin_minima": 0,
+    "newly_sub_margin_terminal_gaps": 0
+  },
+  "empty": [
+    {
+      "suite": "main",
+      "pairs": 144,
+      "before_successes": 141,
+      "after_successes": 141,
+      "contacts": 0,
+      "new_failures": 0,
+      "trace_changes": 0,
+      "trajectory_changes": 0
+    },
+    {
+      "suite": "width",
+      "pairs": 9,
+      "before_successes": 9,
+      "after_successes": 9,
+      "contacts": 0,
+      "new_failures": 0,
+      "trace_changes": 0,
+      "trajectory_changes": 0
+    }
+  ],
+  "tests": {
+    "old_witness_failures": 13,
+    "focused_passes": 53,
+    "requested_suite_passes": 4763,
+    "requested_suite_skips": 17,
+    "requested_suite_xfails": 4,
+    "requested_suite_exit": 0,
+    "live_nondev_episode_exclusions": 3
+  },
+  "inputs_sha256": {
+    "configs/algos/prediction_planner_release_v0_0_8.yaml": "aad5e0bdb3c41273eff8000465399da31949514077e4c98fc22289015888545c",
+    "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml": "af4e9a7a22f9d5f373eb4a3323984e0de6d79edd4263f1c023e9efddff2fd25f"
+  },
+  "artifact_sha256": {
+    "README.md": "0c6a9deeec840181ef388f764c73899f479cac802a93cf1b494118b0012ed73c",
+    "affected.csv": "f100fb5525d600b5fdbdf01c3b41078761968887f79c8d7c4a9b441b52075dc5",
+    "affected_summary.json": "a5964e433ff61ab61de1a57fcfad2f4a956393a4c434d665c523dc0879be62f8",
+    "empty_world.csv": "b4469633c76f6c4b1d0b512c911153fc375bdb7dd766f4498f3f3c90da6fb088",
+    "empty_summary.json": "9493a9c7ed35c9c6c1034eae0f6b25919f82898db3f0e034b4e20cacb4921498"
+  },
+  "evidence_tier": "diagnostic-only",
+  "fallback_or_degraded_rows": 0,
+  "csv_line_endings": "LF"
+}

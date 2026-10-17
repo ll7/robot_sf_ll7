@@ -12,6 +12,7 @@ from robot_sf.common.forecast_variants import FORECAST_VARIANT_CHOICES
 from robot_sf.common.math_utils import wrap_angle_pi
 from robot_sf.models import get_registry_entry
 from robot_sf.planner import socnav as _socnav
+from robot_sf.planner.classic_planner_adapter import PlannerActionAdapter
 from robot_sf.planner.clearance_geometry import (
     CENTER_CLEARANCE_V1,
     pedestrian_clearance,
@@ -26,6 +27,7 @@ from robot_sf.planner.obstacle_features import (
     obstacle_lines_from_observation,
     validate_predictive_runtime_feature_schema,
 )
+from robot_sf.robot.bicycle_drive import BicycleDriveRobot, BicycleDriveSettings
 from robot_sf.robot.differential_drive import DifferentialDriveRobot, DifferentialDriveSettings
 
 SamplingPlannerAdapter = _socnav.SamplingPlannerAdapter
@@ -65,9 +67,12 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         self._device = self._resolve_device()
         self._bound_obstacle_lines: list = []
         self._static_obstacle_geometry: MultiLineString | None = None
-        self._prediction_drive_settings: DifferentialDriveSettings | None = None
+        self._prediction_drive_settings: DifferentialDriveSettings | BicycleDriveSettings | None = (
+            None
+        )
         self._obstacle_feature_extractor = LocalObstacleFeatureExtractor()
         self._baseline_predictor: Any | None = None
+        self._prediction_robot_radius: float | None = None
         self._forecast_variant_execution_mode = self._init_forecast_variant()
         # Issue #6190: structured foresight-model-load provenance so a silent
         # constant-velocity fallback is observable and checker-actionable. The
@@ -290,8 +295,12 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         simulator = getattr(env, "simulator", None)
         robots = getattr(simulator, "robots", None)
         settings = getattr(robots[0], "config", None) if robots else None
+        radius = getattr(settings, "radius", None)
+        self._prediction_robot_radius = float(radius) if radius is not None else None
         self._prediction_drive_settings = (
-            settings if isinstance(settings, DifferentialDriveSettings) else None
+            settings
+            if isinstance(settings, (DifferentialDriveSettings, BicycleDriveSettings))
+            else None
         )
         map_def = getattr(env, "map_def", None)
         if map_def is None:
@@ -302,6 +311,13 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             if callable(iter_segments):
                 lines = normalize_obstacle_lines(iter_segments())
         self.bind_obstacle_lines(lines)
+
+    @property
+    def _robot_radius(self) -> float:
+        """Use the live physical disc radius, retaining unbound config fallback."""
+        if self._prediction_robot_radius is not None:
+            return self._prediction_robot_radius
+        return float(self.config.predictive_robot_radius)
 
     def _resolve_device(self) -> str:
         """Resolve runtime device string for predictive model inference.
@@ -808,7 +824,7 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             dist = pedestrian_clearance(
                 dist,
                 model=self.config.predictive_clearance_model,
-                robot_radius=self.config.predictive_robot_radius,
+                robot_radius=self._robot_radius,
                 pedestrian_radius=self.config.predictive_pedestrian_radius,
             )
             assert isinstance(dist, np.ndarray)
@@ -955,30 +971,49 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         return sorted(set(candidates), key=lambda x: (round(x[0], 6), round(x[1], 6)))
 
     def _bound_drive_rollout(self, commands, dt, observation):
-        """Integrate bound wheel odometry at the observed control clock.
+        """Integrate the bound plant at the observed control clock.
 
         Returns:
             tuple: Local positions and headings at each prediction sample.
         """
         if observation is None and len(commands) > 0:
             raise ValueError("Bound prediction requires a measured-motion observation")
-        state, _, _ = self._socnav_fields(observation or {})
-        drive = DifferentialDriveRobot(self._prediction_drive_settings)
-        drive.state.velocity = (
-            float(self._as_1d_float(state.get("speed", [0.0]), pad=1)[0]),
-            float(self._as_1d_float(state.get("angular_velocity", [0.0]), pad=1)[0]),
-        )
-        drive.state.wheel_speeds = drive.movement._resulting_wheel_speeds(drive.current_speed)
         control_dt = self._simulation_timestep(observation) if observation is not None else dt
+        ticks_per_sample = dt / control_dt
+        control_ticks = round(ticks_per_sample) if np.isfinite(ticks_per_sample) else 0
+        # Observations quantize the control clock to float32. Allow its relative
+        # rounding error at each ratio magnitude, while still taking whole ticks.
+        if control_ticks < 1 or not np.isclose(
+            ticks_per_sample, control_ticks, rtol=1e-6, atol=0.0
+        ):
+            raise ValueError(
+                "Bound prediction rollout timestep must be an integer multiple of the control "
+                f"timestep; got rollout={dt}s, control={control_dt}s"
+            )
+        state, _, _ = self._socnav_fields(observation or {})
+        speed = float(self._as_1d_float(state.get("speed", [0.0]), pad=1)[0])
+        if isinstance(self._prediction_drive_settings, BicycleDriveSettings):
+            drive = BicycleDriveRobot(self._prediction_drive_settings)
+            drive.state.velocity = speed
+        else:
+            drive = DifferentialDriveRobot(self._prediction_drive_settings)
+            drive.state.velocity = (
+                speed,
+                float(self._as_1d_float(state.get("angular_velocity", [0.0]), pad=1)[0]),
+            )
+            drive.state.wheel_speeds = drive.movement._resulting_wheel_speeds(drive.current_speed)
         positions, headings = [], []
         for command in commands:
-            remaining = dt
-            while remaining > 1e-12:
-                step_dt = min(control_dt, remaining)
-                drive.apply_action(
-                    tuple((np.asarray(command) - drive.current_speed) / step_dt), step_dt
-                )
-                remaining -= step_dt
+            for _ in range(control_ticks):
+                if isinstance(drive, BicycleDriveRobot):
+                    # Reuse execution's projection, achievable-speed steering and
+                    # asymmetric acceleration/braking limits, including reverse.
+                    adapter = PlannerActionAdapter(drive, drive.action_space, control_dt)
+                    drive.apply_action(tuple(adapter.from_velocity_command(command)), control_dt)
+                else:
+                    drive.apply_action(
+                        tuple((np.asarray(command) - drive.current_speed) / control_dt), control_dt
+                    )
             positions.append(drive.pos)
             headings.append(drive.pose[1])
         return np.asarray(positions), np.asarray(headings)
@@ -992,7 +1027,7 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         steps: int,
         observation: dict | None = None,
     ) -> np.ndarray:
-        """Forecast the bound differential drive, or an unbound unicycle command.
+        """Forecast the bound physical drive, or an unbound unicycle command.
 
         Returns:
             np.ndarray: Trajectory ``(steps, 2)`` in local robot frame.
@@ -1078,8 +1113,7 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             1, int(steps if steps is not None else self.config.predictive_horizon_steps)
         )
         radius_margin = (
-            float(self.config.predictive_robot_radius)
-            + float(self.config.predictive_pedestrian_radius)
+            float(self._robot_radius) + float(self.config.predictive_pedestrian_radius)
             if self.config.predictive_clearance_model == CENTER_CLEARANCE_V1
             else 0.0
         )
@@ -1098,7 +1132,7 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
                 distances = pedestrian_clearance(
                     distances,
                     model=self.config.predictive_clearance_model,
-                    robot_radius=self.config.predictive_robot_radius,
+                    robot_radius=self._robot_radius,
                     pedestrian_radius=self.config.predictive_pedestrian_radius,
                 )
                 assert isinstance(distances, np.ndarray)
@@ -1126,7 +1160,7 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             dist = pedestrian_clearance(
                 dist,
                 model=self.config.predictive_clearance_model,
-                robot_radius=self.config.predictive_robot_radius,
+                robot_radius=self._robot_radius,
                 pedestrian_radius=self.config.predictive_pedestrian_radius,
             )
             assert isinstance(dist, np.ndarray)
@@ -1157,7 +1191,7 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
                 distances = pedestrian_clearance(
                     distances,
                     model=self.config.predictive_clearance_model,
-                    robot_radius=self.config.predictive_robot_radius,
+                    robot_radius=self._robot_radius,
                     pedestrian_radius=self.config.predictive_pedestrian_radius,
                 )
                 assert isinstance(distances, np.ndarray)
@@ -1177,7 +1211,7 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             dist = pedestrian_clearance(
                 dist,
                 model=self.config.predictive_clearance_model,
-                robot_radius=self.config.predictive_robot_radius,
+                robot_radius=self._robot_radius,
                 pedestrian_radius=self.config.predictive_pedestrian_radius,
             )
             assert isinstance(dist, np.ndarray)
@@ -1199,8 +1233,7 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             float: Penalty that increases for earlier/closer predicted encounters.
         """
         radius_margin = (
-            float(self.config.predictive_robot_radius)
-            + float(self.config.predictive_pedestrian_radius)
+            float(self._robot_radius) + float(self.config.predictive_pedestrian_radius)
             if self.config.predictive_clearance_model == CENTER_CLEARANCE_V1
             else 0.0
         )
@@ -1222,7 +1255,7 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
                 valid_slice = pedestrian_clearance(
                     valid_slice,
                     model=self.config.predictive_clearance_model,
-                    robot_radius=self.config.predictive_robot_radius,
+                    robot_radius=self._robot_radius,
                     pedestrian_radius=self.config.predictive_pedestrian_radius,
                 )
                 assert isinstance(valid_slice, np.ndarray)
@@ -1251,7 +1284,7 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             dist = pedestrian_clearance(
                 dist,
                 model=self.config.predictive_clearance_model,
-                robot_radius=self.config.predictive_robot_radius,
+                robot_radius=self._robot_radius,
                 pedestrian_radius=self.config.predictive_pedestrian_radius,
             )
             assert isinstance(dist, np.ndarray)
@@ -1285,6 +1318,167 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             - self._prediction_drive_settings.radius
         )
 
+    def _interval_motion_cover(self, observation: dict, commands: np.ndarray) -> np.ndarray:
+        """Bound synchronized deviation from each sampled robot chord.
+
+        The unbound rollout declares straight, constant-speed sample segments.
+        For bound odometry, let V, W and A bound speed, yaw rate and linear
+        acceleration on an interval of length h. A continuous unicycle differs
+        from its synchronized chord by at most (A + V*W)*h**2/8. The drive's
+        mid-heading odometry differs from that unicycle by at most V*W*h**2/2;
+        covering both the interior and endpoint chord adds V*W*h**2. Thus
+        (A + 9*V*W)*h**2/8 covers every intervening control substep, including
+        acceleration and reversal. Constant straight motion has zero cover.
+
+        Returns:
+            np.ndarray: Conservative distance error for each prediction interval.
+        """
+        cover = np.zeros(len(commands))
+        settings = self._prediction_drive_settings
+        if settings is None:
+            return cover
+        if isinstance(settings, BicycleDriveSettings):
+            # The bicycle plant advances along a straight segment per control
+            # tick. Bound its deviation from the prediction chord at every tick;
+            # between ticks the relative deviation is linear, so its norm cannot
+            # exceed the endpoint maximum. Reuse the executed adapter/plant.
+            dt = max(float(self.config.predictive_rollout_dt), 1e-3)
+            control_dt = self._simulation_timestep(observation)
+            ticks = round(dt / control_dt)
+            positions, _ = self._bound_drive_rollout(
+                np.repeat(commands, ticks, axis=0), control_dt, observation
+            )
+            points = np.vstack([np.zeros(2), positions])
+            fractions = np.arange(ticks + 1)[:, None] / ticks
+            for i in range(len(commands)):
+                interval = points[i * ticks : (i + 1) * ticks + 1]
+                chord = interval[0] + fractions * (interval[-1] - interval[0])
+                cover[i] = np.max(np.linalg.norm(interval - chord, axis=1))
+            return cover
+        linear_decel = (
+            settings.max_linear_accel
+            if settings.max_linear_decel is None
+            else settings.max_linear_decel
+        )
+        state, _, _ = self._socnav_fields(observation)
+        velocity = np.array(
+            [
+                self._as_1d_float(state.get("speed", [0.0]), pad=1)[0],
+                self._as_1d_float(state.get("angular_velocity", [0.0]), pad=1)[0],
+            ],
+            dtype=float,
+        )
+        dt = max(float(self.config.predictive_rollout_dt), 1e-3)
+        control_dt = self._simulation_timestep(observation)
+        for i, command in enumerate(commands):
+            remaining = dt
+            speed, yaw, accel = abs(velocity[0]), abs(velocity[1]), 0.0
+            while remaining > 1e-12:
+                step_dt = min(control_dt, remaining)
+                action = np.clip(
+                    (command - velocity) / step_dt,
+                    [-linear_decel, -settings.max_angular_accel],
+                    [settings.max_linear_accel, settings.max_angular_accel],
+                )
+                updated = np.clip(
+                    velocity + action * step_dt,
+                    [settings.min_linear_speed, -settings.max_angular_speed],
+                    [settings.max_linear_speed, settings.max_angular_speed],
+                )
+                speed = max(speed, abs(updated[0]))
+                yaw = max(yaw, abs(updated[1]))
+                accel = max(accel, abs(updated[0] - velocity[0]) / step_dt)
+                velocity = updated
+                remaining -= step_dt
+            cover[i] = (accel + 9.0 * speed * yaw) * dt**2 / 8.0
+        return cover
+
+    @staticmethod
+    def _synchronized_margin_clear(
+        robot_points: np.ndarray, pedestrian_points: np.ndarray, cover: np.ndarray, margin: float
+    ) -> bool:
+        """Analytically minimize relative chord distance, minus robot motion cover.
+
+        Returns:
+            bool: Whether every synchronized interval preserves the margin.
+        """
+        relative = pedestrian_points - robot_points[None]
+        start = relative[:, :-1]
+        delta = np.diff(relative, axis=1)
+        squared_length = np.sum(delta * delta, axis=-1)
+        fraction = np.clip(
+            np.divide(
+                -np.sum(start * delta, axis=-1),
+                squared_length,
+                out=np.zeros_like(squared_length),
+                where=squared_length > 0.0,
+            ),
+            0.0,
+            1.0,
+        )
+        closest = start + fraction[..., None] * delta
+        return bool(np.all(np.linalg.norm(closest, axis=-1) - cover[None] >= margin))
+
+    def _pedestrian_margin_clear(
+        self,
+        observation: dict,
+        local_traj: np.ndarray,
+        future_peds: np.ndarray,
+        mask: np.ndarray,
+        commands: np.ndarray,
+    ) -> bool:
+        """Veto physical rollouts spending the configured pedestrian surface margin.
+
+        Check synchronized intervals in the learned forecast and constant-velocity motion of all
+        observed actors. Refuse incomplete forecasts beyond model capacity. This
+        is a candidate guard, not a guarantee against pedestrian-driven contact.
+        Legacy center-distance objectives retain their historical semantics.
+
+        Returns:
+            bool: Whether both forecast sources retain the surface safety margin.
+        """
+        if self.config.predictive_clearance_model == CENTER_CLEARANCE_V1:
+            return True
+        horizon = min(len(local_traj), future_peds.shape[1])
+        center_margin = (
+            self._robot_radius
+            + float(self.config.predictive_pedestrian_radius)
+            + float(self.config.predictive_safe_distance)
+        )
+        robot, _, pedestrians = self._socnav_fields(observation)
+        positions, velocities = self._normalize_pedestrians(pedestrians)
+        if len(positions) > int(self.config.predictive_max_agents):
+            return False
+        if positions.size == 0 and not np.any(mask > 0.5):
+            return True
+        heading = float(self._as_1d_float(robot.get("heading", [0.0]), pad=1)[0])
+        cos_h, sin_h = np.cos(heading), np.sin(heading)
+        relative = (positions - np.asarray(robot.get("position", [0.0, 0.0]))[:2]) @ np.array(
+            [[cos_h, -sin_h], [sin_h, cos_h]]
+        )
+        robot_points = np.vstack([np.zeros(2), local_traj])
+        cover = self._interval_motion_cover(observation, commands)
+        valid_idx = np.flatnonzero(mask > 0.5)
+        valid = future_peds[valid_idx, :horizon]
+        if valid.size:
+            # Production forecasts preserve observed actor slots. Scoring-only
+            # callers without observations extrapolate the first forecast chord.
+            origins = valid[:, 0].copy()
+            if horizon > 1:
+                origins -= valid[:, 1] - valid[:, 0]
+            observed = valid_idx < len(relative)
+            origins[observed] = relative[valid_idx[observed]]
+            learned_points = np.concatenate([origins[:, None], valid], axis=1)
+            if not self._synchronized_margin_clear(
+                robot_points[: horizon + 1], learned_points, cover[:horizon], center_margin
+            ):
+                return False
+        if positions.size == 0:
+            return True
+        times = np.arange(len(local_traj) + 1) * max(float(self.config.predictive_rollout_dt), 1e-3)
+        observed_future = relative[:, None, :] + velocities[:, None, :] * times[None, :, None]
+        return self._synchronized_margin_clear(robot_points, observed_future, cover, center_margin)
+
     def _score_action(
         self,
         *,
@@ -1304,6 +1498,10 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         steps_val = max(1, int(steps))
         robot_traj = self._rollout_robot(v=v, w=w, dt=dt, steps=steps_val, observation=observation)
         if self._static_footprint_clearance(observation, robot_traj) <= 0.0:
+            return float("inf")
+        if not self._pedestrian_margin_clear(
+            observation, robot_traj, future_peds, mask, np.tile((v, w), (len(robot_traj), 1))
+        ):
             return float("inf")
 
         valid_idx = np.where(mask > 0.5)[0]
@@ -1444,10 +1642,17 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         local_headings = local_headings[:horizon]
         if self._static_footprint_clearance(observation, local_traj) <= 0.0:
             return float("inf")
+        if not self._pedestrian_margin_clear(
+            observation,
+            local_traj,
+            future_peds,
+            mask,
+            np.repeat(sequence, segment_steps, axis=0)[:horizon],
+        ):
+            return float("inf")
 
         radius_margin = (
-            float(self.config.predictive_robot_radius)
-            + float(self.config.predictive_pedestrian_radius)
+            float(self._robot_radius) + float(self.config.predictive_pedestrian_radius)
             if self.config.predictive_clearance_model == CENTER_CLEARANCE_V1
             else 0.0
         )
@@ -1469,7 +1674,7 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
                     dist = pedestrian_clearance(
                         dist,
                         model=self.config.predictive_clearance_model,
-                        robot_radius=self.config.predictive_robot_radius,
+                        robot_radius=self._robot_radius,
                         pedestrian_radius=self.config.predictive_pedestrian_radius,
                     )
                     assert isinstance(dist, np.ndarray)
@@ -1595,12 +1800,11 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         base_ranked = sorted(
             (
                 (
-                    self._score_action_distribution(
+                    self._score_sequence_distribution(
                         observation=observation,
                         future_batch=future_batch,
                         mask=mask,
-                        v=v,
-                        w=w,
+                        sequence=[(v, w)],
                         steps=steps,
                     ),
                     (v, w),
@@ -1612,6 +1816,10 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         branch = max(1, int(self.config.predictive_sequence_branch_factor))
         beam_width = max(1, int(self.config.predictive_sequence_beam_width))
         segments = max(1, int(self.config.predictive_sequence_segments))
+        base_ranked = [item for item in base_ranked if np.isfinite(item[0])]
+        # Use the beam's objective for admission too. Single-action scoring has
+        # different speed margins and no phase cost; it can fill this shortlist
+        # with stationary turns and prune every progressing sequence.
         stage_candidates = [cand for _score, cand in base_ranked[:branch]]
 
         beam: list[tuple[float, list[tuple[float, float]]]] = []
@@ -1640,7 +1848,8 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
                         sequence=new_seq,
                         steps=steps,
                     )
-                    expanded.append((score, new_seq))
+                    if np.isfinite(score):
+                        expanded.append((score, new_seq))
             expanded.sort(key=lambda item: float(item[0]))
             beam = expanded[:beam_width]
         return beam[0][1][0] if beam else (0.0, 0.0)
@@ -1925,7 +2134,7 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             steps=steps,
             best=best,
         )
-        return best
+        return best if np.isfinite(_best_cost) else (0.0, 0.0)
 
     def diagnostics(self) -> dict[str, Any]:
         """Return execution diagnostics, including before adapter initialization."""

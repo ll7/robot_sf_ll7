@@ -57,6 +57,8 @@ from robot_sf.benchmark.constants import (
 )
 from robot_sf.benchmark.constants import (
     COMFORT_FORCE_THRESHOLD,
+    CURVATURE_LENGTH_FLOOR_M,
+    CURVATURE_MIN_DISPLACEMENT_M,
 )
 from robot_sf.benchmark.constants import (
     NEAR_MISS_DIST as D_NEAR,
@@ -65,6 +67,7 @@ from robot_sf.benchmark.group_space_metrics import compute_group_space_metrics
 from robot_sf.benchmark.metric_definitions import (
     LEGACY_METRIC_SCHEMA_VERSION,
     METRIC_SCHEMA_VERSION,
+    metric_definitions_sha256,
     require_anchor_compatibility,
 )
 from robot_sf.benchmark.metric_definitions import (
@@ -98,10 +101,21 @@ ROLLOVER_STABILITY_METADATA_KEY = "rollover_stability"
 ROLLOVER_CRITICAL_EVENT = "ROLLOVER_CRITICAL"
 CLEAR_TRACKING_METADATA_KEY = "clear_tracking_uncertainty"
 SOCIAL_GROUPS_METADATA_KEY = "social_groups"
-# D-055: sub-millimetre displacements are standstill, independent of timestep.
-CURVATURE_MIN_DISPLACEMENT_M = 1e-3
-# Bound total turning on short paths without changing the turning numerator.
-CURVATURE_LENGTH_FLOOR_M = 1.0
+
+
+# Contracts declared by the metric implementations below. Runtime witnesses import
+# these identities from the executing metric module rather than release defaults.
+TTC_DEFINITION = {
+    "identity": "time_to_collision_min.center_distance_v1",
+    "geometry": "center_based",
+    "formula": "min(distance/relative_speed), dot(relative_velocity,displacement)>0",
+    "relative_speed_floor_m_s": 1e-9,
+    "ped_velocity": "finite_difference_post_step_positions/dt",
+}
+CLEARANCE_DEFINITION = {
+    "identity": "surface_clearance_v1",
+    "formula": "center_distance-robot_radius-pedestrian_radius",
+}
 
 
 @dataclass
@@ -1492,8 +1506,9 @@ def evaluate_stability_margin(
 
     A value of ``1.0`` indicates no lateral-acceleration load, while ``0.0`` means the
     estimated lateral acceleration is at or beyond the critical rollover threshold. Geometry
-    parameters follow the reviewer-supplied TWV proxy: rear track width ``t_w``, wheelbase
-    ``L``, center-of-gravity height ``h_c``, and CG distance from the front axle ``a``.
+    parameters follow the reviewer-supplied TWV proxy: track ``t_w`` of the axle with two
+    wheels, wheelbase ``L``, center-of-gravity height ``h_c``, and CG distance from the axle
+    with one wheel ``a``. The single wheel may be at the front or at the rear.
 
     Returns:
         Stability margin in ``[0.0, 1.0]`` or ``NaN`` when speed/yaw-rate samples are invalid.
@@ -3485,7 +3500,10 @@ def compute_all_metrics(  # noqa: PLR0913
             "Missing pedestrian force data; force-based metrics will be NaN.",
         )
 
-    values: dict[str, Any] = {"metric_schema_version": METRIC_SCHEMA_VERSION}
+    values: dict[str, Any] = {
+        "metric_schema_version": METRIC_SCHEMA_VERSION,
+        "metric_definitions_sha256": metric_definitions_sha256(),
+    }
     if isinstance(data.episode_metadata, dict):
         values["_episode_metadata"] = dict(data.episode_metadata)
     values.update(_compute_signal_metrics_block(data))

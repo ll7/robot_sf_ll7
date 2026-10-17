@@ -30,7 +30,11 @@ from robot_sf.benchmark.camera_ready._route_clearance import (
     _load_route_clearance_certifications,
     _route_clearance_warning_summary,
 )
-from robot_sf.benchmark.camera_ready._run_state import _git_context, _resolve_campaign_id
+from robot_sf.benchmark.camera_ready._run_state import (
+    _git_context,
+    _resolve_campaign_id,
+    _resolve_campaign_root,
+)
 from robot_sf.benchmark.camera_ready._summaries import (
     _build_amv_coverage_summary,
     _build_comparability_summary,
@@ -69,11 +73,10 @@ from robot_sf.benchmark.tuning_run_provenance import (
 from robot_sf.benchmark.utils import _config_hash
 from robot_sf.common.artifact_paths import (
     ensure_canonical_tree,
-    get_artifact_category_path,
     get_repository_root,
 )
 
-CAMPAIGN_SCHEMA_VERSION = "benchmark-camera-ready-campaign.v1"
+CAMPAIGN_SCHEMA_VERSION = "benchmark-camera-ready-campaign.v2"
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -589,12 +592,7 @@ def _setup_campaign_directories(
     """
     ensure_canonical_tree(categories=("benchmarks",))
     campaign_id = _resolve_campaign_id(cfg, label=label, campaign_id=campaign_id)
-    base_dir = (
-        output_root.resolve()
-        if output_root
-        else (get_artifact_category_path("benchmarks") / "camera_ready")
-    )
-    campaign_root = (base_dir / campaign_id).resolve()
+    campaign_root = _resolve_campaign_root(output_root=output_root, campaign_id=campaign_id)
     reports_dir = campaign_root / "reports"
     preflight_dir = campaign_root / "preflight"
     reports_dir.mkdir(parents=True, exist_ok=True)
@@ -1193,7 +1191,22 @@ def _build_manifest_execution_block(
     Returns:
         JSON-serializable manifest fields for planner and execution metadata.
     """
+    numerical = {}
+    if cfg.numerical_mode is not None:
+        from robot_sf._numerical_mode import (  # noqa: PLC0415
+            effective_numerical_mode,
+            initialize_pinned_torch,
+            validate_numerical_mode,
+        )
+
+        initialize_pinned_torch()
+        observed = effective_numerical_mode()
+        claim = {"mode": cfg.numerical_mode, "inference_dtype": "float64"}
+        # Actor dtype is verified from each learned arm's retained runtime evidence.
+        validate_numerical_mode(claim, {**observed, "inference_dtype": "float64"})
+        numerical = {"numerical_mode": claim, "numerical_kernel_context": observed}
     return {
+        **numerical,
         "planners": planner_entries,
         "tuning_effort_enforcement": cfg.tuning_effort_enforcement,
         "tuning_effort_summary": _tuning_effort_summary(cfg.planners),
@@ -1250,6 +1263,12 @@ def _build_campaign_manifest_payload(  # noqa: PLR0913
                 cfg.snqi_v2_spec.validate_evaluation_commitment(metadata["resolved_seeds"])
     return {
         **({"legacy_snqi": "excluded"} if cfg.snqi_weights_path is None else {}),
+        **(
+            {"snqi_v2": "pending_calibration"}
+            if getattr(cfg, "snqi_v2_binding", None) is not None
+            and getattr(cfg, "snqi_v2_spec", None) is None
+            else {}
+        ),
         **(
             {"metrics": cfg.snqi_v2_spec.provenance()} if getattr(cfg, "snqi_v2_spec", None) else {}
         ),

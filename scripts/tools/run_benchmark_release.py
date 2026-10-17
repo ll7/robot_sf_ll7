@@ -27,7 +27,11 @@ from robot_sf.benchmark.artifact_publication import (
     export_publication_bundle,
     verify_publication_bundle_preflight,
 )
-from robot_sf.benchmark.camera_ready._run_state import _campaign_id
+from robot_sf.benchmark.camera_ready._run_state import (
+    _campaign_id,
+    _normalize_campaign_id,
+    _resolve_campaign_root,
+)
 from robot_sf.benchmark.camera_ready_campaign import (
     load_campaign_config,
     prepare_campaign_preflight,
@@ -319,15 +323,10 @@ def _private_stress_launch() -> bool:
 
 def _fixed_campaign_root(*, output_root: Path | None, campaign_id: str) -> Path:
     """Resolve a fixed campaign directory without allowing path traversal."""
-    base = (
-        output_root.resolve()
-        if output_root is not None
-        else (get_artifact_category_path("benchmarks") / "camera_ready").resolve()
-    )
-    candidate = (base / campaign_id).resolve()
-    if not candidate.is_relative_to(base):
-        raise ReleaseResumeAdmissionError("campaign_id resolves outside the campaign output root")
-    return candidate
+    try:
+        return _resolve_campaign_root(output_root=output_root, campaign_id=campaign_id)
+    except ValueError as exc:
+        raise ReleaseResumeAdmissionError(str(exc)) from exc
 
 
 def _run_spawn_matrix_preflight(
@@ -417,16 +416,17 @@ def _admit_release_resume(
                 "resume receipt requires an explicit fixed campaign_id"
             )
         return None
+    campaign_id = _normalize_campaign_id(args.campaign_id)
     campaign_root = _fixed_campaign_root(
         output_root=args.output_root,
-        campaign_id=args.campaign_id,
+        campaign_id=campaign_id,
     )
     prior_execution = campaign_has_prior_execution(campaign_root)
     if not prior_execution and args.resume_receipt is None:
         return None
     receipt = validate_release_resume_admission(
         campaign_root=campaign_root,
-        campaign_id=args.campaign_id,
+        campaign_id=campaign_id,
         campaign_config_path=campaign_config_path,
         checkpoint_receipt_path=checkpoint_receipt_path,
         current_source_commit=_current_source_commit(),
@@ -1539,6 +1539,24 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
     resolved_manifest = build_resolved_release_manifest(manifest, **resolved_manifest_kwargs)
     if notes_receipt is not None:
         resolved_manifest["release_notes_gate"] = notes_receipt
+    try:
+        snqi_seed_receipt = _snqi_v2_evaluation_seed_receipt(cfg, manifest=manifest)
+    except ValueError as exc:
+        print(
+            json.dumps(
+                {
+                    "mode": args.mode,
+                    "status": "snqi_v2_evaluation_seeds_rejected",
+                    "status_reason": str(exc),
+                    "benchmark_success": False,
+                    "campaign_execution_status": "not_started",
+                    "evidence_status": "blocked",
+                    "release_exit_code": 2,
+                },
+                indent=2,
+            )
+        )
+        return 2
     if args.mode == "preflight":
         checkpoint_admission = _preflight_checkpoint_admission(args, cfg, manifest)
         if checkpoint_admission["status"] == "rejected":
@@ -1568,7 +1586,9 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
                 "Authoritative staged-checkpoint receipt admitted: submit_safe=true; "
                 "metadata-only checkpoint resolvability remains a diagnostic."
             )
-        campaign_id = args.campaign_id or _campaign_id(cfg, label=args.label)
+        campaign_id = _normalize_campaign_id(
+            args.campaign_id or _campaign_id(cfg, label=args.label)
+        )
         campaign_root = _fixed_campaign_root(
             output_root=args.output_root,
             campaign_id=campaign_id,
@@ -1607,6 +1627,7 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
         checkpoint_summary = prepared.get("checkpoint_preflight_summary", {})
         preflight_payload = {
             "mode": "preflight",
+            **snqi_seed_receipt,
             "manifest_validation": validation,
             "resolved_manifest": resolved_manifest,
             "spawn_matrix_preflight": spawn_preflight_summary,
@@ -1652,7 +1673,7 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
         "manifest_validation": validation,
         "resolved_manifest": resolved_manifest,
     }
-    result.update(_snqi_v2_evaluation_seed_receipt(cfg, manifest=manifest))
+    result.update(snqi_seed_receipt)
     if validation["status"] != "valid":
         result["benchmark_success"] = False
         result["status"] = "invalid_manifest"
@@ -1809,7 +1830,7 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
         else {"status": "fresh_campaign", "resume_same_campaign": False}
     )
 
-    campaign_id = args.campaign_id or _campaign_id(cfg, label=args.label)
+    campaign_id = _normalize_campaign_id(args.campaign_id or _campaign_id(cfg, label=args.label))
     campaign_root = _fixed_campaign_root(
         output_root=args.output_root,
         campaign_id=campaign_id,

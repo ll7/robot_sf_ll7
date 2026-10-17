@@ -257,6 +257,7 @@ def diagnose(campaign_root: Path) -> dict:
         episodes_sha256=digest,
         grid=CalibrationGrid(horizons, (1001, 1002), diagnostic=True),
         expected_algorithms=algorithms,
+        allow_historical_unbound=True,
     )
     document["calibration"]["episode_files_sha256"] = hashes
     document["calibration"]["episode_file_scope"] = (

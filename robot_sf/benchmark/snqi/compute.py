@@ -35,6 +35,7 @@ from typing import Any
 
 from robot_sf.benchmark.metric_definitions import (
     require_anchor_compatibility,
+    require_definitions_digest,
 )
 from robot_sf.benchmark.robot_force_contract import validate_robot_force_provenance
 from robot_sf.benchmark.snqi.types import SNQIWeights
@@ -256,6 +257,7 @@ def normalize_snqi_v2_terms(metrics: Metrics, spec: SnqiV2Spec) -> dict[str, flo
         Validated result described above.
     """
     require_anchor_compatibility(metrics, {"metric_schema_version": spec.metric_schema_version})
+    require_definitions_digest(metrics, spec.metric_definitions_sha256)
     validate_robot_force_provenance(metrics, spec.force_source)
 
     def required(name: str) -> float:

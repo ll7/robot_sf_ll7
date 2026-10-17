@@ -1,5 +1,5 @@
 version: 1
-updated_at: 2026-10-06
+updated_at: 2026-09-30
 policy: context-catalog.v1
 description: 'Machine-readable catalog for the current retrieval-first context index.
   This is not a full inventory of docs/context; it covers curated entry points from
@@ -20,6 +20,38 @@ freshness_values:
   policy: Durable policy boundary; update only when the policy changes.
   evidence: Evidence pointer or manifest; preserve provenance and checksums when applicable.
 entries:
+- path: docs/context/guard_escape_ablation/README.md
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/guard_escape_ablation/SHA256SUMS
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/robsweep/README.md
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/robsweep/evidence/SHA256SUMS
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_10089_metric_oracle_audit.md
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_10089_metric_oracle_audit.md.review.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_10089_metric_oracle_mutations.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_10089_metric_oracle_mutations.json.review.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
 - path: docs/context/evidence/issue_10007_fxb/README.md
   status: evidence
   freshness: evidence
@@ -5720,6 +5752,10 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/issue_9545_narrow_doorway_crash_vs_wait
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
 - path: docs/context/evidence/raycast_numba_toggle_2026-08-14
   status: evidence
   freshness: evidence
@@ -8105,10 +8141,46 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
-- path: docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9
+- path: docs/context/evidence/scenario_authoring_0_1_0.json
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/scenario_authoring_0_1_0_bytes.csv
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/scenario_authoring_0_1_0_speeds.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/scenario_authoring_0_1_0.json.review.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/scenario_authoring_0_1_0_bytes.csv.review.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/scenario_authoring_0_1_0_speeds.json.review.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/scenario_authoring_0_1_0_empty_world.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/scenario_authoring_0_1_0_empty_world.json.review.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_10233_pinned_numerical_mode
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/ppo_wall_probe_dev_20261012
+  status: evidence
+  freshness: evidence
+  area: training_evidence
 - path: docs/context/evidence/issue_10000_pedsweep_20261006
   status: evidence
   freshness: evidence

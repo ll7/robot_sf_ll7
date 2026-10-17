@@ -218,6 +218,29 @@ def _missing_zone_kinds(map_def: MapDefinition) -> list[str]:
     return missing
 
 
+def inspect_pedestrian_completion_risks(svg_path: Path, threshold_m: float = 1.0) -> list[dict]:
+    """Flag earlier pedestrian segments entering the final endpoint's completion disk.
+
+    This is an authoring diagnostic, not a route rejection: ordered runtime progress
+    makes loops legal. The final segment itself is deliberately excluded.
+    """
+    definition = SvgMapConverter(str(svg_path)).get_map_definition()
+    findings = []
+    for index, route in enumerate(definition.ped_routes):
+        for segment, (start, end) in enumerate(pairwise(route.waypoints[:-1])):
+            distance = LineString([start, end]).distance(Point(route.waypoints[-1]))
+            if distance <= threshold_m:
+                findings.append(
+                    {
+                        "route": index,
+                        "segment": segment,
+                        "distance_m": distance,
+                        "threshold_m": threshold_m,
+                    }
+                )
+    return findings
+
+
 def inspect_map_geometry(
     svg_path: Path, tolerance_m: float = DEFAULT_TOLERANCE_M
 ) -> MapGeometryReport:
@@ -444,11 +467,22 @@ def _release_actors(
     return actors
 
 
-def inspect_release_zones(matrices=RELEASE_MATRICES) -> list[dict]:
+def _robot_endpoint_evidence(config, endpoint_policy: str) -> dict:
+    """Keep historical fingerprints exact; bind both radii for the new policy."""
+    if endpoint_policy == "pedestrian_radius_v1":
+        return {}
+    return {"robot_radius_m": float(config.robot_config.radius), "endpoint_policy": endpoint_policy}
+
+
+def inspect_release_zones(
+    matrices=RELEASE_MATRICES, *, endpoint_policy: str = "robot_pedestrian_radii_v2"
+) -> list[dict]:
     """Audit every full robot rectangle against resolved actors, without stepping.
 
     Use the scenario loader so YAML actor/route overrides and geometry contracts
-    are applied. Distance <= pedestrian radius includes tangency and round endcaps.
+    are applied. The default compares centre-support distance to the sum of robot
+    and pedestrian radii, including tangency. ``pedestrian_radius_v1`` reproduces
+    the historical 0.0.8 audit and its exact dispositions.
     Report dormant crowd zones too: zero density is a disposition, not an omission.
     The nominal lane test is geometric; it makes no dynamic collision claim.
     """
@@ -457,6 +491,8 @@ def inspect_release_zones(matrices=RELEASE_MATRICES) -> list[dict]:
         load_scenarios,
     )
 
+    if endpoint_policy not in {"pedestrian_radius_v1", "robot_pedestrian_radii_v2"}:
+        raise ValueError(f"Unknown endpoint policy: {endpoint_policy!r}")
     rows = []
     for matrix in matrices:
         matrix = Path(matrix).resolve()
@@ -465,6 +501,8 @@ def inspect_release_zones(matrices=RELEASE_MATRICES) -> list[dict]:
             if config.map_pool is None or not config.map_pool.map_defs:
                 raise ValueError(f"Missing map for {scenario['name']}")
             radius = float(config.sim_config.ped_radius)
+            footprint_evidence = _robot_endpoint_evidence(config, endpoint_policy)
+            robot_radius = footprint_evidence.get("robot_radius_m", 0.0)
             for map_id, definition in sorted(config.map_pool.map_defs.items()):
                 actors = _release_actors(
                     definition,
@@ -482,12 +520,13 @@ def inspect_release_zones(matrices=RELEASE_MATRICES) -> list[dict]:
                             distance = rectangle.distance(shape)
                             # Decimal contacts can round upward (4.9 - 4.5 > 0.4).
                             # A nanometre allowance conservatively includes that contact.
-                            if distance > radius + 1e-9:
+                            if distance > radius + robot_radius + 1e-9:
                                 continue
                             evidence = {
                                 "zone_wkt": rectangle.wkt,
                                 "actor_wkt": shape.wkt,
                                 "ped_radius_m": radius,
+                                **footprint_evidence,
                                 **detail,
                             }
                             fingerprint = hashlib.sha256(
@@ -571,10 +610,21 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Audit all 48 release scenarios and three doorway widths.",
     )
+    parser.add_argument(
+        "--endpoint-policy",
+        choices=("pedestrian_radius_v1", "robot_pedestrian_radii_v2"),
+        default="robot_pedestrian_radii_v2",
+        help="Use pedestrian_radius_v1 only to reproduce the historical audit.",
+    )
+    parser.add_argument(
+        "--ped-route-completion",
+        action="store_true",
+        help="Report earlier pedestrian segments within 1 m of their endpoint.",
+    )
     args = parser.parse_args(argv)
 
     if args.release_zones:
-        rows = inspect_release_zones()
+        rows = inspect_release_zones(endpoint_policy=args.endpoint_policy)
         print(json.dumps(rows, indent=2))
         if args.waiver_file is None:
             print("ERROR: --release-zones requires --waiver-file", file=sys.stderr)
@@ -587,6 +637,20 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     paths = [Path(p) for p in args.map] or [Path(p) for p in DEFAULT_MAPS]
+    if args.ped_route_completion:
+        print(
+            json.dumps(
+                [
+                    {
+                        "map": canonical_repo_path(str(p)),
+                        "findings": inspect_pedestrian_completion_risks(p),
+                    }
+                    for p in paths
+                ],
+                indent=2,
+            )
+        )
+        return 0
     reports = [inspect_map_geometry(p, args.tolerance_m) for p in paths]
     total = sum(r.violations for r in reports)
 

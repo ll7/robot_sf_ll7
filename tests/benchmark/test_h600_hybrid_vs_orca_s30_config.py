@@ -142,6 +142,10 @@ def test_h600_hybrid_vs_orca_s30_loader_detects_authored_source_delta() -> None:
             row["simulation_config"]["max_episode_steps"] == binding["authored_max_episode_steps"]
         )
         row["metadata"].pop("campaign_horizon")
+        # Group authoring belongs to the 0.1.0 source, not this historical pin.
+        for ped in row.get("single_pedestrians", []):
+            ped.pop("initial_group_id", None)
+            ped.pop("join_radius_m", None)
     overtaking = next(
         row for row in authored_inputs if row["name"] == "francis2023_pedestrian_overtaking"
     )

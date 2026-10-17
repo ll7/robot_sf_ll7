@@ -243,9 +243,9 @@
       "description": "Provenance classification that keeps raw output ignored and binds the compact tracked evidence surfaces.",
       "kind": "artifact_provenance",
       "path": "docs/context/evidence/issue_6962_lane_formation_sensitivity/artifact_provenance.json",
-      "sha256": "f3abce3c42354c20f7a812a0c6e1d6912fca1ed5330f446cc5213072c27f1beb",
+      "sha256": "db61686bce3085aa678804b954a6f0d0596f39a74435af9fea8cc0d5a6840050",
       "source_id": "lane_formation_provenance",
-      "tracked_commit": "c7a271e3110f1562207744b5b0fc4d7e7108c38b"
+      "tracked_commit": "9504648bbe93a399f79962897e81176c61043014"
     },
     {
       "command": "uv run python scripts/validation/run_issue_6969_lane_formation_reference.py --output-dir output/diagnostics/issue_6962_threshold_reference_20260814 --generated-at 2026-08-14T00:00:00Z",

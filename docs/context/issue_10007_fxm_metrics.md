@@ -316,9 +316,10 @@ All nine records validate the episode schema; references recomputed from the fin
 implementation match exactly (three cache misses, six hits).
 
 The continuous polygon references are lower than the review's sampled Theta*
-estimates: those used grid/inflation approximations. The analytic obstacle regression
-pins `sqrt(10)+4` m rather than the 9.16 m point reference; the actual producer regression
-pins the same 7 m open-map zone reference for efficiency and ideal time.
+estimates: those used grid approximations only (default Theta* has no inflation). The
+analytic obstacle regression pins `sqrt(10)+4` m rather than the 9.16 m point reference;
+the actual producer regression pins the same 7 m open-map zone reference for efficiency
+and ideal time.
 
 | Episode | Deadlock before → after | Stall windows | Efficiency before → after | Reference m before → after |
 |---|---|---|---|---|

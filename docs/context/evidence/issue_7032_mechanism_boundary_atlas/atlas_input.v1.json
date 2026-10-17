@@ -199,7 +199,7 @@
         {
           "path": "docs/context/evidence/issue_6951_progress_shaped_ablation/artifact_provenance.json",
           "role": "ignored-output provenance boundary",
-          "sha256": "eb5f85f0148e5f82919c3c1cbe65e8079129342ca5db4634e1bc2dfd08fe5406",
+          "sha256": "9fd4ec2dad6c7064fade248762ac71639070c48c60de5f17063e132adad359cc",
           "status": "available"
         }
       ],
@@ -298,7 +298,7 @@
         {
           "path": "docs/context/evidence/issue_6962_lane_formation_sensitivity/artifact_provenance.json",
           "role": "lane-formation ignored-output provenance boundary",
-          "sha256": "f3abce3c42354c20f7a812a0c6e1d6912fca1ed5330f446cc5213072c27f1beb",
+          "sha256": "db61686bce3085aa678804b954a6f0d0596f39a74435af9fea8cc0d5a6840050",
           "status": "available"
         }
       ],

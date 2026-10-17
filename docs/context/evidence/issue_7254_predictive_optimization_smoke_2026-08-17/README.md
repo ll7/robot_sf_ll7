@@ -37,12 +37,12 @@ FP32/loader/AMP smoke. It supersedes the original PR #7263 handoff for provenanc
 | `amp_loader` | 2 | 22,104.56 | 17,344,000 | equivalent |
 
 Terminal classification: `equivalent_smoke`. All six checkpoints passed strict model loading.
-The complete compact machine-readable handoff is [`summary.json`](summary.json); the raw logs,
-checkpoints, and fixture remain ignored worktree-local output as documented in
-[`artifact_provenance.json`](artifact_provenance.json).
+The complete compact machine-readable handoff is [`summary.json`](summary.json). Raw logs,
+checkpoints, and the fixture were disposable worktree-local scratch and are unavailable, with no
+durable retrieval pointer, as documented in [`artifact_provenance.json`](artifact_provenance.json).
 
 ## Reproduction
 
 Run `scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/training/run_predictive_optimization_smoke.py`
 with `--config configs/training/predictive/predictive_optimization_smoke_issue_7254.yaml` and a
-fresh `--output-root`; the complete command is preserved in `summary.json`.
+fresh `--output-root <scratch-root>`; `summary.json` preserves this as a reproduction template.

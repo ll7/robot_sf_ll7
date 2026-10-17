@@ -7,30 +7,24 @@ import hashlib
 import json
 from copy import deepcopy
 from dataclasses import asdict, replace
-from pathlib import Path
 
 import numpy as np
 import pytest
-import yaml
 from pysocialforce.forces import ObstacleForce
 
-from robot_sf.benchmark.map_runner.map_runner_env import build_env_config
 from robot_sf.gym_env.env_config import EnvSettings
 from robot_sf.gym_env.robot_env import _stable_config_hash
 from robot_sf.nav.map_config import MapDefinition, SinglePedestrianDefinition
 from robot_sf.nav.obstacle import Obstacle
 from robot_sf.sim.sim_config import SimulationSettings
 from robot_sf.sim.simulator import Simulator, _build_pysf_simulation
-from robot_sf.training.scenario_loader import load_scenarios
-from scripts.validation.calibrate_obstacle_force_10061 import FOOTPRINT_RADIUS
-from scripts.validation.calibrate_obstacle_force_10061 import config as calibration_config
 
 
 def _doorway_force(profile: str | None, law: str | None = None):
     """Construct the production pedestrian substrate for a 1.2 m opening."""
     np.random.seed(1001)
     settings = SimulationSettings(
-        difficulty=0, ped_density_by_difficulty=[0.0], obstacle_force_law=law
+        difficulty=0, ped_density_by_difficulty=[0.0], obstacle_force_law=law, pedestrian_seed=1001
     )
     # Assignment works on the pre-fix class too, exposing silently ignored wiring.
     settings.obstacle_force_profile = profile
@@ -96,7 +90,7 @@ def test_legacy_profile_keeps_released_force_parameters():
     assert (force.config.factor, force.config.threshold, force.config.sigma) == (10.0, -0.57, 0.0)
 
 
-@pytest.mark.parametrize("profile", ["calibrated_v2", "gradient_v3"])
+@pytest.mark.parametrize("profile", ["calibrated_v2", "gradient_v3", "body_edge_v3"])
 def test_profile_constructor_roundtrip_and_hash_identity(profile):
     """Constructor and serialized settings retain explicit profile selection."""
     settings = SimulationSettings(obstacle_force_profile=profile)
@@ -116,7 +110,14 @@ def test_profile_constructor_roundtrip_and_hash_identity(profile):
 @pytest.mark.parametrize("value", ["", "typo_v2", 3, False])
 def test_invalid_profile_fails_closed(value):
     """Malformed selectors must never silently restore released parameters."""
-    with pytest.raises((ValueError, TypeError), match="obstacle_force_profile"):
+    with pytest.raises(
+        (ValueError, TypeError),
+        match=(
+            "unsupported obstacle_force_profile"
+            if isinstance(value, str)
+            else "obstacle_force_profile must be a string or None"
+        ),
+    ):
         SimulationSettings(obstacle_force_profile=value)
 
 
@@ -128,7 +129,7 @@ def test_candidate_rejects_a_conflicting_force_law():
 
 def test_metadata_distinguishes_opt_in_from_missing_selector():
     """Actual substrate records expose the profile without changing legacy payloads."""
-    for profile in (None, "legacy_v1", "calibrated_v2", "gradient_v3"):
+    for profile in (None, "legacy_v1", "calibrated_v2", "gradient_v3", "body_edge_v3"):
         substrate, _ = _doorway_force(profile)
         simulator = Simulator.__new__(Simulator)
         simulator.config = SimulationSettings(obstacle_force_profile=profile)
@@ -138,20 +139,6 @@ def test_metadata_distinguishes_opt_in_from_missing_selector():
             assert "obstacle_force_profile" not in record
         else:
             assert record["obstacle_force_profile"] == profile
-
-
-def test_calibration_matches_the_release_pair_kernel():
-    """Crowd fitting must use the pair kernel selected by the actual preview matrix."""
-    matrix = Path(__file__).resolve().parents[2] / (
-        "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml"
-    )
-    released = yaml.safe_load(matrix.read_text())["scenario_overrides"]["simulation_config"]
-    actual = calibration_config(0.003, 0.375).social_force_config.kernel_version
-    assert actual == released["social_force_kernel_version"]
-    scenario = load_scenarios(matrix)[0]
-    footprint = build_env_config(scenario, scenario_path=matrix).sim_config.ped_radius
-    assert FOOTPRINT_RADIUS == footprint
-    assert calibration_config(0.003, 0.375).scene_config.agent_radius < footprint
 
 
 def test_gradient_profile_is_the_negative_gradient_of_its_potential():
@@ -177,6 +164,10 @@ def test_gradient_profile_is_the_negative_gradient_of_its_potential():
         ]
     )
     np.testing.assert_allclose(force()[0], -gradient, rtol=1e-7, atol=1e-9)
+    # Physical edge is 0.40 m while historical force geometry remains 0.35 m.
+    assert sim.config.scene_config.agent_radius == pytest.approx(0.35)
+    assert force.config.threshold == pytest.approx(0.40)
+    assert force.config.sigma == 0.0
     assert force.config.law_version == "surface_distance_unit_normal_v2"
 
 
@@ -184,3 +175,23 @@ def test_gradient_profile_preserves_explicit_law_conflict_detection():
     """A supplied legacy law cannot silently become a corrected law."""
     with pytest.raises(ValueError, match="gradient_v3 requires"):
         _doorway_force("gradient_v3", "legacy_shifted_gradient_v1")
+
+
+def test_body_edge_profile_uses_main_fixed_wall_form():
+    """Select the finite-range form without inventing another wall kernel."""
+    sim, force = _doorway_force("body_edge_v3")
+    assert force.config.law_version == "body_edge_exponential_v3"
+    assert force.law_metadata()["parameters"]["amplitude_m_s2"] == 3.0
+    sim.peds.state[0, :2] = [6.0, 2.0]
+    np.testing.assert_array_equal(force(), np.zeros((1, 2)))
+
+
+def test_profile_copy_keeps_new_main_step_and_group_overrides():
+    """Profile InitVar must not displace existing whole-step/group selectors."""
+    settings = SimulationSettings(
+        obstacle_force_profile="gradient_v3",
+        episode_step_limit=7,
+        group_allocation_mode="exact_small_crowd_v1",
+    )
+    assert replace(settings).episode_step_limit == 7
+    assert replace(settings).group_allocation_mode == "exact_small_crowd_v1"

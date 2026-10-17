@@ -31,7 +31,7 @@ TEST_MODULE = REPO_ROOT / "tests" / "test_optional_import_guard_inventory.py"
 NOTES = {
     "ImportError+PermissionError": (
         "PR #10005: optional MoviePy discovery can fail on an unreadable ancestor .env; "
-        "only the encoder import boundary treats permission denial as unavailable."
+        "the four MoviePy import boundaries treat permission denial as unavailable."
     ),
     "ImportError": (
         "Pure optional-import. Prefer "

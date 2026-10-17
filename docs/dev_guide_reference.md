@@ -101,6 +101,19 @@ and excludes optional-only test paths listed in `tests/support/optional_test_all
 Probe failures, malformed JSON, unknown exit codes, and status/exit-code disagreements are
 preflight-tool failures and never receive the missing-extra install guidance.
 
+The extended readiness lane uses Git name-status records so deletion-only changes and both
+endpoints of a rename can select the lane without passing removed paths to pytest or formatting.
+Its impact roots are `robot_sf/`, `configs/`, `maps/`, `scripts/validation/`, `tests/validation/`,
+and `tests/maps/`. The uncovered validation and map tests also depend on
+`fast-pysf/pysocialforce/` and the root or nested package/lock manifests (`pyproject.toml`,
+`uv.lock`, `fast-pysf/pyproject.toml`, and `fast-pysf/uv.lock`), so those paths select the same
+lane. `fast-pysf/tests/`, documentation, examples, benchmarks, and maps stay on their existing
+lanes. Each readiness run records the extended-lane decision and its impact-path reason in
+`output/validation/pr_ready/lane_coverage.txt`.
+The validation and map roots remain declared impact roots even when a change removes their last
+tracked file. In that case readiness records the required impact and a no-surviving-tests
+disposition without passing nonexistent roots to pytest.
+
 ### Claim-map validation
 
 The fast-results claim map is an executable issue queue, not only a context note. Before changing
@@ -793,6 +806,32 @@ Until these toggles are applied, the workflow does not provide the queue-side co
 in-repo `gh-pr-merger` preflight remains binding for guarded merges. Enabling GitHub's native merge
 queue itself also requires maintainer approval to toggle branch-protection settings, consistent
 with the gate-side rationale above.
+
+**Measured configuration, rechecked read-only on 2026-10-16 (issue #10398).** The queue
+requirements above are not active. Read both enforcement surfaces and the bypass policy before
+assuming a merge is guarded:
+
+| Surface | What the snapshot establishes |
+| --- | --- |
+| GitHub, on `main` | No classic branch protection (`GET /branches/main/protection` → 404). The active `main-protection` ruleset (ID `18917814`) requires exactly **`ty-advisory-ratchet`** and **`pr-contract-check`** for non-bypassing actors. It has an always-bypass actor: `actor_type: RepositoryRole`, `actor_id: 5`, `bypass_mode: always`; the authenticated reader reports `current_user_can_bypass: always`. There is no `merge_queue` rule. The workflow-run API returns zero retained `merge_group` runs; this does not rule out deleted historical runs. |
+| Local, `scripts/dev/single_account_merge_receipt.py` | Treats `merge-queue-gate` as required, so `gh_pr_merge.sh` refuses a merge until this job completes. Issue #10398 reports the historical PR #10215 receipt: `required_check_merge-queue-gate_pending`, `status: blocked`. This is not a fresh reproduction of that PR's receipt. |
+
+Two consequences follow from this configuration:
+
+- **`merge-queue-gate` is required by the local merger, but absent from GitHub's required-check
+  set.** Its absence alone therefore does not block a merge under the measured GitHub ruleset.
+  The local fail-closed preflight applies to merges made through `gh_pr_merge.sh`; this observation
+  does not establish enforcement on other merge paths.
+- **GitHub requires the behaviour-change receipt gate, `pr-contract-check`, for non-bypassing
+  actors.** The [dated #10307 reconciliation](https://github.com/ll7/robot_sf_ll7/issues/10307#issuecomment-6191388572)
+  reported failures on 39 of 52 open non-draft PRs on 2026-10-15. This is a historical report,
+  not a current count. Such failures block non-bypassing merges under this ruleset; the active
+  always-bypass actor means they do not establish that those PRs are unmergeable through every path.
+
+The residual for #6274 is stated against the *measured* configuration, including its bypass,
+not the intended one. Two changes remain maintainer decisions and are tracked in #10398: activate
+the queue as documented above, or align `single_account_merge_receipt.py` with the checks GitHub
+actually requires. This documentation correction changes no repository setting, ruleset, or protection.
 
 ### Single-account merge receipt (issue #7669)
 

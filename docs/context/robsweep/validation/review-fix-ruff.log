@@ -1,0 +1,6 @@
+Shared-venv scratch preflight passed: path=/tmp available=525602860KiB required=1048576KiB
+Shared-venv tool freshness preflight passed: tool=ruff resolved=0.16.10 pin==0.16.10 elapsed_ms=43 venv=<environment-path>
+All checks passed!
+Shared-venv scratch preflight passed: path=/tmp available=525602856KiB required=1048576KiB
+Shared-venv tool freshness preflight passed: tool=ruff resolved=0.16.10 pin==0.16.10 elapsed_ms=40 venv=<environment-path>
+7672 files already formatted

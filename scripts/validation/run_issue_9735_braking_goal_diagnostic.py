@@ -10,6 +10,7 @@ import math
 import subprocess
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any, cast
 
 import numpy as np
 import yaml
@@ -39,6 +40,7 @@ def _sha(path: Path) -> str:
 
 def _hybrid_case() -> dict:
     drive = DifferentialDriveSettings()
+    deceleration = cast("float", drive.max_linear_decel)
     v3 = HybridRuleLocalPlannerAdapter(
         build_hybrid_rule_local_planner_config(yaml.safe_load(V3.read_text()))
     )
@@ -69,13 +71,9 @@ def _hybrid_case() -> dict:
                 "center_distance_m": center,
                 "clean_v4_cap_mps": clean_cap,
                 "mutant_v3_cap_mps": mutant_cap,
-                "clean_stopping_distance_m": stopping_distance(
-                    clean_cap, drive.max_linear_decel, 0.1
-                ),
-                "mutant_stopping_distance_m": stopping_distance(
-                    mutant_cap, drive.max_linear_decel, 0.1
-                ),
-                "clean_level": v4._last_v4_speed_safety["level"],
+                "clean_stopping_distance_m": stopping_distance(clean_cap, deceleration, 0.1),
+                "mutant_stopping_distance_m": stopping_distance(mutant_cap, deceleration, 0.1),
+                "clean_level": cast("dict[str, Any]", v4._last_v4_speed_safety)["level"],
             }
         )
     near, far = rows

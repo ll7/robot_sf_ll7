@@ -54,8 +54,9 @@ merged #9873; it is not outstanding implementation work for this PR.
 **Historical recipe; blocked under the current seed policy.** Some producers
 use the sealed legacy seed schedule. Do not execute these commands for a current
 validation run. A separately authorized replay must use a versioned development
-seed artifact and preserve this original report. No producer or simulator was
-rerun during the 2026-10-17 takeover.
+seed artifact and preserve this original report. No full producer CLI, sealed-seed trace, simulator episode or campaign was
+rerun during the 2026-10-17 takeover. The typing check below repeats only
+seed-free component calls and does not regenerate the historical matrix.
 
 The four source scripts and the compactor are tracked under
 `scripts/validation/`. Use the shared-venv wrapper from the repository root
@@ -101,8 +102,12 @@ their own evidence.
 
 ## Takeover status — 2026-10-17
 
-Main was merged normally. The JSON, its existing review-marker sidecar, and all
-four replay/compaction scripts retain their original bytes. The sidecar binds
+Main was merged normally. The JSON and its existing review-marker sidecar
+retain their original bytes. Two producer scripts later received typing-only
+fixture-boundary repairs; the original producer blobs for all historical hash
+checks remain available at `404ad70b26f62199fb3a035a54e14ff6003291f0`. This
+reference supplies identical recorded bytes and does not replace the actual
+recorded packet execution head. The geometry producer and compactor are unchanged. The sidecar binds
 JSON SHA-256 `1b9b111a187e523ef98527a28713c11c5dd992b56f1a996ee945832119f7bffb`.
 The older PR description named another artifact; this note and the current
 matrix are authoritative for the historical source and packet identities.
@@ -115,3 +120,10 @@ remains pending; the earlier bounded review does not approve this changed head.
 The disabled-force expectation/roster gate, current-source permitted-seed replay,
 candidate-wide receipts and independent acceptance remain outside the supplied
 historical fixture proof. No nominal or release evidence is admitted.
+
+
+Hosted typing follow-up: explicit structural-fixture boundaries and optional
+value annotations remove the nine new producer diagnostics. The pinned full type
+ratchet passes with no baseline increase. All three seed-free wall-force,
+pedestrian-force and braking component outputs are byte-identical before/after
+the repair. These calls create no seeded episode or replacement matrix.

@@ -9,6 +9,7 @@ import json
 import subprocess
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any, cast
 
 import numpy as np
 
@@ -107,18 +108,26 @@ class _Peds:
         return 1
 
 
+def _no_forces(sim: object, config: object) -> list[Any]:
+    """Return no unrelated forces for the bounded factory fixture."""
+    del sim, config
+    return []
+
+
 def _pedestrian_case() -> dict:
     peds = _Peds()
     robot = SimpleNamespace(pos=(0.0, 0.0), config=SimpleNamespace(radius=1.0))
     original = simulator_module.pysf_make_forces
-    simulator_module.pysf_make_forces = lambda _sim, _config: []
+    # Only this bounded factory probe replaces the unrelated force factory.
+    cast("Any", simulator_module).pysf_make_forces = _no_forces
     try:
-        variants = {}
+        variants: dict[str, dict[str, Any]] = {}
         for label, active in (("clean", True), ("mutant", False)):
             forces = simulator_module._make_ped_forces(
-                sim=SimpleNamespace(peds=peds),
-                config=SimpleNamespace(),
-                robots=[robot],
+                # These minimal structural fixtures exercise only factory wiring.
+                sim=cast("Any", SimpleNamespace(peds=peds)),
+                config=cast("Any", SimpleNamespace()),
+                robots=cast("Any", [robot]),
                 peds_have_obstacle_forces=True,
                 prf_config=PedRobotForceConfig(
                     is_active=active,
@@ -139,7 +148,7 @@ def _pedestrian_case() -> dict:
             reduced = robot_force_reductions(force_xy.reshape(1, 1, 2), dt=0.1, reference=1.0)
             variants[label] = {
                 "prf_active": active,
-                "component_ids": [component.component_id for component in components],
+                "component_ids": [cast("Any", component).component_id for component in components],
                 "force_xy": force_xy.tolist(),
                 "impulse_total": reduced["robot_force_impulse_total"],
                 "metrics_validator_pass": True,

@@ -53,15 +53,16 @@ def test_resolution_refuses_reset_pool_selection_overlap(tmp_path: Path) -> None
 
 
 @pytest.mark.parametrize("band", ["current", "retired"])
-def test_resolution_refuses_sealed_interior_in_reset_pool(tmp_path: Path, band: str) -> None:
+def test_resolution_refuses_sealed_interior_in_reset_pool(
+    tmp_path: Path, band: str, monkeypatch
+) -> None:
     """Reject both protected bands, including unlisted points in the current interval."""
-    interior = (
-        min(seed_bands.EVAL_SEEDS_0_0_8) + 1
-        if band == "current"
-        else min(seed_bands.RETIRED_EVAL_SEEDS_0_0_7) + 1
-    )
-    if band == "current":
-        assert interior not in seed_bands.EVAL_SEEDS_0_0_8
+    # Synthetic policy double: no protected identity is evaluated or emitted.
+    # seed-holdout: synthetic-fixture begin
+    monkeypatch.setattr(seed_bands, "EVAL_SEEDS_0_0_8", (100050, 100060))
+    monkeypatch.setattr(seed_bands, "RETIRED_EVAL_SEEDS_0_0_7", frozenset({100070, 100071}))
+    interior = 100051 if band == "current" else 100071
+    # seed-holdout: synthetic-fixture end
     path = _config(tmp_path, [interior])
     with pytest.raises(ValueError, match="training.*sealed"):
         train_ppo.load_expert_training_config(path)
@@ -124,9 +125,12 @@ def test_range_resolution_refuses_actual_heldout_overlap(tmp_path: Path, split: 
         train_ppo.load_expert_training_config(path)
 
 
-def test_range_resolution_refuses_sealed_interior(tmp_path: Path) -> None:
+def test_range_resolution_refuses_sealed_interior(tmp_path: Path, monkeypatch) -> None:
     """A one-value range inside the sealed interval fails before simulation."""
-    interior = min(seed_bands.EVAL_SEEDS_0_0_8) + 1
+    # seed-holdout: synthetic-fixture begin
+    monkeypatch.setattr(seed_bands, "EVAL_SEEDS_0_0_8", (100050, 100060))
+    interior = 100051
+    # seed-holdout: synthetic-fixture end
     path = _range_config(tmp_path, training_seed_range=[interior, interior])
     with pytest.raises(ValueError, match="training seed range overlaps sealed"):
         train_ppo.load_expert_training_config(path)

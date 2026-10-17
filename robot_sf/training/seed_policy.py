@@ -32,10 +32,13 @@ def _sealed(seed: int) -> bool:
     Returns:
         Whether the identity is protected.
     """
+    # Boundary metadata only; these identities are never used for simulation.
+    # seed-holdout: setup-only begin
     return (
         min(seed_bands.EVAL_SEEDS_0_0_8) <= seed <= max(seed_bands.EVAL_SEEDS_0_0_8)
         or seed in seed_bands.RETIRED_EVAL_SEEDS_0_0_7
     )
+    # seed-holdout: setup-only end
 
 
 @dataclass(frozen=True)
@@ -65,6 +68,8 @@ class TrainingSeedPolicy:
         if low > high:
             raise ValueError("training_seed_range start must not exceed end")
         master = _integer(master_seed)
+        # Boundary metadata only; reject a range before constructing an environment.
+        # seed-holdout: setup-only begin
         if any(
             low <= end and start <= high
             for start, end in (
@@ -76,6 +81,7 @@ class TrainingSeedPolicy:
             )
         ):
             raise ValueError("training seed range overlaps sealed seeds")
+        # seed-holdout: setup-only end
         validate_seed_splits((), selection_seeds, evaluation_seeds)
         for label, seeds in (("selection", selection_seeds), ("evaluation", evaluation_seeds)):
             if any(low <= _integer(seed) <= high for seed in seeds):

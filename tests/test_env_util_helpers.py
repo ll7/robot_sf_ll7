@@ -192,7 +192,7 @@ def test_robot_env_hash_preserves_legacy_goal_sampling_identity() -> None:
 
 
 def test_robot_env_missing_wall_selector_matches_legacy_identity_byte_for_byte() -> None:
-    """The 0.1.0 default must retain the independently pinned historical hash."""
+    """Missing and explicit legacy wall selectors retain the same pinned identity."""
     cfg = EnvSettings(
         map_pool=MapDefinitionPool(maps_folder="fixture", map_defs={"fixture": _minimal_map_def()})
     )
@@ -200,7 +200,9 @@ def test_robot_env_missing_wall_selector_matches_legacy_identity_byte_for_byte()
         sim_config=SimulationSettings(obstacle_force_law=LEGACY_SHIFTED_GRADIENT_V1),
         map_pool=MapDefinitionPool(maps_folder="fixture", map_defs={"fixture": _minimal_map_def()}),
     )
-    assert _stable_config_hash(cfg).encode("ascii") == b"d280527b83ce075c"
+    # ab3c014bd (merged by 408ffb1ba, #10278) renamed serialized rollover fields;
+    # dae7470d0 (#10295) integrated that identity change with the wall-law pins.
+    assert _stable_config_hash(cfg).encode("ascii") == b"c8ac3dfe358aac1e"
     assert _stable_config_hash(cfg).encode("ascii") == _stable_config_hash(explicit_legacy).encode(
         "ascii"
     )
@@ -209,15 +211,19 @@ def test_robot_env_missing_wall_selector_matches_legacy_identity_byte_for_byte()
 
 
 def test_robot_env_hash_pins_explicit_body_edge_wall_identity() -> None:
-    """Opting into the corrected law changes identity without moving legacy hashes."""
+    """Explicit body-edge walls have a pinned identity independent of goal-policy spelling."""
     cfg = EnvSettings(
         sim_config=SimulationSettings(obstacle_force_law="body_edge_exponential_v3"),
         map_pool=MapDefinitionPool(maps_folder="fixture", map_defs={"fixture": _minimal_map_def()}),
     )
-    assert _stable_config_hash(cfg) == "f6c4a0545697161d"
+    # ab3c014bd (#10278) renamed serialized rollover fields to
+    # two_wheel_axle_track_m and single_wheel_axle_to_cog_m; dae7470d0 (#10295)
+    # integrated that identity change without updating this pin.
+    # The geometry values and wall law did not change; the config identity did.
+    assert _stable_config_hash(cfg) == "e4bcf1d2f4d295af"
 
     cfg.sim_config.robot_goal_sampling_policy = ROBOT_GOAL_SAMPLING_LEGACY_V1
-    assert _stable_config_hash(cfg) == "f6c4a0545697161d"
+    assert _stable_config_hash(cfg) == "e4bcf1d2f4d295af"
 
 
 def test_robot_env_hash_changes_for_corrected_goal_sampling_policy() -> None:

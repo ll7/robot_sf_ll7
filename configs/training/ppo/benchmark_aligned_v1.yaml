@@ -1,0 +1,45 @@
+# Launch through scripts/training/train_ppo_benchmark_aligned.py.
+# Sampling consumes PR #10324; main may preflight but must refuse training without it.
+# Reward and optimisation are inherited; reward corrections belong to another lane.
+base_config: ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_base.yaml
+policy_id: ppo_benchmark_aligned_v1
+scenario_config: benchmark_aligned_v1_scenarios.yaml
+# Loader-compatible seed template only. The guarded launcher replaces this
+# with the sidecar's master stream once #10324 is integrated; do not launch
+# this leaf directly as a campaign. The stock execution boundary refuses
+# the template until the required policy is bound.
+seeds: [100000]
+randomize_seeds: false
+env_overrides:
+  ppo_action_semantics: velocity_delta
+  predictive_foresight_device: cpu
+  robot_config:
+    type: differential_drive
+    max_linear_speed: 2.0
+    max_angular_speed: 1.0
+    allow_backwards: false
+    max_linear_accel: 1.0
+    max_linear_decel: 1.0
+    max_angular_accel: 1.0
+  sim_config:
+    time_per_step_in_secs: 0.1
+    sim_time_in_secs: 60.0
+scenario_sampling:
+  require_training_seed_policy: true
+  episode_seed_pool: [100000]
+convergence:
+  success_rate: 1.1
+  collision_rate: 0.0
+  plateau_window: 100000000
+evaluation:
+  scenario_config: benchmark_aligned_v1_scenarios.yaml
+  evaluation_seed_manifest: benchmark_aligned_v1_selection.yaml
+  evaluation_episodes: 1440
+  hold_out_scenarios: []
+  randomize_seeds: false
+  full_policy_analysis_on_new_best: false
+  full_policy_analysis_videos: false
+tracking:
+  wandb:
+    group: issue-9628-benchmark-aligned-v1
+    name: ppo-benchmark-aligned-v1

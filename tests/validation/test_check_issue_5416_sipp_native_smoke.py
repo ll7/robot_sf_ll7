@@ -338,11 +338,17 @@ def test_native_watchdog_cleans_descendant_after_parent_exits(tmp_path: Path) ->
     pid_path = tmp_path / "descendant.pid"
     descendant = (
         "from pathlib import Path; import os, sys, time; "
-        "Path(sys.argv[1]).write_text(str(os.getpid())); time.sleep(30)"
+        "Path(sys.argv[1] + '.tmp').write_text(str(os.getpid())); "
+        "os.replace(sys.argv[1] + '.tmp', sys.argv[1]); time.sleep(30)"
     )
     parent = (
-        "import subprocess, sys, time; "
-        "subprocess.Popen([sys.executable, '-c', sys.argv[2], sys.argv[1]]); time.sleep(0.04)"
+        "from pathlib import Path; import subprocess, sys, time\n"
+        "child = subprocess.Popen([sys.executable, '-c', sys.argv[2], sys.argv[1]])\n"
+        "deadline = time.monotonic() + 0.5\n"
+        "while not Path(sys.argv[1]).is_file():\n"
+        " if child.poll() is not None: raise RuntimeError('descendant exited before ready')\n"
+        " if time.monotonic() >= deadline: raise TimeoutError('descendant never became ready')\n"
+        " time.sleep(0.005)\n"
     )
     smoke_validator._run_native_row_with_watchdog(
         command=[sys.executable, "-c", parent, str(pid_path), descendant],

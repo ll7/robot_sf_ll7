@@ -1,0 +1,7 @@
+{
+  "artifact_path": "docs/validation/predictive_braking_pair/summary.json",
+  "artifact_sha256": "db2fd09487456b3db8e8f2a8e86a5e2d65434f24cfec3f4c0ae6b16983d2babd",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "evidence-review-marker.v1"
+}

@@ -101,6 +101,19 @@ and excludes optional-only test paths listed in `tests/support/optional_test_all
 Probe failures, malformed JSON, unknown exit codes, and status/exit-code disagreements are
 preflight-tool failures and never receive the missing-extra install guidance.
 
+The extended readiness lane uses Git name-status records so deletion-only changes and both
+endpoints of a rename can select the lane without passing removed paths to pytest or formatting.
+Its impact roots are `robot_sf/`, `configs/`, `maps/`, `scripts/validation/`, `tests/validation/`,
+and `tests/maps/`. The uncovered validation and map tests also depend on
+`fast-pysf/pysocialforce/` and the root or nested package/lock manifests (`pyproject.toml`,
+`uv.lock`, `fast-pysf/pyproject.toml`, and `fast-pysf/uv.lock`), so those paths select the same
+lane. `fast-pysf/tests/`, documentation, examples, benchmarks, and maps stay on their existing
+lanes. Each readiness run records the extended-lane decision and its impact-path reason in
+`output/validation/pr_ready/lane_coverage.txt`.
+The validation and map roots remain declared impact roots even when a change removes their last
+tracked file. In that case readiness records the required impact and a no-surviving-tests
+disposition without passing nonexistent roots to pytest.
+
 ### Claim-map validation
 
 The fast-results claim map is an executable issue queue, not only a context note. Before changing
@@ -794,6 +807,32 @@ in-repo `gh-pr-merger` preflight remains binding for guarded merges. Enabling Gi
 queue itself also requires maintainer approval to toggle branch-protection settings, consistent
 with the gate-side rationale above.
 
+**Measured configuration, rechecked read-only on 2026-10-16 (issue #10398).** The queue
+requirements above are not active. Read both enforcement surfaces and the bypass policy before
+assuming a merge is guarded:
+
+| Surface | What the snapshot establishes |
+| --- | --- |
+| GitHub, on `main` | No classic branch protection (`GET /branches/main/protection` → 404). The active `main-protection` ruleset (ID `18917814`) requires exactly **`ty-advisory-ratchet`** and **`pr-contract-check`** for non-bypassing actors. It has an always-bypass actor: `actor_type: RepositoryRole`, `actor_id: 5`, `bypass_mode: always`; the authenticated reader reports `current_user_can_bypass: always`. There is no `merge_queue` rule. The workflow-run API returns zero retained `merge_group` runs; this does not rule out deleted historical runs. |
+| Local, `scripts/dev/single_account_merge_receipt.py` | Treats `merge-queue-gate` as required, so `gh_pr_merge.sh` refuses a merge until this job completes. Issue #10398 reports the historical PR #10215 receipt: `required_check_merge-queue-gate_pending`, `status: blocked`. This is not a fresh reproduction of that PR's receipt. |
+
+Two consequences follow from this configuration:
+
+- **`merge-queue-gate` is required by the local merger, but absent from GitHub's required-check
+  set.** Its absence alone therefore does not block a merge under the measured GitHub ruleset.
+  The local fail-closed preflight applies to merges made through `gh_pr_merge.sh`; this observation
+  does not establish enforcement on other merge paths.
+- **GitHub requires the behaviour-change receipt gate, `pr-contract-check`, for non-bypassing
+  actors.** The [dated #10307 reconciliation](https://github.com/ll7/robot_sf_ll7/issues/10307#issuecomment-6191388572)
+  reported failures on 39 of 52 open non-draft PRs on 2026-10-15. This is a historical report,
+  not a current count. Such failures block non-bypassing merges under this ruleset; the active
+  always-bypass actor means they do not establish that those PRs are unmergeable through every path.
+
+The residual for #6274 is stated against the *measured* configuration, including its bypass,
+not the intended one. Two changes remain maintainer decisions and are tracked in #10398: activate
+the queue as documented above, or align `single_account_merge_receipt.py` with the checks GitHub
+actually requires. This documentation correction changes no repository setting, ruleset, or protection.
+
 ### Single-account merge receipt (issue #7669)
 
 **Plain-language contract.** A merge may proceed with one account only when a versioned receipt
@@ -884,7 +923,7 @@ blocker. A pure-deletion file with a valid coverage row and no new-file line num
 `100.0` with scope `changed executable lines 0/0`; there are no new executable lines to cover. A
 `not_required` verdict is only for a head with no executable Python changes in the configured
 coverage scope, and remains observable in the artifact rather than being inferred from a skipped
-job. Hosted fast feedback runs the complete non-slow `all` lane, so an optional-extra change cannot
+job. Hosted fast feedback runs the `all` lane with fast tests plus affected slow witnesses, so an optional-extra change cannot
 be proven by a core-only shard.
 
 The local `pr_ready_check.sh` coverage lane remains useful for fast feedback, but its disposable
@@ -2656,11 +2695,12 @@ All figures must be **reproducible from code** and directly **integratable into 
   format check can be stale when the shared baseline moved.
 
 CI mapping to local tasks and CLI:
-- `fast-feedback` matrix → four `scripts/dev/ci_driver.sh test` shards on every event; shard 1
-  also runs lint and advisory type checking. Pull requests exclude slow tests and upload one
+- `fast-feedback` matrix → six `scripts/dev/ci_driver.sh test` shards on every event; shard 1
+  also runs lint and advisory type checking. Pull requests run all fast tests plus selected slow
+  files and upload one
   trace-based coverage database per shard for exact-head changed coverage, while non-PR events
   run the complete suite and upload one coverage database per shard using the faster sysmon backend.
-- `coverage-gate` job → combines all four non-PR coverage databases, enforces the 85.0% absolute coverage
+- `coverage-gate` job → combines all six non-PR coverage databases, enforces the 85.0% absolute coverage
   floor, and updates the advisory main baseline.
 - `smoke-artifacts` job → `scripts/dev/ci_driver.sh smoke artifact-policy`
 - aggregate `ci` job → requires the coverage gate on non-PR events and all other split jobs while
@@ -2668,6 +2708,21 @@ CI mapping to local tasks and CLI:
 - local full equivalent → `scripts/dev/run_ci_local.sh`
 
 Workflow location: `.github/workflows/ci.yml`.
+
+PR slow-file selection is owned by `scripts/dev/affected_test_selection.py`. The preparation
+job scans tracked files once and writes a base/head/tree-bound artifact. Shards reuse it and
+admit `not slow or affected`. The CI log records each selected file's import/path chain,
+unconditional witness rule, or full-suite fallback reason. Package initializers, relative imports,
+vendored module aliases, joined path literals, unique basename pins and transitive text-input
+references participate in selection. Renames include both endpoints; deleted tests cannot execute.
+
+Pin, inventory, manifest and registry filenames, optimized-assert and issue-5303 witnesses,
+docs-evidence checks and tests using digest/inventory helpers always run, including an empty diff.
+Shared CI/build/collection changes, unparseable Python and inputs with no mapped test consumer
+retain full-suite admission. Static selection can overselect and cannot resolve arbitrary runtime
+path construction or dynamic imports. Train/main heads still run the complete suite. This changes
+admission within the existing test job and adds no process gate.
+
 
 ### Main CI signal and staleness-aware merge policy
 

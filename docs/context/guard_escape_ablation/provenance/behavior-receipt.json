@@ -1,0 +1,7 @@
+{
+  "passed": true,
+  "paired_episodes": 96,
+  "comparison": "IEEE command/state trace bytes, outcome, steps",
+  "baseline_commit": "373dbfde4f39667cf9e8732dabe7df5118bdeab1",
+  "execution_commit": "0035fba05c9b679e39f58ec286f5d57b96bb9a0a"
+}

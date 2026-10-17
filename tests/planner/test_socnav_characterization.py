@@ -177,9 +177,6 @@ def test_factory_default_config_matches_socnav_planner_config() -> None:
 # ===========================================================================
 
 
-# PR #10011 projects world velocity onto the forward axis. A lateral goal
-# turns with zero translation; HRVO head-on keeps its angular command and
-# translates at the forward component 2.3699999918043613 (not vector norm).
 # --- ORCA heuristic fallback (always available, pure Python) ---------------
 
 
@@ -203,6 +200,9 @@ def test_orca_heuristic_plan_golden(label, observation, golden) -> None:
 
 
 # --- HRVO (pure-Python local solver, no optional backend) ------------------
+# PR #10011 projects world velocity onto the forward axis. A lateral goal
+# turns with zero translation; HRVO head-on keeps its angular command and
+# translates at the forward component 2.3699999918043613 (not vector norm).
 
 
 @pytest.mark.parametrize(

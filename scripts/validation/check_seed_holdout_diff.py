@@ -32,6 +32,7 @@ import sys
 import textwrap
 import tokenize
 from dataclasses import dataclass
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 import yaml
@@ -713,6 +714,16 @@ def _unallowlisted_sealed_reference(path: str, content: str) -> bool:
     )
 
 
+def _integer_seed_bound(value: object) -> int:
+    """Normalize numeric seed bounds without rounding or truncating fractions."""
+    if type(value) not in (int, float, str):
+        raise ValueError("seed range bound must be numeric")
+    number = Decimal(str(value))
+    if not number.is_finite() or number != number.to_integral_value():
+        raise ValueError("seed range bound must be a finite integer")
+    return int(number)
+
+
 def _yaml_alias_holdout(  # noqa: C901 - traverse YAML merge/alias graphs with cycle guards
     path: str, number: int, content: str, lines: list[str]
 ) -> bool:
@@ -724,41 +735,57 @@ def _yaml_alias_holdout(  # noqa: C901 - traverse YAML merge/alias graphs with c
     except yaml.YAMLError:
         return bool("<<:" in content or SEED_FIELD.search(content))
 
+    def seed_value_overlaps(node):
+        resolved = yaml.safe_load(yaml.serialize(node))
+        if isinstance(resolved, dict):
+            low = resolved.get("min", resolved.get("low"))
+            high = resolved.get("max", resolved.get("high"))
+            try:
+                low, high = _integer_seed_bound(low), _integer_seed_bound(high)
+            except (ValueError, InvalidOperation):
+                return True
+            return any(low <= seed <= high for seed in HELD_OUT_SEEDS)
+        values = resolved if isinstance(resolved, list) else [resolved]
+        return any(type(seed) is int and seed in HELD_OUT_SEEDS for seed in values)
+
     def contains_seed(node, seen):
         if id(node) in seen:
             return False
         seen = seen | {id(node)}
         if isinstance(node, yaml.MappingNode):
             for key, value in node.value:
-                if SEED_FIELD.search(key.value + ":"):
-                    resolved = yaml.safe_load(yaml.serialize(value))
-                    values = resolved if isinstance(resolved, list) else [resolved]
-                    if any(type(seed) is int and seed in HELD_OUT_SEEDS for seed in values):
-                        return True
+                if SEED_FIELD.search(key.value + ":") and seed_value_overlaps(value):
+                    return True
                 if contains_seed(value, seen):
                     return True
         elif isinstance(node, yaml.SequenceNode):
             return any(contains_seed(value, seen) for value in node.value)
         return False
 
-    def visit(node, seen):
+    def visit(node, seen, seed_context=False):
         if id(node) in seen:
             return False
         seen = seen | {id(node)}
         if isinstance(node, yaml.MappingNode):
             for key, value in node.value:
+                is_seed = bool(SEED_FIELD.search(key.value + ":"))
                 if key.start_mark.line == number - 1:
+                    # A changed merge inherits the enclosing range's seed role.
+                    # Resolve the whole mapping so local bound overrides apply.
+                    if (
+                        seed_context
+                        and key.tag == "tag:yaml.org,2002:merge"
+                        and seed_value_overlaps(node)
+                    ):
+                        return True
                     if contains_seed(value, set()):
                         return True
-                    if SEED_FIELD.search(key.value + ":"):
-                        resolved = yaml.safe_load(yaml.serialize(value))
-                        values = resolved if isinstance(resolved, list) else [resolved]
-                        if any(type(seed) is int and seed in HELD_OUT_SEEDS for seed in values):
-                            return True
-                if visit(value, seen):
+                    if is_seed and seed_value_overlaps(value):
+                        return True
+                if visit(value, seen, is_seed):
                     return True
         elif isinstance(node, yaml.SequenceNode):
-            return any(visit(value, seen) for value in node.value)
+            return any(visit(value, seen, seed_context) for value in node.value)
         return False
 
     return visit(root, set()) if root is not None else False

@@ -1,0 +1,4 @@
+max_linear_speed: 1.2
+max_angular_speed: 1.0
+sacadrl_pref_speed: 1.0
+sacadrl_max_other_agents: 19

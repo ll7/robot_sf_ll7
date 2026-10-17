@@ -82,7 +82,7 @@ def _expected_job_identities(
     is_map = any("map_file" in sc or "simulation_config" in sc for sc in scenarios)
     if is_map:
         from robot_sf.benchmark.map_runner.map_runner_batch_plan import (  # noqa: PLC0415
-            build_seed_jobs,
+            build_job_identities,
         )
         from robot_sf.benchmark.map_runner.map_runner_identity import (  # noqa: PLC0415
             _resolve_seed_list,
@@ -91,7 +91,7 @@ def _expected_job_identities(
         from robot_sf.common.artifact_paths import get_repository_root  # noqa: PLC0415
 
         repo = get_repository_root()
-        jobs = build_seed_jobs(
+        return build_job_identities(
             scenarios,
             suite_seeds=_resolve_seed_list(repo / "configs/benchmarks/seed_list_v1.yaml"),
             suite_key=_suite_key(scenario_path or repo / "scoped_scenarios.json"),
@@ -108,9 +108,7 @@ def _expected_job_identities(
         jobs = _expand_jobs(scenarios)
     identities = [
         (
-            str(sc.get("name") or sc.get("scenario_id") or sc.get("id") or "unknown")
-            if is_map
-            else str(sc.get("id", "unknown")),
+            str(sc.get("id", "unknown")),
             seed,
         )
         for sc, seed in jobs

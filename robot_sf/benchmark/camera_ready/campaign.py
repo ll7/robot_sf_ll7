@@ -1983,6 +1983,7 @@ def _post_run_integrity_and_fairness(
         resolved_seeds=resolved_seeds,
         campaign_root=campaign_root,
         campaign_manifest=manifest_payload,
+        scenario_path=cfg.scenario_matrix_path,
     )
     for blocker in campaign_integrity["blockers"]:
         warnings.append(

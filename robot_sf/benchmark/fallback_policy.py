@@ -153,7 +153,7 @@ def _degraded_status_list_marker(statuses: list[Any], path: str) -> tuple[str, s
     return None
 
 
-def runtime_fallback_or_degraded_marker(  # noqa: C901
+def runtime_fallback_or_degraded_marker(  # noqa: C901, PLR0915
     payload: Any,
     *,
     expected_algorithm: str | None = None,

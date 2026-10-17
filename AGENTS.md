@@ -65,7 +65,7 @@ Always-required core context:
 
 The route table is the single owner of task-to-guidance routing; references are required by default
 and optional only when marked optional/illustrative, generated, or explicitly background. For the
-token-efficient thread profile, phase audits, meta-workflow gate, SLURM lanes, knowledge graph,
+token-efficient thread profile, phase audits, meta-workflow gate, SLURM lanes,
 cross-agent compatibility, and context-note policy, use the topic index at
 `docs/dev/agents/relocated-agents-guidance.md`.
 

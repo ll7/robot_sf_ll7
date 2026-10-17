@@ -1,0 +1,6 @@
+{
+  "passed": true,
+  "fixtures": 8,
+  "purpose": "Pre-result hand-calculated decision fixtures: inclusive 5 pp, zero exclusion, OR across factors, negative control, MIXED and strict escape upper bound",
+  "replication_outcomes_used": false
+}

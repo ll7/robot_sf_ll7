@@ -84,6 +84,7 @@ CONSTRUCTION_CAPABLE_KEYS = [
     ("social_force", "SocialForcePlannerAdapter"),
     ("sf", "SocialForcePlannerAdapter"),
     ("orca", "ORCAPlannerAdapter"),
+    ("orca_avo", "ORCAAVOPlannerAdapter"),
     ("socnav_orca_nonholonomic", "ORCAPlannerAdapter"),
     ("socnav_orca_dd", "ORCAPlannerAdapter"),
     ("socnav_orca_relaxed", "ORCAPlannerAdapter"),
@@ -145,7 +146,7 @@ class TestRegistryCoverage:
 
     def test_registry_key_set_matches_historical_dispatch(self) -> None:
         registered = {algo for spec in SOCNAV_FAMILY_SPECS for algo in spec.algorithms}
-        assert registered == HISTORICAL_SOCNAV_KEYS
+        assert registered == HISTORICAL_SOCNAV_KEYS | {"orca_avo"}
 
     def test_every_key_resolves_to_exactly_one_spec(self) -> None:
         seen: set[str] = set()

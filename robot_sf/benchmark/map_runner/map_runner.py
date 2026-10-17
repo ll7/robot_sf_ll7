@@ -275,6 +275,10 @@ from robot_sf.planner.nmpc_social import (  # noqa: F401 - registry re-export.
     NMPCSocialPlannerAdapter,
     build_nmpc_social_config,
 )
+from robot_sf.planner.orca_avo import (  # noqa: F401 - registry re-export.
+    ORCAAVOPlannerAdapter,
+    build_orca_avo_config,
+)
 from robot_sf.planner.predictive_mppi import (
     PredictiveMPPIAdapter,
     build_predictive_mppi_config,
@@ -449,6 +453,7 @@ def _sonic_crowdnav_symbols() -> tuple[Any, Any]:
 
 
 _SOCNAV_ALGO_KEYS = {
+    "orca_avo",
     "socnav_sampling",
     "sampling",
     "orca",

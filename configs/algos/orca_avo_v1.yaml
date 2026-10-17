@@ -1,0 +1,9 @@
+# Research-only opt-in A′; empirical, no differential-drive safety guarantee.
+# Use with algorithm key orca_avo. Requires binding the actual forward drive.
+max_linear_speed: 2.0
+max_angular_speed: 1.0
+allow_fallback: false
+avo_horizon: 6.0
+avo_sample_dt: 0.1
+avo_rings: 4
+avo_angles: 32

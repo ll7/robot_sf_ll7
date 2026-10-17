@@ -281,6 +281,12 @@ SOCNAV_FAMILY_SPECS: tuple[SocnavFamilySpec, ...] = (
     ),
     # ORCA family: base key plus the tuned variants (per-variant config overrides).
     _orca_spec("orca", {}),
+    SocnavFamilySpec(
+        algorithms=frozenset({"orca_avo"}),
+        adapter_attr="ORCAAVOPlannerAdapter",
+        config_builder_attr="build_orca_avo_config",
+        pass_allow_fallback=True,
+    ),
     *(_orca_spec(name, overrides) for name, overrides in _ORCA_VARIANTS.items()),
     # Upstream SocNavBench wrapper.
     SocnavFamilySpec(

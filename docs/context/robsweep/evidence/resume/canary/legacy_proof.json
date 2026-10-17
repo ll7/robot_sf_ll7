@@ -1,0 +1,26 @@
+{
+  "arm": "legacy",
+  "seed": 1061,
+  "steps": 5,
+  "workers": [
+    1,
+    2
+  ],
+  "equal_fields": [
+    "outcome",
+    "steps",
+    "effective_physics",
+    "metric_values"
+  ],
+  "artifacts": [
+    {
+      "artifact_path": "docs/context/robsweep/evidence/resume/canary/legacy_w1.jsonl.gz",
+      "sha256": "e8bb4c847b2f462f14911aaa12ee30025a0f3b9b7a27823f66c448042787b2f2"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/resume/canary/legacy_w2.jsonl.gz",
+      "sha256": "b01cbdbb5aafafec119cb51622e0a91973d2bdc16cbcc010a93ab0575d41452f"
+    }
+  ],
+  "claim_boundary": "Dispatch binding canary only; not a full-trajectory determinism proof or ranking episode."
+}

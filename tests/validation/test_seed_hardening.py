@@ -99,4 +99,95 @@ def test_yaml_alias_cannot_inherit_heldout_seed_range(tmp_path, bounds, alias):
     assert not check_diff(diff, tmp_path)
 
 
+@pytest.mark.parametrize("band", ["RETIRED_EVAL_SEEDS_0_0_7", "EVAL_SEEDS_0_0_8"])
+@pytest.mark.parametrize("names", [("min", "max"), ("low", "high")])
+@pytest.mark.parametrize("spelling", ["'{value}'", "{value}.0", "'{value}.0'"])
+@pytest.mark.parametrize("alias", ["<<: *defaults", "seed_policy: *defaults"])
+def test_yaml_alias_coercible_seed_range(tmp_path, band, names, spelling, alias):
+    """Consumer-coercible bounds must not hide an inherited held-out range."""
+    from robot_sf.benchmark import seed_bands
+
+    seeds = getattr(seed_bands, band)
+    path = "configs/probe.yaml"
+    target = tmp_path / path
+    target.parent.mkdir()
+    diff = f"diff --git a/{path} b/{path}\n+++ b/{path}\n@@ -2,0 +3 @@\n+  {alias}\n"
+
+    def write_range(low, high):
+        bounds = ", ".join(
+            f"{name}: {spelling.format(value=value)}"
+            for name, value in zip(names, (low, high), strict=True)
+        )
+        target.write_text(
+            f"defaults: &defaults {{scenario_seed: {{{bounds}}}}}\nscenario:\n  {alias}\n"
+        )
+
+    write_range(min(seeds) - 1, max(seeds) + 1)
+    assert [(f.line, f.text) for f in check_diff(diff, tmp_path)] == [(3, alias)]
+    write_range(1001, 1003)
+    assert not check_diff(diff, tmp_path)
+
+
+@pytest.mark.parametrize("names", [("min", "max"), ("low", "high")])
+@pytest.mark.parametrize("bound_index", [0, 1])
+@pytest.mark.parametrize(
+    "invalid",
+    [
+        "1001.5",
+        "'1001.000000000000000001'",
+        "'nope'",
+        "true",
+        "null",
+        ".nan",
+        ".inf",
+        "[]",
+        "{}",
+        None,
+    ],
+)
+def test_yaml_alias_invalid_seed_range_fails_closed(tmp_path, names, bound_index, invalid):
+    """Malformed bounds must yield a finding rather than skip or truncate the range."""
+    path = "configs/probe.yaml"
+    target = tmp_path / path
+    target.parent.mkdir()
+    values = ["1001", "1003"]
+    values[bound_index] = invalid
+    bounds = ", ".join(
+        f"{name}: {value}" for name, value in zip(names, values, strict=True) if value is not None
+    )
+    target.write_text(
+        f"defaults: &defaults {{scenario_seed: {{{bounds}}}}}\nscenario:\n  <<: *defaults\n"
+    )
+    diff = f"diff --git a/{path} b/{path}\n+++ b/{path}\n@@ -2,0 +3 @@\n+  <<: *defaults\n"
+    assert [(f.line, f.text) for f in check_diff(diff, tmp_path)] == [(3, "<<: *defaults")]
+
+
+@pytest.mark.parametrize("band", ["RETIRED_EVAL_SEEDS_0_0_7", "EVAL_SEEDS_0_0_8"])
+@pytest.mark.parametrize("names", [("min", "max"), ("low", "high")])
+@pytest.mark.parametrize("flow", [True, False])
+def test_yaml_merge_retains_enclosing_seed_range(tmp_path, band, names, flow):
+    """Only the merge line changes; the seed key and anchor remain unchanged."""
+    from robot_sf.benchmark import seed_bands
+
+    seeds = getattr(seed_bands, band)
+    path = "configs/probe.yaml"
+    target = tmp_path / path
+    target.parent.mkdir()
+    alias = "<<: *bounds"
+    diff = f"diff --git a/{path} b/{path}\n+++ b/{path}\n@@ -3,0 +4 @@\n+    {alias}\n"
+
+    def write_range(low, high):
+        bounds = f"{names[0]}: {low}, {names[1]}: {high}"
+        opening, closing = (" {", "  }\n") if flow else ("", "")
+        target.write_text(
+            f"defaults: &bounds {{{bounds}}}\nscenario:\n"
+            f"  scenario_seed:{opening}\n    {alias}\n{closing}"
+        )
+
+    write_range(min(seeds) - 1, max(seeds) + 1)
+    assert [(f.line, f.text) for f in check_diff(diff, tmp_path)] == [(4, alias)]
+    write_range(1001, 1003)
+    assert not check_diff(diff, tmp_path)
+
+
 # seed-holdout: synthetic-fixture end

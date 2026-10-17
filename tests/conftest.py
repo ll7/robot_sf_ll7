@@ -444,6 +444,7 @@ _LEGACY_FAST_FILES = {
     # DWA occupancy-clearance tests are deterministic planner contracts; keep
     # ego-frame and far-obstacle branches in exact-head changed coverage.
     "test_dwa.py",
+    "tests/dev/test_common_setup_venv_profile.py",
     # Force validity reduction checks use small fixed NumPy arrays.
     "test_robot_force_presence.py",
     # Seed inventories and campaign resume planning use deterministic fixtures.
@@ -681,6 +682,8 @@ _LEGACY_FAST_FILES = {
     # contracts; include them in fast shards for changed-line coverage.
     "test_release_row_bundle.py",
     "test_release_row_anomalies.py",
+    # Borrowed-ledger identity faults use compact rows, without simulator steps.
+    "test_release_row_ledger_binding.py",
     "test_grid_socnav_extractor.py",
     "map_test.py",
     "navigation_test.py",
@@ -1509,6 +1512,12 @@ def pytest_ignore_collect(collection_path, path=None, config=None):  # type: ign
     return not _should_collect_in_lane(path_obj.as_posix(), lane)
 
 
+_FAST_NODE_IDS = {
+    "tests/benchmark/test_spawn_preflight_respawn_window.py::test_contact_continuation_preserves_negative_controls",
+    "tests/benchmark/test_spawn_preflight_respawn_window.py::test_release_step1_collision_is_measured",
+}
+
+
 def pytest_collection_modifyitems(config, items):  # type: ignore[missing-type-doc]
     """Admit affected explicit slow tests; all other tests are fast by default."""
     config.addinivalue_line("markers", "affected: test affected by the committed PR diff")
@@ -1521,6 +1530,11 @@ def pytest_collection_modifyitems(config, items):  # type: ignore[missing-type-d
             if item_path.is_relative_to(root)
             else item_path.as_posix()
         )
+        if (
+            relative == "tests/benchmark/test_spawn_preflight_respawn_window.py"
+            and item.nodeid.split("[", maxsplit=1)[0] not in _FAST_NODE_IDS
+        ):
+            item.add_marker(pytest.mark.slow)
         if relative in affected:
             item.add_marker(pytest.mark.affected)
 
@@ -1704,8 +1718,7 @@ def sample_baseline_data():
 
 
 # =====================================================================# Occupancy Grid Fixtures
-# =======================================================
-
+# ================================================
 
 @pytest.fixture
 def simple_grid_config():
@@ -1852,8 +1865,7 @@ def pre_generated_grid(occupancy_grid, simple_obstacles, simple_pedestrians, rob
 
 
 # =====================================================================# Shared Subprocess Mock Fixture
-# =======================================================
-
+# ================================================
 
 def _build_matcher_predicate(
     matcher: list[str] | tuple[str, ...] | str | Callable[[list[str]], bool],

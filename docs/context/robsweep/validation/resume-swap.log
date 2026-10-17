@@ -1,0 +1,15 @@
+Shared-venv scratch preflight passed: path=/tmp available=526299188KiB required=1048576KiB
+Shared-venv selection gate acquired: <environment-path>
+Shared-venv project package freshness preflight passed: package=pysocialforce venv=<environment-path>
+Shared-venv tool freshness preflight skipped: tool=python reason=interpreter-or-shell elapsed_ms=219 venv=<environment-path>
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1791848323.767328 1869312 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+I0000 00:00:1791848323.799132 1869312 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 AVX_VNNI FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1791848324.430592 1869312 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+I0000 00:00:1791848324.430841 1869312 cudart_stub.cc:31] Could not find cuda drivers on your machine, GPU will not be used.
+2026-10-13 01:38:45.135 | DEBUG    | robot_sf.sensor.registry:register_sensor:98 - Registered sensor 'dummy_constant' in registry
+2026-10-13 01:38:45.979 | INFO     | robot_sf.sim.registry:register_backend:59 - Registered simulator backend: fast-pysf
+2026-10-13 01:38:45.980 | INFO     | robot_sf.sim.registry:register_backend:59 - Registered simulator backend: dummy
+{"arm": "swap", "completed_identities_skipped": 25, "written": 0}

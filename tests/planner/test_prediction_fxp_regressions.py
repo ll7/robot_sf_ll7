@@ -51,7 +51,7 @@ def test_collector_preserves_already_ego_velocity_at_north_heading(collector, fl
             for block, values in obs.items()
             for key, value in values.items()
         }
-    frame = collector._extract_frame(obs, max_agents=2)
+    frame = collector._extract_frame(obs, max_agents=2, ped_ids=("episode-1:ped-0",))
     state, _, mask, _ = collector._frames_to_samples(
         [frame, frame], max_agents=2, horizon_steps=1, ego_conditioning=False
     )

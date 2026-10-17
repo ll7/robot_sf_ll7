@@ -41,6 +41,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+from scripts.dev import check_ci_needs as ci_manifest
 from scripts.dev.check_ci_needs import (
     AGGREGATE_JOB,
     CI_PATHS_IGNORE_PATTERNS,
@@ -516,23 +517,130 @@ def test_required_check_identities_bind_to_aggregate_ci_contract() -> None:
 
 
 def test_draft_feedback_uses_a_distinct_aggregate_check_name() -> None:
-    """Draft feedback must not publish the full-run check identity."""
+    """Ready docs PRs report ci; draft feedback cannot masquerade as full admission."""
     workflow = yaml.safe_load(CI_WORKFLOW.read_text(encoding="utf-8"))
     assert workflow["jobs"][AGGREGATE_JOB]["name"] == (
         "${{ github.event_name == 'pull_request' && github.event.pull_request.draft "
         "&& 'ci-draft' || 'ci' }}"
     )
+    assert workflow["jobs"][AGGREGATE_JOB]["if"] == "always()"
+    decision = next(
+        step
+        for step in workflow["jobs"]["dispatch-ownership"]["steps"]
+        if step.get("id") == "decision"
+    )
+    assert "github.event.pull_request.draft" in decision["run"]
+    assert 'echo "run_full_ci=false"' in decision["run"]
 
 
 def test_ci_paths_ignore_manifest_matches_workflow_triggers() -> None:
-    """The checked-in ignore manifest must match both CI skip declarations."""
+    """The former ignore manifest now controls internal skips, never event delivery."""
     workflow = yaml.safe_load(CI_WORKFLOW.read_text(encoding="utf-8"))
     triggers = workflow.get(True, workflow.get("on", {}))
-
     assert isinstance(triggers, dict)
-    expected = list(CI_PATHS_IGNORE_PATTERNS)
-    assert triggers["push"]["paths-ignore"] == expected
-    assert triggers["pull_request"]["paths-ignore"] == expected
+    for event in ("push", "pull_request", "merge_group"):
+        assert event in triggers
+        assert "paths-ignore" not in (triggers[event] or {})
+    assert ci_manifest.CI_DOCS_ONLY_PATTERNS == ("**/*.md", "docs/**")
+    # Preserve imports and audit receipt identities for callers on older revisions.
+    assert CI_PATHS_IGNORE_PATTERNS == ci_manifest.CI_DOCS_ONLY_PATTERNS
+    dispatch = workflow["jobs"]["dispatch-ownership"]
+    detector = next(step for step in dispatch["steps"] if step.get("id") == "docs")
+    assert "from scripts.dev.check_ci_needs import docs_only_changed_files" in detector["run"]
+    assert "docs_only_changed_files(paths, complete=True)" in detector["run"]
+    assert dispatch["outputs"]["docs_only"] == "${{ steps.docs.outputs.docs_only }}"
+    aggregate = workflow["jobs"][AGGREGATE_JOB]
+    docs_result = next(
+        step
+        for step in aggregate["steps"]
+        if step.get("name") == "Record documentation-only result"
+    )
+    assert "needs.dispatch-ownership.result == 'success'" in docs_result["if"]
+    assert "needs.dispatch-ownership.outputs.docs_only == 'true'" in docs_result["if"]
+
+
+@pytest.mark.parametrize("event", ["pull_request", "push", "merge_group"])
+@pytest.mark.parametrize(
+    ("change", "expected"),
+    [
+        ("docs", True),
+        ("code", False),
+        ("mixed", False),
+        ("leading_space", False),
+        ("rename_in", False),
+        ("rename_out", False),
+        ("delete_docs", True),
+        ("empty", False),
+        ("missing_base", False),
+    ],
+)
+def test_ci_docs_only_admission_executes_complete_git_diff(
+    tmp_path: Path,
+    event: str,
+    change: str,
+    expected: bool,
+) -> None:
+    """Execute the workflow: skip heavy work only for a proven docs-only diff."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    configure_git_identity(repo)
+
+    def git(*args: str) -> str:
+        return subprocess.check_output(["git", *args], cwd=repo, text=True).strip()
+
+    (repo / "docs").mkdir()
+    (repo / "src").mkdir()
+    (repo / "README.md").write_text("Baseline docs\n", encoding="utf-8")
+    (repo / "src/code.py").write_text("print(1)\n", encoding="utf-8")
+    git("add", ".")
+    git("commit", "-qm", "base")
+    base = git("rev-parse", "HEAD")
+    if change == "leading_space":
+        (repo / " README.md").write_text("Ambiguous normalized path\n", encoding="utf-8")
+    elif change == "docs":
+        (repo / "docs/notes.json").write_text("{}\n", encoding="utf-8")
+    elif change in {"code", "mixed"}:
+        (repo / "src/code.py").write_text("print(2)\n", encoding="utf-8")
+        if change == "mixed":
+            (repo / "README.md").write_text("Updated docs\n", encoding="utf-8")
+    elif change == "rename_in":
+        git("mv", "src/code.py", "docs/code.py")
+    elif change == "rename_out":
+        git("mv", "README.md", "src/readme.txt")
+    elif change == "delete_docs":
+        git("rm", "README.md")
+    git("add", ".")
+    git("commit", "--allow-empty", "-qm", "changed")
+    head = git("rev-parse", "HEAD")
+    if change == "missing_base":
+        base = "f" * 40
+    workflow = yaml.safe_load(CI_WORKFLOW.read_text(encoding="utf-8"))
+    detector = next(
+        step for step in workflow["jobs"]["dispatch-ownership"]["steps"] if step.get("id") == "docs"
+    )
+    output = tmp_path / "output"
+    env = dict(
+        os.environ,
+        PYTHONPATH=str(ROOT),
+        GITHUB_EVENT_NAME=event,
+        GITHUB_SHA=head,
+        PR_BASE_SHA=base,
+        PR_HEAD_SHA=head,
+        PUSH_BASE_SHA=base,
+        GROUP_BASE_SHA=base,
+        GROUP_HEAD_SHA=head,
+        GITHUB_OUTPUT=str(output),
+    )
+    subprocess.run(
+        ["bash", "-e", "-c", detector["run"]],
+        cwd=repo,
+        env=env,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert output.read_text(encoding="utf-8") == f"docs_only={str(expected).lower()}\n"
 
 
 def test_ci_aggregate_uses_declarative_needs_checker() -> None:
@@ -2782,6 +2890,7 @@ def _make_pinned_tool_fixture_repo(
         "PATH": f"{fake_bin}{os.pathsep}{os.environ['PATH']}",
     }
     env.pop("PYTHONPATH", None)
+    env.pop("ROBOT_SF_VENV_FRESHNESS_CHECK", None)
     return repo, venv, env
 
 
@@ -4011,10 +4120,17 @@ def test_worktree_shared_venv_skips_unpinned_tool_with_log_line(
     assert "reason=unpinned" in result.stderr
 
 
+@pytest.mark.parametrize("parent_bypasses_freshness", [False, True])
 def test_worktree_shared_venv_skips_tool_gate_for_interpreters(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    parent_bypasses_freshness: bool,
 ) -> None:
     """Interpreter commands keep the #6003 contract even when a stale tool sits in the venv."""
+    if parent_bypasses_freshness:
+        monkeypatch.setenv("ROBOT_SF_VENV_FRESHNESS_CHECK", "skip")
+    else:
+        monkeypatch.delenv("ROBOT_SF_VENV_FRESHNESS_CHECK", raising=False)
     repo, venv, env = _make_pinned_tool_fixture_repo(tmp_path, resolved_version="0.16.4")
     checker = repo / "scripts" / "dev" / "check_fast_pysf_runtime.py"
     checker.parent.mkdir(parents=True)
@@ -5758,6 +5874,11 @@ def test_coverage_docs_match_effective_source_scope() -> None:
     assert 'source = ["robot_sf", "fast-pysf/pysocialforce"]' in cov_guide_text
     assert "fast-pysf/pysocialforce" in coverage_run["source"]
     assert 'cmd+=("--cov=robot_sf" "--cov-report=html" "--cov-report=json")' in wrapper_text
+    assert "--cov=robot_sf/gym_env" in cov_guide_text
+    assert "--cov=robot_sf/benchmark" in cov_guide_text
+    assert "--cov=robot_sf/analysis_workbench --cov-branch" in cov_guide_text
+    assert "coverage report -m" in cov_guide_text
+    assert "Coverage.py imports dotted source names" in cov_guide_text
     assert "Only the `robot_sf/` package" in cov_guide_text
     assert "not included in the local wrapper report" in cov_guide_text
     assert "measure only the `robot_sf/` package" in dev_guide_text

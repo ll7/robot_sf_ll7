@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+import yaml
 
 from scripts.coverage.check_changed_files_coverage import (
     _changed_files,
@@ -671,3 +674,85 @@ def test_rename_only_callee_swap_rejects_live_helper_removal() -> None:
         "    return point_distance(left, right) + kept(left)\n"
     )
     assert _rename_only_callee_swaps(before, after) is None
+
+
+@pytest.mark.parametrize(
+    ("missing_base", "own_covered"),
+    [(False, True), (False, False), (True, True)],
+    ids=["stale-event", "real-shortfall", "missing-ref"],
+)
+def test_hosted_coverage_uses_live_base_or_fails_closed(
+    tmp_path: Path, missing_base: bool, own_covered: bool
+) -> None:
+    """Execute the workflow shell so stale event bases cannot inflate PR coverage."""
+    root = Path(__file__).resolve().parents[2]
+    repo, event_base, live_base = _fixture_repo(tmp_path)
+    _git(repo, "switch", "-c", "pull-request")
+    _git(repo, "update-ref", "refs/heads/main", live_base)
+    _git(repo, "remote", "add", "origin", str(repo))
+    _git(repo, "update-ref", "refs/remotes/origin/main", event_base)
+    (repo / "robot_sf/own.py").write_text("def own():\n    return 3\n", encoding="utf-8")
+    _git(repo, "add", "robot_sf/own.py")
+    _git(repo, "commit", "-q", "-m", "PR change")
+    head = _git(repo, "rev-parse", "HEAD")
+    coverage_dir = repo / "output/coverage"
+    coverage_dir.mkdir(parents=True)
+    (coverage_dir / "coverage.json").write_text(
+        json.dumps(
+            {
+                "files": {
+                    "robot_sf/own.py": {
+                        "executed_lines": [1, 2] if own_covered else [1],
+                        "missing_lines": [] if own_covered else [2],
+                        "summary": {"percent_covered": 100.0},
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    commands = tmp_path / "commands"
+    commands.mkdir()
+    uv = commands / "uv"
+    uv.write_text('#!/bin/sh\nshift 3\nexec "$GATE_PYTHON" "$GATE_SCRIPT" "$@"\n', encoding="utf-8")
+    uv.chmod(0o755)
+    workflow = yaml.safe_load((root / ".github/workflows/ci.yml").read_text(encoding="utf-8"))
+    step = next(
+        step
+        for step in workflow["jobs"]["changed-coverage-gate"]["steps"]
+        if step.get("id") == "changed-coverage"
+    )
+    env = {
+        **os.environ,
+        "PATH": f"{commands}{os.pathsep}{os.environ['PATH']}",
+        "PYTHONPATH": str(root),
+        "BASE_SHA": event_base,
+        "HEAD_SHA": head,
+        "BASE_BRANCH": "missing" if missing_base else "main",
+        "GITHUB_EVENT_NAME": "pull_request",
+        "GATE_PYTHON": sys.executable,
+        "GATE_SCRIPT": str(root / "scripts/coverage/check_changed_files_coverage.py"),
+    }
+    result = subprocess.run(
+        ["bash", "-c", step["run"]],
+        cwd=repo,
+        env=env,
+        text=True,
+        capture_output=True,
+        timeout=60,
+        check=False,
+    )
+    report = coverage_dir / "changed-coverage-result.json"
+    if missing_base:
+        assert result.returncode != 0
+        assert not report.exists(), result.stdout + result.stderr
+        assert "missing" in result.stderr
+    else:
+        assert result.returncode == (0 if own_covered else 1), result.stdout + result.stderr
+        payload = json.loads(report.read_text(encoding="utf-8"))
+        assert payload["base_sha"] == live_base
+        assert payload["head_sha"] == head
+        assert payload["selected_paths"] == ["robot_sf/own.py"]
+        assert payload["verdict"] == ("passed" if own_covered else "blocked")
+        if not own_covered:
+            assert payload["failure_reasons"] == ["coverage_below_minimum:robot_sf/own.py"]

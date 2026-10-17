@@ -1656,7 +1656,7 @@ def _build_episode_record(  # noqa: C901, PLR0913, PLR0915
     route_complete_signal = route_complete_success(last_info)
     success = bool(route_complete_signal and not collision)
     route_complete = success
-    timeout = bool(
+    timeout = not (collision or success) and bool(
         (isinstance(meta, dict) and meta.get("is_timesteps_exceeded"))
         or truncated
         or reached_max_steps

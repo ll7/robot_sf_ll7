@@ -72,12 +72,15 @@ execution-state precedence set. Verify the issue/PR terminal state separately.
 
 These are composable state qualifiers rather than replacement execution states:
 `state:author-decision`, `state:blocked-human-decision`,
-`state:blocked-no-code-slice`, `state:deferred`,
+`state:blocked-dependency`, `state:blocked-no-code-slice`, `state:deferred`,
 `state:needs-artifact-promotion`, `state:needs-interpretation`,
 `state:parked`, `state:ready-to-submit`, `state:review`, `state:reviewing`, and
 `state:working`.
 An issue with no `state:*` label is undispatchable, not implicitly ready. A
 `resource:*` label never promotes an issue to ready.
+
+`state:blocked-dependency` records an unmet dependency and blocks dispatch while
+composing with an execution state such as `state:ready`.
 
 `state:ready-to-submit` qualifies the compute submit path as available; it is
 not a dispatch signal, so an issue still needs a dispatch-shaped execution state

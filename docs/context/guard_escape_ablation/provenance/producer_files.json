@@ -1,0 +1,36 @@
+{
+  "schema": "guard-escape-ablation.projection.v1",
+  "execution_commit": "0035fba05c9b679e39f58ec286f5d57b96bb9a0a",
+  "raw_root_role": "full/campaigns/exp_guardesc_full",
+  "files": [
+    {
+      "path": "runs/g0e0__differential_drive/episodes.jsonl",
+      "sha256": "2aa21fe4006ecd398518cb46a264b06cab76be370c055e0e1b26fefa16287637",
+      "size_bytes": 23294182,
+      "rows": 540
+    },
+    {
+      "path": "runs/g0e1__differential_drive/episodes.jsonl",
+      "sha256": "e614f497d635bf12cf8ba56341dd9c8bcdb033f441eb880814b729459848d6db",
+      "size_bytes": 23420257,
+      "rows": 540
+    },
+    {
+      "path": "runs/g1e0__differential_drive/episodes.jsonl",
+      "sha256": "4f9bf28ebc63e16e8d6c68dd955ed0d6da5e4d68d113da5e000271146a33189d",
+      "size_bytes": 23397264,
+      "rows": 540
+    },
+    {
+      "path": "runs/g1e1__differential_drive/episodes.jsonl",
+      "sha256": "1118599c926059b6fbcc8de94583bb5e073ea9ff0afa8748c6115766fdf46762",
+      "size_bytes": 23565070,
+      "rows": 540
+    }
+  ],
+  "rows": 2160,
+  "non_factor_controller_settings_equal": true,
+  "compact_sha256": "a407825ff91556aeda37a0f7969308fd88c3aa6fafcb12c475ec2723990c5a19",
+  "row_digest_definition": "SHA-256 of exact producer line bytes, including its newline",
+  "projection": "Endpoint metrics, outcome, arm/seed/cell, source/factor/execution identity, authored budget, termination and producer line identity; no trajectories."
+}

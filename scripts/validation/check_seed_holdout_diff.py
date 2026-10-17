@@ -724,17 +724,27 @@ def _yaml_alias_holdout(  # noqa: C901 - traverse YAML merge/alias graphs with c
     except yaml.YAMLError:
         return bool("<<:" in content or SEED_FIELD.search(content))
 
+    def seed_value_overlaps(node):
+        resolved = yaml.safe_load(yaml.serialize(node))
+        if isinstance(resolved, dict):
+            low = resolved.get("min", resolved.get("low"))
+            high = resolved.get("max", resolved.get("high"))
+            return (
+                type(low) is int
+                and type(high) is int
+                and any(low <= seed <= high for seed in HELD_OUT_SEEDS)
+            )
+        values = resolved if isinstance(resolved, list) else [resolved]
+        return any(type(seed) is int and seed in HELD_OUT_SEEDS for seed in values)
+
     def contains_seed(node, seen):
         if id(node) in seen:
             return False
         seen = seen | {id(node)}
         if isinstance(node, yaml.MappingNode):
             for key, value in node.value:
-                if SEED_FIELD.search(key.value + ":"):
-                    resolved = yaml.safe_load(yaml.serialize(value))
-                    values = resolved if isinstance(resolved, list) else [resolved]
-                    if any(type(seed) is int and seed in HELD_OUT_SEEDS for seed in values):
-                        return True
+                if SEED_FIELD.search(key.value + ":") and seed_value_overlaps(value):
+                    return True
                 if contains_seed(value, seen):
                     return True
         elif isinstance(node, yaml.SequenceNode):
@@ -750,11 +760,8 @@ def _yaml_alias_holdout(  # noqa: C901 - traverse YAML merge/alias graphs with c
                 if key.start_mark.line == number - 1:
                     if contains_seed(value, set()):
                         return True
-                    if SEED_FIELD.search(key.value + ":"):
-                        resolved = yaml.safe_load(yaml.serialize(value))
-                        values = resolved if isinstance(resolved, list) else [resolved]
-                        if any(type(seed) is int and seed in HELD_OUT_SEEDS for seed in values):
-                            return True
+                    if SEED_FIELD.search(key.value + ":") and seed_value_overlaps(value):
+                        return True
                 if visit(value, seen):
                     return True
         elif isinstance(node, yaml.SequenceNode):

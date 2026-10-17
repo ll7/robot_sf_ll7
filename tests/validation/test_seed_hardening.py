@@ -81,4 +81,22 @@ def test_scalar_and_mapping_aliases_cannot_hide_heldout_seeds(tmp_path, anchor, 
     assert not check_diff(diff, tmp_path)
 
 
+@pytest.mark.parametrize("bounds", ["min: 110, max: 142", "low: 110, high: 142"])
+@pytest.mark.parametrize("alias", ["<<: *defaults", "seed_policy: *defaults"])
+def test_yaml_alias_cannot_inherit_heldout_seed_range(tmp_path, bounds, alias):
+    """Adding an alias must check inherited bounds, even without a held-out literal."""
+    path = "configs/probe.yaml"
+    target = tmp_path / path
+    target.parent.mkdir()
+    source = f"defaults: &defaults\n  scenario_seed: {{{bounds}}}\nscenario:\n  {alias}\n"
+    target.write_text(source)
+    diff = f"diff --git a/{path} b/{path}\n+++ b/{path}\n@@ -3,0 +4 @@\n+  {alias}\n"
+    findings = check_diff(diff, tmp_path)
+    assert [(finding.line, finding.text) for finding in findings] == [(4, alias)]
+
+    # Identical alias syntax with a development range must remain admissible.
+    target.write_text(source.replace("110", "1001").replace("142", "1003"))
+    assert not check_diff(diff, tmp_path)
+
+
 # seed-holdout: synthetic-fixture end

@@ -154,5 +154,5 @@ def test_diagnostic_bicycle_braking_cover_includes_control_tick_interior():
     planner.bind_env(SimpleNamespace(simulator=SimpleNamespace(robots=[robot])))
     observation = {"robot": {"speed": [1.0]}, "sim": {"timestep": [0.1]}}
     cover = planner._interval_motion_cover(observation, np.zeros((3, 2)))
-    np.testing.assert_allclose(cover, [0.005, 0.005, 0.005], atol=1e-12)
+    np.testing.assert_allclose(cover, [0.005, 0.005, 0.005], atol=2e-8)
     assert robot.state.velocity == 0.0

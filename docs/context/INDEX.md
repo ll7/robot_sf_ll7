@@ -899,3 +899,5 @@ The checkpoint-bound PPO velocity-delta adapter and shared release plant limitat
 
 - [Released PPO wall probe, five dev seeds](evidence/ppo_wall_probe_dev_20261012/README.md):
   corrected absolute-target signature holds on 5/5 dev seeds (all 20 sampled targets at 2 m/s); diagnostic only.
+
+- [Issue 10405: ORCA-initialised rollout MPC](issue_10405_orca_mpc.md): default-off B, empirical dev-only comparison and continuous-clearance contract.

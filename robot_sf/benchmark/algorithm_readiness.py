@@ -59,6 +59,13 @@ _ALGORITHMS: tuple[AlgorithmReadiness, ...] = (
         note="Social-force adapter baseline.",
     ),
     _contract_readiness("orca"),
+    AlgorithmReadiness(
+        canonical_name="orca_mpc",
+        tier="experimental",
+        aliases=("orca_mpc",),
+        note="Default-off ORCA-seeded drive rollout MPC; empirical research only.",
+        requires_explicit_opt_in=True,
+    ),
     _contract_readiness("socnav_orca_nonholonomic"),
     _contract_readiness("socnav_orca_dd"),
     _contract_readiness("socnav_orca_relaxed"),

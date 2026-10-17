@@ -144,3 +144,67 @@ same-mechanism issues and complete the missing comparisons on the actual selecte
 successor. Revival condition: an ownership handoff or a selected successor with
 current-main validation; preserve this diagnostic evidence rather than repeating
 successful runs without a changed question.
+
+
+## Takeover analytic validation — 2026-10-17
+
+The same two-case production-adapter probe gives **2 numeric failures** on main
+`4f4c82eecabd6bb6c10a00364ff171dc76fce388` (zero translation at 0.137512 m and
+0.08 m side clearance), and **2 passes** on the selected #10294 successor
+`4e5602f6a4c0a5932e7e4bca3afb31714c9382f9`. Each source had its own verified
+project environment. No seed, simulator episode or campaign was used. The
+released v4 is the explicit main comparator when the opt-in is unavailable;
+its zero stop band remains intentional for the frozen identity. This checks the
+opt-in progress mechanism, not safety equivalence or current-main integration
+of the stacked successor. The seven-cell JSON above remains unchanged and bound
+to its original execution source.
+
+Test value: the probe protects translation admitted by the opt-in directional
+guards. Reinstating the old radial zero cap would fail it. The earlier diagnostic
+record did not independently execute this current-main adapter comparison.
+It calls the real adapter with an analytic observation and existing drive-binding
+helper; no production seam is added. Missing crowding/overtaking campaign cells,
+introduced timeouts, proximity review and domain approval remain outstanding.
+
+For reproduction, save the following block as `/tmp/hybrid_progress_probe.py`
+and run the following from each named source after bootstrapping its project
+environment:
+
+```bash
+scripts/dev/run_worktree_shared_venv.sh -- \
+  uv run pytest -p tests.support.heldout_seed_guard \
+  /tmp/hybrid_progress_probe.py -q -n 0
+```
+ Main deliberately
+fails this diagnostic; the opt-in source passes. The probe SHA-256 is `ecaf4b786fc4db95350dd095d912a0cdf346a38a5cf545a73f7050f06e6bb74b`.
+
+```python
+"""Analytic opt-in progress comparator; released v4 remains the negative control."""
+import numpy as np
+import pytest
+from tests.planner import test_hybrid_rule_v4_clearance_braking as helpers
+from robot_sf.planner import hybrid_rule_local_planner as native
+
+@pytest.mark.parametrize('clearance', [0.137512, 0.08])
+def test_requested_guarded_progress_translates_at_safe_side_clearance(clearance):
+    cfg = helpers.load_planner_config(
+        helpers.CANDIDATES + 'hybrid_rule_v4_fast_progress_static_escape_s30_h600_release_0_0_8_frozen.yaml',
+        'francis2023_join_group',
+    )
+    # Main's existing v4 is an explicit comparator when the opt-in is unavailable.
+    cfg['planner_variant'] = getattr(native, 'HYBRID_RULE_V4_GUARDED_PROGRESS_VARIANT', native.HYBRID_RULE_V4_CLEARANCE_BRAKING_VARIANT)
+    cfg['debug_candidate_evaluator'] = True
+    planner = native.HybridRuleLocalPlannerAdapter(native.build_hybrid_rule_local_planner_config(cfg))
+    helpers._bind(planner, helpers.DifferentialDriveSettings())
+    centre = clearance + helpers.ROBOT_RADIUS + helpers.PED_RADIUS
+    observation = {
+        'robot': {'position': np.array([0., 0.]), 'heading': np.array([0.]), 'speed': np.array([0.]), 'radius': np.array([helpers.ROBOT_RADIUS])},
+        'goal': {'current': np.array([20., 0.]), 'next': np.array([20., 0.]), 'next_valid': np.array([1.])},
+        'pedestrians': {'positions': np.array([[0., centre]]), 'velocities': np.array([[0., 0.]]), 'count': np.array([1.]), 'radius': helpers.PED_RADIUS},
+        'sim': {'timestep': helpers.BENCHMARK_DT},
+    }
+    command = planner.plan(observation)
+    assert command[0] > 0., f'guarded progress requires translation; got {command}'
+    assert command[1] == pytest.approx(0.)
+    assert planner.last_decision()['candidate_evaluator_debug']['feasible_moving_count'] > 0
+```

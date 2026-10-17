@@ -270,6 +270,46 @@ def test_empty_campaign_returns_zero_checked_but_not_submit_safe(tmp_path: Path)
     }
 
 
+@pytest.mark.parametrize("stage", [False, True])
+@pytest.mark.parametrize("layout", ["configless", "no_model_id", "sibling_checkpoint"])
+def test_campaign_rejects_unverified_default_predictor(
+    tmp_path: Path, stage: bool, layout: str
+) -> None:
+    """Missing default predictors block campaigns even without an explicit checkpoint reference."""
+    from robot_sf.benchmark.campaign.predictive_horizon_preflight import (
+        PredictiveHorizonPreflightError,
+        check_campaign_predictive_horizons_preflight,
+    )
+
+    algo_config = (
+        None
+        if layout == "configless"
+        else _write_algo_config(tmp_path, "prediction.yaml", {"algo": "prediction_planner"})
+    )
+    planners = (
+        PlannerSpec(key="prediction", algo="prediction_planner", algo_config_path=algo_config),
+    )
+    models = []
+    if layout == "sibling_checkpoint":
+        checkpoint = tmp_path / "policy.zip"
+        checkpoint.write_bytes(b"policy")
+        models = [{"model_id": "policy", "local_path": str(checkpoint)}]
+        policy_config = _write_algo_config(tmp_path, "ppo.yaml", {"model_id": "policy"})
+        planners += (PlannerSpec(key="ppo", algo="ppo", algo_config_path=policy_config),)
+    cfg = _campaign(planners, tmp_path=tmp_path)
+    registry = _write_registry(tmp_path, models)
+
+    bindings = check_campaign_predictive_horizons_preflight(
+        cfg, stage=stage, registry_path=registry
+    )
+    assert bindings[0]["status"] == "unverified"
+    assert bindings[0]["unverified_reason"] == "missing_checkpoint"
+    with pytest.raises(PredictiveHorizonPreflightError, match="unverified") as excinfo:
+        check_campaign_arm_checkpoints_preflight(cfg, stage=stage, registry_path=registry)
+    assert excinfo.value.arms == ("prediction",)
+    assert excinfo.value.binding == bindings[0]
+
+
 # --- staging mode ----------------------------------------------------------
 
 

@@ -36,6 +36,7 @@ from robot_sf.benchmark.result_provenance import (
     write_result_provenance_manifest,
 )
 from robot_sf.benchmark.utils import _config_hash
+from tests.benchmark.campaign_identity_support import producer_params, producer_record_identity
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MANIFEST_PATH = REPO_ROOT / (
@@ -116,51 +117,63 @@ def _repo_relative(path: Path) -> str:
     return path.resolve().relative_to(REPO_ROOT).as_posix()
 
 
-def _row(*, algo: str, algo_config: dict[str, Any], scenario_id: str, seed: int) -> dict[str, Any]:
-    scenario_params = {
-        "algo": algo,
-        "algo_config_hash": _config_hash(algo_config),
-        "id": scenario_id,
-        "robot_config": {"type": "differential_drive"},
-        "run_dt": 0.1,
-    }
+def _row(
+    *, algo: str, algo_config: dict[str, Any], scenario: dict[str, Any], seed: int, cfg: Any
+) -> dict[str, Any]:
+    scenario_id = str(scenario["name"])
+    scenario_params = producer_params(
+        scenario,
+        seed,
+        algo=algo,
+        algo_config=algo_config,
+        horizon=cfg.horizon,
+        dt=cfg.dt,
+        record_forces=cfg.record_forces,
+        record_planner_decision_trace=cfg.record_planner_decision_trace,
+        record_simulation_step_trace=cfg.record_simulation_step_trace,
+    )
     config_hash = _config_hash(scenario_params)
-    return {
-        "algo": algo,
-        "config_hash": config_hash,
-        "episode_id": f"{scenario_id}--{seed}",
-        "event_ledger": {"software_commit": SOURCE_COMMIT},
-        "git_hash": SOURCE_COMMIT,
-        "horizon": 600,
-        "scenario_id": scenario_id,
-        "scenario_params": scenario_params,
-        "seed": seed,
-        "status": "success",
-        "algorithm_metadata": {
-            "algorithm": "ppo" if algo == "guarded_ppo" else algo,
-            "canonical_algorithm": algo,
-            "planner_kinematics": {
-                "robot_kinematics": "differential_drive",
-                "scenario_kinematics": ["differential_drive"],
-            },
-            "planner_contract": {
-                "planner_id": algo,
-                "action_contract": {"active_robot_kinematics": "differential_drive"},
-            },
-        },
-        "provenance": {
+    return producer_record_identity(
+        {
+            "algo": algo,
+            "config_hash": config_hash,
+            "episode_id": f"{scenario_id}--{seed}",
+            "event_ledger": {"software_commit": SOURCE_COMMIT},
             "git_hash": SOURCE_COMMIT,
-            "config_hash": config_hash,
-            "config_identity": {"algo": algo},
-        },
-        "result_provenance": {
-            "config_hash": config_hash,
-            "repo_commit": SOURCE_COMMIT,
+            "horizon": 600,
             "scenario_id": scenario_id,
+            "scenario_params": scenario_params,
             "seed": seed,
-            "simulator_settings": {"dt": 0.1, "horizon": 600, "kinematics": "differential_drive"},
-        },
-    }
+            "status": "success",
+            "algorithm_metadata": {
+                "algorithm": "ppo" if algo == "guarded_ppo" else algo,
+                "canonical_algorithm": algo,
+                "planner_kinematics": {
+                    "robot_kinematics": "differential_drive",
+                    "scenario_kinematics": ["differential_drive"],
+                },
+                "planner_contract": {
+                    "planner_id": algo,
+                    "action_contract": {"active_robot_kinematics": "differential_drive"},
+                },
+            },
+            "provenance": {
+                "git_hash": SOURCE_COMMIT,
+                "config_hash": config_hash,
+            },
+            "result_provenance": {
+                "config_hash": config_hash,
+                "repo_commit": SOURCE_COMMIT,
+                "scenario_id": scenario_id,
+                "seed": seed,
+                "simulator_settings": {
+                    "dt": 0.1,
+                    "horizon": 600,
+                    "kinematics": "differential_drive",
+                },
+            },
+        }
+    )
 
 
 @pytest.fixture
@@ -274,8 +287,9 @@ def _build_stress_fixture(
                 _row(
                     algo=algo,
                     algo_config=algo_config,
-                    scenario_id=str(scenario["name"]),
+                    scenario=scenario,
                     seed=fixture_seed,
+                    cfg=campaign_config,
                 )
             )
         episodes_path.parent.mkdir(parents=True, exist_ok=True)
@@ -345,6 +359,7 @@ def _build_stress_fixture(
         resolved_seeds=[fixture_seed],
         campaign_root=root,
         campaign_manifest=campaign_manifest,
+        cfg=campaign_config,
     )
     _write_json(
         root / "reports" / "campaign_summary.json",

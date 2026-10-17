@@ -6,7 +6,7 @@ import json
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from robot_sf.benchmark.algorithm_metadata import (
     enrich_algorithm_metadata,
@@ -181,7 +181,7 @@ def expected_episode_identity(
         Complete selected runtime identity.
     """
     spec = selected_campaign_planner(cfg, planner)
-    assert cfg is not None
+    cfg = cast("CampaignConfig", cfg)
     if not isinstance(campaign_commit, str) or not campaign_commit.strip():
         raise ValueError("trusted campaign commit is required for runtime identity")
     selected = _scenario_with_episode_seed_defaults(dict(scenario), seed=seed)

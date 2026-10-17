@@ -15,7 +15,6 @@ from robot_sf.benchmark.metrics import (
     comfort_exposure,
     force_quantiles,
     min_distance,
-    post_process_metrics,
     time_to_goal,
 )
 
@@ -108,7 +107,7 @@ def test_matching_name_in_metadata_or_unknown_structured_path_remains_error():
 
 
 def test_production_undefined_metrics_survive_serialization_and_scan(tmp_path):
-    """Use real producer/postprocessor output, rather than a pre-normalized fixture."""
+    """Use raw producer output, rather than a pre-normalized fixture."""
     data = EpisodeData(
         robot_pos=np.zeros((3, 2)),
         robot_vel=np.zeros((3, 2)),
@@ -127,8 +126,7 @@ def test_production_undefined_metrics_survive_serialization_and_scan(tmp_path):
     assert math.isnan(raw["time_to_goal"])
     assert math.isnan(raw["min_distance"])
     assert math.isnan(raw["force_q50"])
-    metrics = post_process_metrics(raw, snqi_weights=None, snqi_baseline=None)
-    row = {"episode_id": "produced", "metrics": {"clearance_m": 1.0, **metrics}}
+    row = {"episode_id": "produced", "metrics": {"clearance_m": 1.0, **raw}}
     source = tmp_path / "episodes.jsonl"
     source.write_text(json.dumps(row) + "\n", encoding="utf-8")
     original = source.read_bytes()

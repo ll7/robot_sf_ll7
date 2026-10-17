@@ -237,3 +237,25 @@ def test_batch_preflight_rejects_capsule_before_checkpoint_resolution(monkeypatc
     )
     with pytest.raises(ValueError, match="capsule/bicycle"):
         map_runner._validate_per_scenario_compatibility(ctx)
+
+
+@pytest.mark.parametrize("binding", ["authored", "live"])
+def test_direct_ppo_binding_refuses_capsule_before_observation_state_changes(monkeypatch, binding):
+    """The standalone PPO entry point must reject before accepting an observation space."""
+    from gymnasium.spaces import Box
+
+    from robot_sf.baselines.ppo import PPOPlanner
+
+    settings = SimpleNamespace(capsule={"length": 1.183, "width": 0.478})
+    env = SimpleNamespace(observation_space=Box(-1.0, 1.0, (2,)))
+    if binding == "authored":
+        env.config = SimpleNamespace(robot_config=settings)
+    else:
+        env.simulator = SimpleNamespace(robots=[SimpleNamespace(config=settings)])
+    planner = object.__new__(PPOPlanner)
+    planner._runtime_observation_space = None
+    monkeypatch.setattr(planner, "_validate_runtime_observation_space", lambda: None)
+    before = vars(planner).copy()
+    with pytest.raises(ValueError, match="capsule/bicycle"):
+        planner.bind_env(env)
+    assert vars(planner) == before

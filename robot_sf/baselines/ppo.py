@@ -46,6 +46,7 @@ from robot_sf.common.errors import raise_fatal_with_remedy, warn_soft_degrade
 from robot_sf.common.optional_import import try_import
 from robot_sf.common.seed import _configure_torch_213_runtime
 from robot_sf.models import get_registry_entry, resolve_model_path
+from robot_sf.planner.footprint_contract import require_supported_env_footprint
 from robot_sf.planner.predictive_foresight import (
     PredictiveForesightEncoder,
     predictive_foresight_config_from_source,
@@ -342,6 +343,7 @@ class PPOPlanner:
     def bind_env(self, env: Any) -> None:
         """Bind runtime observation space for dict-to-Box checkpoint adapters."""
 
+        require_supported_env_footprint(type(self).__name__, env)
         obs_space = getattr(env, "observation_space", None)
         if isinstance(obs_space, gym_spaces.Space):
             self._runtime_observation_space = obs_space

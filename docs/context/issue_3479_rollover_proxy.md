@@ -24,9 +24,9 @@ holonomic models — can be surfaced as a per-step signal.
 
 | symbol | field | default (m) | meaning |
 | --- | --- | --- | --- |
-| `t_w` | `track_width_m` | 0.80 | lateral wheel track |
+| `t_w` | `two_wheel_axle_track_m` | 0.80 | track of the axle with two wheels |
 | `h_c` | `cog_height_m` | 0.60 | centre-of-gravity height |
-| `a` | `front_axle_to_cog_m` | 0.50 | front axle → CoG |
+| `a` | `single_wheel_axle_to_cog_m` | 0.50 | axle with one wheel → CoG (the single wheel may be at the front or at the rear) |
 | `L` | `wheelbase_m` | 1.20 | wheelbase |
 | `g` | `gravity_m_s2` | 9.81 | gravity |
 

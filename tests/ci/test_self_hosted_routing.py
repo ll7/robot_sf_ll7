@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import copy
 import re
 import subprocess
 from pathlib import Path
@@ -35,7 +36,7 @@ def _evaluate_node(node: ast.AST, context: dict[str, Any]) -> Any:
         assert isinstance(node.op, ast.Not)
         return not _evaluate_node(node.operand, context)
     if isinstance(node, ast.Name):
-        assert node.id in {"github", "vars", "needs"}
+        assert node.id in {"github", "vars", "needs", "steps"}
         return context[node.id]
     if isinstance(node, ast.Attribute):
         parent = _evaluate_node(node.value, context)
@@ -107,6 +108,7 @@ def _github_context(
     triggering_actor: str = "ll7",
     repository: str = "ll7/robot_sf_ll7",
     head_repository: str = "ll7/robot_sf_ll7",
+    author: str | None = "ll7",
 ) -> dict[str, Any]:
     return {
         "event_name": event,
@@ -114,7 +116,12 @@ def _github_context(
         "triggering_actor": triggering_actor,
         "repository": repository,
         "run_attempt": "1",
-        "event": {"pull_request": {"head": {"repo": {"full_name": head_repository}}}},
+        "event": {
+            "pull_request": {
+                "head": {"repo": {"full_name": head_repository}},
+                "user": {"login": author} if author is not None else {},
+            }
+        },
     }
 
 
@@ -123,6 +130,21 @@ def _github_context(
     [
         (_github_context("push"), "robot-sf-ci-ephemeral"),
         (_github_context("pull_request"), "robot-sf-ci-ephemeral"),
+        pytest.param(
+            _github_context("pull_request", author="dependabot[bot]"),
+            "ubuntu-latest",
+            id="bot-author-maintainer-trigger",
+        ),
+        pytest.param(
+            _github_context("pull_request", author="outsider"),
+            "ubuntu-latest",
+            id="other-author-maintainer-trigger",
+        ),
+        pytest.param(
+            _github_context("pull_request", author=None),
+            "ubuntu-latest",
+            id="missing-author",
+        ),
         (_github_context("pull_request", head_repository="outsider/robot_sf_ll7"), "ubuntu-latest"),
         (_github_context("pull_request", actor="dependabot[bot]"), "ubuntu-latest"),
         (_github_context("pull_request", triggering_actor="dependabot[bot]"), "ubuntu-latest"),
@@ -219,8 +241,7 @@ def test_inventory_token_and_recovery_authority_stay_in_hosted_trusted_jobs() ->
     assert "needs.self-hosted-admission.result == 'success'" in probe["if"]
     assert "github.event.pull_request.base.ref == 'main'" in probe["if"]
     assert "github.ref == 'refs/heads/main'" in probe["if"]
-    assert probe["with"]["github-token"] == "${{ github.token }}"
-    assert "secrets." not in str(router)
+    _assert_router_app_token_boundary(yaml.safe_load(CI_WORKFLOW.read_text(encoding="utf-8")))
     checkout = router["steps"][0]
     assert "pull_request.base.sha" in checkout["with"]["ref"]
     assert "pull_request.head.sha" not in checkout["with"]["ref"]
@@ -415,3 +436,257 @@ def test_job_started_hook_path_has_runner_accepted_extension() -> None:
         hook_path = line.split("ACTIONS_RUNNER_HOOK_JOB_STARTED=", 1)[1].strip()
         assert hook_path.endswith((".sh", ".ps1", ".js")), hook_path
         assert f"job_started_hook.sh {hook_path}" in script
+
+
+APP_TOKEN_ACTION = "actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349"
+APP_TOKEN_INPUT = "${{ steps.router-token.outputs.token }}"
+
+
+def _token_steps(workflow: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    steps = workflow["jobs"]["runner-availability"]["steps"]
+    mint = [step for step in steps if step.get("id") == "router-token"]
+    assert len(mint) == 1, "exactly one inventory App token mint is required"
+    return mint[0], next(step for step in steps if step.get("id") == "route")
+
+
+def _token_condition(
+    step: dict[str, Any],
+    github: dict[str, Any],
+    *,
+    enabled: str = "true",
+    provenance: str = "true",
+    admission: str = "success",
+    mint_outcome: str = "success",
+    token_present: bool = True,
+) -> bool:
+    expression = step["if"].strip().removeprefix("${{").removesuffix("}}")
+    expression = expression.replace("&&", "and").replace("||", "or")
+    expression = expression.replace("self-hosted-admission", "self_hosted_admission")
+    expression = expression.replace("router-token", "router_token").replace("== false", "== False")
+    return bool(
+        _evaluate_node(
+            ast.parse(expression.strip(), mode="eval"),
+            {
+                "github": github,
+                "vars": {"ROBOT_SF_SELF_HOSTED_CI_ENABLED": enabled},
+                "needs": {
+                    "self_hosted_admission": {
+                        "result": admission,
+                        "outputs": {"self_hosted": provenance},
+                    }
+                },
+                "steps": {
+                    "router_token": {
+                        "outcome": mint_outcome,
+                        "outputs": {"token": "present" if token_present else ""},
+                    }
+                },
+            },
+        )
+    )
+
+
+def _mint_context(**changes: Any) -> dict[str, Any]:
+    return {
+        "event_name": "pull_request",
+        "repository": "ll7/robot_sf_ll7",
+        "actor": "ll7",
+        "triggering_actor": "ll7",
+        "run_attempt": 1,
+        "ref": "refs/pull/123/merge",
+        "event": {
+            "pull_request": {
+                "base": {"ref": "main"},
+                "head": {"repo": {"full_name": "ll7/robot_sf_ll7", "fork": False}},
+                "user": {"login": "ll7"},
+            }
+        },
+        **changes,
+    }
+
+
+def _assert_router_app_token_boundary(workflow: dict[str, Any]) -> None:
+    """Check real workflow credential custody, scope, failure policy and event admission."""
+    jobs = workflow["jobs"]
+    router = jobs["runner-availability"]
+    mint, probe = _token_steps(workflow)
+    mint_locations = [
+        name
+        for name, job in jobs.items()
+        for step in job.get("steps", [])
+        if step.get("uses", "").startswith("actions/create-github-app-token@")
+    ]
+    assert mint_locations == ["runner-availability"], "mint must stay in availability only"
+    assert mint["uses"] == APP_TOKEN_ACTION, "App action must use the reviewed full release SHA"
+    assert mint["with"] == {
+        "app-id": "${{ secrets.ROBOT_SF_ROUTER_APP_ID }}",
+        "private-key": "${{ secrets.ROBOT_SF_ROUTER_APP_KEY }}",
+        "owner": "ll7",
+        "repositories": "robot_sf_ll7",
+        "permission-administration": "read",
+    }, "App inputs must request only administration read for the single repository with revocation"
+    assert router["runs-on"] == "ubuntu-latest", "credential job must stay hosted"
+    assert router["permissions"] == {"contents": "read"}, "job token stays read-only"
+    for label, subject in [("job", router), ("mint", mint), ("probe", probe)]:
+        assert subject.get("continue-on-error") is True, f"{label} failure must not fail CI"
+    assert [step.get("id") for step in router["steps"]] == [None, "router-token", "route"], (
+        "no extra step may execute with the credential"
+    )
+    checkout = router["steps"][0]
+    assert checkout["uses"].startswith("actions/checkout@")
+    assert checkout["with"]["ref"] == (
+        "${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.sha }}"
+    ), "credential consumer must use trusted base source"
+    assert checkout["with"]["persist-credentials"] is False
+    assert probe["with"]["github-token"] == APP_TOKEN_INPUT, "probe must use the App token"
+    assert probe["with"]["retries"] == 0, "inventory failures must not retry"
+    _assert_token_references(workflow)
+    for options in [
+        {"mint_outcome": "failure"},
+        {"mint_outcome": "skipped"},
+        {"token_present": False},
+    ]:
+        assert not _token_condition(probe, _mint_context(), **options), (
+            "failed/skipped/empty mint must skip inventory and leave hosted outputs empty"
+        )
+    for options in [
+        {"enabled": ""},
+        {"enabled": "false"},
+        {"provenance": "false"},
+        {"provenance": ""},
+        {"admission": "failure"},
+        {"admission": "skipped"},
+    ]:
+        for step in (mint, probe):
+            assert not _token_condition(step, _mint_context(), **options), (
+                "mint and probe require rollout and successful commit provenance"
+            )
+    for case, context, expected in _mint_event_cases():
+        for step in (mint, probe):
+            assert _token_condition(step, context) is expected, f"mint/probe event policy: {case}"
+
+
+def _assert_token_references(workflow: dict[str, Any]) -> None:
+    """Refuse token or App-secret references outside their exact action input locations."""
+    allowed = {
+        ("jobs", "runner-availability", "steps", 1, "with", "app-id"),
+        ("jobs", "runner-availability", "steps", 1, "with", "private-key"),
+        ("jobs", "runner-availability", "steps", 2, "if"),
+        ("jobs", "runner-availability", "steps", 2, "with", "github-token"),
+    }
+
+    def inspect(value: Any, path: tuple[Any, ...] = ()) -> None:
+        if isinstance(value, dict):
+            for key, child in value.items():
+                inspect(child, (*path, key))
+        elif isinstance(value, list):
+            for index, child in enumerate(value):
+                inspect(child, (*path, index))
+        elif isinstance(value, str) and (
+            "ROBOT_SF_ROUTER_APP_" in value or "steps.router-token" in value
+        ):
+            assert path in allowed, (
+                "App credential must not escape mint inputs and probe input/guard"
+            )
+
+    inspect(workflow)
+
+
+def _mint_event_cases() -> list[tuple[str, dict[str, Any], bool]]:
+    cases = [("trusted PR", _mint_context(), True)]
+    cases.append(("main push", _mint_context(event_name="push", ref="refs/heads/main"), True))
+    for field, value in [
+        ("repository", "outsider/robot_sf_ll7"),
+        ("actor", "dependabot[bot]"),
+        ("actor", "other"),
+        ("triggering_actor", "github-actions[bot]"),
+        ("triggering_actor", "other"),
+        ("run_attempt", 2),
+    ]:
+        cases.append((f"{field}={value}", _mint_context(**{field: value}), False))
+    for event in ["pull_request_target", "workflow_run", "workflow_dispatch", "merge_group"]:
+        cases.append((event, _mint_context(event_name=event), False))
+    cases.append(
+        ("feature push", _mint_context(event_name="push", ref="refs/heads/feature"), False)
+    )
+    for case, section, value in [
+        ("fork repository", "head", {"repo": {"full_name": "outsider/repo", "fork": True}}),
+        ("fork flag", "head", {"repo": {"full_name": "ll7/robot_sf_ll7", "fork": True}}),
+        ("missing fork flag", "head", {"repo": {"full_name": "ll7/robot_sf_ll7"}}),
+        ("other PR author", "user", {"login": "other"}),
+        ("non-main base", "base", {"ref": "feature"}),
+    ]:
+        context = _mint_context()
+        context["event"]["pull_request"][section] = value
+        cases.append((case, context, False))
+    return cases
+
+
+def test_router_app_token_boundary() -> None:
+    """Inventory authentication is scoped and usable only by the trusted hosted probe."""
+    _assert_router_app_token_boundary(yaml.safe_load(CI_WORKFLOW.read_text(encoding="utf-8")))
+
+
+@pytest.mark.parametrize(
+    ("mutation", "reason"),
+    [
+        ("extra-job", "availability only"),
+        ("write", "only administration read"),
+        ("extra-permission", "only administration read"),
+        ("all-repositories", "single repository"),
+        ("disable-revoke", "revocation"),
+        ("tag", "full release SHA"),
+        ("job-output", "must not escape"),
+        ("env", "must not escape"),
+        ("script", "must not escape"),
+        ("pr-head", "trusted base source"),
+        ("mint-failure", "mint failure must not fail CI"),
+        ("probe-failure", "probe failure must not fail CI"),
+        ("job-failure", "job failure must not fail CI"),
+        ("failed-mint-probe", "failed/skipped/empty mint"),
+        ("bot-mint", "event policy: actor=dependabot"),
+        ("fork-mint", "event policy: fork flag"),
+        ("provenance", "successful commit provenance"),
+    ],
+)
+def test_app_token_check_rejects_unsafe_workflow_mutations(mutation: str, reason: str) -> None:
+    """The check must detect credential widening/leakage, lost fallback and unsafe minting."""
+    workflow = copy.deepcopy(yaml.safe_load(CI_WORKFLOW.read_text(encoding="utf-8")))
+    router = workflow["jobs"]["runner-availability"]
+    mint, probe = _token_steps(workflow)
+    if mutation == "extra-job":
+        workflow["jobs"]["extra"] = {"steps": [copy.deepcopy(mint)]}
+    elif mutation in {"write", "extra-permission", "all-repositories", "disable-revoke"}:
+        key, value = {
+            "write": ("permission-administration", "write"),
+            "extra-permission": ("permission-contents", "read"),
+            "all-repositories": ("repositories", ""),
+            "disable-revoke": ("skip-token-revoke", True),
+        }[mutation]
+        mint["with"][key] = value
+    elif mutation == "tag":
+        mint["uses"] = "actions/create-github-app-token@v2"
+    elif mutation == "job-output":
+        router["outputs"]["token"] = APP_TOKEN_INPUT
+    elif mutation == "env":
+        probe["env"]["GH_TOKEN"] = APP_TOKEN_INPUT
+    elif mutation == "script":
+        probe["with"]["script"] += f"\nconsole.log('{APP_TOKEN_INPUT}');"
+    elif mutation == "pr-head":
+        router["steps"][0]["with"]["ref"] = "${{ github.event.pull_request.head.sha }}"
+    elif mutation in {"mint-failure", "probe-failure", "job-failure"}:
+        {"mint-failure": mint, "probe-failure": probe, "job-failure": router}[mutation][
+            "continue-on-error"
+        ] = False
+    elif mutation == "failed-mint-probe":
+        probe["if"] = mint["if"]
+    else:
+        guard = {
+            "bot-mint": "github.actor == 'll7' &&",
+            "fork-mint": "github.event.pull_request.head.repo.fork == false &&",
+            "provenance": "needs.self-hosted-admission.result == 'success' &&",
+        }[mutation]
+        assert guard in mint["if"], "mutation must change the intended guard"
+        mint["if"] = mint["if"].replace(guard, "")
+    with pytest.raises(AssertionError, match=re.escape(reason)):
+        _assert_router_app_token_boundary(workflow)

@@ -1,0 +1,35 @@
+# Development-only collection/training contract; independent model IDs for consumers.
+# Executed by the digest-bound lane driver archived with each run manifest.
+collection_entrypoint: scripts/training/collect_predictive_hardcase_data.py
+base_matrix: configs/scenarios/classic_interactions.yaml
+hardcase_matrix: configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml
+collection_seed_start: 1001
+collection_seed_end: 1015
+evaluation_seed_start: 1016
+evaluation_seed_end: 1030
+hardcase_names_contain: [cross_trap, doorway, bottleneck]
+base_max_steps: 240
+hardcase_max_steps: 260
+max_agents: 24
+forecast_steps: 8
+max_speed: 1.2
+hardcase_repeat: 3
+supervision_schema: predictive_planner_dataset_v2_identity
+allow_legacy_supervision: false
+training:
+  epochs: 220
+  batch_size: 128
+  lr: 0.0002
+  weight_decay: 0.00001
+  val_split: 0.2
+  seed: 1008
+  hidden_dim: 192
+  message_passing_steps: 3
+  num_workers: 2
+  pin_memory: true
+  max_val_ade: 1.0
+  max_val_fde: 1.8
+  proxy_every_epochs: 0
+models:
+  forecast: predictive_mppi_identity_dev_train010_20261011
+  prediction: prediction_planner_identity_dev_train010_20261011

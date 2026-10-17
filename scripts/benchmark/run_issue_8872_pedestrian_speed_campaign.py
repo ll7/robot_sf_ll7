@@ -50,7 +50,7 @@ from collections.abc import Callable, Mapping, Sequence
 from contextlib import contextmanager
 from functools import lru_cache
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from scripts.validation.check_issue_6561_pedestrian_speed_protocol import (
     DEFAULT_CONFIG as DEFAULT_PROTOCOL_CONFIG,
@@ -346,7 +346,7 @@ class CampaignAdapterError(ValueError):
     """Raised when a packet, receipt, or row outcome is unsafe to admit."""
 
 
-def _require(condition: bool, message: str) -> None:
+def _require(condition: object, message: str) -> None:
     if not condition:
         raise CampaignAdapterError(message)
 
@@ -424,6 +424,7 @@ def _protocol_metric_names() -> tuple[str, ...]:
     for section in PROTOCOL_METRIC_SECTIONS:
         values = contract.get(section)
         _require(isinstance(values, list), f"metric_contract.{section} must be a list")
+        values = cast("list[Any]", values)
         _require(
             all(isinstance(name, str) and bool(name.strip()) for name in values),
             f"metric_contract.{section} contains an invalid name",
@@ -579,7 +580,7 @@ def _project_public_receipt(value: Any, field: str) -> dict[str, Any]:
     """Project a private-ops receipt before it is copied into a public packet."""
     schema = PUBLIC_RECEIPT_SCHEMAS.get(field)
     _require(schema is not None, f"receipt field {field} has no public schema")
-    projected = _project_public_mapping(value, path=field, schema=schema)
+    projected = _project_public_mapping(value, path=field, schema=cast("Mapping[str, Any]", schema))
     _assert_no_transient_state(projected, field)
     return projected
 
@@ -1030,6 +1031,7 @@ def _validate_journal_success_provenance(
         isinstance(diagnostics, Mapping) and bool(diagnostics),
         "journal native terminal row diagnostics are incomplete",
     )
+    diagnostics = cast("Mapping[str, Any]", diagnostics)
     _require(
         JOURNAL_DIAGNOSTIC_SCALARS.issubset(diagnostics),
         "journal native terminal row activation diagnostics are incomplete",
@@ -1053,6 +1055,7 @@ def _validate_journal_success_provenance(
         isinstance(checkpoint_provenance, list),
         "journal native terminal row checkpoint provenance is incomplete",
     )
+    checkpoint_provenance = cast("list[Mapping[str, Any]]", checkpoint_provenance)
     _require(
         all(
             isinstance(item, Mapping) and set(item) == JOURNAL_CHECKPOINT_FIELDS
@@ -1069,6 +1072,7 @@ def _validate_journal_success_provenance(
             isinstance(expected_checkpoints, list),
             "packet has no checkpoint identities for the row planner",
         )
+        expected_checkpoints = cast("list[Mapping[str, Any]]", expected_checkpoints)
         expected_checkpoint_ids = [item["model_id"] for item in expected_checkpoints]
         actual_checkpoint_ids = [item["model_id"] for item in checkpoint_provenance]
         _require(
@@ -1734,6 +1738,7 @@ def _normalize_outcome(  # noqa: C901
         )
     if status != SUCCESS_STATUS:
         return _row_base(status, status)
+    provenance = cast("Mapping[str, Any]", provenance)
     metrics = _validated_protocol_metrics(
         provenance.get("metrics"),
         field="row.provenance.metrics",
@@ -1859,6 +1864,7 @@ def _validate_identity_contract(
         None,
     )
     _require(scenario_spec is not None, "identity scenario is not in the frozen protocol")
+    scenario_spec = cast("dict[str, Any]", scenario_spec)
     planner_spec = next(
         (
             dict(item)
@@ -1868,6 +1874,7 @@ def _validate_identity_contract(
         None,
     )
     _require(planner_spec is not None, "identity planner is not in the frozen protocol")
+    planner_spec = cast("dict[str, Any]", planner_spec)
     regime_spec = next(
         (
             dict(item)
@@ -1877,6 +1884,7 @@ def _validate_identity_contract(
         None,
     )
     _require(regime_spec is not None, "identity regime is not in the frozen protocol")
+    regime_spec = cast("dict[str, Any]", regime_spec)
     _require(
         identity.get("scenario_source_sha256") == scenario_spec.get("source_sha256"),
         "identity scenario digest drifted",
@@ -1963,7 +1971,7 @@ def _record_binary_metric(
         number, error = _record_metric_value(metrics, name, field=field)
         if error is not None:
             return None, error
-        return (1.0 if number > 0.0 else 0.0), None
+        return (1.0 if cast("float", number) > 0.0 else 0.0), None
     return None, f"metric_contract_missing:{field}"
 
 
@@ -2021,7 +2029,9 @@ def _extract_protocol_metrics(  # noqa: C901, PLR0912, PLR0915
             field="collision_count",
         )
         if total_error is None and alternate_error is None:
-            total_collision = max(total_collision, alternate_collision)
+            total_collision = max(
+                cast("float", total_collision), cast("float", alternate_collision)
+            )
         elif total_error is None:
             return values, alternate_error
         else:
@@ -2047,6 +2057,7 @@ def _extract_protocol_metrics(  # noqa: C901, PLR0912, PLR0915
             if metric_name in present:
                 continue
             return values, error
+        count = cast("float", count)
         typed_counts[metric_name] = count
         failure = _set_if_missing(
             metric_name,
@@ -2090,7 +2101,7 @@ def _extract_protocol_metrics(  # noqa: C901, PLR0912, PLR0915
         if error is not None:
             return values, "metric_contract_missing:total_exposure_seconds"
         dt_seconds = _finite_metric(identity.get("dt_seconds"), "identity.dt_seconds")
-        total_exposure = exposure_share * exposure_steps * dt_seconds
+        total_exposure = cast("float", exposure_share) * cast("float", exposure_steps) * dt_seconds
         if not math.isfinite(total_exposure):
             return values, "metric_contract_nonfinite:total_exposure_seconds"
         values["total_exposure_seconds"] = total_exposure
@@ -2136,6 +2147,7 @@ def _validate_trace_actor_and_spawn_contract(record: Mapping[str, Any]) -> None:
         "reset pedestrian state is unavailable",
     )
 
+    reset_pedestrians = cast("list[Any]", reset_pedestrians)
     protocol = load_protocol(DEFAULT_PROTOCOL_CONFIG)
     speed_contract = _mapping(
         protocol.get("pedestrian_speed_contract"), "pedestrian_speed_contract"
@@ -2167,6 +2179,7 @@ def _validate_trace_actor_and_spawn_contract(record: Mapping[str, Any]) -> None:
             and len(velocity) == 2,
             "reset pedestrian velocity is invalid",
         )
+        velocity = cast("Sequence[Any]", velocity)
         speed = math.hypot(
             _finite_metric(velocity[0], "reset pedestrian velocity x"),
             _finite_metric(velocity[1], "reset pedestrian velocity y"),
@@ -2178,6 +2191,7 @@ def _validate_trace_actor_and_spawn_contract(record: Mapping[str, Any]) -> None:
 
     steps = trace.get("steps")
     _require(isinstance(steps, list) and bool(steps), "simulation_step_trace.steps is empty")
+    steps = cast("list[Any]", steps)
     for step_index, raw_step in enumerate(steps):
         step = _mapping(raw_step, f"simulation_step_trace.steps[{step_index}]")
         transition_trace = _mapping(
@@ -2190,6 +2204,7 @@ def _validate_trace_actor_and_spawn_contract(record: Mapping[str, Any]) -> None:
             f"trace step {step_index} has no oracle transitions",
         )
         step_actor_ids: set[str] = set()
+        transitions = cast("list[Any]", transitions)
         for transition_index, raw_transition in enumerate(transitions):
             transition = _mapping(
                 raw_transition,
@@ -2204,7 +2219,7 @@ def _validate_trace_actor_and_spawn_contract(record: Mapping[str, Any]) -> None:
                 actor_id not in step_actor_ids,
                 f"trace step {step_index} pedestrian ids duplicate",
             )
-            step_actor_ids.add(actor_id)
+            step_actor_ids.add(cast("str", actor_id))
         _require(
             step_actor_ids == reset_actor_ids,
             f"trace step {step_index} actor identities differ from the reset actor set",
@@ -2348,6 +2363,7 @@ def _execute_native_identity(  # noqa: PLR0913
     planner_id = str(identity["planner_id"])
     base = scenarios.get(scenario_id)
     _require(base is not None, f"scenario {scenario_id} was not loaded")
+    base = cast("dict[str, Any]", base)
     _require(planner_id in planner_specs, f"planner {planner_id} was not loaded")
     spec = planner_specs[planner_id]
     planner_checkpoint_ids = sorted(_required_model_ids([spec]))
@@ -2506,7 +2522,7 @@ def _validate_journal_header(
         header_binding_hash
         == _packet_binding_hash(
             _compiled_manifest(),
-            header_source_commit,
+            cast("str", header_source_commit),
             packet_context["checkpoint_manifest"],
         ),
         "execution journal header packet binding is invalid",
@@ -2531,7 +2547,7 @@ def _validate_journal_header(
         and header_manifest_hash == packet_context["manifest_hash"],
         "execution journal header does not match the preserved production packet",
     )
-    return header_expected_rows
+    return cast("int", header_expected_rows)
 
 
 def reconcile_execution_journal(
@@ -2603,6 +2619,7 @@ def reconcile_execution_journal(
                 isinstance(provenance, Mapping),
                 "journal native terminal row is missing provenance",
             )
+            provenance = cast("Mapping[str, Any]", provenance)
             _validate_journal_success_provenance(
                 provenance,
                 identity_key,
@@ -2717,6 +2734,7 @@ def _journal_row_payload(
     if provenance is not None:
         provenance = _journal_provenance(provenance, identity_key)
         if terminal_status == SUCCESS_STATUS:
+            provenance = cast("Mapping[str, Any]", provenance)
             _validate_journal_success_provenance(
                 provenance,
                 identity_key,

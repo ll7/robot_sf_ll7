@@ -672,8 +672,9 @@ def seed_compiled_lidar_rng(seed: int) -> None:
     unseeded, so released stochastic paths, default settings, and serialized
     artifacts are unchanged. In multi-threaded scan dispatch (batch
     coordinator workers) each scan thread owns its own RNG state, so seed
-    every scanning thread explicitly; seeding here never affects another
-    thread's draws, nor the physical/config/metric evolution of the run.
+    every scanning thread explicitly. This seeds the calling thread's shared
+    Numba RNG, so other compiled stochastic code on that thread also observes
+    the seed. It does not change configuration or seed other threads.
     """
     _seed_compiled_rng(int(seed))
 

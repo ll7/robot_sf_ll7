@@ -1,0 +1,18 @@
+{
+  "python": "3.13.14",
+  "numpy": "2.4.6",
+  "pyyaml": "6.0.3",
+  "execution_commit": "0035fba05c9b679e39f58ec286f5d57b96bb9a0a",
+  "uv_lock_sha256": "def82098b23281e7c49f1f05e052e412c2de54ae2da53f1708bc0ddc2a30d023",
+  "cpu_only": true,
+  "workers": 4,
+  "numerical_threads": 1,
+  "available_logical_cores": 20,
+  "load_average": [
+    1.36767578125,
+    1.259765625,
+    1.48828125
+  ],
+  "original_environment_reused": true,
+  "command": "PYTHONPATH=<execution-worktree>:<execution-worktree>/fast-pysf <original-python-3.13.14> scripts/tools/run_camera_ready_benchmark.py --config <registered-packet>/inputs/full.yaml --output-root <lane>/full --label exp_guardesc_replication --log-level INFO"
+}

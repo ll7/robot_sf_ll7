@@ -139,9 +139,9 @@ def test_updated_legacy_report_keeps_collision_gate_opt_in() -> None:
         config=release_row_anomalies.DEFAULT_CONFIG,
     )
 
-    # Golden includes detector engine v1.5 provenance; collision opt-in is unchanged.
+    # Golden includes detector engine v1.6 provenance; collision opt-in is unchanged.
     assert hashlib.sha256(canonical_json(report).encode()).hexdigest() == (
-        "84ae978a189d83df11bd31167bc59aa88c9f936031ab2bc943930d67fd6db5bf"
+        "30dd91c9a61bbdf1308a1f25d3d22674d6b13437d88f64d66baef6f5c8ee64e5"
     )
     assert "collision_metric_contract" not in report["config"]
     assert "collision_metric_inconsistent" not in {

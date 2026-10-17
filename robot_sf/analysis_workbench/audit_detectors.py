@@ -31,7 +31,7 @@ from robot_sf.analysis_workbench.audit_contracts import (
 )
 
 DETECTOR_REGISTRY_SCHEMA_VERSION = "audit-detector-registry.v1"
-DETECTOR_ENGINE_VERSION = "audit-detectors.v1.5"
+DETECTOR_ENGINE_VERSION = "audit-detectors.v1.6"
 DETECTOR_REGISTRY_VERSION = DETECTOR_REGISTRY_SCHEMA_VERSION
 GOAL_ADJACENT_TIMEOUT_VERSION = "goal_adjacent_timeout.v1"
 
@@ -1090,11 +1090,45 @@ def _admission_containers(row: Mapping[str, Any]) -> tuple[tuple[str, Mapping[st
     return tuple(containers)
 
 
+# Explicit NaN sentinels from benchmark.metrics and its canonical metrics_spec.md.
+# This is a path/name contract, never a substring rule for distance/force names.
+# Do not include always-defined measurements, validity flags, or always-defined event counts.
+_DOCUMENTED_UNDEFINED_METRIC_NAMES = (
+    "time_to_goal",
+    "time_to_goal_norm_success_only",
+    "time_to_goal_ideal_ratio",
+    "path_efficiency",
+    "aggregated_time",
+    "min_distance",
+    "mean_distance",
+    "min_clearance",
+    "mean_clearance",
+    "robot_ped_within_5m_frac",
+    "distance_to_human_min",
+    "clearing_distance_min",
+    "clearing_distance_avg",
+    "time_to_collision_min",
+    "force_q50",
+    "force_q90",
+    "force_q95",
+    "ped_force_q50",
+    "ped_force_q90",
+    "ped_force_q95",
+    "ped_force_mean",
+    "force_exceed_events",
+    "comfort_exposure",
+    "force_gradient_norm_mean",
+)
+
+
 def normalize_recorded_undefined(row: Mapping[str, Any]) -> Mapping[str, Any]:
     """Project documented unavailable release sentinels to null without editing source rows.
 
     Positive infinity from disabled tracking and NaN predicted separation in a
     pedestrian-free episode are undefined diagnostics, not corrupt identities.
+    Canonical metric producers also emit NaN for the explicitly listed optional
+    or undefined scalar metrics and force quantiles. Normalize only those metric
+    paths, without inferring why a particular measurement is unavailable.
     Every projection retains the source path, token, and reason. Other
     non-finite values still fail admission.
 
@@ -1143,6 +1177,17 @@ def normalize_recorded_undefined(row: Mapping[str, Any]) -> Mapping[str, Any]:
                     "no_pedestrians",
                 ),
             ]
+        )
+    for prefix in (("metrics",), ("operational_metrics",)):
+        paths.extend(
+            (prefix + (name,), "NaN", "documented_undefined_metric")
+            for name in _DOCUMENTED_UNDEFINED_METRIC_NAMES
+        )
+    # The detector also accepts flattened copies of this named structured record.
+    for prefix in ((), ("metrics",), ("operational_metrics",)):
+        paths.extend(
+            (prefix + ("force_quantiles", quantile), "NaN", "documented_undefined_metric")
+            for quantile in ("q50", "q90", "q95")
         )
     result = row
     missingness = []

@@ -1103,6 +1103,8 @@ def test_yaml_indirection_lookalikes_are_plain_text(tmp_path, source):
         "value: {{start: '{low}', end: '{high}'}}",
         "value: {{lower: '{low}', upper: '{high}'}}",
         "value: {{first: '{low}', last: '{high}'}}",
+        "value: ['{low}.5', '{high}.5']",
+        "value: {{min: {low}.5, max: {high}.5}}",
     ],
 )
 def test_yaml_resolved_semantics_refuse_holdout_without_seed_key(tmp_path, band, shape):

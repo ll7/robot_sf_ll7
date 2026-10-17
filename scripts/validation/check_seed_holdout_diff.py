@@ -809,10 +809,16 @@ def _yaml_semantic_findings(  # noqa: C901 - graph traversal, range checks and s
 
     def overlaps(values):
         try:
-            low, high = sorted(_integer_seed_bound(value) for value in values)
+            if any(type(value) not in (int, float, str) for value in values):
+                return False
+            low, high = sorted(Decimal(str(value)) for value in values)
+            return (
+                low.is_finite()
+                and high.is_finite()
+                and any(low <= seed <= high for seed in HELD_OUT_SEEDS)
+            )
         except (ValueError, InvalidOperation):
             return False
-        return any(low <= seed <= high for seed in HELD_OUT_SEEDS)
 
     def visit(node, seen):  # noqa: C901 - handle scalar, mapping and sequence nodes
         if id(node) in seen:

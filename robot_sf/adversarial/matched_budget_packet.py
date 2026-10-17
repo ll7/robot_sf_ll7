@@ -338,11 +338,12 @@ def canonical_sha256(value: Any) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
-def _repo_file(root: Path, value: Any, name: str) -> Path:
+def _repo_file(root: Path, value: Any, name: str, *, must_exist: bool = True) -> Path:
     _require(isinstance(value, str) and value.strip(), f"{name} must be a path")
     path = (root / value).resolve()
     _require(path.is_relative_to(root.resolve()), f"{name} must be repo-relative")
-    _require(path.is_file(), f"{name} not found: {value}")
+    if must_exist:
+        _require(path.is_file(), f"{name} not found: {value}")
     return path
 
 
@@ -405,13 +406,19 @@ def _resolve_source_commit(packet: Mapping[str, Any], root: Path) -> str:
     return commit
 
 
-def _input_paths(packet: Mapping[str, Any], root: Path, *, source_commit: str) -> dict[str, Path]:
+def _input_snapshots(
+    packet: Mapping[str, Any], root: Path, *, source_commit: str
+) -> tuple[dict[str, bytes], list[dict[str, str]]]:
+    """Verify immutable inputs and report current drift without repinning evidence."""
     inputs = _mapping(_mapping(packet.get("source"), "source").get("inputs"), "source.inputs")
-    paths = {}
+    snapshots = {}
+    staleness = []
     for input_id, raw in inputs.items():
         item = _mapping(raw, f"source.inputs.{input_id}")
         _reject_unknown_keys(item, _INPUT_ALLOWED_KEYS, f"source.inputs.{input_id}")
-        path = _repo_file(root, item.get("path"), f"source.inputs.{input_id}.path")
+        path = _repo_file(
+            root, item.get("path"), f"source.inputs.{input_id}.path", must_exist=False
+        )
         digest = str(item.get("sha256", "")).lower()
         _require(
             len(digest) == 64 and not set(digest) - set("0123456789abcdef"),
@@ -435,13 +442,21 @@ def _input_paths(packet: Mapping[str, Any], root: Path, *, source_commit: str) -
             and not set(working_tree_digest) - set("0123456789abcdef"),
             f"working-tree source hash {input_id} must be SHA-256",
         )
-        _expect(
-            hashlib.sha256(path.read_bytes()).hexdigest(),
-            working_tree_digest,
-            f"working-tree source hash {input_id}",
-        )
-        paths[str(input_id)] = path
-    return paths
+        try:
+            current_digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        except OSError:
+            current_digest = None
+        if current_digest != digest:
+            staleness.append(
+                {
+                    "input_id": str(input_id),
+                    "path": relative_path,
+                    "source_commit": source_commit,
+                    "message": f"stale since {source_commit}",
+                }
+            )
+        snapshots[str(input_id)] = immutable_bytes
+    return snapshots, staleness
 
 
 def _parameter_signature(value: Any) -> list[tuple[str, Any, Any]]:
@@ -451,7 +466,7 @@ def _parameter_signature(value: Any) -> list[tuple[str, Any, Any]]:
     ]
 
 
-def _validate_source_semantics(packet: Mapping[str, Any], paths: Mapping[str, Path]) -> None:
+def _validate_source_semantics(packet: Mapping[str, Any], snapshots: Mapping[str, bytes]) -> None:
     source = _mapping(packet["source"], "source")
     commit = str(source.get("base_commit", ""))
     _require(
@@ -460,18 +475,14 @@ def _validate_source_semantics(packet: Mapping[str, Any], paths: Mapping[str, Pa
     )
     _expect(source.get("base_ref"), "origin/main", "source.base_ref")
     scenario = _mapping(packet["scenario"], "scenario")
-    space = _mapping(
-        yaml.safe_load(paths["search_space"].read_text(encoding="utf-8")), "search space"
-    )
+    space = _mapping(yaml.safe_load(snapshots["search_space"]), "search space")
     variables = _mapping(space.get("variables"), "search_space.variables")
     expected = [(name, item.get("min"), item.get("max")) for name, item in variables.items()]
     _expect(_parameter_signature(scenario.get("parameters")), expected, "scenario parameters")
     expected_order = tuple(variables)
     _expect(tuple(scenario.get("parameter_order", ())), expected_order, "parameter order")
     _check(scenario, ("policy", "horizon_steps", "dt_s"), ("goal", 100, 0.1), "scenario")
-    template = _mapping(
-        yaml.safe_load(paths["scenario_template"].read_text(encoding="utf-8")), "scenario template"
-    )
+    template = _mapping(yaml.safe_load(snapshots["scenario_template"]), "scenario template")
     first = _mapping(_list(template.get("scenarios"), "scenario_template.scenarios")[0], "scenario")
     simulation = _mapping(first.get("simulation_config"), "scenario_template.simulation_config")
     _expect(
@@ -611,9 +622,9 @@ def validate_packet(packet: Mapping[str, Any], *, repo_root: Path) -> dict[str, 
     source = _mapping(packet.get("source"), "source")
     _reject_unknown_keys(source, _SOURCE_ALLOWED_KEYS, "source")
     source_commit = _resolve_source_commit(packet, repo_root)
-    paths = _input_paths(packet, repo_root, source_commit=source_commit)
-    _require(_REQUIRED_INPUTS.issubset(paths), "source inputs are incomplete")
-    _validate_source_semantics(packet, paths)
+    snapshots, staleness = _input_snapshots(packet, repo_root, source_commit=source_commit)
+    _require(_REQUIRED_INPUTS.issubset(snapshots), "source inputs are incomplete")
+    _validate_source_semantics(packet, snapshots)
     _validate_packet_nested_keys(packet)
     _expect(
         (
@@ -773,6 +784,7 @@ def validate_packet(packet: Mapping[str, Any], *, repo_root: Path) -> dict[str, 
         "simulator_call_budget": SIMULATOR_CALL_BUDGET,
         "claim_eligible": False,
         "campaign_execution_allowed": False,
+        "source_staleness": staleness,
     }
 
 

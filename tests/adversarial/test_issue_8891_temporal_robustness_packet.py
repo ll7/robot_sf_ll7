@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import subprocess
 import sys
@@ -51,12 +52,81 @@ def test_packet_separates_immutable_and_working_tree_source_hashes(packet: dict)
         assert source_input["sha256"] != source_input["working_tree_sha256"]
 
 
-def test_missing_working_tree_refresh_hash_keeps_exact_binding_fail_closed(packet: dict) -> None:
-    del packet["source"]["inputs"]["robustness"]["working_tree_sha256"]
-    _bad(
-        lambda: validate_packet(packet, repo_root=ROOT),
-        "working-tree source hash robustness",
+def test_historical_packet_does_not_require_working_tree_refresh_hashes(packet: dict) -> None:
+    """Historical provenance survives source evolution without pretending evidence was rerun."""
+    for source_input in packet["source"]["inputs"].values():
+        source_input.pop("working_tree_sha256", None)
+    result = validate_packet(packet, repo_root=ROOT)
+    assert result["status"] == "ok"
+    assert result["campaign_execution_allowed"] is False
+    assert any(item["input_id"] == "robustness" for item in result["source_staleness"])
+
+
+def _historical_checkout(packet: dict, root: Path) -> Path:
+    """Build a tiny Git fixture borrowing objects, without cloning the repository."""
+    subprocess.run(["git", "init", "-q", str(root)], check=True)
+    common = subprocess.run(
+        ["git", "-C", str(ROOT), "rev-parse", "--path-format=absolute", "--git-common-dir"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    (root / ".git/objects/info/alternates").write_text(
+        str(Path(common) / "objects") + "\n", encoding="utf-8"
     )
+    commit = packet["source"]["base_commit"]
+    subprocess.run(
+        ["git", "-C", str(root), "update-ref", "refs/remotes/origin/main", commit], check=True
+    )
+    for item in packet["source"]["inputs"].values():
+        target = root / item["path"]
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(
+            subprocess.run(
+                ["git", "-C", str(root), "show", f"{commit}:{item['path']}"],
+                capture_output=True,
+                check=True,
+            ).stdout
+        )
+        item.pop("working_tree_sha256", None)
+    return root
+
+
+@pytest.mark.parametrize("input_id", ["runner", "search_space", "scenario_template"])
+@pytest.mark.parametrize("change", ["modified", "deleted"])
+def test_historical_validation_uses_committed_inputs(
+    packet: dict, tmp_path: Path, input_id: str, change: str
+) -> None:
+    """Current edits/deletions cannot invalidate or redefine a historical planning audit."""
+    root = _historical_checkout(packet, tmp_path)
+    assert validate_packet(packet, repo_root=root).get("source_staleness", []) == []
+    item = packet["source"]["inputs"][input_id]
+    path = root / item["path"]
+    if change == "deleted":
+        path.unlink()
+    else:
+        path.write_text("current: unrelated implementation\n", encoding="utf-8")
+        # Repinning current bytes must not redefine the historical semantics.
+        item["working_tree_sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+    result = validate_packet(packet, repo_root=root)
+    assert result["status"] == "ok"
+    assert result["claim_eligible"] is False
+    assert result["campaign_execution_allowed"] is False
+    assert result.get("source_staleness") == [
+        {
+            "input_id": input_id,
+            "path": item["path"],
+            "source_commit": packet["source"]["base_commit"],
+            "message": f"stale since {packet['source']['base_commit']}",
+        }
+    ]
+
+
+@pytest.mark.parametrize("input_id", ["runner", "search_space", "scenario_template"])
+def test_immutable_source_hash_stays_blocking(packet: dict, input_id: str) -> None:
+    """Commit-bound integrity remains a hard gate even when current drift is advisory."""
+    packet["source"]["inputs"][input_id]["sha256"] = "0" * 64
+    _bad(lambda: validate_packet(packet, repo_root=ROOT), f"immutable source hash {input_id}")
 
 
 def test_working_tree_refresh_hash_format_is_fail_closed(packet: dict) -> None:

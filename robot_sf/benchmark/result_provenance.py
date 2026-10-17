@@ -485,6 +485,13 @@ def build_result_provenance_manifest(  # noqa: PLR0913
             )
         )
 
+    numerical_evidence = [
+        rec.get("algorithm_metadata", {}).get("numerical_mode") for rec in episode_records
+    ]
+    for row, evidence in zip(rows, numerical_evidence, strict=True):
+        if evidence is not None:
+            row["numerical_mode"] = evidence
+
     # Completeness.
     is_complete = written > 0 and written >= total_jobs
     completeness: dict[str, Any]
@@ -538,6 +545,14 @@ def build_result_provenance_manifest(  # noqa: PLR0913
         "derived_artifacts": [],
         "completeness": completeness,
     }
+    if any(evidence is not None for evidence in numerical_evidence):
+        from robot_sf._numerical_mode import effective_numerical_mode  # noqa: PLC0415
+
+        manifest["run"]["numerical_mode"] = {
+            "mode": "pinned_float64_v1",
+            "inference_dtype": "float64",
+        }
+        manifest["run"]["numerical_kernel_context"] = effective_numerical_mode()
     return manifest
 
 
@@ -641,6 +656,26 @@ def _validate_campaign_identity(
     )
 
 
+def _validate_manifest_numerical_mode(payload: Mapping[str, Any], run: Mapping[str, Any]) -> None:
+    """Cross-check a pinned claim against retained kernels and actor evidence."""
+    if "numerical_mode" in run:
+        from robot_sf._numerical_mode import validate_numerical_mode  # noqa: PLC0415
+
+        observed = run.get("numerical_kernel_context", {})
+        rows = payload.get("rows", [])
+        _require(bool(rows), "Pinned numerical mode requires retained actor evidence")
+        for row in rows:
+            evidence = row.get("numerical_mode", {})
+            try:
+                validate_numerical_mode(run["numerical_mode"], evidence)
+                validate_numerical_mode(
+                    run["numerical_mode"],
+                    {**observed, "inference_dtype": evidence.get("inference_dtype")},
+                )
+            except ValueError as exc:
+                raise ProvenanceValidationError(str(exc)) from exc
+
+
 def validate_result_provenance_manifest(payload: Mapping[str, Any]) -> None:
     """Validate a provenance manifest.
 
@@ -664,6 +699,8 @@ def validate_result_provenance_manifest(payload: Mapping[str, Any]) -> None:
             bool(run.get(field)),
             f"run.{field} is missing or empty",
         )
+
+    _validate_manifest_numerical_mode(payload, run)
 
     inputs = payload.get("inputs", {})
     _require(isinstance(inputs, Mapping), "inputs must be dict")

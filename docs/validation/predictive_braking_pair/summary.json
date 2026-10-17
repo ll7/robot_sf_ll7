@@ -1,0 +1,84 @@
+{
+  "schema_version": "predictive_braking_pair_development_closeout.v1",
+  "status": "diagnostic-only",
+  "source_head": "6c9d79cda6dfaafc8c24c846e774a7bbd2b657e8",
+  "summaries": {
+    "station": {
+      "scenarios": 1,
+      "totals": {
+        "hybrid_v4_default": {
+          "episodes": 30,
+          "successes": 0,
+          "contact_episodes": 0,
+          "near_miss_onsets": 102,
+          "near_miss_exposure_s": 233.50000000000003,
+          "bound_2s_windows": 7206,
+          "bound_2s_violations": 1231,
+          "bound_2s_violation_rate": 0.17082986400222036
+        },
+        "hybrid_v4_predictive_braking": {
+          "episodes": 30,
+          "successes": 15,
+          "contact_episodes": 0,
+          "near_miss_onsets": 200,
+          "near_miss_exposure_s": 330.1,
+          "bound_2s_windows": 5049,
+          "bound_2s_violations": 2315,
+          "bound_2s_violation_rate": 0.4585066349772232
+        }
+      }
+    },
+    "empty": {
+      "scenarios": 48,
+      "totals": {
+        "hybrid_v4_default": {
+          "episodes": 96,
+          "successes": 84,
+          "contact_episodes": 0,
+          "near_miss_onsets": 0,
+          "near_miss_exposure_s": 0.0,
+          "bound_2s_windows": 0,
+          "bound_2s_violations": 0,
+          "bound_2s_violation_rate": null
+        },
+        "hybrid_v4_predictive_braking": {
+          "episodes": 96,
+          "successes": 84,
+          "contact_episodes": 0,
+          "near_miss_onsets": 0,
+          "near_miss_exposure_s": 0.0,
+          "bound_2s_windows": 0,
+          "bound_2s_violations": 0,
+          "bound_2s_violation_rate": null
+        }
+      }
+    }
+  },
+  "verified_trajectory_count": 252,
+  "empty_failed_episode_count": 24,
+  "empty_compared_executed_metrics": [
+    "success",
+    "collision",
+    "near_miss_onsets",
+    "near_miss_exposure_s",
+    "steps",
+    "duration_s",
+    "initial_goal_distance_m",
+    "final_goal_distance_m",
+    "travel_m",
+    "min_center_separation_m",
+    "near_miss_events",
+    "near_miss_steps",
+    "collision_steps",
+    "protective_stop_count"
+  ],
+  "empty_changed_episode_count": 0,
+  "raw_archive_sha256": "70b59ffb0a0607fdb47a5652cd0cf78ea3359365dfe5449dc6dea28f1c8e00f5",
+  "raw_archive_disposition": "Retained outside disposable worktree output in private development storage; compact measurements and manifests tracked here.",
+  "claim_boundary": "Development diagnostics only. Predictive braking is not a safety guarantee. No learned-PPO integration or release/paper admission.",
+  "tracked_csv_normalization": {
+    "line_endings": "LF",
+    "field_values_and_row_order": "unchanged",
+    "raw_archive_preserves_producer_bytes": true
+  }
+}

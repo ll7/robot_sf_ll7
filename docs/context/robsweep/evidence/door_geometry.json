@@ -1,0 +1,45 @@
+{
+  "artifact_path": "maps/svg_maps/francis2023/francis2023_narrow_doorway.svg",
+  "sha256": "7538ed173d462a5107afc1a1e43b5b2e6d2bc5c9604035cdec9a551e20a8b15e",
+  "opening_width_m": 2.0,
+  "jamb_rectangles": [
+    {
+      "x": "15",
+      "y": "1",
+      "width": "1",
+      "height": "3",
+      "fill": "#000000",
+      "{http://www.inkscape.org/namespaces/inkscape}label": "obstacle"
+    },
+    {
+      "x": "15",
+      "y": "6",
+      "width": "1",
+      "height": "3",
+      "fill": "#000000",
+      "{http://www.inkscape.org/namespaces/inkscape}label": "obstacle"
+    }
+  ],
+  "positive_clearance_route_y": 5.0,
+  "radii": [
+    {
+      "radius_m": 0.3,
+      "diameter_margin_m": 1.4,
+      "symmetric_surface_clearance_m": 0.7,
+      "fits_with_release_0_1m_each_side_margin": true
+    },
+    {
+      "radius_m": 0.5,
+      "diameter_margin_m": 1.0,
+      "symmetric_surface_clearance_m": 0.5,
+      "fits_with_release_0_1m_each_side_margin": true
+    },
+    {
+      "radius_m": 1.0,
+      "diameter_margin_m": 0.0,
+      "symmetric_surface_clearance_m": 0.0,
+      "fits_with_release_0_1m_each_side_margin": false
+    }
+  ],
+  "interpretation": "At radius 1.0 no strictly positive-clearance crossing exists. Exact tangent traversal is a mathematical limiting case; it does not satisfy the released safety-margin contract."
+}

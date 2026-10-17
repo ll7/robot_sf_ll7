@@ -545,11 +545,13 @@ This is a deliberate benchmark-oriented adaptation, not a claim of exact upstrea
 
 ## 9. Reproducible Commands (Minimal)
 
-Train:
+Train (the dataset must come from the identity-corrected collectors; to reproduce a historical
+v1 run from an existing unmarked NPZ, add `--allow-legacy-supervision`, see
+`docs/training/predictive_planner_training.md`):
 
 ```bash
 uv run python scripts/training/train_predictive_planner.py \
-  --dataset output/tmp/predictive_planner/datasets/predictive_rollouts_mixed_v1.npz \
+  --dataset output/tmp/predictive_planner/datasets/predictive_rollouts_mixed_identity_v2.npz \
   --output-dir output/tmp/predictive_planner/training/predictive_proxy_selected_v2 \
   --model-id predictive_proxy_selected_v2 \
   --select-by-proxy \

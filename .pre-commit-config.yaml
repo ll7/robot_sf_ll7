@@ -3,7 +3,7 @@ repos:
     # Ruff version. Keep in sync with `ruff` in pyproject.toml `[tool.ruff]`
     # required-version and the dev dependency pin; a mismatch fails the hook with
     # "Required version does not match the running version".
-    rev: v0.16.7
+    rev: v0.17.0
     hooks:
       # Run the linter.
       - id: ruff
@@ -14,10 +14,10 @@ repos:
     rev: v5.0.0
     hooks:
       - id: trailing-whitespace
-        exclude: ^(docs/|specs/|\.understand-anything/|maps/svg_maps/|fast-pysf/tests/test_maps/)
+        exclude: ^(docs/|specs/|maps/svg_maps/|fast-pysf/tests/test_maps/)
       - id: end-of-file-fixer
         # Frozen v0.0.2 campaign byte pin intentionally has no EOF newline.
-        exclude: ^(docs/|specs/|\.understand-anything/|maps/svg_maps/|fast-pysf/tests/test_maps/|configs/benchmarks/paper_experiment_matrix_all_planners_v1\.yaml$)
+        exclude: ^(docs/|specs/|maps/svg_maps/|fast-pysf/tests/test_maps/|configs/benchmarks/paper_experiment_matrix_all_planners_v1\.yaml$)
       - id: check-yaml
         args: [--allow-multiple-documents]
       - id: check-toml

@@ -61,3 +61,22 @@ def test_robot_env_supplies_static_clearance_and_physical_speed():
         assert meta["static_obstacle_clearance"] == pytest.approx(expected)
     finally:
         env.close()
+
+
+def test_default_reward_skips_static_clearance_geometry(monkeypatch):
+    """A zero default preserves the environment path without a geometry query."""
+    from robot_sf.gym_env import robot_env
+
+    def unexpected_geometry(*_args, **_kwargs):
+        pytest.fail("default reward requested static-clearance geometry")
+
+    monkeypatch.setattr(robot_env, "robot_obstacle_clearance", unexpected_geometry, raising=False)
+    config = RobotSimulationConfig()
+    config.sim_config.ped_density_by_area = 0.0
+    env = make_robot_env(config=config, seed=1001, reward_name="route_completion_v3")
+    try:
+        env.reset(seed=1001)
+        meta = env.step((0.5, 0.0))[-1]["meta"]
+        assert "static_obstacle_clearance" not in meta
+    finally:
+        env.close()

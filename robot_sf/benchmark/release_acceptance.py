@@ -1402,12 +1402,21 @@ def _stress_row_contract_blockers(  # noqa: C901, PLR0912, PLR0915
         )
     )
     provenance_config_hash = _nested_value(row, "provenance", "config_hash")
+    blockers.extend(
+        f"{prefix}: {blocker}"
+        for blocker in _alias_blockers(
+            _alias_values(row, (("provenance.config_hash", provenance_config_hash),)),
+            label="provenance config",
+            expected=expected_row_config_hash,
+        )
+    )
     analysis_trace = _nested_value(row, "algorithm_metadata", "analysis_trace")
     if isinstance(analysis_trace, Mapping):
+        # The complete campaign checker binds this hash to the selected source scenario.
+        # It has a different scope from the full runtime configuration above.
         trace_config_aliases = _alias_values(
             row,
             (
-                ("provenance.config_hash", provenance_config_hash),
                 (
                     "algorithm_metadata.analysis_trace.config_hash",
                     analysis_trace.get("config_hash", _MISSING),
@@ -1421,20 +1430,8 @@ def _stress_row_contract_blockers(  # noqa: C901, PLR0912, PLR0915
                 label="analysis trace config",
             )
         )
-    else:
-        if analysis_trace is not _MISSING and analysis_trace is not None:
-            blockers.append(f"{prefix}: algorithm_metadata.analysis_trace must be a mapping")
-        blockers.extend(
-            f"{prefix}: {blocker}"
-            for blocker in _alias_blockers(
-                _alias_values(
-                    row,
-                    (("provenance.config_hash", provenance_config_hash),),
-                ),
-                label="provenance config",
-                expected=expected_row_config_hash,
-            )
-        )
+    elif analysis_trace is not _MISSING and analysis_trace is not None:
+        blockers.append(f"{prefix}: algorithm_metadata.analysis_trace must be a mapping")
 
     metadata_algorithm = _nested_value(row, "algorithm_metadata", "algorithm")
     expected_metadata_algorithm = "ppo" if expected_algo == "guarded_ppo" else expected_algo

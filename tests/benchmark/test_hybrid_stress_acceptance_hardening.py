@@ -19,6 +19,7 @@ from robot_sf.benchmark.camera_ready._preflight import _config_hash_payload, _sc
 from robot_sf.benchmark.camera_ready._run_state import validate_campaign_integrity
 from robot_sf.benchmark.camera_ready_campaign import load_campaign_config
 from robot_sf.benchmark.identity.hash_utils import sha256_file
+from robot_sf.benchmark.map_runner.map_runner_identity import _scenario_with_episode_seed_defaults
 from robot_sf.benchmark.map_runner_policies.map_runner_policy_resolution import (
     resolve_episode_policy_runtime,
 )
@@ -1280,9 +1281,22 @@ def test_analysis_trace_config_hash_keeps_legacy_trace_binding(
     path = _first_row_path(root, "prediction_planner")
     rows = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
     row = rows[0]
-    trace_hash = "trace-config-hash"
-    row["algorithm_metadata"]["analysis_trace"] = {"config_hash": trace_hash}
-    row["provenance"]["config_hash"] = trace_hash if trace_hash_matches else "wrong-trace-hash"
+    selected = next(
+        s for s in _load_campaign_scenarios(campaign_config) if s["name"] == row["scenario_id"]
+    )
+    selected = _scenario_with_kinematics(
+        selected,
+        kinematics="differential_drive",
+        holonomic_command_mode=campaign_config.holonomic_command_mode,
+    )
+    source = _scenario_with_episode_seed_defaults(selected, seed=row["seed"])
+    trace_hash = _config_hash(
+        {key: value for key, value in source.items() if key not in {"seed", "repeats"}}
+    )
+    row["algorithm_metadata"]["analysis_trace"] = {
+        "config_hash": trace_hash if trace_hash_matches else "wrong-trace-hash",
+        "git_hash": SOURCE_COMMIT,
+    }
     path.write_text("".join(json.dumps(item) + "\n" for item in rows), encoding="utf-8")
     _refresh_sidecar_raw_hash(path)
 
@@ -1312,19 +1326,11 @@ def test_unrelated_nested_business_metadata_does_not_trigger_emergency_marker(
     root, manifest, campaign_config = stress_fixture
     path = _first_row_path(root, "prediction_planner")
     rows = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
-    rows[0]["scenario_params"]["metadata"] = {
+    rows[0]["metadata"] = {
         "planner_mode": "REORIENT",
         "selected_source": "static_reorient",
     }
-    config_hash = _config_hash(rows[0]["scenario_params"])
-    rows[0]["config_hash"] = config_hash
-    rows[0]["provenance"]["config_hash"] = config_hash
-    rows[0]["result_provenance"]["config_hash"] = config_hash
     path.write_text("".join(json.dumps(item) + "\n" for item in rows), encoding="utf-8")
-    sidecar_path = path.with_name(f"{path.name}.provenance.json")
-    sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
-    sidecar["rows"][0]["config_hash"] = config_hash
-    sidecar_path.write_text(json.dumps(sidecar), encoding="utf-8")
     _refresh_sidecar_raw_hash(path)
 
     report = _acceptance(root, manifest, campaign_config)

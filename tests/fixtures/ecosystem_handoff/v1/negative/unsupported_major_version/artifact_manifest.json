@@ -4,13 +4,13 @@
     {
       "kind": "fixture_identity",
       "path": "fixture_manifest.json",
-      "sha256": "1b0e907bcd151f45feb3c60c537c4ab833c102f6f453085cafeaab29dbca0fa0",
+      "sha256": "8cc2d329ab57ddc3721838797803a31116e4a1a32541903b62e50316cb1e5066",
       "size_bytes": 1954
     },
     {
       "kind": "contract_identity",
       "path": "contract_reference.json",
-      "sha256": "4ade596f01122ec867d00374536b26cee7836a9754b65e2af377fd2e7522773e",
+      "sha256": "68e9804fad06e409b0104ee53b4d8fb4a2336e3d853fbc7b79c0bd23504070c2",
       "size_bytes": 323
     },
     {
@@ -22,13 +22,13 @@
     {
       "kind": "episode_rows",
       "path": "episodes.jsonl",
-      "sha256": "fb74dbc310e6417c355111327d64204ac2768eb0849aed1034f54e6f0fc3f7b6",
+      "sha256": "a2c6b571a15a8b527b05da3deef0b72c30f4bccbc4a16bf5b67c6cc63b44834d",
       "size_bytes": 2305
     },
     {
       "kind": "provenance",
       "path": "episodes.jsonl.provenance.json",
-      "sha256": "68fd396f7b7186e2b1247efb3ba28d58acf43dab828aea5abcf4daff65c24b1a",
+      "sha256": "dfcf149973107728764f467984120462c5969a3e5a74884fca6076405491ba9f",
       "size_bytes": 2968
     },
     {

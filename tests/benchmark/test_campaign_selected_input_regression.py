@@ -120,3 +120,39 @@ def test_resigned_producer_row_cannot_replace_selected_input(tmp_path, substitut
     else:
         substituted["simulation_config"]["max_episode_steps"] = 60
     assert admit(_signed_record(substituted)) is False
+
+
+@pytest.mark.parametrize("corrupt_runtime_hash", [False, True])
+def test_stress_hash_aliases_keep_source_and_runtime_scopes_distinct(corrupt_runtime_hash):
+    """Isolate hash scopes; the complete stress fixture covers admission and source binding."""
+    from robot_sf.benchmark.release_acceptance import _stress_row_contract_blockers
+
+    params = {"algo": "goal", "run_horizon": 600}
+    runtime_hash = _config_hash(params)
+    row = {
+        "scenario_params": params,
+        "config_hash": runtime_hash,
+        "result_provenance": {"config_hash": runtime_hash},
+        "provenance": {"config_hash": "wrong-runtime" if corrupt_runtime_hash else runtime_hash},
+        "algorithm_metadata": {"analysis_trace": {"config_hash": "source-scenario-hash"}},
+    }
+    blockers = _stress_row_contract_blockers(
+        row,
+        prefix="row",
+        planner_key="goal",
+        expected_algo="goal",
+        expected_kinematics="differential_drive",
+        expected_source_commit="a" * 40,
+    )
+    config_blockers = [
+        blocker
+        for blocker in blockers
+        if any(
+            label in blocker
+            for label in ("row config", "provenance config", "analysis trace config")
+        )
+    ]
+    if corrupt_runtime_hash:
+        assert any("provenance config" in blocker for blocker in config_blockers)
+    else:
+        assert config_blockers == []

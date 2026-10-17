@@ -24,7 +24,7 @@ from hashlib import sha256
 from importlib.metadata import PackageNotFoundError, version
 from importlib.util import find_spec
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import numba
 import numpy as np
@@ -78,8 +78,8 @@ def capture_pedestrian_group_provenance(simulator: Any) -> dict[str, Any]:
         return {**block, "status": "unavailable", "reason": "runtime_group_state_missing"}
     count = len(np.asarray(simulator.ped_pos).reshape(-1, 2))
     members_seen: set[int] = set()
-    serialized = []
-    for group_id, members in sorted(groups.items()):
+    serialized: list[dict[str, Any]] = []
+    for group_id, members in sorted(cast("Mapping[Any, Any]", groups).items()):
         ids = sorted(operator.index(member) for member in members)
         if any(member < 0 or member >= count or member in members_seen for member in ids):
             raise ValueError("invalid reset pedestrian group membership")

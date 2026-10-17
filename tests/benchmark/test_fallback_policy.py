@@ -1133,3 +1133,24 @@ def test_runtime_fallback_marker_rejects_nonmapping_diagnostic_receipt(receipt) 
         "diagnostic_receipt",
         "invalid",
     )
+
+
+@pytest.mark.parametrize(
+    ("payload", "expected"),
+    [
+        ({"fallback": False, "fallback_reasons": []}, ("fallback_reasons", "invalid")),
+        (
+            {"fallback": False, "fallback_reasons": {"malformed_grid": True}},
+            ("fallback_reasons", "invalid"),
+        ),
+        (
+            {"fallback": False, "fallback_reasons": {"malformed_grid": 1}},
+            ("fallback_reasons.malformed_grid", "1"),
+        ),
+        ({"fallback_reasons": {}}, ("fallback_reasons", "invalid")),
+        ({"fallback": False, "fallback_reasons": {"unused": 0}}, None),
+    ],
+)
+def test_runtime_fallback_marker_checks_receipt_reason_alias_counts(payload, expected) -> None:
+    """Receipt aliases retain real fallback counts and reject forged neutral state."""
+    assert runtime_fallback_or_degraded_marker(payload) == expected

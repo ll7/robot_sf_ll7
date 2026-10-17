@@ -2323,7 +2323,9 @@ def _prepare_episode_env(  # noqa: C901
     if expected_population_size is not None:
         if scenario is None:
             raise ValueError("population-size validation requires the episode scenario")
-        instantiated_count = int(np.asarray(env.simulator.ped_pos).reshape(-1, 2).shape[0])
+        instantiated_count = int(
+            np.asarray(cast("Any", env.simulator).ped_pos).reshape(-1, 2).shape[0]
+        )
         # Issue #5666 acceptance: a forced population must instantiate exactly
         # the declared count. A silent divergence is what wasted a full compute
         # cycle, so fail loudly instead of letting the mismatch propagate.
@@ -2337,7 +2339,9 @@ def _prepare_episode_env(  # noqa: C901
         if scenario is None:
             raise ValueError("runtime trace label building requires the episode scenario")
         if instantiated_count is None:
-            instantiated_count = int(np.asarray(env.simulator.ped_pos).reshape(-1, 2).shape[0])
+            instantiated_count = int(
+                np.asarray(cast("Any", env.simulator).ped_pos).reshape(-1, 2).shape[0]
+            )
         runtime_labels = pedestrian_control_trace_label_builder(instantiated_count)
         if len(runtime_labels) != instantiated_count:
             raise ValueError(
@@ -3869,7 +3873,7 @@ def _setup_and_run_step_loop(args: _StepLoopSetupArgs) -> _EpisodeStepLoopResult
             args.algo_meta["reference_population"] = {
                 "schema_version": "v1",
                 "instantiated_population_size": int(
-                    np.asarray(env.simulator.ped_pos).reshape(-1, 2).shape[0]
+                    np.asarray(cast("Any", env.simulator).ped_pos).reshape(-1, 2).shape[0]
                 ),
             }
         state = _init_step_loop_state(

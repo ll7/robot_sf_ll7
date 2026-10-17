@@ -14,7 +14,7 @@ import re
 from collections import Counter, defaultdict
 from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from jsonschema import Draft202012Validator
 
@@ -669,10 +669,18 @@ def render_markdown(report: dict[str, Any]) -> str:
         Markdown report text.
     """
     report = report if isinstance(report, dict) else {}
-    gate = report.get("gate") if isinstance(report.get("gate"), Mapping) else {}
-    coverage = report.get("coverage") if isinstance(report.get("coverage"), Mapping) else {}
+    gate = (
+        cast("Mapping[str, Any]", report.get("gate"))
+        if isinstance(report.get("gate"), Mapping)
+        else {}
+    )
+    coverage = (
+        cast("Mapping[str, Any]", report.get("coverage"))
+        if isinstance(report.get("coverage"), Mapping)
+        else {}
+    )
     contact = (
-        report.get("stationary_contact")
+        cast("Mapping[str, Any]", report.get("stationary_contact"))
         if isinstance(report.get("stationary_contact"), Mapping)
         else {}
     )

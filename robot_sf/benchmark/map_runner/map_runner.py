@@ -2439,7 +2439,11 @@ def _validate_behavior_sanity(scenario: dict[str, Any]) -> list[str]:
         list[str]: Non-fatal behavior sanity errors.
     """
     errors: list[str] = []
-    meta = scenario.get("metadata") if isinstance(scenario.get("metadata"), dict) else {}
+    meta = (
+        cast("dict[str, Any]", scenario.get("metadata"))
+        if isinstance(scenario.get("metadata"), dict)
+        else {}
+    )
     behavior = str(meta.get("behavior") or "").strip().lower()
     single_peds = (
         scenario.get("single_pedestrians")

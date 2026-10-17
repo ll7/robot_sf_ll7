@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
 import subprocess
 from collections.abc import Mapping, Sequence
 from pathlib import Path
@@ -340,8 +341,13 @@ def canonical_sha256(value: Any) -> str:
 
 def _repo_file(root: Path, value: Any, name: str, *, must_exist: bool = True) -> Path:
     _require(isinstance(value, str) and value.strip(), f"{name} must be a path")
-    path = (root / value).resolve()
-    _require(path.is_relative_to(root.resolve()), f"{name} must be repo-relative")
+    # Preserve the pinned path: resolving a current symlink must not select a
+    # different entry from the historical commit tree.
+    path = Path(os.path.abspath(root.resolve() / value))
+    _require(
+        path.is_relative_to(root.resolve()) and path.resolve().is_relative_to(root.resolve()),
+        f"{name} must be repo-relative",
+    )
     if must_exist:
         _require(path.is_file(), f"{name} not found: {value}")
     return path
@@ -426,9 +432,29 @@ def _input_snapshots(
         )
         relative_path = path.relative_to(root.resolve()).as_posix()
         try:
-            immutable_bytes = _git_output(root, "show", f"{source_commit}:{relative_path}")
+            entry = _git_output(
+                root,
+                "--literal-pathspecs",
+                "ls-tree",
+                "-z",
+                "--full-tree",
+                source_commit,
+                "--",
+                relative_path,
+            )
+            metadata = entry.split(b"\t", 1)[0].split()
+            _require(
+                entry.count(b"\0") == 1
+                and len(metadata) == 3
+                and metadata[0] in {b"100644", b"100755"}
+                and metadata[1] == b"blob",
+                f"immutable source path must be a regular file blob: {relative_path}",
+            )
+            immutable_bytes = _git_output(root, "cat-file", "blob", metadata[2].decode("ascii"))
         except PacketError as exc:
-            raise PacketError(f"immutable source path cannot be resolved: {relative_path}") from exc
+            raise PacketError(
+                f"immutable source path cannot be resolved as a regular file blob: {relative_path}"
+            ) from exc
         _expect(
             hashlib.sha256(immutable_bytes).hexdigest(),
             digest,

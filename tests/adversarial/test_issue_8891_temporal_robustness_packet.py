@@ -122,6 +122,82 @@ def test_historical_validation_uses_committed_inputs(
     ]
 
 
+def _pin_source_entry(packet: dict, root: Path, kind: str) -> None:
+    """Create real Git entries with matching pins, borrowing the historical source tree."""
+
+    def git(*args: str, data: bytes | None = None) -> bytes:
+        return subprocess.run(
+            ["git", "-C", str(root), *args], input=data, capture_output=True, check=True
+        ).stdout
+
+    commit = packet["source"]["base_commit"]
+    relative = "robot_sf/adversarial" if kind == "directory" else "source-entry"
+    if kind != "directory":
+        git("read-tree", commit)
+        if kind == "gitlink":
+            mode, oid = "160000", commit
+        else:
+            mode = {
+                "symlink": "120000",
+                "symlink-to-source": "120000",
+                "regular": "100644",
+                "executable": "100755",
+            }[kind]
+            content = b"absent-target" if mode == "120000" else b"source file bytes\n"
+            if kind == "symlink-to-source":
+                content = packet["source"]["inputs"]["runner"]["path"].encode()
+                (root / relative).symlink_to(content.decode())
+                # The old resolver follows this dangling link to a regular committed target.
+                (root / content.decode()).unlink()
+            oid = git("hash-object", "-w", "--stdin", data=content).decode().strip()
+        git("update-index", "--add", "--cacheinfo", f"{mode},{oid},{relative}")
+        tree = git("write-tree").decode().strip()
+        commit = (
+            git(
+                "-c",
+                "user.name=Packet Test",
+                "-c",
+                "user.email=packet@example.invalid",
+                "commit-tree",
+                tree,
+                "-p",
+                commit,
+                data=b"source entry fixture\n",
+            )
+            .decode()
+            .strip()
+        )
+        git("update-ref", "refs/remotes/origin/main", commit)
+        packet["source"]["base_commit"] = commit
+    pin_path = content.decode() if kind == "symlink-to-source" else relative
+    shown = git("show", f"{commit}:{pin_path}")
+    packet["source"]["inputs"]["runner"].update(
+        path=relative, sha256=hashlib.sha256(shown).hexdigest()
+    )
+
+
+@pytest.mark.parametrize("kind", ["directory", "symlink", "gitlink", "symlink-to-source"])
+def test_pinned_source_rejects_non_file_entries(packet: dict, tmp_path: Path, kind: str) -> None:
+    """Matching pins cannot turn a tree, symlink or gitlink into a source file."""
+    root = _historical_checkout(packet, tmp_path)
+    assert validate_packet(packet, repo_root=root)["status"] == "ok"
+    _pin_source_entry(packet, root, kind)
+    with pytest.raises(PacketError, match=r"source.inputs.runner.path not found|regular.*blob"):
+        validate_packet(packet, repo_root=root)
+
+
+@pytest.mark.parametrize("kind", ["regular", "executable"])
+def test_pinned_source_accepts_regular_blob_modes(packet: dict, tmp_path: Path, kind: str) -> None:
+    """Both regular Git file modes remain valid even after current files are deleted."""
+    root = _historical_checkout(packet, tmp_path)
+    _pin_source_entry(packet, root, kind)
+    result = validate_packet(packet, repo_root=root)
+    assert result["status"] == "ok"
+    assert result["campaign_execution_allowed"] is False
+    assert result["claim_eligible"] is False
+    assert [item["input_id"] for item in result["source_staleness"]] == ["runner"]
+
+
 @pytest.mark.parametrize("input_id", ["runner", "search_space", "scenario_template"])
 def test_immutable_source_hash_stays_blocking(packet: dict, input_id: str) -> None:
     """Commit-bound integrity remains a hard gate even when current drift is advisory."""

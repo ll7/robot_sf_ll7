@@ -650,6 +650,22 @@ def _yaml_bounds_overlap(path: str, text: str, before: list[str], after: list[st
 
 
 RUNTIME_POLICY_LINES = {
+    # Exact refusal-only metadata and synthetic doubles; no rollout consumer is exempt.
+    "robot_sf/training/seed_policy.py": frozenset(
+        [
+            "min(seed_bands.EVAL_SEEDS_0_0_8) <= seed <= max(seed_bands.EVAL_SEEDS_0_0_8)",
+            "or seed in seed_bands.RETIRED_EVAL_SEEDS_0_0_7",
+            "(min(seed_bands.EVAL_SEEDS_0_0_8), max(seed_bands.EVAL_SEEDS_0_0_8)),",
+            "min(seed_bands.RETIRED_EVAL_SEEDS_0_0_7),",
+            "max(seed_bands.RETIRED_EVAL_SEEDS_0_0_7),",
+        ]
+    ),
+    "tests/training/test_training_seed_policy.py": frozenset(
+        [
+            'monkeypatch.setattr(seed_bands, "EVAL_SEEDS_0_0_8", (100050, 100060))',
+            'monkeypatch.setattr(seed_bands, "RETIRED_EVAL_SEEDS_0_0_7", frozenset({100070, 100071}))',
+        ]
+    ),
     "robot_sf/benchmark/runtime_seed_guard.py": frozenset(
         [
             "if value not in seed_bands.HELD_OUT_SEEDS:",

@@ -1,0 +1,26 @@
+==> CI phase: lint
+ci_driver phase_start phase=lint started_at=2026-10-13T10:00:24Z
+==> lint step: uv run ruff check .
+All checks passed!
+    lint step passed
+==> lint step: uv run ruff format --check .
+7689 files already formatted
+    lint step passed
+==> lint step: uv run python scripts/validation/check_broad_exceptions.py
+Broad exception ratchet passed with 207 entries.
+    lint step passed
+==> lint step: uv run python scripts/dev/check_version_alignment.py --advisory
+HEAD tags: (none)
+installed robot_sf version: 0.0.7.dev1596+g83b16e720.d20261013
+CITATION.cff version: 0.0.7
+release preparation target: 0.0.6
+latest full release tag: 0.0.7
+OK: all version axes align with the git tag / release line.
+    lint step passed
+==> lint step: uv run python scripts/dev/check_ruff_version_parity.py
+.pre-commit-config.yaml rev:       'v0.16.10'
+pyproject.toml required-version:   '==0.16.10'
+pyproject.toml dev ruff pin:       'ruff==0.16.10'
+OK: all three Ruff version axes agree.
+    lint step passed
+ci_driver phase_end phase=lint status=0 duration_seconds=5 completed_at=2026-10-13T10:00:29Z

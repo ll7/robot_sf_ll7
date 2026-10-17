@@ -234,6 +234,13 @@ def test_repo_status_is_optional(monkeypatch, tmp_path: Path, fake_subprocess) -
         ["git", "rev-list", "--left-right", "--count", "HEAD...origin/main"],
         _result("0\t4\n"),
     )
+    _register_primary_checkout_reads(
+        fake_subprocess,
+        attached=True,
+        head_sha="a" * 40,
+        origin_main_sha="b" * 40,
+        behind=0,
+    )
 
     monkeypatch.chdir(main)
     monkeypatch.setattr(snapshot, "_run_command", fake_subprocess)
@@ -244,6 +251,44 @@ def test_repo_status_is_optional(monkeypatch, tmp_path: Path, fake_subprocess) -
     assert result.repo_status.branch_status == "## main...origin/main"
     assert result.repo_status.dirty_entries == 1
     assert result.repo_status.behind == 4
+    # An attached checkout is never "stale", even when its upstream moved ahead.
+    assert result.repo_status.head_attached is True
+    assert result.repo_status.head_behind_origin_main == 0
+    assert result.repo_status.stale_primary_checkout is False
+
+
+def _register_primary_checkout_reads(
+    fake_subprocess,
+    *,
+    attached: bool,
+    head_sha: str,
+    origin_main_sha: str | None,
+    behind: int | None,
+) -> None:
+    """Register the Git reads that primary-checkout staleness detection performs."""
+    symbolic = _result("main\n") if attached else _result("", returncode=1)
+    fake_subprocess.register(
+        ["git", "symbolic-ref", "--quiet", "--short", "HEAD"],
+        symbolic,
+    )
+    fake_subprocess.register(
+        ["git", "rev-parse", "--verify", "--quiet", "HEAD^{commit}"],
+        _result(f"{head_sha}\n"),
+    )
+    if origin_main_sha is None:
+        fake_subprocess.register(
+            ["git", "rev-parse", "--verify", "--quiet", "origin/main^{commit}"],
+            _result("", returncode=1),
+        )
+        return
+    fake_subprocess.register(
+        ["git", "rev-parse", "--verify", "--quiet", "origin/main^{commit}"],
+        _result(f"{origin_main_sha}\n"),
+    )
+    fake_subprocess.register(
+        ["git", "rev-list", "--count", "HEAD..origin/main"],
+        _result(f"{behind}\n", returncode=0) if behind is not None else _result("", returncode=1),
+    )
 
 
 def test_missing_worktree_path_marks_status_failed(

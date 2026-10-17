@@ -34,3 +34,12 @@ published threshold. Baseline maxima remain diagnostics. Tiny yaw returns
 missing onset; a window-boundary result cannot establish an onset outside the
 captured window. Synthetic manoeuvre-location controls prevent zero-baseline
 Gaussian tails from saturating the estimator.
+
+CALFIT start admission refuses non-finite state, invalid walls, overlapping discs
+and walls before integration. V3/V4 holding layouts preserve population size and
+explicitly report any engineering density reduction needed for rigid bodies.
+`calfit_preflight_10074.py` checks estimator controls without simulator episodes;
+its ideal records are structural tests, never accepted model evidence.
+`calfit_search_10074.py` preserves separate desired-speed draws and velocity caps.
+Acquisition still requires qualified contact/wall physics and a new explicitly
+pinned five-day plan; historical rejected grids do not qualify the model.

@@ -1,0 +1,14 @@
+--- original_head_empty_world_sweep.py
++++ diagnostic_width_repair.py
+@@ -259,6 +259,11 @@
+     payload["export_publication_bundle"] = False
+     payload["paper_facing"] = False  # dev seeds are not admissible paper evidence
+     payload["record_simulation_step_trace"] = bool(step_trace)
++    if suite == "width":
++        # Empty-world outcome receipt does not consume legacy SNQI anchors.
++        # Clear only diagnostic references; never relabel or modify anchor files.
++        payload["snqi_weights"] = None
++        payload["snqi_baseline"] = None
+     if arms:
+         known = {p["key"] for p in payload["planners"]}
+         missing = set(arms) - known

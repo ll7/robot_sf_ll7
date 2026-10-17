@@ -1,0 +1,310 @@
+[
+  {
+    "scenario": "classic_station_platform_medium",
+    "map_path": "maps/successor_svg_maps/issue_10063_classic_station_platform_safe_spawn_v1.svg",
+    "map_sha256": "39017d6623ca72ec8020f76025d09cd1135cc8d6868d93a58575e265375845d4",
+    "source_head": "d90bf2436e24dea33198a8bbaf6bbf4342b0edac",
+    "blob_url": "https://github.com/ll7/robot_sf_ll7/blob/d90bf2436e24dea33198a8bbaf6bbf4342b0edac/maps/successor_svg_maps/issue_10063_classic_station_platform_safe_spawn_v1.svg",
+    "history": [
+      "ab96ad95e114337e5f342f970be70803f7de9234 Audit full crowd route sampling support and clear the station goal",
+      "ce4d0f04162f5b1675b864ae71fbdfc3f8828279 fix(scenarios): separate release robot endpoints from pedestrian spawns"
+    ]
+  },
+  {
+    "scenario": "classic_cross_trap_low",
+    "map_path": "maps/successor_svg_maps/issue_9762_classic_crossing_goal_zone_entry_v2.svg",
+    "map_sha256": "d3bc9ad6205108a480469338282611730410787cc897abd4d71f3f0fbd47d6a8",
+    "source_head": "d90bf2436e24dea33198a8bbaf6bbf4342b0edac",
+    "blob_url": "https://github.com/ll7/robot_sf_ll7/blob/d90bf2436e24dea33198a8bbaf6bbf4342b0edac/maps/successor_svg_maps/issue_9762_classic_crossing_goal_zone_entry_v2.svg",
+    "history": [
+      "d695891269df9c71445a3f968acd71d8a847c40c fix(maps): end goal-zone routes inside their zones; add matrix consistency gate (#9762) (#9815)"
+    ]
+  },
+  {
+    "scenario": "classic_cross_trap_medium",
+    "map_path": "maps/successor_svg_maps/issue_9762_classic_crossing_goal_zone_entry_v2.svg",
+    "map_sha256": "d3bc9ad6205108a480469338282611730410787cc897abd4d71f3f0fbd47d6a8",
+    "source_head": "d90bf2436e24dea33198a8bbaf6bbf4342b0edac",
+    "blob_url": "https://github.com/ll7/robot_sf_ll7/blob/d90bf2436e24dea33198a8bbaf6bbf4342b0edac/maps/successor_svg_maps/issue_9762_classic_crossing_goal_zone_entry_v2.svg",
+    "history": [
+      "d695891269df9c71445a3f968acd71d8a847c40c fix(maps): end goal-zone routes inside their zones; add matrix consistency gate (#9762) (#9815)"
+    ]
+  },
+  {
+    "scenario": "classic_cross_trap_high",
+    "map_path": "maps/successor_svg_maps/issue_9762_classic_crossing_goal_zone_entry_v2.svg",
+    "map_sha256": "d3bc9ad6205108a480469338282611730410787cc897abd4d71f3f0fbd47d6a8",
+    "source_head": "d90bf2436e24dea33198a8bbaf6bbf4342b0edac",
+    "blob_url": "https://github.com/ll7/robot_sf_ll7/blob/d90bf2436e24dea33198a8bbaf6bbf4342b0edac/maps/successor_svg_maps/issue_9762_classic_crossing_goal_zone_entry_v2.svg",
+    "history": [
+      "d695891269df9c71445a3f968acd71d8a847c40c fix(maps): end goal-zone routes inside their zones; add matrix consistency gate (#9762) (#9815)"
+    ]
+  },
+  {
+    "scenario": "classic_head_on_corridor_low",
+    "map_path": "maps/successor_svg_maps/issue_9762_classic_head_on_corridor_goal_zone_entry_v2.svg",
+    "map_sha256": "e25e068d97d6e060e5e0e19387f23b1e63dc7b0f687bd1b7d95ccf2dd46b9457",
+    "source_head": "d90bf2436e24dea33198a8bbaf6bbf4342b0edac",
+    "blob_url": "https://github.com/ll7/robot_sf_ll7/blob/d90bf2436e24dea33198a8bbaf6bbf4342b0edac/maps/successor_svg_maps/issue_9762_classic_head_on_corridor_goal_zone_entry_v2.svg",
+    "history": [
+      "d695891269df9c71445a3f968acd71d8a847c40c fix(maps): end goal-zone routes inside their zones; add matrix consistency gate (#9762) (#9815)"
+    ]
+  },
+  {
+    "scenario": "classic_head_on_corridor_medium",
+    "map_path": "maps/successor_svg_maps/issue_9762_classic_head_on_corridor_goal_zone_entry_v2.svg",
+    "map_sha256": "e25e068d97d6e060e5e0e19387f23b1e63dc7b0f687bd1b7d95ccf2dd46b9457",
+    "source_head": "d90bf2436e24dea33198a8bbaf6bbf4342b0edac",
+    "blob_url": "https://github.com/ll7/robot_sf_ll7/blob/d90bf2436e24dea33198a8bbaf6bbf4342b0edac/maps/successor_svg_maps/issue_9762_classic_head_on_corridor_goal_zone_entry_v2.svg",
+    "history": [
+      "d695891269df9c71445a3f968acd71d8a847c40c fix(maps): end goal-zone routes inside their zones; add matrix consistency gate (#9762) (#9815)"
+    ]
+  },
+  {
+    "scenario": "classic_t_intersection_low",
+    "map_path": "maps/successor_svg_maps/issue_9762_classic_t_intersection_goal_zone_entry_v2.svg",
+    "map_sha256": "111f58b931f66647af201cab235e9c3285afb71f8b731cef40286b6c9cda8877",
+    "source_head": "d90bf2436e24dea33198a8bbaf6bbf4342b0edac",
+    "blob_url": "https://github.com/ll7/robot_sf_ll7/blob/d90bf2436e24dea33198a8bbaf6bbf4342b0edac/maps/successor_svg_maps/issue_9762_classic_t_intersection_goal_zone_entry_v2.svg",
+    "history": [
+      "d695891269df9c71445a3f968acd71d8a847c40c fix(maps): end goal-zone routes inside their zones; add matrix consistency gate (#9762) (#9815)"
+    ]
+  },
+  {
+    "scenario": "classic_t_intersection_medium",
+    "map_path": "maps/successor_svg_maps/issue_9762_classic_t_intersection_goal_zone_entry_v2.svg",
+    "map_sha256": "111f58b931f66647af201cab235e9c3285afb71f8b731cef40286b6c9cda8877",
+    "source_head": "d90bf2436e24dea33198a8bbaf6bbf4342b0edac",
+    "blob_url": "https://github.com/ll7/robot_sf_ll7/blob/d90bf2436e24dea33198a8bbaf6bbf4342b0edac/maps/successor_svg_maps/issue_9762_classic_t_intersection_goal_zone_entry_v2.svg",
+    "history": [
+      "d695891269df9c71445a3f968acd71d8a847c40c fix(maps): end goal-zone routes inside their zones; add matrix consistency gate (#9762) (#9815)"
+    ]
+  },
+  {
+    "scenario": "francis2023_frontal_approach",
+    "map_path": "maps/successor_svg_maps/issue_9762_francis2023_frontal_approach_goal_zone_entry_v2.svg",
+    "map_sha256": "076bd939f2411133ae2dd272ec51615060fc055c75351472178dc42e7c5a976d",
+    "source_head": "d90bf2436e24dea33198a8bbaf6bbf4342b0edac",
+    "blob_url": "https://github.com/ll7/robot_sf_ll7/blob/d90bf2436e24dea33198a8bbaf6bbf4342b0edac/maps/successor_svg_maps/issue_9762_francis2023_frontal_approach_goal_zone_entry_v2.svg",
+    "history": [
+      "d695891269df9c71445a3f968acd71d8a847c40c fix(maps): end goal-zone routes inside their zones; add matrix consistency gate (#9762) (#9815)"
+    ]
+  },
+  {
+    "scenario": "francis2023_pedestrian_obstruction",
+    "map_path": "maps/successor_svg_maps/issue_9762_francis2023_ped_obstruction_goal_zone_entry_v2.svg",
+    "map_sha256": "3035bb837b24b710762d2d9b26777e7b355ec93cf425153120d99ea329c154fe",
+    "source_head": "d90bf2436e24dea33198a8bbaf6bbf4342b0edac",
+    "blob_url": "https://github.com/ll7/robot_sf_ll7/blob/d90bf2436e24dea33198a8bbaf6bbf4342b0edac/maps/successor_svg_maps/issue_9762_francis2023_ped_obstruction_goal_zone_entry_v2.svg",
+    "history": [
+      "d695891269df9c71445a3f968acd71d8a847c40c fix(maps): end goal-zone routes inside their zones; add matrix consistency gate (#9762) (#9815)"
+    ]
+  },
+  {
+    "scenario": "francis2023_pedestrian_overtaking",
+    "map_path": "maps/successor_svg_maps/issue_10063_francis2023_ped_overtaking_safe_spawn_v1.svg",
+    "map_sha256": "265884fa9a2a37b37f9d1090ce59ac3e88b1034bbf33a89816fb3f4156d28592",
+    "source_head": "d90bf2436e24dea33198a8bbaf6bbf4342b0edac",
+    "blob_url": "https://github.com/ll7/robot_sf_ll7/blob/d90bf2436e24dea33198a8bbaf6bbf4342b0edac/maps/successor_svg_maps/issue_10063_francis2023_ped_overtaking_safe_spawn_v1.svg",
+    "history": [
+      "f63f3a6e8522a5b037e56d5f38d673b365cfb67b fix: author overtaking horizon and disclose guarded PPO envelope",
+      "9a5f187cf7f3da330edb57c90281d769721b67d8 Retreat pedestrian parking behind the robot final approach",
+      "b7473db1fed2e0a3ae35a9cc8f016cda7c1e573f Move parked overtaking pedestrian beyond final-approach perception range",
+      "697f5af7b7ac800b43dedfb79dc0374bdda8ff1e Protect the pedestrian parking circle from walls and clarify passing offsets",
+      "e8dad6b0610a81d6052511c8c2a18eecad6bcfb9 Give the overtaking pedestrian an upper exit clear of wall repulsion",
+      "d9e8eb7dae3805f19e4d4185900f882f0991e09e Clear the whole pedestrian parking region from the final robot leg",
+      "0c3139cfcb8bf2977608ac630b433aa5cadf6b65 fix: clear overtaking goal with a straight pedestrian exit",
+      "3ebc01c7f92bb93b71c8d10fed63964224f2f479 fix(scenarios): retain corridor and turn overtaker off final approach"
+    ]
+  },
+  {
+    "scenario": "francis2023_robot_overtaking",
+    "map_path": "maps/successor_svg_maps/issue_9762_francis2023_robot_overtaking_goal_zone_entry_v2.svg",
+    "map_sha256": "7681d0b11d861aae9ffe58241f6da114c5ccdf68105b061d1770c54aff2ce999",
+    "source_head": "d90bf2436e24dea33198a8bbaf6bbf4342b0edac",
+    "blob_url": "https://github.com/ll7/robot_sf_ll7/blob/d90bf2436e24dea33198a8bbaf6bbf4342b0edac/maps/successor_svg_maps/issue_9762_francis2023_robot_overtaking_goal_zone_entry_v2.svg",
+    "history": [
+      "d695891269df9c71445a3f968acd71d8a847c40c fix(maps): end goal-zone routes inside their zones; add matrix consistency gate (#9762) (#9815)"
+    ]
+  },
+  {
+    "scenario": "francis2023_down_path",
+    "map_path": "maps/successor_svg_maps/issue_9762_francis2023_down_path_goal_zone_entry_v2.svg",
+    "map_sha256": "56e68a19ccc76fbcd634d1ad5188947d85f37e6c4b191f25b60e5753d2754cd4",
+    "source_head": "d90bf2436e24dea33198a8bbaf6bbf4342b0edac",
+    "blob_url": "https://github.com/ll7/robot_sf_ll7/blob/d90bf2436e24dea33198a8bbaf6bbf4342b0edac/maps/successor_svg_maps/issue_9762_francis2023_down_path_goal_zone_entry_v2.svg",
+    "history": [
+      "d695891269df9c71445a3f968acd71d8a847c40c fix(maps): end goal-zone routes inside their zones; add matrix consistency gate (#9762) (#9815)"
+    ]
+  },
+  {
+    "scenario": "francis2023_intersection_no_gesture",
+    "map_path": "maps/successor_svg_maps/issue_9762_francis2023_intersection_no_gesture_goal_zone_entry_v2.svg",
+    "map_sha256": "4a3670c3062e305ee26c64387def7357f42ec58dcdb3640de5e6a9493b163ea7",
+    "source_head": "d90bf2436e24dea33198a8bbaf6bbf4342b0edac",
+    "blob_url": "https://github.com/ll7/robot_sf_ll7/blob/d90bf2436e24dea33198a8bbaf6bbf4342b0edac/maps/successor_svg_maps/issue_9762_francis2023_intersection_no_gesture_goal_zone_entry_v2.svg",
+    "history": [
+      "d695891269df9c71445a3f968acd71d8a847c40c fix(maps): end goal-zone routes inside their zones; add matrix consistency gate (#9762) (#9815)"
+    ]
+  },
+  {
+    "scenario": "francis2023_blind_corner",
+    "map_path": "maps/successor_svg_maps/issue_9762_francis2023_blind_corner_goal_zone_entry_v2.svg",
+    "map_sha256": "0eb4c229fbceb711bbe6747d84b6a2db315890fb817c68900da3ebb8a6217317",
+    "source_head": "d90bf2436e24dea33198a8bbaf6bbf4342b0edac",
+    "blob_url": "https://github.com/ll7/robot_sf_ll7/blob/d90bf2436e24dea33198a8bbaf6bbf4342b0edac/maps/successor_svg_maps/issue_9762_francis2023_blind_corner_goal_zone_entry_v2.svg",
+    "history": [
+      "d695891269df9c71445a3f968acd71d8a847c40c fix(maps): end goal-zone routes inside their zones; add matrix consistency gate (#9762) (#9815)"
+    ]
+  },
+  {
+    "scenario": "francis2023_narrow_hallway",
+    "map_path": "maps/successor_svg_maps/issue_9762_francis2023_narrow_hallway_goal_zone_entry_v2.svg",
+    "map_sha256": "d4016dc32bc4a2715dc088f510da92a6e7739513d5971022bd18478e3181cb8a",
+    "source_head": "d90bf2436e24dea33198a8bbaf6bbf4342b0edac",
+    "blob_url": "https://github.com/ll7/robot_sf_ll7/blob/d90bf2436e24dea33198a8bbaf6bbf4342b0edac/maps/successor_svg_maps/issue_9762_francis2023_narrow_hallway_goal_zone_entry_v2.svg",
+    "history": [
+      "d695891269df9c71445a3f968acd71d8a847c40c fix(maps): end goal-zone routes inside their zones; add matrix consistency gate (#9762) (#9815)"
+    ]
+  },
+  {
+    "scenario": "francis2023_entering_room",
+    "map_path": "maps/successor_svg_maps/issue_9856_francis2023_entering_room_route_width_v1.svg",
+    "map_sha256": "1506b9ddbee141c7256c92802cb6513d3add4cf5a270a9bad3dd197ec7a69166",
+    "source_head": "d90bf2436e24dea33198a8bbaf6bbf4342b0edac",
+    "blob_url": "https://github.com/ll7/robot_sf_ll7/blob/d90bf2436e24dea33198a8bbaf6bbf4342b0edac/maps/successor_svg_maps/issue_9856_francis2023_entering_room_route_width_v1.svg",
+    "history": [
+      "d405d1c78ceab885fb9cae5b9a2baa12d7f42235 fix(benchmark): version room and elevator route widths (#9856) (#9870)"
+    ]
+  },
+  {
+    "scenario": "francis2023_exiting_room",
+    "map_path": "maps/successor_svg_maps/issue_9856_francis2023_exiting_room_route_width_v1.svg",
+    "map_sha256": "cfd25fa09fd2a315f84f39408e57c0ec59bff14ea86d6020a07b93d75a3e434c",
+    "source_head": "d90bf2436e24dea33198a8bbaf6bbf4342b0edac",
+    "blob_url": "https://github.com/ll7/robot_sf_ll7/blob/d90bf2436e24dea33198a8bbaf6bbf4342b0edac/maps/successor_svg_maps/issue_9856_francis2023_exiting_room_route_width_v1.svg",
+    "history": [
+      "d405d1c78ceab885fb9cae5b9a2baa12d7f42235 fix(benchmark): version room and elevator route widths (#9856) (#9870)"
+    ]
+  },
+  {
+    "scenario": "francis2023_intersection_wait",
+    "map_path": "maps/successor_svg_maps/issue_9762_francis2023_intersection_no_gesture_goal_zone_entry_v2.svg",
+    "map_sha256": "4a3670c3062e305ee26c64387def7357f42ec58dcdb3640de5e6a9493b163ea7",
+    "source_head": "d90bf2436e24dea33198a8bbaf6bbf4342b0edac",
+    "blob_url": "https://github.com/ll7/robot_sf_ll7/blob/d90bf2436e24dea33198a8bbaf6bbf4342b0edac/maps/successor_svg_maps/issue_9762_francis2023_intersection_no_gesture_goal_zone_entry_v2.svg",
+    "history": [
+      "d695891269df9c71445a3f968acd71d8a847c40c fix(maps): end goal-zone routes inside their zones; add matrix consistency gate (#9762) (#9815)"
+    ]
+  },
+  {
+    "scenario": "francis2023_intersection_proceed",
+    "map_path": "maps/successor_svg_maps/issue_9762_francis2023_intersection_no_gesture_goal_zone_entry_v2.svg",
+    "map_sha256": "4a3670c3062e305ee26c64387def7357f42ec58dcdb3640de5e6a9493b163ea7",
+    "source_head": "d90bf2436e24dea33198a8bbaf6bbf4342b0edac",
+    "blob_url": "https://github.com/ll7/robot_sf_ll7/blob/d90bf2436e24dea33198a8bbaf6bbf4342b0edac/maps/successor_svg_maps/issue_9762_francis2023_intersection_no_gesture_goal_zone_entry_v2.svg",
+    "history": [
+      "d695891269df9c71445a3f968acd71d8a847c40c fix(maps): end goal-zone routes inside their zones; add matrix consistency gate (#9762) (#9815)"
+    ]
+  },
+  {
+    "scenario": "francis2023_following_human",
+    "map_path": "maps/successor_svg_maps/issue_9762_francis2023_down_path_goal_zone_entry_v2.svg",
+    "map_sha256": "56e68a19ccc76fbcd634d1ad5188947d85f37e6c4b191f25b60e5753d2754cd4",
+    "source_head": "d90bf2436e24dea33198a8bbaf6bbf4342b0edac",
+    "blob_url": "https://github.com/ll7/robot_sf_ll7/blob/d90bf2436e24dea33198a8bbaf6bbf4342b0edac/maps/successor_svg_maps/issue_9762_francis2023_down_path_goal_zone_entry_v2.svg",
+    "history": [
+      "d695891269df9c71445a3f968acd71d8a847c40c fix(maps): end goal-zone routes inside their zones; add matrix consistency gate (#9762) (#9815)"
+    ]
+  },
+  {
+    "scenario": "francis2023_leading_human",
+    "map_path": "maps/successor_svg_maps/issue_9762_francis2023_down_path_goal_zone_entry_v2.svg",
+    "map_sha256": "56e68a19ccc76fbcd634d1ad5188947d85f37e6c4b191f25b60e5753d2754cd4",
+    "source_head": "d90bf2436e24dea33198a8bbaf6bbf4342b0edac",
+    "blob_url": "https://github.com/ll7/robot_sf_ll7/blob/d90bf2436e24dea33198a8bbaf6bbf4342b0edac/maps/successor_svg_maps/issue_9762_francis2023_down_path_goal_zone_entry_v2.svg",
+    "history": [
+      "d695891269df9c71445a3f968acd71d8a847c40c fix(maps): end goal-zone routes inside their zones; add matrix consistency gate (#9762) (#9815)"
+    ]
+  },
+  {
+    "scenario": "francis2023_accompanying_peer",
+    "map_path": "maps/successor_svg_maps/issue_9762_francis2023_down_path_goal_zone_entry_v2.svg",
+    "map_sha256": "56e68a19ccc76fbcd634d1ad5188947d85f37e6c4b191f25b60e5753d2754cd4",
+    "source_head": "d90bf2436e24dea33198a8bbaf6bbf4342b0edac",
+    "blob_url": "https://github.com/ll7/robot_sf_ll7/blob/d90bf2436e24dea33198a8bbaf6bbf4342b0edac/maps/successor_svg_maps/issue_9762_francis2023_down_path_goal_zone_entry_v2.svg",
+    "history": [
+      "d695891269df9c71445a3f968acd71d8a847c40c fix(maps): end goal-zone routes inside their zones; add matrix consistency gate (#9762) (#9815)"
+    ]
+  },
+  {
+    "scenario": "francis2023_join_group",
+    "map_path": "maps/successor_svg_maps/issue_9762_francis2023_join_group_goal_zone_entry_v2.svg",
+    "map_sha256": "72a76ca81c1449be9cc736778a719beb000b5197814facf68cf0854f23ad6a54",
+    "source_head": "d90bf2436e24dea33198a8bbaf6bbf4342b0edac",
+    "blob_url": "https://github.com/ll7/robot_sf_ll7/blob/d90bf2436e24dea33198a8bbaf6bbf4342b0edac/maps/successor_svg_maps/issue_9762_francis2023_join_group_goal_zone_entry_v2.svg",
+    "history": [
+      "d695891269df9c71445a3f968acd71d8a847c40c fix(maps): end goal-zone routes inside their zones; add matrix consistency gate (#9762) (#9815)"
+    ]
+  },
+  {
+    "scenario": "francis2023_leave_group",
+    "map_path": "maps/successor_svg_maps/issue_9762_francis2023_leave_group_goal_zone_entry_v2.svg",
+    "map_sha256": "b69538eb45eee2c177218cdf35d29c2e3d6e6395f7da4199abb031d2ac37eda5",
+    "source_head": "d90bf2436e24dea33198a8bbaf6bbf4342b0edac",
+    "blob_url": "https://github.com/ll7/robot_sf_ll7/blob/d90bf2436e24dea33198a8bbaf6bbf4342b0edac/maps/successor_svg_maps/issue_9762_francis2023_leave_group_goal_zone_entry_v2.svg",
+    "history": [
+      "d695891269df9c71445a3f968acd71d8a847c40c fix(maps): end goal-zone routes inside their zones; add matrix consistency gate (#9762) (#9815)"
+    ]
+  },
+  {
+    "scenario": "francis2023_crowd_navigation",
+    "map_path": "maps/successor_svg_maps/issue_9762_francis2023_crowd_navigation_goal_zone_entry_v2.svg",
+    "map_sha256": "5274dbd2c17d90a7d48af38af7dbeb134e9647ba0926e0a825cf9b4af27ba4dc",
+    "source_head": "d90bf2436e24dea33198a8bbaf6bbf4342b0edac",
+    "blob_url": "https://github.com/ll7/robot_sf_ll7/blob/d90bf2436e24dea33198a8bbaf6bbf4342b0edac/maps/successor_svg_maps/issue_9762_francis2023_crowd_navigation_goal_zone_entry_v2.svg",
+    "history": [
+      "d695891269df9c71445a3f968acd71d8a847c40c fix(maps): end goal-zone routes inside their zones; add matrix consistency gate (#9762) (#9815)"
+    ]
+  },
+  {
+    "scenario": "francis2023_parallel_traffic",
+    "map_path": "maps/successor_svg_maps/issue_9762_francis2023_parallel_traffic_goal_zone_entry_v2.svg",
+    "map_sha256": "62bc1ccceb667edfb1d4986539458984b400958e1e81098276df76304edccba6",
+    "source_head": "d90bf2436e24dea33198a8bbaf6bbf4342b0edac",
+    "blob_url": "https://github.com/ll7/robot_sf_ll7/blob/d90bf2436e24dea33198a8bbaf6bbf4342b0edac/maps/successor_svg_maps/issue_9762_francis2023_parallel_traffic_goal_zone_entry_v2.svg",
+    "history": [
+      "d695891269df9c71445a3f968acd71d8a847c40c fix(maps): end goal-zone routes inside their zones; add matrix consistency gate (#9762) (#9815)"
+    ]
+  },
+  {
+    "scenario": "francis2023_perpendicular_traffic",
+    "map_path": "maps/successor_svg_maps/issue_9762_francis2023_perpendicular_traffic_goal_zone_entry_v2.svg",
+    "map_sha256": "75ae14f525c561ebc70ecaa399a96d04f2957f1b6b06d197d770c573c59963dc",
+    "source_head": "d90bf2436e24dea33198a8bbaf6bbf4342b0edac",
+    "blob_url": "https://github.com/ll7/robot_sf_ll7/blob/d90bf2436e24dea33198a8bbaf6bbf4342b0edac/maps/successor_svg_maps/issue_9762_francis2023_perpendicular_traffic_goal_zone_entry_v2.svg",
+    "history": [
+      "d695891269df9c71445a3f968acd71d8a847c40c fix(maps): end goal-zone routes inside their zones; add matrix consistency gate (#9762) (#9815)"
+    ]
+  },
+  {
+    "scenario": "francis2023_circular_crossing",
+    "map_path": "maps/successor_svg_maps/issue_9762_francis2023_circular_crossing_goal_zone_entry_v2.svg",
+    "map_sha256": "efe54d7488e68048c610d087fabf16dadf5b8ac049f2c18fcebebe7a0aa766b8",
+    "source_head": "d90bf2436e24dea33198a8bbaf6bbf4342b0edac",
+    "blob_url": "https://github.com/ll7/robot_sf_ll7/blob/d90bf2436e24dea33198a8bbaf6bbf4342b0edac/maps/successor_svg_maps/issue_9762_francis2023_circular_crossing_goal_zone_entry_v2.svg",
+    "history": [
+      "d695891269df9c71445a3f968acd71d8a847c40c fix(maps): end goal-zone routes inside their zones; add matrix consistency gate (#9762) (#9815)"
+    ]
+  },
+  {
+    "scenario": "francis2023_robot_crowding",
+    "map_path": "maps/successor_svg_maps/issue_10063_francis2023_robot_crowding_safe_spawn_v1.svg",
+    "map_sha256": "8ced0ecd8402a30842a888ad7a2d463322c7383d38dde93a4e015e87b469b80f",
+    "source_head": "d90bf2436e24dea33198a8bbaf6bbf4342b0edac",
+    "blob_url": "https://github.com/ll7/robot_sf_ll7/blob/d90bf2436e24dea33198a8bbaf6bbf4342b0edac/maps/successor_svg_maps/issue_10063_francis2023_robot_crowding_safe_spawn_v1.svg",
+    "history": [
+      "ce4d0f04162f5b1675b864ae71fbdfc3f8828279 fix(scenarios): separate release robot endpoints from pedestrian spawns"
+    ]
+  }
+]

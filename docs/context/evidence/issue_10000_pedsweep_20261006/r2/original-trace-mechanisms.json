@@ -1,0 +1,5583 @@
+[
+  {
+    "slot": [
+      "guarded_ppo",
+      "differential_drive",
+      "francis2023_crowd_navigation",
+      1001
+    ],
+    "events": [
+      "success_to_failure"
+    ],
+    "baseline": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": true,
+        "timeout_event": false
+      },
+      "success": true,
+      "reset_robot": {
+        "heading": 0.0,
+        "position": [
+          4.387535640902389,
+          9.04622710398411
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": -0.13461743295192719,
+        "position": [
+          26.02636210496787,
+          10.595647538197104
+        ],
+        "velocity": [
+          1.6072894378167746,
+          -0.2031926840169085
+        ]
+      },
+      "last_goal": null,
+      "last_collision": null,
+      "action_semantics": null,
+      "steps": 129,
+      "horizon": 600,
+      "raw_file": "runs/guarded_ppo__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_crowd_navigation--1001--0257c30df249647f"
+    },
+    "top": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": false,
+        "timeout_event": true
+      },
+      "success": false,
+      "reset_robot": {
+        "angular_velocity": 0.0,
+        "heading": 0.0,
+        "position": [
+          4.387535640902389,
+          9.04622710398411
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": -0.6423551440238953,
+        "position": [
+          22.596269720153373,
+          11.025367965090718
+        ],
+        "velocity": [
+          1.54984442472049,
+          -1.2641132303566849
+        ]
+      },
+      "last_goal": {
+        "current": [
+          27.0,
+          10.0
+        ],
+        "next": [
+          26.77295628860691,
+          9.976348874982191
+        ]
+      },
+      "last_collision": {
+        "obstacle": false,
+        "pedestrian": false,
+        "robot": false
+      },
+      "action_semantics": "velocity_delta",
+      "steps": 400,
+      "horizon": 400,
+      "raw_file": "runs/guarded_ppo__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_crowd_navigation--1001--bdfe0be3507f9720"
+    }
+  },
+  {
+    "slot": [
+      "guarded_ppo",
+      "differential_drive",
+      "francis2023_crowd_navigation",
+      1003
+    ],
+    "events": [
+      "success_to_failure"
+    ],
+    "baseline": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": true,
+        "timeout_event": false
+      },
+      "success": true,
+      "reset_robot": {
+        "heading": 0.0,
+        "position": [
+          4.195611596179941,
+          9.210043797889305
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": -0.36500000953674316,
+        "position": [
+          26.034527031412157,
+          10.174217886514082
+        ],
+        "velocity": [
+          1.6267808089900981,
+          -0.6450458894540034
+        ]
+      },
+      "last_goal": null,
+      "last_collision": null,
+      "action_semantics": null,
+      "steps": 125,
+      "horizon": 600,
+      "raw_file": "runs/guarded_ppo__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_crowd_navigation--1003--dcf4825a2c8a7f7b"
+    },
+    "top": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": false,
+        "timeout_event": true
+      },
+      "success": false,
+      "reset_robot": {
+        "angular_velocity": 0.0,
+        "heading": 0.0,
+        "position": [
+          3.8043884038200586,
+          10.789956202110695
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": -0.9975395202636719,
+        "position": [
+          21.484577016135376,
+          11.993933979671596
+        ],
+        "velocity": [
+          1.049368657231291,
+          -1.7025937334609864
+        ]
+      },
+      "last_goal": {
+        "current": [
+          27.0,
+          10.0
+        ],
+        "next": [
+          26.49096076426588,
+          9.364625587322402
+        ]
+      },
+      "last_collision": {
+        "obstacle": false,
+        "pedestrian": false,
+        "robot": false
+      },
+      "action_semantics": "velocity_delta",
+      "steps": 400,
+      "horizon": 400,
+      "raw_file": "runs/guarded_ppo__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_crowd_navigation--1003--ce26c0bf99ed0fed"
+    }
+  },
+  {
+    "slot": [
+      "guarded_ppo",
+      "differential_drive",
+      "francis2023_pedestrian_overtaking",
+      1001
+    ],
+    "events": [
+      "success_to_failure"
+    ],
+    "baseline": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": true,
+        "timeout_event": false
+      },
+      "success": true,
+      "reset_robot": {
+        "heading": 0.0,
+        "position": [
+          4.387535640902389,
+          4.04622710398411
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": 0.7452639937400818,
+        "position": [
+          36.047361661454715,
+          4.069446749507244
+        ],
+        "velocity": [
+          1.479948849598287,
+          1.3452700110285631
+        ]
+      },
+      "last_goal": null,
+      "last_collision": null,
+      "action_semantics": null,
+      "steps": 181,
+      "horizon": 600,
+      "raw_file": "runs/guarded_ppo__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_pedestrian_overtaking--1001--7a1cb281f736c50c"
+    },
+    "top": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": false,
+        "timeout_event": true
+      },
+      "success": false,
+      "reset_robot": {
+        "angular_velocity": 0.0,
+        "heading": 0.0,
+        "position": [
+          4.387535640902389,
+          4.011556775996028
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": -0.9263323545455933,
+        "position": [
+          32.1188652510809,
+          7.009647436506256
+        ],
+        "velocity": [
+          0.40599339228954534,
+          -0.5702362364995839
+        ]
+      },
+      "last_goal": {
+        "current": [
+          36.772956288606906,
+          4.9763488749821905
+        ],
+        "next": null
+      },
+      "last_collision": {
+        "obstacle": false,
+        "pedestrian": false,
+        "robot": false
+      },
+      "action_semantics": "velocity_delta",
+      "steps": 600,
+      "horizon": 600,
+      "raw_file": "runs/guarded_ppo__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_pedestrian_overtaking--1001--8dae42f9d52cecd3"
+    }
+  },
+  {
+    "slot": [
+      "guarded_ppo",
+      "differential_drive",
+      "francis2023_pedestrian_overtaking",
+      1003
+    ],
+    "events": [
+      "success_to_failure"
+    ],
+    "baseline": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": true,
+        "timeout_event": false
+      },
+      "success": true,
+      "reset_robot": {
+        "heading": 0.0,
+        "position": [
+          4.195611596179941,
+          4.2100437978893055
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": 0.5199999809265137,
+        "position": [
+          36.393793846442094,
+          4.034327897216067
+        ],
+        "velocity": [
+          1.7381173335895284,
+          0.9894180788097362
+        ]
+      },
+      "last_goal": null,
+      "last_collision": null,
+      "action_semantics": null,
+      "steps": 186,
+      "horizon": 600,
+      "raw_file": "runs/guarded_ppo__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_pedestrian_overtaking--1003--8771c580b126f268"
+    },
+    "top": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": false,
+        "timeout_event": true
+      },
+      "success": false,
+      "reset_robot": {
+        "angular_velocity": 0.0,
+        "heading": 0.0,
+        "position": [
+          3.8043884038200586,
+          4.447489050527674
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": 0.08122720569372177,
+        "position": [
+          32.28068278854798,
+          5.264845117160357
+        ],
+        "velocity": [
+          0.6946488841708032,
+          0.08638823832134435
+        ]
+      },
+      "last_goal": {
+        "current": [
+          37.0,
+          5.0
+        ],
+        "next": [
+          36.49096076426588,
+          4.3646255873224025
+        ]
+      },
+      "last_collision": {
+        "obstacle": false,
+        "pedestrian": false,
+        "robot": false
+      },
+      "action_semantics": "velocity_delta",
+      "steps": 600,
+      "horizon": 600,
+      "raw_file": "runs/guarded_ppo__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_pedestrian_overtaking--1003--2db1f71d30d5cd18"
+    }
+  },
+  {
+    "slot": [
+      "hybrid_rule_v4_fast_progress_static_escape",
+      "differential_drive",
+      "francis2023_accompanying_peer",
+      1002
+    ],
+    "events": [
+      "success_to_failure"
+    ],
+    "baseline": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": true,
+        "timeout_event": false
+      },
+      "success": true,
+      "reset_robot": {
+        "heading": 0.0,
+        "position": [
+          5.74202342267626,
+          3.3661360938745704
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": -0.008766375482082367,
+        "position": [
+          36.069556389367044,
+          2.995006472979835
+        ],
+        "velocity": [
+          0.9230548059174737,
+          -0.008092052258588112
+        ]
+      },
+      "last_goal": null,
+      "last_collision": null,
+      "action_semantics": null,
+      "steps": 169,
+      "horizon": 600,
+      "raw_file": "runs/hybrid_rule_v3_fast_progress_static_escape__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_accompanying_peer--1002--77b5133a5f050dc2"
+    },
+    "top": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": false,
+        "timeout_event": true
+      },
+      "success": false,
+      "reset_robot": {
+        "angular_velocity": 0.0,
+        "heading": 0.0,
+        "position": [
+          5.74202342267626,
+          3.3661360938745704
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": -2.606006383895874,
+        "position": [
+          34.74514762796667,
+          3.96168204877768
+        ],
+        "velocity": [
+          -0.10636701588580877,
+          -0.05613326555915066
+        ]
+      },
+      "last_goal": {
+        "current": [
+          36.3865353628047,
+          3.1025605753907968
+        ],
+        "next": null
+      },
+      "last_collision": {
+        "obstacle": false,
+        "pedestrian": false,
+        "robot": false
+      },
+      "action_semantics": null,
+      "steps": 400,
+      "horizon": 400,
+      "raw_file": "runs/hybrid_rule_v4_fast_progress_static_escape__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_accompanying_peer--1002--e841b6cfbc6dd612"
+    }
+  },
+  {
+    "slot": [
+      "hybrid_rule_v4_fast_progress_static_escape",
+      "differential_drive",
+      "francis2023_down_path",
+      1002
+    ],
+    "events": [
+      "success_to_failure"
+    ],
+    "baseline": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": true,
+        "timeout_event": false
+      },
+      "success": true,
+      "reset_robot": {
+        "heading": 0.0,
+        "position": [
+          5.74202342267626,
+          3.3661360938745704
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": -0.008766375482082367,
+        "position": [
+          36.069556389367044,
+          2.995006472979835
+        ],
+        "velocity": [
+          0.9230548059174737,
+          -0.008092052258588112
+        ]
+      },
+      "last_goal": null,
+      "last_collision": null,
+      "action_semantics": null,
+      "steps": 169,
+      "horizon": 600,
+      "raw_file": "runs/hybrid_rule_v3_fast_progress_static_escape__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_down_path--1002--5aa67efb24ce7796"
+    },
+    "top": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": false,
+        "timeout_event": true
+      },
+      "success": false,
+      "reset_robot": {
+        "angular_velocity": 0.0,
+        "heading": 0.0,
+        "position": [
+          5.74202342267626,
+          3.3661360938745704
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": -2.606006383895874,
+        "position": [
+          34.74514762796667,
+          3.96168204877768
+        ],
+        "velocity": [
+          -0.10636701588580877,
+          -0.05613326555915066
+        ]
+      },
+      "last_goal": {
+        "current": [
+          36.3865353628047,
+          3.1025605753907968
+        ],
+        "next": null
+      },
+      "last_collision": {
+        "obstacle": false,
+        "pedestrian": false,
+        "robot": false
+      },
+      "action_semantics": null,
+      "steps": 400,
+      "horizon": 400,
+      "raw_file": "runs/hybrid_rule_v4_fast_progress_static_escape__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_down_path--1002--f630a2e8380ede23"
+    }
+  },
+  {
+    "slot": [
+      "hybrid_rule_v4_fast_progress_static_escape",
+      "differential_drive",
+      "francis2023_entering_room",
+      1002
+    ],
+    "events": [
+      "success_to_failure"
+    ],
+    "baseline": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": true,
+        "timeout_event": false
+      },
+      "success": true,
+      "reset_robot": {
+        "heading": 0.0,
+        "position": [
+          4.74202342267626,
+          9.36613609387457
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": 0.009314331226050854,
+        "position": [
+          20.001241055171572,
+          9.762251154091418
+        ],
+        "velocity": [
+          0.9249598633633127,
+          0.008615631908757138
+        ]
+      },
+      "last_goal": null,
+      "last_collision": null,
+      "action_semantics": null,
+      "steps": 99,
+      "horizon": 600,
+      "raw_file": "runs/hybrid_rule_v3_fast_progress_static_escape__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_entering_room--1002--c5798bc7fc81ad50"
+    },
+    "top": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": false,
+        "timeout_event": true
+      },
+      "success": false,
+      "reset_robot": {
+        "angular_velocity": 0.0,
+        "heading": -0.13255153596401215,
+        "position": [
+          4.74202342267626,
+          9.36613609387457
+        ],
+        "velocity": [
+          0.0,
+          -0.0
+        ]
+      },
+      "last_robot": {
+        "heading": -1.6096618175506592,
+        "position": [
+          18.563438559465297,
+          10.084633294980826
+        ],
+        "velocity": [
+          -0.041268925562150116,
+          -0.46317474642521006
+        ]
+      },
+      "last_goal": {
+        "current": [
+          20.3865353628047,
+          10.102560575390797
+        ],
+        "next": null
+      },
+      "last_collision": {
+        "obstacle": false,
+        "pedestrian": false,
+        "robot": false
+      },
+      "action_semantics": null,
+      "steps": 400,
+      "horizon": 400,
+      "raw_file": "runs/hybrid_rule_v4_fast_progress_static_escape__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_entering_room--1002--5e05dca9ee089d6b"
+    }
+  },
+  {
+    "slot": [
+      "hybrid_rule_v4_fast_progress_static_escape",
+      "differential_drive",
+      "francis2023_following_human",
+      1002
+    ],
+    "events": [
+      "success_to_failure"
+    ],
+    "baseline": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": true,
+        "timeout_event": false
+      },
+      "success": true,
+      "reset_robot": {
+        "heading": 0.0,
+        "position": [
+          5.74202342267626,
+          3.3661360938745704
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": -0.008766375482082367,
+        "position": [
+          36.069556389367044,
+          2.995006472979835
+        ],
+        "velocity": [
+          0.9230548059174737,
+          -0.008092052258588112
+        ]
+      },
+      "last_goal": null,
+      "last_collision": null,
+      "action_semantics": null,
+      "steps": 169,
+      "horizon": 600,
+      "raw_file": "runs/hybrid_rule_v3_fast_progress_static_escape__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_following_human--1002--6a0f4f3b4ac6a4bd"
+    },
+    "top": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": false,
+        "timeout_event": true
+      },
+      "success": false,
+      "reset_robot": {
+        "angular_velocity": 0.0,
+        "heading": 0.0,
+        "position": [
+          5.74202342267626,
+          3.3661360938745704
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": -2.606006383895874,
+        "position": [
+          34.74514762796667,
+          3.96168204877768
+        ],
+        "velocity": [
+          -0.10636701588580877,
+          -0.05613326555915066
+        ]
+      },
+      "last_goal": {
+        "current": [
+          36.3865353628047,
+          3.1025605753907968
+        ],
+        "next": null
+      },
+      "last_collision": {
+        "obstacle": false,
+        "pedestrian": false,
+        "robot": false
+      },
+      "action_semantics": null,
+      "steps": 400,
+      "horizon": 400,
+      "raw_file": "runs/hybrid_rule_v4_fast_progress_static_escape__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_following_human--1002--887b7fb640d052e1"
+    }
+  },
+  {
+    "slot": [
+      "hybrid_rule_v4_fast_progress_static_escape",
+      "differential_drive",
+      "francis2023_leading_human",
+      1002
+    ],
+    "events": [
+      "success_to_failure"
+    ],
+    "baseline": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": true,
+        "timeout_event": false
+      },
+      "success": true,
+      "reset_robot": {
+        "heading": 0.0,
+        "position": [
+          5.74202342267626,
+          3.3661360938745704
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": -0.008766375482082367,
+        "position": [
+          36.069556389367044,
+          2.995006472979835
+        ],
+        "velocity": [
+          0.9230548059174737,
+          -0.008092052258588112
+        ]
+      },
+      "last_goal": null,
+      "last_collision": null,
+      "action_semantics": null,
+      "steps": 169,
+      "horizon": 600,
+      "raw_file": "runs/hybrid_rule_v3_fast_progress_static_escape__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_leading_human--1002--e995696876e05b82"
+    },
+    "top": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": false,
+        "timeout_event": true
+      },
+      "success": false,
+      "reset_robot": {
+        "angular_velocity": 0.0,
+        "heading": 0.0,
+        "position": [
+          5.74202342267626,
+          3.3661360938745704
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": -2.606006383895874,
+        "position": [
+          34.74514762796667,
+          3.96168204877768
+        ],
+        "velocity": [
+          -0.10636701588580877,
+          -0.05613326555915066
+        ]
+      },
+      "last_goal": {
+        "current": [
+          36.3865353628047,
+          3.1025605753907968
+        ],
+        "next": null
+      },
+      "last_collision": {
+        "obstacle": false,
+        "pedestrian": false,
+        "robot": false
+      },
+      "action_semantics": null,
+      "steps": 400,
+      "horizon": 400,
+      "raw_file": "runs/hybrid_rule_v4_fast_progress_static_escape__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_leading_human--1002--a50aba4e04142e3a"
+    }
+  },
+  {
+    "slot": [
+      "hybrid_rule_v4_fast_progress_static_escape",
+      "differential_drive",
+      "francis2023_narrow_hallway",
+      1002
+    ],
+    "events": [
+      "success_to_failure"
+    ],
+    "baseline": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": true,
+        "timeout_event": false
+      },
+      "success": true,
+      "reset_robot": {
+        "heading": 0.0,
+        "position": [
+          4.74202342267626,
+          2.3661360938745704
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": 0.011476367712020874,
+        "position": [
+          26.06019011660236,
+          3.034116292671854
+        ],
+        "velocity": [
+          0.9518601497992663,
+          0.013304413605270682
+        ]
+      },
+      "last_goal": null,
+      "last_collision": null,
+      "action_semantics": null,
+      "steps": 124,
+      "horizon": 600,
+      "raw_file": "runs/hybrid_rule_v3_fast_progress_static_escape__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_narrow_hallway--1002--e5ddd8d0e6cb9ffd"
+    },
+    "top": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": false,
+        "timeout_event": true
+      },
+      "success": false,
+      "reset_robot": {
+        "angular_velocity": 0.0,
+        "heading": 0.0,
+        "position": [
+          4.74202342267626,
+          2.3661360938745704
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": 2.4533050060272217,
+        "position": [
+          25.508769562880563,
+          3.5691777099702056
+        ],
+        "velocity": [
+          -0.721295991582771,
+          0.648559566731981
+        ]
+      },
+      "last_goal": {
+        "current": [
+          26.3865353628047,
+          3.1025605753907968
+        ],
+        "next": null
+      },
+      "last_collision": {
+        "obstacle": false,
+        "pedestrian": false,
+        "robot": false
+      },
+      "action_semantics": null,
+      "steps": 400,
+      "horizon": 400,
+      "raw_file": "runs/hybrid_rule_v4_fast_progress_static_escape__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_narrow_hallway--1002--4551cab413a2301c"
+    }
+  },
+  {
+    "slot": [
+      "hybrid_rule_v4_fast_progress_static_escape",
+      "differential_drive",
+      "francis2023_pedestrian_overtaking",
+      1002
+    ],
+    "events": [
+      "success_to_failure"
+    ],
+    "baseline": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": true,
+        "timeout_event": false
+      },
+      "success": true,
+      "reset_robot": {
+        "heading": 0.0,
+        "position": [
+          4.74202342267626,
+          4.36613609387457
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": 0.010109033435583115,
+        "position": [
+          36.06669032540587,
+          5.005729369667788
+        ],
+        "velocity": [
+          0.9256471426564161,
+          0.009357716751550171
+        ]
+      },
+      "last_goal": null,
+      "last_collision": null,
+      "action_semantics": null,
+      "steps": 174,
+      "horizon": 600,
+      "raw_file": "runs/hybrid_rule_v3_fast_progress_static_escape__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_pedestrian_overtaking--1002--2ca4062ecf961274"
+    },
+    "top": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": false,
+        "timeout_event": true
+      },
+      "success": false,
+      "reset_robot": {
+        "angular_velocity": 0.0,
+        "heading": 0.0,
+        "position": [
+          4.74202342267626,
+          4.091534023468642
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": 2.1211345195770264,
+        "position": [
+          35.803478687489466,
+          5.434039858515426
+        ],
+        "velocity": [
+          -0.3358055540556393,
+          0.6141942932536892
+        ]
+      },
+      "last_goal": {
+        "current": [
+          36.3865353628047,
+          5.102560575390797
+        ],
+        "next": null
+      },
+      "last_collision": {
+        "obstacle": false,
+        "pedestrian": false,
+        "robot": false
+      },
+      "action_semantics": null,
+      "steps": 600,
+      "horizon": 600,
+      "raw_file": "runs/hybrid_rule_v4_fast_progress_static_escape__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_pedestrian_overtaking--1002--12ec4b78ceba896b"
+    }
+  },
+  {
+    "slot": [
+      "hybrid_rule_v4_fast_progress_static_escape_continuous",
+      "differential_drive",
+      "francis2023_accompanying_peer",
+      1002
+    ],
+    "events": [
+      "success_to_failure"
+    ],
+    "baseline": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": true,
+        "timeout_event": false
+      },
+      "success": true,
+      "reset_robot": {
+        "heading": 0.0,
+        "position": [
+          5.74202342267626,
+          3.3661360938745704
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": -0.00966931413859129,
+        "position": [
+          36.07098751945921,
+          2.9944783819730056
+        ],
+        "velocity": [
+          0.9230471230108606,
+          -0.008925510550303883
+        ]
+      },
+      "last_goal": null,
+      "last_collision": null,
+      "action_semantics": null,
+      "steps": 169,
+      "horizon": 600,
+      "raw_file": "runs/hybrid_rule_v3_fast_progress_static_escape_continuous__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_accompanying_peer--1002--e1005f300c95306d"
+    },
+    "top": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": false,
+        "timeout_event": true
+      },
+      "success": false,
+      "reset_robot": {
+        "angular_velocity": 0.0,
+        "heading": 0.0,
+        "position": [
+          5.74202342267626,
+          3.3661360938745704
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": -2.3375742435455322,
+        "position": [
+          34.791871496452316,
+          3.8850223491080955
+        ],
+        "velocity": [
+          -0.12392984136056384,
+          -0.11638628422053099
+        ]
+      },
+      "last_goal": {
+        "current": [
+          36.3865353628047,
+          3.1025605753907968
+        ],
+        "next": null
+      },
+      "last_collision": {
+        "obstacle": false,
+        "pedestrian": false,
+        "robot": false
+      },
+      "action_semantics": null,
+      "steps": 400,
+      "horizon": 400,
+      "raw_file": "runs/hybrid_rule_v4_fast_progress_static_escape_continuous__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_accompanying_peer--1002--f56cd1306c32c548"
+    }
+  },
+  {
+    "slot": [
+      "hybrid_rule_v4_fast_progress_static_escape_continuous",
+      "differential_drive",
+      "francis2023_down_path",
+      1002
+    ],
+    "events": [
+      "success_to_failure"
+    ],
+    "baseline": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": true,
+        "timeout_event": false
+      },
+      "success": true,
+      "reset_robot": {
+        "heading": 0.0,
+        "position": [
+          5.74202342267626,
+          3.3661360938745704
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": -0.00966931413859129,
+        "position": [
+          36.07098751945921,
+          2.9944783819730056
+        ],
+        "velocity": [
+          0.9230471230108606,
+          -0.008925510550303883
+        ]
+      },
+      "last_goal": null,
+      "last_collision": null,
+      "action_semantics": null,
+      "steps": 169,
+      "horizon": 600,
+      "raw_file": "runs/hybrid_rule_v3_fast_progress_static_escape_continuous__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_down_path--1002--413b058811b4083a"
+    },
+    "top": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": false,
+        "timeout_event": true
+      },
+      "success": false,
+      "reset_robot": {
+        "angular_velocity": 0.0,
+        "heading": 0.0,
+        "position": [
+          5.74202342267626,
+          3.3661360938745704
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": -2.3375742435455322,
+        "position": [
+          34.791871496452316,
+          3.8850223491080955
+        ],
+        "velocity": [
+          -0.12392984136056384,
+          -0.11638628422053099
+        ]
+      },
+      "last_goal": {
+        "current": [
+          36.3865353628047,
+          3.1025605753907968
+        ],
+        "next": null
+      },
+      "last_collision": {
+        "obstacle": false,
+        "pedestrian": false,
+        "robot": false
+      },
+      "action_semantics": null,
+      "steps": 400,
+      "horizon": 400,
+      "raw_file": "runs/hybrid_rule_v4_fast_progress_static_escape_continuous__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_down_path--1002--52ec1a704c8be1ae"
+    }
+  },
+  {
+    "slot": [
+      "hybrid_rule_v4_fast_progress_static_escape_continuous",
+      "differential_drive",
+      "francis2023_entering_room",
+      1002
+    ],
+    "events": [
+      "success_to_failure"
+    ],
+    "baseline": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": true,
+        "timeout_event": false
+      },
+      "success": true,
+      "reset_robot": {
+        "heading": 0.0,
+        "position": [
+          4.74202342267626,
+          9.36613609387457
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": 0.018738428130745888,
+        "position": [
+          20.07886957613641,
+          9.763016378592116
+        ],
+        "velocity": [
+          0.8999791547123337,
+          0.01686616851616307
+        ]
+      },
+      "last_goal": null,
+      "last_collision": null,
+      "action_semantics": null,
+      "steps": 101,
+      "horizon": 600,
+      "raw_file": "runs/hybrid_rule_v3_fast_progress_static_escape_continuous__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_entering_room--1002--562474ddda35cca2"
+    },
+    "top": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": false,
+        "timeout_event": true
+      },
+      "success": false,
+      "reset_robot": {
+        "angular_velocity": 0.0,
+        "heading": -0.13255153596401215,
+        "position": [
+          4.74202342267626,
+          9.36613609387457
+        ],
+        "velocity": [
+          0.0,
+          -0.0
+        ]
+      },
+      "last_robot": {
+        "heading": -2.550111770629883,
+        "position": [
+          18.62588812866018,
+          10.305527079087987
+        ],
+        "velocity": [
+          -0.1528273091781429,
+          -0.09191712043177702
+        ]
+      },
+      "last_goal": {
+        "current": [
+          20.3865353628047,
+          10.102560575390797
+        ],
+        "next": null
+      },
+      "last_collision": {
+        "obstacle": false,
+        "pedestrian": false,
+        "robot": false
+      },
+      "action_semantics": null,
+      "steps": 400,
+      "horizon": 400,
+      "raw_file": "runs/hybrid_rule_v4_fast_progress_static_escape_continuous__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_entering_room--1002--b5f6445fa33d2e0f"
+    }
+  },
+  {
+    "slot": [
+      "hybrid_rule_v4_fast_progress_static_escape_continuous",
+      "differential_drive",
+      "francis2023_following_human",
+      1002
+    ],
+    "events": [
+      "success_to_failure"
+    ],
+    "baseline": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": true,
+        "timeout_event": false
+      },
+      "success": true,
+      "reset_robot": {
+        "heading": 0.0,
+        "position": [
+          5.74202342267626,
+          3.3661360938745704
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": -0.00966931413859129,
+        "position": [
+          36.07098751945921,
+          2.9944783819730056
+        ],
+        "velocity": [
+          0.9230471230108606,
+          -0.008925510550303883
+        ]
+      },
+      "last_goal": null,
+      "last_collision": null,
+      "action_semantics": null,
+      "steps": 169,
+      "horizon": 600,
+      "raw_file": "runs/hybrid_rule_v3_fast_progress_static_escape_continuous__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_following_human--1002--290da9390614f7b1"
+    },
+    "top": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": false,
+        "timeout_event": true
+      },
+      "success": false,
+      "reset_robot": {
+        "angular_velocity": 0.0,
+        "heading": 0.0,
+        "position": [
+          5.74202342267626,
+          3.3661360938745704
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": -2.3375742435455322,
+        "position": [
+          34.791871496452316,
+          3.8850223491080955
+        ],
+        "velocity": [
+          -0.12392984136056384,
+          -0.11638628422053099
+        ]
+      },
+      "last_goal": {
+        "current": [
+          36.3865353628047,
+          3.1025605753907968
+        ],
+        "next": null
+      },
+      "last_collision": {
+        "obstacle": false,
+        "pedestrian": false,
+        "robot": false
+      },
+      "action_semantics": null,
+      "steps": 400,
+      "horizon": 400,
+      "raw_file": "runs/hybrid_rule_v4_fast_progress_static_escape_continuous__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_following_human--1002--59346e21d5bb7247"
+    }
+  },
+  {
+    "slot": [
+      "hybrid_rule_v4_fast_progress_static_escape_continuous",
+      "differential_drive",
+      "francis2023_frontal_approach",
+      1002
+    ],
+    "events": [
+      "success_to_failure"
+    ],
+    "baseline": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": true,
+        "timeout_event": false
+      },
+      "success": true,
+      "reset_robot": {
+        "heading": 0.0,
+        "position": [
+          4.74202342267626,
+          4.36613609387457
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": 0.011892210692167282,
+        "position": [
+          36.070790515102416,
+          5.006788677291363
+        ],
+        "velocity": [
+          0.9256289845531285,
+          0.011008293504701783
+        ]
+      },
+      "last_goal": null,
+      "last_collision": null,
+      "action_semantics": null,
+      "steps": 176,
+      "horizon": 600,
+      "raw_file": "runs/hybrid_rule_v3_fast_progress_static_escape_continuous__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_frontal_approach--1002--33fe5d5e2e28d443"
+    },
+    "top": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": false,
+        "timeout_event": true
+      },
+      "success": false,
+      "reset_robot": {
+        "angular_velocity": 0.0,
+        "heading": 0.0,
+        "position": [
+          4.74202342267626,
+          4.36613609387457
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": -3.053832769393921,
+        "position": [
+          34.87658498994156,
+          5.845010137174171
+        ],
+        "velocity": [
+          -0.46966885741085207,
+          -0.0177431298513131
+        ]
+      },
+      "last_goal": {
+        "current": [
+          36.3865353628047,
+          5.102560575390797
+        ],
+        "next": null
+      },
+      "last_collision": {
+        "obstacle": false,
+        "pedestrian": false,
+        "robot": false
+      },
+      "action_semantics": null,
+      "steps": 400,
+      "horizon": 400,
+      "raw_file": "runs/hybrid_rule_v4_fast_progress_static_escape_continuous__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_frontal_approach--1002--84aa2afcf702172f"
+    }
+  },
+  {
+    "slot": [
+      "hybrid_rule_v4_fast_progress_static_escape_continuous",
+      "differential_drive",
+      "francis2023_leading_human",
+      1002
+    ],
+    "events": [
+      "success_to_failure"
+    ],
+    "baseline": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": true,
+        "timeout_event": false
+      },
+      "success": true,
+      "reset_robot": {
+        "heading": 0.0,
+        "position": [
+          5.74202342267626,
+          3.3661360938745704
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": -0.00966931413859129,
+        "position": [
+          36.07098751945921,
+          2.9944783819730056
+        ],
+        "velocity": [
+          0.9230471230108606,
+          -0.008925510550303883
+        ]
+      },
+      "last_goal": null,
+      "last_collision": null,
+      "action_semantics": null,
+      "steps": 169,
+      "horizon": 600,
+      "raw_file": "runs/hybrid_rule_v3_fast_progress_static_escape_continuous__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_leading_human--1002--cb0c907e8bfdce24"
+    },
+    "top": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": false,
+        "timeout_event": true
+      },
+      "success": false,
+      "reset_robot": {
+        "angular_velocity": 0.0,
+        "heading": 0.0,
+        "position": [
+          5.74202342267626,
+          3.3661360938745704
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": -2.3375742435455322,
+        "position": [
+          34.791871496452316,
+          3.8850223491080955
+        ],
+        "velocity": [
+          -0.12392984136056384,
+          -0.11638628422053099
+        ]
+      },
+      "last_goal": {
+        "current": [
+          36.3865353628047,
+          3.1025605753907968
+        ],
+        "next": null
+      },
+      "last_collision": {
+        "obstacle": false,
+        "pedestrian": false,
+        "robot": false
+      },
+      "action_semantics": null,
+      "steps": 400,
+      "horizon": 400,
+      "raw_file": "runs/hybrid_rule_v4_fast_progress_static_escape_continuous__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_leading_human--1002--a943f9a2d196b7f2"
+    }
+  },
+  {
+    "slot": [
+      "hybrid_rule_v4_fast_progress_static_escape_continuous",
+      "differential_drive",
+      "francis2023_parallel_traffic",
+      1002
+    ],
+    "events": [
+      "success_to_failure"
+    ],
+    "baseline": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": true,
+        "timeout_event": false
+      },
+      "success": true,
+      "reset_robot": {
+        "heading": 0.0,
+        "position": [
+          4.74202342267626,
+          4.36613609387457
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": 0.011892210692167282,
+        "position": [
+          36.070790515102416,
+          5.006788677291363
+        ],
+        "velocity": [
+          0.9256289845531285,
+          0.011008293504701783
+        ]
+      },
+      "last_goal": null,
+      "last_collision": null,
+      "action_semantics": null,
+      "steps": 176,
+      "horizon": 600,
+      "raw_file": "runs/hybrid_rule_v3_fast_progress_static_escape_continuous__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_parallel_traffic--1002--498bb2ad9f0be8cc"
+    },
+    "top": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": false,
+        "timeout_event": true
+      },
+      "success": false,
+      "reset_robot": {
+        "angular_velocity": 0.0,
+        "heading": 0.0,
+        "position": [
+          4.74202342267626,
+          4.36613609387457
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": -3.053832769393921,
+        "position": [
+          34.87658498994156,
+          5.845010137174171
+        ],
+        "velocity": [
+          -0.46966885741085207,
+          -0.0177431298513131
+        ]
+      },
+      "last_goal": {
+        "current": [
+          36.3865353628047,
+          5.102560575390797
+        ],
+        "next": null
+      },
+      "last_collision": {
+        "obstacle": false,
+        "pedestrian": false,
+        "robot": false
+      },
+      "action_semantics": null,
+      "steps": 400,
+      "horizon": 400,
+      "raw_file": "runs/hybrid_rule_v4_fast_progress_static_escape_continuous__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_parallel_traffic--1002--93863fa58f5c4b4d"
+    }
+  },
+  {
+    "slot": [
+      "hybrid_rule_v4_fast_progress_static_escape_continuous",
+      "differential_drive",
+      "francis2023_pedestrian_obstruction",
+      1002
+    ],
+    "events": [
+      "success_to_failure"
+    ],
+    "baseline": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": true,
+        "timeout_event": false
+      },
+      "success": true,
+      "reset_robot": {
+        "heading": 0.0,
+        "position": [
+          4.74202342267626,
+          4.36613609387457
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": 0.011892210692167282,
+        "position": [
+          36.070790515102416,
+          5.006788677291363
+        ],
+        "velocity": [
+          0.9256289845531285,
+          0.011008293504701783
+        ]
+      },
+      "last_goal": null,
+      "last_collision": null,
+      "action_semantics": null,
+      "steps": 176,
+      "horizon": 600,
+      "raw_file": "runs/hybrid_rule_v3_fast_progress_static_escape_continuous__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_pedestrian_obstruction--1002--02b71555be223593"
+    },
+    "top": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": false,
+        "timeout_event": true
+      },
+      "success": false,
+      "reset_robot": {
+        "angular_velocity": 0.0,
+        "heading": 0.0,
+        "position": [
+          4.74202342267626,
+          4.36613609387457
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": -3.053832769393921,
+        "position": [
+          34.87658498994156,
+          5.845010137174171
+        ],
+        "velocity": [
+          -0.46966885741085207,
+          -0.0177431298513131
+        ]
+      },
+      "last_goal": {
+        "current": [
+          36.3865353628047,
+          5.102560575390797
+        ],
+        "next": null
+      },
+      "last_collision": {
+        "obstacle": false,
+        "pedestrian": false,
+        "robot": false
+      },
+      "action_semantics": null,
+      "steps": 400,
+      "horizon": 400,
+      "raw_file": "runs/hybrid_rule_v4_fast_progress_static_escape_continuous__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_pedestrian_obstruction--1002--7d0105ab69c8c5d4"
+    }
+  },
+  {
+    "slot": [
+      "hybrid_rule_v4_fast_progress_static_escape_continuous",
+      "differential_drive",
+      "francis2023_pedestrian_overtaking",
+      1002
+    ],
+    "events": [
+      "success_to_failure"
+    ],
+    "baseline": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": true,
+        "timeout_event": false
+      },
+      "success": true,
+      "reset_robot": {
+        "heading": 0.0,
+        "position": [
+          4.74202342267626,
+          4.36613609387457
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": 0.011892210692167282,
+        "position": [
+          36.070790515102416,
+          5.006788677291363
+        ],
+        "velocity": [
+          0.9256289845531285,
+          0.011008293504701783
+        ]
+      },
+      "last_goal": null,
+      "last_collision": null,
+      "action_semantics": null,
+      "steps": 176,
+      "horizon": 600,
+      "raw_file": "runs/hybrid_rule_v3_fast_progress_static_escape_continuous__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_pedestrian_overtaking--1002--f224c6310bc424b4"
+    },
+    "top": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": false,
+        "timeout_event": true
+      },
+      "success": false,
+      "reset_robot": {
+        "angular_velocity": 0.0,
+        "heading": 0.0,
+        "position": [
+          4.74202342267626,
+          4.091534023468642
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": 2.0171375274658203,
+        "position": [
+          35.85562474705929,
+          5.303712821035749
+        ],
+        "velocity": [
+          -0.27023202326141416,
+          0.645735745954994
+        ]
+      },
+      "last_goal": {
+        "current": [
+          36.3865353628047,
+          5.102560575390797
+        ],
+        "next": null
+      },
+      "last_collision": {
+        "obstacle": false,
+        "pedestrian": false,
+        "robot": false
+      },
+      "action_semantics": null,
+      "steps": 600,
+      "horizon": 600,
+      "raw_file": "runs/hybrid_rule_v4_fast_progress_static_escape_continuous__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_pedestrian_overtaking--1002--3d793ef32515028a"
+    }
+  },
+  {
+    "slot": [
+      "hybrid_rule_v4_fast_progress_static_escape_continuous",
+      "differential_drive",
+      "francis2023_robot_overtaking",
+      1002
+    ],
+    "events": [
+      "success_to_failure"
+    ],
+    "baseline": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": true,
+        "timeout_event": false
+      },
+      "success": true,
+      "reset_robot": {
+        "heading": 0.0,
+        "position": [
+          4.74202342267626,
+          4.36613609387457
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": 0.011892210692167282,
+        "position": [
+          36.070790515102416,
+          5.006788677291363
+        ],
+        "velocity": [
+          0.9256289845531285,
+          0.011008293504701783
+        ]
+      },
+      "last_goal": null,
+      "last_collision": null,
+      "action_semantics": null,
+      "steps": 176,
+      "horizon": 600,
+      "raw_file": "runs/hybrid_rule_v3_fast_progress_static_escape_continuous__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_robot_overtaking--1002--204aaa9980eda255"
+    },
+    "top": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": false,
+        "timeout_event": true
+      },
+      "success": false,
+      "reset_robot": {
+        "angular_velocity": 0.0,
+        "heading": 0.0,
+        "position": [
+          4.74202342267626,
+          4.36613609387457
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": -3.053832769393921,
+        "position": [
+          34.87658498994156,
+          5.845010137174171
+        ],
+        "velocity": [
+          -0.46966885741085207,
+          -0.0177431298513131
+        ]
+      },
+      "last_goal": {
+        "current": [
+          36.3865353628047,
+          5.102560575390797
+        ],
+        "next": null
+      },
+      "last_collision": {
+        "obstacle": false,
+        "pedestrian": false,
+        "robot": false
+      },
+      "action_semantics": null,
+      "steps": 400,
+      "horizon": 400,
+      "raw_file": "runs/hybrid_rule_v4_fast_progress_static_escape_continuous__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_robot_overtaking--1002--4388cf9721f67d83"
+    }
+  },
+  {
+    "slot": [
+      "ppo",
+      "differential_drive",
+      "classic_cross_trap_high",
+      1001
+    ],
+    "events": [
+      "success_to_failure",
+      "new_collision"
+    ],
+    "baseline": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": true,
+        "timeout_event": false
+      },
+      "success": true,
+      "reset_robot": {
+        "heading": 0.7962936162948608,
+        "position": [
+          6.775071281804778,
+          4.0924542079682205
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": 0.7774634957313538,
+        "position": [
+          35.06350727798566,
+          32.008445508000804
+        ],
+        "velocity": [
+          1.040094540705141,
+          1.010298642182228
+        ]
+      },
+      "last_goal": null,
+      "last_collision": null,
+      "action_semantics": null,
+      "steps": 252,
+      "horizon": 600,
+      "raw_file": "runs/ppo__differential_drive/episodes.jsonl",
+      "episode_id": "classic_cross_trap_high--1001--0e4d7579fabc239a"
+    },
+    "top": {
+      "outcome": {
+        "collision_event": true,
+        "route_complete": false,
+        "timeout_event": false
+      },
+      "success": false,
+      "reset_robot": {
+        "angular_velocity": 0.0,
+        "heading": 0.7962936162948608,
+        "position": [
+          6.775071281804778,
+          4.0924542079682205
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": 1.1684080362319946,
+        "position": [
+          11.06559313226719,
+          20.689263728745487
+        ],
+        "velocity": [
+          0.7730685710962071,
+          1.8445500764097744
+        ]
+      },
+      "last_goal": {
+        "current": [
+          18.86,
+          29.46
+        ],
+        "next": [
+          34.0,
+          34.0
+        ]
+      },
+      "last_collision": {
+        "obstacle": true,
+        "pedestrian": false,
+        "robot": false
+      },
+      "action_semantics": "velocity_delta",
+      "steps": 98,
+      "horizon": 600,
+      "raw_file": "runs/ppo__differential_drive/episodes.jsonl",
+      "episode_id": "classic_cross_trap_high--1001--45a916f7a97d8dc1"
+    }
+  },
+  {
+    "slot": [
+      "ppo",
+      "differential_drive",
+      "classic_cross_trap_low",
+      1001
+    ],
+    "events": [
+      "success_to_failure",
+      "new_collision"
+    ],
+    "baseline": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": true,
+        "timeout_event": false
+      },
+      "success": true,
+      "reset_robot": {
+        "heading": 0.7962936162948608,
+        "position": [
+          6.775071281804778,
+          4.0924542079682205
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": 0.7774634957313538,
+        "position": [
+          35.06350727798566,
+          32.008445508000804
+        ],
+        "velocity": [
+          1.040094540705141,
+          1.010298642182228
+        ]
+      },
+      "last_goal": null,
+      "last_collision": null,
+      "action_semantics": null,
+      "steps": 252,
+      "horizon": 600,
+      "raw_file": "runs/ppo__differential_drive/episodes.jsonl",
+      "episode_id": "classic_cross_trap_low--1001--1b4098376d242d70"
+    },
+    "top": {
+      "outcome": {
+        "collision_event": true,
+        "route_complete": false,
+        "timeout_event": false
+      },
+      "success": false,
+      "reset_robot": {
+        "angular_velocity": 0.0,
+        "heading": 0.7962936162948608,
+        "position": [
+          6.775071281804778,
+          4.0924542079682205
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": 1.1684080362319946,
+        "position": [
+          11.06559313226719,
+          20.689263728745487
+        ],
+        "velocity": [
+          0.7730685710962071,
+          1.8445500764097744
+        ]
+      },
+      "last_goal": {
+        "current": [
+          18.86,
+          29.46
+        ],
+        "next": [
+          34.0,
+          34.0
+        ]
+      },
+      "last_collision": {
+        "obstacle": true,
+        "pedestrian": false,
+        "robot": false
+      },
+      "action_semantics": "velocity_delta",
+      "steps": 98,
+      "horizon": 600,
+      "raw_file": "runs/ppo__differential_drive/episodes.jsonl",
+      "episode_id": "classic_cross_trap_low--1001--6ad64199ffb0f2d1"
+    }
+  },
+  {
+    "slot": [
+      "ppo",
+      "differential_drive",
+      "classic_cross_trap_medium",
+      1001
+    ],
+    "events": [
+      "success_to_failure",
+      "new_collision"
+    ],
+    "baseline": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": true,
+        "timeout_event": false
+      },
+      "success": true,
+      "reset_robot": {
+        "heading": 0.7962936162948608,
+        "position": [
+          6.775071281804778,
+          4.0924542079682205
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": 0.7774634957313538,
+        "position": [
+          35.06350727798566,
+          32.008445508000804
+        ],
+        "velocity": [
+          1.040094540705141,
+          1.010298642182228
+        ]
+      },
+      "last_goal": null,
+      "last_collision": null,
+      "action_semantics": null,
+      "steps": 252,
+      "horizon": 600,
+      "raw_file": "runs/ppo__differential_drive/episodes.jsonl",
+      "episode_id": "classic_cross_trap_medium--1001--4d0ea375e5ff0ef7"
+    },
+    "top": {
+      "outcome": {
+        "collision_event": true,
+        "route_complete": false,
+        "timeout_event": false
+      },
+      "success": false,
+      "reset_robot": {
+        "angular_velocity": 0.0,
+        "heading": 0.7962936162948608,
+        "position": [
+          6.775071281804778,
+          4.0924542079682205
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": 1.1684080362319946,
+        "position": [
+          11.06559313226719,
+          20.689263728745487
+        ],
+        "velocity": [
+          0.7730685710962071,
+          1.8445500764097744
+        ]
+      },
+      "last_goal": {
+        "current": [
+          18.86,
+          29.46
+        ],
+        "next": [
+          34.0,
+          34.0
+        ]
+      },
+      "last_collision": {
+        "obstacle": true,
+        "pedestrian": false,
+        "robot": false
+      },
+      "action_semantics": "velocity_delta",
+      "steps": 98,
+      "horizon": 600,
+      "raw_file": "runs/ppo__differential_drive/episodes.jsonl",
+      "episode_id": "classic_cross_trap_medium--1001--eae67f25c02e3405"
+    }
+  },
+  {
+    "slot": [
+      "ppo",
+      "differential_drive",
+      "classic_station_platform_medium",
+      1003
+    ],
+    "events": [
+      "new_collision"
+    ],
+    "baseline": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": false,
+        "timeout_event": true
+      },
+      "success": false,
+      "reset_robot": {
+        "heading": 0.0,
+        "position": [
+          4.391223192359883,
+          3.315065696833959
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": -0.7935559749603271,
+        "position": [
+          58.571977784670274,
+          4.242383631957843
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_goal": null,
+      "last_collision": null,
+      "action_semantics": null,
+      "steps": 600,
+      "horizon": 600,
+      "raw_file": "runs/ppo__differential_drive/episodes.jsonl",
+      "episode_id": "classic_station_platform_medium--1003--3df2814908856639"
+    },
+    "top": {
+      "outcome": {
+        "collision_event": true,
+        "route_complete": false,
+        "timeout_event": false
+      },
+      "success": false,
+      "reset_robot": {
+        "angular_velocity": 0.0,
+        "heading": 0.0,
+        "position": [
+          3.6087768076401168,
+          5.684934303166041
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": 0.23905740678310394,
+        "position": [
+          46.99904779278084,
+          7.020232294768236
+        ],
+        "velocity": [
+          1.9436970373498497,
+          0.4712131439139977
+        ]
+      },
+      "last_goal": {
+        "current": [
+          36.0,
+          19.5
+        ],
+        "next": [
+          38.0,
+          22.5
+        ]
+      },
+      "last_collision": {
+        "obstacle": true,
+        "pedestrian": false,
+        "robot": false
+      },
+      "action_semantics": "velocity_delta",
+      "steps": 230,
+      "horizon": 650,
+      "raw_file": "runs/ppo__differential_drive/episodes.jsonl",
+      "episode_id": "classic_station_platform_medium--1003--2d68c01acb346f64"
+    }
+  },
+  {
+    "slot": [
+      "ppo",
+      "differential_drive",
+      "francis2023_blind_corner",
+      1001
+    ],
+    "events": [
+      "success_to_failure",
+      "new_collision"
+    ],
+    "baseline": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": true,
+        "timeout_event": false
+      },
+      "success": true,
+      "reset_robot": {
+        "heading": 0.0,
+        "position": [
+          5.387535640902389,
+          25.046227103984112
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": -1.4520074129104614,
+        "position": [
+          27.01072688659027,
+          3.894886320148552
+        ],
+        "velocity": [
+          0.16186602497278102,
+          -1.679346937316688
+        ]
+      },
+      "last_goal": null,
+      "last_collision": null,
+      "action_semantics": null,
+      "steps": 225,
+      "horizon": 600,
+      "raw_file": "runs/ppo__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_blind_corner--1001--7e6b79d6fa7ae367"
+    },
+    "top": {
+      "outcome": {
+        "collision_event": true,
+        "route_complete": false,
+        "timeout_event": false
+      },
+      "success": false,
+      "reset_robot": {
+        "angular_velocity": 0.0,
+        "heading": 0.0,
+        "position": [
+          5.4698728687849885,
+          25.39156383016797
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": -0.2828744351863861,
+        "position": [
+          23.436231583744558,
+          24.965136670111743
+        ],
+        "velocity": [
+          1.931610886448496,
+          -0.5185358072048984
+        ]
+      },
+      "last_goal": {
+        "current": [
+          24.5,
+          27.0
+        ],
+        "next": [
+          27.0,
+          24.5
+        ]
+      },
+      "last_collision": {
+        "obstacle": true,
+        "pedestrian": false,
+        "robot": false
+      },
+      "action_semantics": "velocity_delta",
+      "steps": 100,
+      "horizon": 400,
+      "raw_file": "runs/ppo__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_blind_corner--1001--79df80cb3a5cdf24"
+    }
+  },
+  {
+    "slot": [
+      "ppo",
+      "differential_drive",
+      "francis2023_blind_corner",
+      1003
+    ],
+    "events": [
+      "success_to_failure",
+      "new_collision"
+    ],
+    "baseline": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": true,
+        "timeout_event": false
+      },
+      "success": true,
+      "reset_robot": {
+        "heading": 0.0,
+        "position": [
+          5.195611596179941,
+          25.210043797889305
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": -1.6170554161071777,
+        "position": [
+          26.83097283171802,
+          3.9237811999116867
+        ],
+        "velocity": [
+          -0.15351670289035724,
+          -1.9439476901227737
+        ]
+      },
+      "last_goal": null,
+      "last_collision": null,
+      "action_semantics": null,
+      "steps": 225,
+      "horizon": 600,
+      "raw_file": "runs/ppo__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_blind_corner--1003--9dfa56f4a57840b1"
+    },
+    "top": {
+      "outcome": {
+        "collision_event": true,
+        "route_complete": false,
+        "timeout_event": false
+      },
+      "success": false,
+      "reset_robot": {
+        "angular_velocity": 0.0,
+        "heading": 0.0,
+        "position": [
+          4.804388403820059,
+          26.789956202110695
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": -0.26041170954704285,
+        "position": [
+          23.297202715188455,
+          24.971705406065052
+        ],
+        "velocity": [
+          1.9393429640128446,
+          -0.48882396415670826
+        ]
+      },
+      "last_goal": {
+        "current": [
+          24.5,
+          27.0
+        ],
+        "next": [
+          27.0,
+          24.5
+        ]
+      },
+      "last_collision": {
+        "obstacle": true,
+        "pedestrian": false,
+        "robot": false
+      },
+      "action_semantics": "velocity_delta",
+      "steps": 103,
+      "horizon": 400,
+      "raw_file": "runs/ppo__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_blind_corner--1003--cb7a4acaf4eaf13d"
+    }
+  },
+  {
+    "slot": [
+      "ppo",
+      "differential_drive",
+      "francis2023_circular_crossing",
+      1001
+    ],
+    "events": [
+      "success_to_failure",
+      "new_collision"
+    ],
+    "baseline": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": true,
+        "timeout_event": false
+      },
+      "success": true,
+      "reset_robot": {
+        "heading": 0.0,
+        "position": [
+          4.387535640902389,
+          9.04622710398411
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": -0.18286380171775818,
+        "position": [
+          16.104551054049367,
+          9.381969453468079
+        ],
+        "velocity": [
+          1.973374649296833,
+          -0.3252575802537727
+        ]
+      },
+      "last_goal": null,
+      "last_collision": null,
+      "action_semantics": null,
+      "steps": 69,
+      "horizon": 600,
+      "raw_file": "runs/ppo__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_circular_crossing--1001--ded1f558245b33a4"
+    },
+    "top": {
+      "outcome": {
+        "collision_event": true,
+        "route_complete": false,
+        "timeout_event": false
+      },
+      "success": false,
+      "reset_robot": {
+        "angular_velocity": 0.0,
+        "heading": 0.0,
+        "position": [
+          4.387535640902389,
+          9.04622710398411
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": -0.1169196367263794,
+        "position": [
+          18.11954555371486,
+          8.84009927705392
+        ],
+        "velocity": [
+          1.9430221695029815,
+          -0.19895151672157496
+        ]
+      },
+      "last_goal": {
+        "current": [
+          16.77295628860691,
+          9.976348874982191
+        ],
+        "next": null
+      },
+      "last_collision": {
+        "obstacle": true,
+        "pedestrian": false,
+        "robot": false
+      },
+      "action_semantics": "velocity_delta",
+      "steps": 79,
+      "horizon": 400,
+      "raw_file": "runs/ppo__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_circular_crossing--1001--e76222cd3eded14a"
+    }
+  },
+  {
+    "slot": [
+      "ppo",
+      "differential_drive",
+      "francis2023_entering_room",
+      1001
+    ],
+    "events": [
+      "success_to_failure",
+      "new_collision"
+    ],
+    "baseline": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": true,
+        "timeout_event": false
+      },
+      "success": true,
+      "reset_robot": {
+        "heading": 0.0,
+        "position": [
+          4.387535640902389,
+          9.04622710398411
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": 0.32063430547714233,
+        "position": [
+          20.83484542552681,
+          9.045049189463423
+        ],
+        "velocity": [
+          1.8983213030450585,
+          0.6295841726133666
+        ]
+      },
+      "last_goal": null,
+      "last_collision": null,
+      "action_semantics": null,
+      "steps": 93,
+      "horizon": 600,
+      "raw_file": "runs/ppo__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_entering_room--1001--492b341d2fda00f9"
+    },
+    "top": {
+      "outcome": {
+        "collision_event": true,
+        "route_complete": false,
+        "timeout_event": false
+      },
+      "success": false,
+      "reset_robot": {
+        "angular_velocity": 0.0,
+        "heading": -0.13255153596401215,
+        "position": [
+          4.387535640902389,
+          9.04622710398411
+        ],
+        "velocity": [
+          0.0,
+          -0.0
+        ]
+      },
+      "last_robot": {
+        "heading": 0.08149436116218567,
+        "position": [
+          26.072142553582793,
+          9.125915574571392
+        ],
+        "velocity": [
+          1.9881391856069897,
+          0.21749155996044323
+        ]
+      },
+      "last_goal": {
+        "current": [
+          20.77295628860691,
+          9.976348874982191
+        ],
+        "next": null
+      },
+      "last_collision": {
+        "obstacle": true,
+        "pedestrian": false,
+        "robot": false
+      },
+      "action_semantics": "velocity_delta",
+      "steps": 119,
+      "horizon": 400,
+      "raw_file": "runs/ppo__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_entering_room--1001--03cce97131f0a513"
+    }
+  },
+  {
+    "slot": [
+      "ppo",
+      "differential_drive",
+      "francis2023_entering_room",
+      1002
+    ],
+    "events": [
+      "success_to_failure",
+      "new_collision"
+    ],
+    "baseline": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": true,
+        "timeout_event": false
+      },
+      "success": true,
+      "reset_robot": {
+        "heading": 0.0,
+        "position": [
+          4.74202342267626,
+          9.36613609387457
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": 0.5428141951560974,
+        "position": [
+          21.49469333557828,
+          9.070702449993481
+        ],
+        "velocity": [
+          1.7238142244393373,
+          1.0141323974809957
+        ]
+      },
+      "last_goal": null,
+      "last_collision": null,
+      "action_semantics": null,
+      "steps": 96,
+      "horizon": 600,
+      "raw_file": "runs/ppo__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_entering_room--1002--876f060850e99325"
+    },
+    "top": {
+      "outcome": {
+        "collision_event": true,
+        "route_complete": false,
+        "timeout_event": false
+      },
+      "success": false,
+      "reset_robot": {
+        "angular_velocity": 0.0,
+        "heading": -0.13255153596401215,
+        "position": [
+          4.74202342267626,
+          9.36613609387457
+        ],
+        "velocity": [
+          0.0,
+          -0.0
+        ]
+      },
+      "last_robot": {
+        "heading": 0.3676469326019287,
+        "position": [
+          26.112000052288565,
+          9.347161041469775
+        ],
+        "velocity": [
+          1.8534833959415664,
+          0.7513982306133471
+        ]
+      },
+      "last_goal": {
+        "current": [
+          20.3865353628047,
+          10.102560575390797
+        ],
+        "next": null
+      },
+      "last_collision": {
+        "obstacle": true,
+        "pedestrian": false,
+        "robot": false
+      },
+      "action_semantics": "velocity_delta",
+      "steps": 118,
+      "horizon": 400,
+      "raw_file": "runs/ppo__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_entering_room--1002--45d76c1425d6cb7d"
+    }
+  },
+  {
+    "slot": [
+      "ppo",
+      "differential_drive",
+      "francis2023_exiting_room",
+      1003
+    ],
+    "events": [
+      "success_to_failure",
+      "new_collision"
+    ],
+    "baseline": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": true,
+        "timeout_event": false
+      },
+      "success": true,
+      "reset_robot": {
+        "heading": -3.1415927410125732,
+        "position": [
+          21.19561159617994,
+          9.210043797889305
+        ],
+        "velocity": [
+          -0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": -3.098428726196289,
+        "position": [
+          3.9922703592777413,
+          9.842767804931748
+        ],
+        "velocity": [
+          -1.9930595604016155,
+          -0.16647398803334212
+        ]
+      },
+      "last_goal": null,
+      "last_collision": null,
+      "action_semantics": null,
+      "steps": 181,
+      "horizon": 600,
+      "raw_file": "runs/ppo__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_exiting_room--1003--c4bc3f21f81f6b9b"
+    },
+    "top": {
+      "outcome": {
+        "collision_event": true,
+        "route_complete": false,
+        "timeout_event": false
+      },
+      "success": false,
+      "reset_robot": {
+        "angular_velocity": 0.0,
+        "heading": -2.863292932510376,
+        "position": [
+          20.80438840382006,
+          10.789956202110695
+        ],
+        "velocity": [
+          -0.0,
+          -0.0
+        ]
+      },
+      "last_robot": {
+        "heading": -3.118293046951294,
+        "position": [
+          15.44881331330736,
+          10.138403502786302
+        ],
+        "velocity": [
+          -1.998335618723388,
+          -0.08157668135799767
+        ]
+      },
+      "last_goal": {
+        "current": [
+          3.0,
+          10.0
+        ],
+        "next": [
+          2.4909607642658798,
+          9.364625587322402
+        ]
+      },
+      "last_collision": {
+        "obstacle": true,
+        "pedestrian": false,
+        "robot": false
+      },
+      "action_semantics": "velocity_delta",
+      "steps": 37,
+      "horizon": 400,
+      "raw_file": "runs/ppo__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_exiting_room--1003--02303f17ffb27510"
+    }
+  },
+  {
+    "slot": [
+      "ppo",
+      "differential_drive",
+      "francis2023_join_group",
+      1001
+    ],
+    "events": [
+      "success_to_failure",
+      "new_collision"
+    ],
+    "baseline": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": true,
+        "timeout_event": false
+      },
+      "success": true,
+      "reset_robot": {
+        "heading": 0.0,
+        "position": [
+          4.387535640902389,
+          9.04622710398411
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": -0.18286380171775818,
+        "position": [
+          16.104551054049367,
+          9.381969453468079
+        ],
+        "velocity": [
+          1.973374649296833,
+          -0.3252575802537727
+        ]
+      },
+      "last_goal": null,
+      "last_collision": null,
+      "action_semantics": null,
+      "steps": 69,
+      "horizon": 600,
+      "raw_file": "runs/ppo__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_join_group--1001--20e951c835951cc2"
+    },
+    "top": {
+      "outcome": {
+        "collision_event": true,
+        "route_complete": false,
+        "timeout_event": false
+      },
+      "success": false,
+      "reset_robot": {
+        "angular_velocity": 0.0,
+        "heading": 0.0,
+        "position": [
+          4.387535640902389,
+          9.04622710398411
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": -0.1169196367263794,
+        "position": [
+          18.11954555371486,
+          8.84009927705392
+        ],
+        "velocity": [
+          1.9430221695029815,
+          -0.19895151672157496
+        ]
+      },
+      "last_goal": {
+        "current": [
+          16.77295628860691,
+          9.976348874982191
+        ],
+        "next": null
+      },
+      "last_collision": {
+        "obstacle": true,
+        "pedestrian": false,
+        "robot": false
+      },
+      "action_semantics": "velocity_delta",
+      "steps": 79,
+      "horizon": 400,
+      "raw_file": "runs/ppo__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_join_group--1001--d7eb2d9fbf4c08da"
+    }
+  },
+  {
+    "slot": [
+      "ppo",
+      "differential_drive",
+      "francis2023_leave_group",
+      1001
+    ],
+    "events": [
+      "success_to_failure",
+      "new_collision"
+    ],
+    "baseline": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": true,
+        "timeout_event": false
+      },
+      "success": true,
+      "reset_robot": {
+        "heading": 0.0,
+        "position": [
+          4.387535640902389,
+          9.04622710398411
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": -0.18286380171775818,
+        "position": [
+          16.104551054049367,
+          9.381969453468079
+        ],
+        "velocity": [
+          1.973374649296833,
+          -0.3252575802537727
+        ]
+      },
+      "last_goal": null,
+      "last_collision": null,
+      "action_semantics": null,
+      "steps": 69,
+      "horizon": 600,
+      "raw_file": "runs/ppo__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_leave_group--1001--946709f00848d9b1"
+    },
+    "top": {
+      "outcome": {
+        "collision_event": true,
+        "route_complete": false,
+        "timeout_event": false
+      },
+      "success": false,
+      "reset_robot": {
+        "angular_velocity": 0.0,
+        "heading": 0.0,
+        "position": [
+          4.387535640902389,
+          9.04622710398411
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": -0.1169196367263794,
+        "position": [
+          18.11954555371486,
+          8.84009927705392
+        ],
+        "velocity": [
+          1.9430221695029815,
+          -0.19895151672157496
+        ]
+      },
+      "last_goal": {
+        "current": [
+          16.77295628860691,
+          9.976348874982191
+        ],
+        "next": null
+      },
+      "last_collision": {
+        "obstacle": true,
+        "pedestrian": false,
+        "robot": false
+      },
+      "action_semantics": "velocity_delta",
+      "steps": 79,
+      "horizon": 400,
+      "raw_file": "runs/ppo__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_leave_group--1001--5a3604b7fd2a495c"
+    }
+  },
+  {
+    "slot": [
+      "ppo",
+      "differential_drive",
+      "francis2023_robot_crowding",
+      1001
+    ],
+    "events": [
+      "success_to_failure",
+      "new_collision"
+    ],
+    "baseline": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": true,
+        "timeout_event": false
+      },
+      "success": true,
+      "reset_robot": {
+        "heading": 0.0,
+        "position": [
+          4.387535640902389,
+          9.04622710398411
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": -0.18286380171775818,
+        "position": [
+          16.104551054049367,
+          9.381969453468079
+        ],
+        "velocity": [
+          1.973374649296833,
+          -0.3252575802537727
+        ]
+      },
+      "last_goal": null,
+      "last_collision": null,
+      "action_semantics": null,
+      "steps": 69,
+      "horizon": 600,
+      "raw_file": "runs/ppo__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_robot_crowding--1001--956c717f32c13aad"
+    },
+    "top": {
+      "outcome": {
+        "collision_event": true,
+        "route_complete": false,
+        "timeout_event": false
+      },
+      "success": false,
+      "reset_robot": {
+        "angular_velocity": 0.0,
+        "heading": 0.0,
+        "position": [
+          4.387535640902389,
+          9.04622710398411
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": -0.1169196367263794,
+        "position": [
+          18.11954555371486,
+          8.84009927705392
+        ],
+        "velocity": [
+          1.9430221695029815,
+          -0.19895151672157496
+        ]
+      },
+      "last_goal": {
+        "current": [
+          16.77295628860691,
+          9.976348874982191
+        ],
+        "next": null
+      },
+      "last_collision": {
+        "obstacle": true,
+        "pedestrian": false,
+        "robot": false
+      },
+      "action_semantics": "velocity_delta",
+      "steps": 79,
+      "horizon": 400,
+      "raw_file": "runs/ppo__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_robot_crowding--1001--e7b572dcd60f5e4c"
+    }
+  },
+  {
+    "slot": [
+      "prediction_planner",
+      "differential_drive",
+      "classic_t_intersection_low",
+      1003
+    ],
+    "events": [
+      "success_to_failure",
+      "new_collision"
+    ],
+    "baseline": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": true,
+        "timeout_event": false
+      },
+      "success": true,
+      "reset_robot": {
+        "heading": -1.560083031654358,
+        "position": [
+          22.997151192359883,
+          32.26303459577861
+        ],
+        "velocity": [
+          0.0,
+          -0.0
+        ]
+      },
+      "last_robot": {
+        "heading": -0.38508301973342896,
+        "position": [
+          34.97711324742864,
+          18.95150280243758
+        ],
+        "velocity": [
+          1.4959740280927036,
+          -0.5675048081488754
+        ]
+      },
+      "last_goal": null,
+      "last_collision": null,
+      "action_semantics": null,
+      "steps": 154,
+      "horizon": 600,
+      "raw_file": "runs/prediction_planner__differential_drive/episodes.jsonl",
+      "episode_id": "classic_t_intersection_low--1003--0541b0bf32c0ebf9"
+    },
+    "top": {
+      "outcome": {
+        "collision_event": true,
+        "route_complete": false,
+        "timeout_event": false
+      },
+      "success": false,
+      "reset_robot": {
+        "angular_velocity": 0.0,
+        "heading": -1.560083031654358,
+        "position": [
+          22.214704807640114,
+          35.422859404221384
+        ],
+        "velocity": [
+          0.0,
+          -0.0
+        ]
+      },
+      "last_robot": {
+        "heading": 0.1993245929479599,
+        "position": [
+          25.34976887666505,
+          20.4011308819733
+        ],
+        "velocity": [
+          1.5672305685953702,
+          0.3221619854362956
+        ]
+      },
+      "last_goal": {
+        "current": [
+          36.889965,
+          18.784306
+        ],
+        "next": [
+          35.87188652853175,
+          17.513557174644806
+        ]
+      },
+      "last_collision": {
+        "obstacle": true,
+        "pedestrian": false,
+        "robot": false
+      },
+      "action_semantics": null,
+      "steps": 117,
+      "horizon": 500,
+      "raw_file": "runs/prediction_planner__differential_drive/episodes.jsonl",
+      "episode_id": "classic_t_intersection_low--1003--e1e555e4a7c85c07"
+    }
+  },
+  {
+    "slot": [
+      "prediction_planner",
+      "differential_drive",
+      "classic_t_intersection_medium",
+      1003
+    ],
+    "events": [
+      "success_to_failure",
+      "new_collision"
+    ],
+    "baseline": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": true,
+        "timeout_event": false
+      },
+      "success": true,
+      "reset_robot": {
+        "heading": -1.560083031654358,
+        "position": [
+          22.997151192359883,
+          32.26303459577861
+        ],
+        "velocity": [
+          0.0,
+          -0.0
+        ]
+      },
+      "last_robot": {
+        "heading": -0.38508301973342896,
+        "position": [
+          34.97711324742864,
+          18.95150280243758
+        ],
+        "velocity": [
+          1.4959740280927036,
+          -0.5675048081488754
+        ]
+      },
+      "last_goal": null,
+      "last_collision": null,
+      "action_semantics": null,
+      "steps": 154,
+      "horizon": 600,
+      "raw_file": "runs/prediction_planner__differential_drive/episodes.jsonl",
+      "episode_id": "classic_t_intersection_medium--1003--89a30894e81d5361"
+    },
+    "top": {
+      "outcome": {
+        "collision_event": true,
+        "route_complete": false,
+        "timeout_event": false
+      },
+      "success": false,
+      "reset_robot": {
+        "angular_velocity": 0.0,
+        "heading": -1.560083031654358,
+        "position": [
+          22.214704807640114,
+          35.422859404221384
+        ],
+        "velocity": [
+          0.0,
+          -0.0
+        ]
+      },
+      "last_robot": {
+        "heading": 0.1993245929479599,
+        "position": [
+          25.34976887666505,
+          20.4011308819733
+        ],
+        "velocity": [
+          1.5672305685953702,
+          0.3221619854362956
+        ]
+      },
+      "last_goal": {
+        "current": [
+          36.889965,
+          18.784306
+        ],
+        "next": [
+          35.87188652853175,
+          17.513557174644806
+        ]
+      },
+      "last_collision": {
+        "obstacle": true,
+        "pedestrian": false,
+        "robot": false
+      },
+      "action_semantics": null,
+      "steps": 117,
+      "horizon": 500,
+      "raw_file": "runs/prediction_planner__differential_drive/episodes.jsonl",
+      "episode_id": "classic_t_intersection_medium--1003--9bae7007916a2b9e"
+    }
+  },
+  {
+    "slot": [
+      "sacadrl",
+      "differential_drive",
+      "classic_head_on_corridor_low",
+      1002
+    ],
+    "events": [
+      "success_to_failure",
+      "new_collision"
+    ],
+    "baseline": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": true,
+        "timeout_event": false
+      },
+      "success": true,
+      "reset_robot": {
+        "heading": 1.3646290302276611,
+        "position": [
+          15.80894784535252,
+          3.5492215877491406
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": 1.334628939628601,
+        "position": [
+          19.632449191693787,
+          33.05783831654953
+        ],
+        "velocity": [
+          0.23397807978163598,
+          0.9722418722630977
+        ]
+      },
+      "last_goal": null,
+      "last_collision": null,
+      "action_semantics": null,
+      "steps": 356,
+      "horizon": 600,
+      "raw_file": "runs/sacadrl__differential_drive/episodes.jsonl",
+      "episode_id": "classic_head_on_corridor_low--1002--0704a313c3ab4bd1"
+    },
+    "top": {
+      "outcome": {
+        "collision_event": true,
+        "route_complete": false,
+        "timeout_event": false
+      },
+      "success": false,
+      "reset_robot": {
+        "angular_velocity": 0.0,
+        "heading": 1.3913688659667969,
+        "position": [
+          15.80894784535252,
+          3.5492215877491406
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": -1.1286311149597168,
+        "position": [
+          23.13152728498271,
+          2.9457724599590964
+        ],
+        "velocity": [
+          0.4120157633520094,
+          -0.9111767176291652
+        ]
+      },
+      "last_goal": {
+        "current": [
+          19.109221,
+          35.043137
+        ],
+        "next": [
+          17.882291725609406,
+          35.248258150781595
+        ]
+      },
+      "last_collision": {
+        "obstacle": true,
+        "pedestrian": false,
+        "robot": false
+      },
+      "action_semantics": null,
+      "steps": 146,
+      "horizon": 500,
+      "raw_file": "runs/sacadrl__differential_drive/episodes.jsonl",
+      "episode_id": "classic_head_on_corridor_low--1002--ca8932830c4dd68d"
+    }
+  },
+  {
+    "slot": [
+      "sacadrl",
+      "differential_drive",
+      "classic_head_on_corridor_low",
+      1003
+    ],
+    "events": [
+      "success_to_failure",
+      "new_collision"
+    ],
+    "baseline": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": true,
+        "timeout_event": false
+      },
+      "success": true,
+      "reset_robot": {
+        "heading": 1.3646290302276611,
+        "position": [
+          14.716124192359883,
+          3.237036995778612
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": 1.3196289539337158,
+        "position": [
+          18.150095659253598,
+          33.107930166375816
+        ],
+        "velocity": [
+          0.231546746451734,
+          0.9728237785989791
+        ]
+      },
+      "last_goal": null,
+      "last_collision": null,
+      "action_semantics": null,
+      "steps": 338,
+      "horizon": 600,
+      "raw_file": "runs/sacadrl__differential_drive/episodes.jsonl",
+      "episode_id": "classic_head_on_corridor_low--1003--872dbd9c4e1a552f"
+    },
+    "top": {
+      "outcome": {
+        "collision_event": true,
+        "route_complete": false,
+        "timeout_event": false
+      },
+      "success": false,
+      "reset_robot": {
+        "angular_velocity": 0.0,
+        "heading": 1.3913688659667969,
+        "position": [
+          13.933677807640118,
+          6.396861804221388
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": -0.6536310911178589,
+        "position": [
+          23.50586949311581,
+          2.9888124831068645
+        ],
+        "velocity": [
+          0.7831187646890925,
+          -0.6218721736754462
+        ]
+      },
+      "last_goal": {
+        "current": [
+          19.109221,
+          35.043137
+        ],
+        "next": [
+          18.091142528531762,
+          33.7723881746448
+        ]
+      },
+      "last_collision": {
+        "obstacle": true,
+        "pedestrian": false,
+        "robot": false
+      },
+      "action_semantics": null,
+      "steps": 123,
+      "horizon": 500,
+      "raw_file": "runs/sacadrl__differential_drive/episodes.jsonl",
+      "episode_id": "classic_head_on_corridor_low--1003--99fced33031e3b91"
+    }
+  },
+  {
+    "slot": [
+      "sacadrl",
+      "differential_drive",
+      "classic_head_on_corridor_medium",
+      1002
+    ],
+    "events": [
+      "success_to_failure",
+      "new_collision"
+    ],
+    "baseline": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": true,
+        "timeout_event": false
+      },
+      "success": true,
+      "reset_robot": {
+        "heading": 1.3646290302276611,
+        "position": [
+          15.80894784535252,
+          3.5492215877491406
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": 1.334628939628601,
+        "position": [
+          19.632449191693787,
+          33.05783831654953
+        ],
+        "velocity": [
+          0.23397807978163598,
+          0.9722418722630977
+        ]
+      },
+      "last_goal": null,
+      "last_collision": null,
+      "action_semantics": null,
+      "steps": 356,
+      "horizon": 600,
+      "raw_file": "runs/sacadrl__differential_drive/episodes.jsonl",
+      "episode_id": "classic_head_on_corridor_medium--1002--ccbdcb6f3366727e"
+    },
+    "top": {
+      "outcome": {
+        "collision_event": true,
+        "route_complete": false,
+        "timeout_event": false
+      },
+      "success": false,
+      "reset_robot": {
+        "angular_velocity": 0.0,
+        "heading": 1.3913688659667969,
+        "position": [
+          15.80894784535252,
+          3.5492215877491406
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": -1.1286311149597168,
+        "position": [
+          23.13152728498271,
+          2.9457724599590964
+        ],
+        "velocity": [
+          0.4120157633520094,
+          -0.9111767176291652
+        ]
+      },
+      "last_goal": {
+        "current": [
+          19.109221,
+          35.043137
+        ],
+        "next": [
+          17.882291725609406,
+          35.248258150781595
+        ]
+      },
+      "last_collision": {
+        "obstacle": true,
+        "pedestrian": false,
+        "robot": false
+      },
+      "action_semantics": null,
+      "steps": 146,
+      "horizon": 500,
+      "raw_file": "runs/sacadrl__differential_drive/episodes.jsonl",
+      "episode_id": "classic_head_on_corridor_medium--1002--4a5b731ca732ebec"
+    }
+  },
+  {
+    "slot": [
+      "sacadrl",
+      "differential_drive",
+      "classic_head_on_corridor_medium",
+      1003
+    ],
+    "events": [
+      "success_to_failure",
+      "new_collision"
+    ],
+    "baseline": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": true,
+        "timeout_event": false
+      },
+      "success": true,
+      "reset_robot": {
+        "heading": 1.3646290302276611,
+        "position": [
+          14.716124192359883,
+          3.237036995778612
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": 1.3196289539337158,
+        "position": [
+          18.150095659253598,
+          33.107930166375816
+        ],
+        "velocity": [
+          0.231546746451734,
+          0.9728237785989791
+        ]
+      },
+      "last_goal": null,
+      "last_collision": null,
+      "action_semantics": null,
+      "steps": 338,
+      "horizon": 600,
+      "raw_file": "runs/sacadrl__differential_drive/episodes.jsonl",
+      "episode_id": "classic_head_on_corridor_medium--1003--5cc7971886b7eca0"
+    },
+    "top": {
+      "outcome": {
+        "collision_event": true,
+        "route_complete": false,
+        "timeout_event": false
+      },
+      "success": false,
+      "reset_robot": {
+        "angular_velocity": 0.0,
+        "heading": 1.3913688659667969,
+        "position": [
+          13.933677807640118,
+          6.396861804221388
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": -0.6536310911178589,
+        "position": [
+          23.50586949311581,
+          2.9888124831068645
+        ],
+        "velocity": [
+          0.7831187646890925,
+          -0.6218721736754462
+        ]
+      },
+      "last_goal": {
+        "current": [
+          19.109221,
+          35.043137
+        ],
+        "next": [
+          18.091142528531762,
+          33.7723881746448
+        ]
+      },
+      "last_collision": {
+        "obstacle": true,
+        "pedestrian": false,
+        "robot": false
+      },
+      "action_semantics": null,
+      "steps": 123,
+      "horizon": 500,
+      "raw_file": "runs/sacadrl__differential_drive/episodes.jsonl",
+      "episode_id": "classic_head_on_corridor_medium--1003--e8150ea6a8269b87"
+    }
+  },
+  {
+    "slot": [
+      "sacadrl",
+      "differential_drive",
+      "francis2023_blind_corner",
+      1001
+    ],
+    "events": [
+      "new_collision"
+    ],
+    "baseline": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": false,
+        "timeout_event": true
+      },
+      "success": false,
+      "reset_robot": {
+        "heading": 0.0,
+        "position": [
+          5.387535640902389,
+          25.046227103984112
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": -1.5099999904632568,
+        "position": [
+          26.861734322550955,
+          9.874063870561473
+        ],
+        "velocity": [
+          0.060758881219378225,
+          -0.9981524724975444
+        ]
+      },
+      "last_goal": null,
+      "last_collision": null,
+      "action_semantics": null,
+      "steps": 400,
+      "horizon": 600,
+      "raw_file": "runs/sacadrl__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_blind_corner--1001--b385d088a8e45912"
+    },
+    "top": {
+      "outcome": {
+        "collision_event": true,
+        "route_complete": false,
+        "timeout_event": false
+      },
+      "success": false,
+      "reset_robot": {
+        "angular_velocity": 0.0,
+        "heading": 0.0,
+        "position": [
+          5.4698728687849885,
+          25.39156383016797
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": -1.6799999475479126,
+        "position": [
+          24.99370646024295,
+          18.53487815546543
+        ],
+        "velocity": [
+          -0.15606312320393556,
+          -0.9877470838103264
+        ]
+      },
+      "last_goal": {
+        "current": [
+          27.0,
+          3.0
+        ],
+        "next": [
+          26.77295628860691,
+          2.9763488749821905
+        ]
+      },
+      "last_collision": {
+        "obstacle": true,
+        "pedestrian": false,
+        "robot": false
+      },
+      "action_semantics": null,
+      "steps": 310,
+      "horizon": 400,
+      "raw_file": "runs/sacadrl__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_blind_corner--1001--8830c8e652ed8fd0"
+    }
+  },
+  {
+    "slot": [
+      "sacadrl",
+      "differential_drive",
+      "francis2023_intersection_no_gesture",
+      1001
+    ],
+    "events": [
+      "success_to_failure",
+      "new_collision"
+    ],
+    "baseline": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": true,
+        "timeout_event": false
+      },
+      "success": true,
+      "reset_robot": {
+        "heading": 0.0,
+        "position": [
+          4.387535640902389,
+          13.04622710398411
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": -0.05999999865889549,
+        "position": [
+          26.01067041372847,
+          14.252579415781147
+        ],
+        "velocity": [
+          0.998200539935219,
+          -0.05996400647944711
+        ]
+      },
+      "last_goal": null,
+      "last_collision": null,
+      "action_semantics": null,
+      "steps": 234,
+      "horizon": 600,
+      "raw_file": "runs/sacadrl__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_intersection_no_gesture--1001--91e6a89b9c51a157"
+    },
+    "top": {
+      "outcome": {
+        "collision_event": true,
+        "route_complete": false,
+        "timeout_event": false
+      },
+      "success": false,
+      "reset_robot": {
+        "angular_velocity": 0.0,
+        "heading": 0.0,
+        "position": [
+          4.4698728687849885,
+          13.391563830167973
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": -0.8299999833106995,
+        "position": [
+          7.619895726780686,
+          12.937538082073587
+        ],
+        "velocity": [
+          0.6618592824951186,
+          -0.7496281012442374
+        ]
+      },
+      "last_goal": {
+        "current": [
+          27.0,
+          14.0
+        ],
+        "next": [
+          26.77295628860691,
+          13.976348874982191
+        ]
+      },
+      "last_collision": {
+        "obstacle": true,
+        "pedestrian": false,
+        "robot": false
+      },
+      "action_semantics": null,
+      "steps": 42,
+      "horizon": 400,
+      "raw_file": "runs/sacadrl__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_intersection_no_gesture--1001--be5ed26493365a05"
+    }
+  },
+  {
+    "slot": [
+      "sacadrl",
+      "differential_drive",
+      "francis2023_intersection_no_gesture",
+      1002
+    ],
+    "events": [
+      "success_to_failure",
+      "new_collision"
+    ],
+    "baseline": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": true,
+        "timeout_event": false
+      },
+      "success": true,
+      "reset_robot": {
+        "heading": 0.0,
+        "position": [
+          4.74202342267626,
+          13.36613609387457
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": -0.07999999821186066,
+        "position": [
+          26.092852864276512,
+          14.222327700162248
+        ],
+        "velocity": [
+          0.9968017063026124,
+          -0.07991469396916528
+        ]
+      },
+      "last_goal": null,
+      "last_collision": null,
+      "action_semantics": null,
+      "steps": 228,
+      "horizon": 600,
+      "raw_file": "runs/sacadrl__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_intersection_no_gesture--1002--5ca96585ada4a8d4"
+    },
+    "top": {
+      "outcome": {
+        "collision_event": true,
+        "route_complete": false,
+        "timeout_event": false
+      },
+      "success": false,
+      "reset_robot": {
+        "angular_velocity": 0.0,
+        "heading": 0.0,
+        "position": [
+          4.74202342267626,
+          13.36613609387457
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": -0.45500001311302185,
+        "position": [
+          8.526969670154118,
+          12.9862314483986
+        ],
+        "velocity": [
+          0.8787783820443096,
+          -0.4772300862808265
+        ]
+      },
+      "last_goal": {
+        "current": [
+          27.0,
+          14.0
+        ],
+        "next": [
+          26.3865353628047,
+          14.102560575390797
+        ]
+      },
+      "last_collision": {
+        "obstacle": true,
+        "pedestrian": false,
+        "robot": false
+      },
+      "action_semantics": null,
+      "steps": 50,
+      "horizon": 400,
+      "raw_file": "runs/sacadrl__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_intersection_no_gesture--1002--cbe172981b3b4690"
+    }
+  },
+  {
+    "slot": [
+      "sacadrl",
+      "differential_drive",
+      "francis2023_intersection_proceed",
+      1001
+    ],
+    "events": [
+      "success_to_failure",
+      "new_collision"
+    ],
+    "baseline": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": true,
+        "timeout_event": false
+      },
+      "success": true,
+      "reset_robot": {
+        "heading": 0.0,
+        "position": [
+          4.387535640902389,
+          13.04622710398411
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": -0.05999999865889549,
+        "position": [
+          26.01067041372847,
+          14.252579415781147
+        ],
+        "velocity": [
+          0.998200539935219,
+          -0.05996400647944711
+        ]
+      },
+      "last_goal": null,
+      "last_collision": null,
+      "action_semantics": null,
+      "steps": 234,
+      "horizon": 600,
+      "raw_file": "runs/sacadrl__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_intersection_proceed--1001--ccd47376f0b223f8"
+    },
+    "top": {
+      "outcome": {
+        "collision_event": true,
+        "route_complete": false,
+        "timeout_event": false
+      },
+      "success": false,
+      "reset_robot": {
+        "angular_velocity": 0.0,
+        "heading": 0.0,
+        "position": [
+          4.4698728687849885,
+          13.391563830167973
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": -0.8299999833106995,
+        "position": [
+          7.619895726780686,
+          12.937538082073587
+        ],
+        "velocity": [
+          0.6618592824951186,
+          -0.7496281012442374
+        ]
+      },
+      "last_goal": {
+        "current": [
+          27.0,
+          14.0
+        ],
+        "next": [
+          26.77295628860691,
+          13.976348874982191
+        ]
+      },
+      "last_collision": {
+        "obstacle": true,
+        "pedestrian": false,
+        "robot": false
+      },
+      "action_semantics": null,
+      "steps": 42,
+      "horizon": 400,
+      "raw_file": "runs/sacadrl__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_intersection_proceed--1001--97a4faa4a1113367"
+    }
+  },
+  {
+    "slot": [
+      "sacadrl",
+      "differential_drive",
+      "francis2023_intersection_proceed",
+      1002
+    ],
+    "events": [
+      "success_to_failure",
+      "new_collision"
+    ],
+    "baseline": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": true,
+        "timeout_event": false
+      },
+      "success": true,
+      "reset_robot": {
+        "heading": 0.0,
+        "position": [
+          4.74202342267626,
+          13.36613609387457
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": -0.07999999821186066,
+        "position": [
+          26.092852864276512,
+          14.222327700162248
+        ],
+        "velocity": [
+          0.9968017063026124,
+          -0.07991469396916528
+        ]
+      },
+      "last_goal": null,
+      "last_collision": null,
+      "action_semantics": null,
+      "steps": 228,
+      "horizon": 600,
+      "raw_file": "runs/sacadrl__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_intersection_proceed--1002--e71fa3d3a24fa3b3"
+    },
+    "top": {
+      "outcome": {
+        "collision_event": true,
+        "route_complete": false,
+        "timeout_event": false
+      },
+      "success": false,
+      "reset_robot": {
+        "angular_velocity": 0.0,
+        "heading": 0.0,
+        "position": [
+          4.74202342267626,
+          13.36613609387457
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": -0.45500001311302185,
+        "position": [
+          8.526969670154118,
+          12.9862314483986
+        ],
+        "velocity": [
+          0.8787783820443096,
+          -0.4772300862808265
+        ]
+      },
+      "last_goal": {
+        "current": [
+          27.0,
+          14.0
+        ],
+        "next": [
+          26.3865353628047,
+          14.102560575390797
+        ]
+      },
+      "last_collision": {
+        "obstacle": true,
+        "pedestrian": false,
+        "robot": false
+      },
+      "action_semantics": null,
+      "steps": 50,
+      "horizon": 400,
+      "raw_file": "runs/sacadrl__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_intersection_proceed--1002--9f65404cac2d97f9"
+    }
+  },
+  {
+    "slot": [
+      "sacadrl",
+      "differential_drive",
+      "francis2023_intersection_wait",
+      1001
+    ],
+    "events": [
+      "success_to_failure",
+      "new_collision"
+    ],
+    "baseline": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": true,
+        "timeout_event": false
+      },
+      "success": true,
+      "reset_robot": {
+        "heading": 0.0,
+        "position": [
+          4.387535640902389,
+          13.04622710398411
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": -0.05999999865889549,
+        "position": [
+          26.01067041372847,
+          14.252579415781147
+        ],
+        "velocity": [
+          0.998200539935219,
+          -0.05996400647944711
+        ]
+      },
+      "last_goal": null,
+      "last_collision": null,
+      "action_semantics": null,
+      "steps": 234,
+      "horizon": 600,
+      "raw_file": "runs/sacadrl__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_intersection_wait--1001--cdd9c5d5b3d4e6d4"
+    },
+    "top": {
+      "outcome": {
+        "collision_event": true,
+        "route_complete": false,
+        "timeout_event": false
+      },
+      "success": false,
+      "reset_robot": {
+        "angular_velocity": 0.0,
+        "heading": 0.0,
+        "position": [
+          4.4698728687849885,
+          13.391563830167973
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": -0.8299999833106995,
+        "position": [
+          7.619895726780686,
+          12.937538082073587
+        ],
+        "velocity": [
+          0.6618592824951186,
+          -0.7496281012442374
+        ]
+      },
+      "last_goal": {
+        "current": [
+          27.0,
+          14.0
+        ],
+        "next": [
+          26.77295628860691,
+          13.976348874982191
+        ]
+      },
+      "last_collision": {
+        "obstacle": true,
+        "pedestrian": false,
+        "robot": false
+      },
+      "action_semantics": null,
+      "steps": 42,
+      "horizon": 400,
+      "raw_file": "runs/sacadrl__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_intersection_wait--1001--d9c99e17f6599ed3"
+    }
+  },
+  {
+    "slot": [
+      "sacadrl",
+      "differential_drive",
+      "francis2023_intersection_wait",
+      1002
+    ],
+    "events": [
+      "success_to_failure",
+      "new_collision"
+    ],
+    "baseline": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": true,
+        "timeout_event": false
+      },
+      "success": true,
+      "reset_robot": {
+        "heading": 0.0,
+        "position": [
+          4.74202342267626,
+          13.36613609387457
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": -0.07999999821186066,
+        "position": [
+          26.092852864276512,
+          14.222327700162248
+        ],
+        "velocity": [
+          0.9968017063026124,
+          -0.07991469396916528
+        ]
+      },
+      "last_goal": null,
+      "last_collision": null,
+      "action_semantics": null,
+      "steps": 228,
+      "horizon": 600,
+      "raw_file": "runs/sacadrl__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_intersection_wait--1002--d691d56d5d43066f"
+    },
+    "top": {
+      "outcome": {
+        "collision_event": true,
+        "route_complete": false,
+        "timeout_event": false
+      },
+      "success": false,
+      "reset_robot": {
+        "angular_velocity": 0.0,
+        "heading": 0.0,
+        "position": [
+          4.74202342267626,
+          13.36613609387457
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": -0.45500001311302185,
+        "position": [
+          8.526969670154118,
+          12.9862314483986
+        ],
+        "velocity": [
+          0.8787783820443096,
+          -0.4772300862808265
+        ]
+      },
+      "last_goal": {
+        "current": [
+          27.0,
+          14.0
+        ],
+        "next": [
+          26.3865353628047,
+          14.102560575390797
+        ]
+      },
+      "last_collision": {
+        "obstacle": true,
+        "pedestrian": false,
+        "robot": false
+      },
+      "action_semantics": null,
+      "steps": 50,
+      "horizon": 400,
+      "raw_file": "runs/sacadrl__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_intersection_wait--1002--57f98b9f30b07313"
+    }
+  },
+  {
+    "slot": [
+      "sacadrl",
+      "differential_drive",
+      "francis2023_narrow_hallway",
+      1001
+    ],
+    "events": [
+      "success_to_failure",
+      "new_collision"
+    ],
+    "baseline": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": true,
+        "timeout_event": false
+      },
+      "success": true,
+      "reset_robot": {
+        "heading": 0.0,
+        "position": [
+          4.387535640902389,
+          2.0462271039841102
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": -0.05999999865889549,
+        "position": [
+          26.01067041372847,
+          3.2525794157811267
+        ],
+        "velocity": [
+          0.998200539935219,
+          -0.059964006479442666
+        ]
+      },
+      "last_goal": null,
+      "last_collision": null,
+      "action_semantics": null,
+      "steps": 234,
+      "horizon": 600,
+      "raw_file": "runs/sacadrl__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_narrow_hallway--1001--5b6527c20d497059"
+    },
+    "top": {
+      "outcome": {
+        "collision_event": true,
+        "route_complete": false,
+        "timeout_event": false
+      },
+      "success": false,
+      "reset_robot": {
+        "angular_velocity": 0.0,
+        "heading": 0.0,
+        "position": [
+          4.4698728687849885,
+          2.3915638301679727
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": -0.8299999833106995,
+        "position": [
+          7.619895726780686,
+          1.9375380820735901
+        ],
+        "velocity": [
+          0.6618592824951186,
+          -0.7496281012442418
+        ]
+      },
+      "last_goal": {
+        "current": [
+          27.0,
+          3.0
+        ],
+        "next": [
+          26.77295628860691,
+          2.9763488749821905
+        ]
+      },
+      "last_collision": {
+        "obstacle": true,
+        "pedestrian": false,
+        "robot": false
+      },
+      "action_semantics": null,
+      "steps": 42,
+      "horizon": 400,
+      "raw_file": "runs/sacadrl__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_narrow_hallway--1001--6bd118cc8806c23b"
+    }
+  },
+  {
+    "slot": [
+      "sacadrl",
+      "differential_drive",
+      "francis2023_narrow_hallway",
+      1002
+    ],
+    "events": [
+      "success_to_failure",
+      "new_collision"
+    ],
+    "baseline": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": true,
+        "timeout_event": false
+      },
+      "success": true,
+      "reset_robot": {
+        "heading": 0.0,
+        "position": [
+          4.74202342267626,
+          2.3661360938745704
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": -0.07999999821186066,
+        "position": [
+          26.092852864276512,
+          3.2223277001622357
+        ],
+        "velocity": [
+          0.9968017063026124,
+          -0.07991469396916973
+        ]
+      },
+      "last_goal": null,
+      "last_collision": null,
+      "action_semantics": null,
+      "steps": 228,
+      "horizon": 600,
+      "raw_file": "runs/sacadrl__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_narrow_hallway--1002--5fcbde60c7f2b2cf"
+    },
+    "top": {
+      "outcome": {
+        "collision_event": true,
+        "route_complete": false,
+        "timeout_event": false
+      },
+      "success": false,
+      "reset_robot": {
+        "angular_velocity": 0.0,
+        "heading": 0.0,
+        "position": [
+          4.74202342267626,
+          2.3661360938745704
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": -0.45500001311302185,
+        "position": [
+          8.526969670154118,
+          1.9862314483985972
+        ],
+        "velocity": [
+          0.8787783820443096,
+          -0.47723008628081987
+        ]
+      },
+      "last_goal": {
+        "current": [
+          27.0,
+          3.0
+        ],
+        "next": [
+          26.3865353628047,
+          3.1025605753907968
+        ]
+      },
+      "last_collision": {
+        "obstacle": true,
+        "pedestrian": false,
+        "robot": false
+      },
+      "action_semantics": null,
+      "steps": 50,
+      "horizon": 400,
+      "raw_file": "runs/sacadrl__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_narrow_hallway--1002--48a56703cdcffea9"
+    }
+  },
+  {
+    "slot": [
+      "sacadrl",
+      "differential_drive",
+      "francis2023_perpendicular_traffic",
+      1001
+    ],
+    "events": [
+      "success_to_failure",
+      "new_collision"
+    ],
+    "baseline": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": true,
+        "timeout_event": false
+      },
+      "success": true,
+      "reset_robot": {
+        "heading": 0.0,
+        "position": [
+          4.387535640902389,
+          13.04622710398411
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": -0.05999999865889549,
+        "position": [
+          26.01067041372847,
+          14.252579415781147
+        ],
+        "velocity": [
+          0.998200539935219,
+          -0.05996400647944711
+        ]
+      },
+      "last_goal": null,
+      "last_collision": null,
+      "action_semantics": null,
+      "steps": 234,
+      "horizon": 600,
+      "raw_file": "runs/sacadrl__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_perpendicular_traffic--1001--bba79d2aea88fa04"
+    },
+    "top": {
+      "outcome": {
+        "collision_event": true,
+        "route_complete": false,
+        "timeout_event": false
+      },
+      "success": false,
+      "reset_robot": {
+        "angular_velocity": 0.0,
+        "heading": 0.0,
+        "position": [
+          4.4698728687849885,
+          13.391563830167973
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": -0.8299999833106995,
+        "position": [
+          7.619895726780686,
+          12.937538082073587
+        ],
+        "velocity": [
+          0.6618592824951186,
+          -0.7496281012442374
+        ]
+      },
+      "last_goal": {
+        "current": [
+          27.0,
+          14.0
+        ],
+        "next": [
+          26.77295628860691,
+          13.976348874982191
+        ]
+      },
+      "last_collision": {
+        "obstacle": true,
+        "pedestrian": false,
+        "robot": false
+      },
+      "action_semantics": null,
+      "steps": 42,
+      "horizon": 400,
+      "raw_file": "runs/sacadrl__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_perpendicular_traffic--1001--0c7b0450e63210a4"
+    }
+  },
+  {
+    "slot": [
+      "sacadrl",
+      "differential_drive",
+      "francis2023_perpendicular_traffic",
+      1002
+    ],
+    "events": [
+      "success_to_failure",
+      "new_collision"
+    ],
+    "baseline": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": true,
+        "timeout_event": false
+      },
+      "success": true,
+      "reset_robot": {
+        "heading": 0.0,
+        "position": [
+          4.74202342267626,
+          13.36613609387457
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": -0.07999999821186066,
+        "position": [
+          26.092852864276512,
+          14.222327700162248
+        ],
+        "velocity": [
+          0.9968017063026124,
+          -0.07991469396916528
+        ]
+      },
+      "last_goal": null,
+      "last_collision": null,
+      "action_semantics": null,
+      "steps": 228,
+      "horizon": 600,
+      "raw_file": "runs/sacadrl__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_perpendicular_traffic--1002--fe96e8902d7c76dd"
+    },
+    "top": {
+      "outcome": {
+        "collision_event": true,
+        "route_complete": false,
+        "timeout_event": false
+      },
+      "success": false,
+      "reset_robot": {
+        "angular_velocity": 0.0,
+        "heading": 0.0,
+        "position": [
+          4.74202342267626,
+          13.36613609387457
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": -0.45500001311302185,
+        "position": [
+          8.526969670154118,
+          12.9862314483986
+        ],
+        "velocity": [
+          0.8787783820443096,
+          -0.4772300862808265
+        ]
+      },
+      "last_goal": {
+        "current": [
+          27.0,
+          14.0
+        ],
+        "next": [
+          26.3865353628047,
+          14.102560575390797
+        ]
+      },
+      "last_collision": {
+        "obstacle": true,
+        "pedestrian": false,
+        "robot": false
+      },
+      "action_semantics": null,
+      "steps": 50,
+      "horizon": 400,
+      "raw_file": "runs/sacadrl__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_perpendicular_traffic--1002--10d919126b71cbf6"
+    }
+  },
+  {
+    "slot": [
+      "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+      "differential_drive",
+      "francis2023_entering_room",
+      1002
+    ],
+    "events": [
+      "success_to_failure"
+    ],
+    "baseline": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": true,
+        "timeout_event": false
+      },
+      "success": true,
+      "reset_robot": {
+        "heading": 0.0,
+        "position": [
+          4.74202342267626,
+          9.36613609387457
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": 0.009314331226050854,
+        "position": [
+          20.001241055171572,
+          9.762251154091418
+        ],
+        "velocity": [
+          0.9249598633633127,
+          0.008615631908757138
+        ]
+      },
+      "last_goal": null,
+      "last_collision": null,
+      "action_semantics": null,
+      "steps": 99,
+      "horizon": 600,
+      "raw_file": "runs/scenario_adaptive_hybrid_orca_v2_bottleneck_yield__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_entering_room--1002--82c354b4d521ebe0"
+    },
+    "top": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": false,
+        "timeout_event": true
+      },
+      "success": false,
+      "reset_robot": {
+        "angular_velocity": 0.0,
+        "heading": -0.13255153596401215,
+        "position": [
+          4.74202342267626,
+          9.36613609387457
+        ],
+        "velocity": [
+          0.0,
+          -0.0
+        ]
+      },
+      "last_robot": {
+        "heading": -1.3586698770523071,
+        "position": [
+          18.574178363032605,
+          9.967970833003854
+        ],
+        "velocity": [
+          0.10088567427267492,
+          -0.6168039300921535
+        ]
+      },
+      "last_goal": {
+        "current": [
+          20.3865353628047,
+          10.102560575390797
+        ],
+        "next": null
+      },
+      "last_collision": {
+        "obstacle": false,
+        "pedestrian": false,
+        "robot": false
+      },
+      "action_semantics": null,
+      "steps": 400,
+      "horizon": 400,
+      "raw_file": "runs/scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_entering_room--1002--bdcf8711c73c0c83"
+    }
+  },
+  {
+    "slot": [
+      "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+      "differential_drive",
+      "francis2023_narrow_hallway",
+      1002
+    ],
+    "events": [
+      "success_to_failure"
+    ],
+    "baseline": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": true,
+        "timeout_event": false
+      },
+      "success": true,
+      "reset_robot": {
+        "heading": 0.0,
+        "position": [
+          4.74202342267626,
+          2.3661360938745704
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": 0.011476367712020874,
+        "position": [
+          26.06019011660236,
+          3.034116292671854
+        ],
+        "velocity": [
+          0.9518601497992663,
+          0.013304413605270682
+        ]
+      },
+      "last_goal": null,
+      "last_collision": null,
+      "action_semantics": null,
+      "steps": 124,
+      "horizon": 600,
+      "raw_file": "runs/scenario_adaptive_hybrid_orca_v2_bottleneck_yield__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_narrow_hallway--1002--e473395a1501a8ec"
+    },
+    "top": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": false,
+        "timeout_event": true
+      },
+      "success": false,
+      "reset_robot": {
+        "angular_velocity": 0.0,
+        "heading": 0.0,
+        "position": [
+          4.74202342267626,
+          2.3661360938745704
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": 2.444204807281494,
+        "position": [
+          25.526262585227663,
+          3.553185381482274
+        ],
+        "velocity": [
+          -0.7863438872623263,
+          0.7256506477142199
+        ]
+      },
+      "last_goal": {
+        "current": [
+          26.3865353628047,
+          3.1025605753907968
+        ],
+        "next": null
+      },
+      "last_collision": {
+        "obstacle": false,
+        "pedestrian": false,
+        "robot": false
+      },
+      "action_semantics": null,
+      "steps": 400,
+      "horizon": 400,
+      "raw_file": "runs/scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_narrow_hallway--1002--ff990078c39f484a"
+    }
+  },
+  {
+    "slot": [
+      "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+      "differential_drive",
+      "francis2023_pedestrian_overtaking",
+      1002
+    ],
+    "events": [
+      "success_to_failure"
+    ],
+    "baseline": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": true,
+        "timeout_event": false
+      },
+      "success": true,
+      "reset_robot": {
+        "heading": 0.0,
+        "position": [
+          4.74202342267626,
+          4.36613609387457
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": 0.010109033435583115,
+        "position": [
+          36.06669032540587,
+          5.005729369667788
+        ],
+        "velocity": [
+          0.9256471426564161,
+          0.009357716751550171
+        ]
+      },
+      "last_goal": null,
+      "last_collision": null,
+      "action_semantics": null,
+      "steps": 174,
+      "horizon": 600,
+      "raw_file": "runs/scenario_adaptive_hybrid_orca_v2_bottleneck_yield__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_pedestrian_overtaking--1002--6df5545090373313"
+    },
+    "top": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": false,
+        "timeout_event": true
+      },
+      "success": false,
+      "reset_robot": {
+        "angular_velocity": 0.0,
+        "heading": 0.0,
+        "position": [
+          4.74202342267626,
+          4.091534023468642
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": 2.1289215087890625,
+        "position": [
+          35.78695360139826,
+          5.377180464650611
+        ],
+        "velocity": [
+          -0.3405781418222631,
+          0.6115607323176331
+        ]
+      },
+      "last_goal": {
+        "current": [
+          36.3865353628047,
+          5.102560575390797
+        ],
+        "next": null
+      },
+      "last_collision": {
+        "obstacle": false,
+        "pedestrian": false,
+        "robot": false
+      },
+      "action_semantics": null,
+      "steps": 600,
+      "horizon": 600,
+      "raw_file": "runs/scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_pedestrian_overtaking--1002--e27a0feaaa02631d"
+    }
+  },
+  {
+    "slot": [
+      "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+      "differential_drive",
+      "francis2023_entering_room",
+      1002
+    ],
+    "events": [
+      "success_to_failure"
+    ],
+    "baseline": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": true,
+        "timeout_event": false
+      },
+      "success": true,
+      "reset_robot": {
+        "heading": 0.0,
+        "position": [
+          4.74202342267626,
+          9.36613609387457
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": 0.009314331226050854,
+        "position": [
+          20.001241055171572,
+          9.762251154091418
+        ],
+        "velocity": [
+          0.9249598633633127,
+          0.008615631908757138
+        ]
+      },
+      "last_goal": null,
+      "last_collision": null,
+      "action_semantics": null,
+      "steps": 99,
+      "horizon": 600,
+      "raw_file": "runs/scenario_adaptive_hybrid_orca_v2_collision_guard__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_entering_room--1002--82c354b4d521ebe0"
+    },
+    "top": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": false,
+        "timeout_event": true
+      },
+      "success": false,
+      "reset_robot": {
+        "angular_velocity": 0.0,
+        "heading": -0.13255153596401215,
+        "position": [
+          4.74202342267626,
+          9.36613609387457
+        ],
+        "velocity": [
+          0.0,
+          -0.0
+        ]
+      },
+      "last_robot": {
+        "heading": -1.3586698770523071,
+        "position": [
+          18.574178363032605,
+          9.967970833003854
+        ],
+        "velocity": [
+          0.10088567427267492,
+          -0.6168039300921535
+        ]
+      },
+      "last_goal": {
+        "current": [
+          20.3865353628047,
+          10.102560575390797
+        ],
+        "next": null
+      },
+      "last_collision": {
+        "obstacle": false,
+        "pedestrian": false,
+        "robot": false
+      },
+      "action_semantics": null,
+      "steps": 400,
+      "horizon": 400,
+      "raw_file": "runs/scenario_adaptive_hybrid_orca_v2_collision_guard_v4__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_entering_room--1002--bdcf8711c73c0c83"
+    }
+  },
+  {
+    "slot": [
+      "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+      "differential_drive",
+      "francis2023_narrow_hallway",
+      1002
+    ],
+    "events": [
+      "success_to_failure"
+    ],
+    "baseline": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": true,
+        "timeout_event": false
+      },
+      "success": true,
+      "reset_robot": {
+        "heading": 0.0,
+        "position": [
+          4.74202342267626,
+          2.3661360938745704
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": 0.011476367712020874,
+        "position": [
+          26.06019011660236,
+          3.034116292671854
+        ],
+        "velocity": [
+          0.9518601497992663,
+          0.013304413605270682
+        ]
+      },
+      "last_goal": null,
+      "last_collision": null,
+      "action_semantics": null,
+      "steps": 124,
+      "horizon": 600,
+      "raw_file": "runs/scenario_adaptive_hybrid_orca_v2_collision_guard__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_narrow_hallway--1002--e473395a1501a8ec"
+    },
+    "top": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": false,
+        "timeout_event": true
+      },
+      "success": false,
+      "reset_robot": {
+        "angular_velocity": 0.0,
+        "heading": 0.0,
+        "position": [
+          4.74202342267626,
+          2.3661360938745704
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": 2.444204807281494,
+        "position": [
+          25.526262585227663,
+          3.553185381482274
+        ],
+        "velocity": [
+          -0.7863438872623263,
+          0.7256506477142199
+        ]
+      },
+      "last_goal": {
+        "current": [
+          26.3865353628047,
+          3.1025605753907968
+        ],
+        "next": null
+      },
+      "last_collision": {
+        "obstacle": false,
+        "pedestrian": false,
+        "robot": false
+      },
+      "action_semantics": null,
+      "steps": 400,
+      "horizon": 400,
+      "raw_file": "runs/scenario_adaptive_hybrid_orca_v2_collision_guard_v4__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_narrow_hallway--1002--ff990078c39f484a"
+    }
+  },
+  {
+    "slot": [
+      "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+      "differential_drive",
+      "francis2023_pedestrian_overtaking",
+      1002
+    ],
+    "events": [
+      "success_to_failure"
+    ],
+    "baseline": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": true,
+        "timeout_event": false
+      },
+      "success": true,
+      "reset_robot": {
+        "heading": 0.0,
+        "position": [
+          4.74202342267626,
+          4.36613609387457
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": 0.010109033435583115,
+        "position": [
+          36.06669032540587,
+          5.005729369667788
+        ],
+        "velocity": [
+          0.9256471426564161,
+          0.009357716751550171
+        ]
+      },
+      "last_goal": null,
+      "last_collision": null,
+      "action_semantics": null,
+      "steps": 174,
+      "horizon": 600,
+      "raw_file": "runs/scenario_adaptive_hybrid_orca_v2_collision_guard__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_pedestrian_overtaking--1002--6df5545090373313"
+    },
+    "top": {
+      "outcome": {
+        "collision_event": false,
+        "route_complete": false,
+        "timeout_event": true
+      },
+      "success": false,
+      "reset_robot": {
+        "angular_velocity": 0.0,
+        "heading": 0.0,
+        "position": [
+          4.74202342267626,
+          4.091534023468642
+        ],
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "last_robot": {
+        "heading": 2.1289215087890625,
+        "position": [
+          35.78695360139826,
+          5.377180464650611
+        ],
+        "velocity": [
+          -0.3405781418222631,
+          0.6115607323176331
+        ]
+      },
+      "last_goal": {
+        "current": [
+          36.3865353628047,
+          5.102560575390797
+        ],
+        "next": null
+      },
+      "last_collision": {
+        "obstacle": false,
+        "pedestrian": false,
+        "robot": false
+      },
+      "action_semantics": null,
+      "steps": 600,
+      "horizon": 600,
+      "raw_file": "runs/scenario_adaptive_hybrid_orca_v2_collision_guard_v4__differential_drive/episodes.jsonl",
+      "episode_id": "francis2023_pedestrian_overtaking--1002--e27a0feaaa02631d"
+    }
+  }
+]

@@ -1,0 +1,740 @@
+{
+  "schema_version": "issue10180-learned-arm-disposition.v1",
+  "evidence_tier": "diagnostic-only",
+  "paper_facing": false,
+  "benchmark_promotion": false,
+  "gate_cleared": false,
+  "runtime_repair": false,
+  "simulator_runs": 0,
+  "full_gate_runs": 0,
+  "source_receipt_commit": "e711f56c67d4f63fe8c044ada2208da0875f0e36",
+  "receipt_parent_commit": "75787aaf591344ee59ec0e9c55de56ff38b486b6",
+  "inspected_main": "61cc91877a159e1d08b321543bd860042520b9ed",
+  "source_sha256": {
+    "r2/per-event.json": "c40ee1d192c97a542b23a0956c74834c950521af1ce07857c76c2609a1eb0b3b",
+    "r2/runtime-pairs-plan.md": "b87592f9171f89e8ac181ca6ce71a327206ff6e3e37d22eddd46ff7e4b61db9f",
+    "r2/runtime-pair-manifest.json": "24152fd772141aca34d0c497bcbce3c2047a3d3ab8390ed53745fbc8edb494f9",
+    "r2/executed-input-identities.json": "832f45dd2d7ceac73f405bd5579579b878015788c4741eda78acfc39e789be62",
+    "r2/runtime-input-hashes.json": "20e42612bfc70607b82c704ecf68105765c3da18fc754b397522c9167d2df614",
+    "r2/runtime-audit.json": "86369997cd143b8b51c5911792350f24789d5094ad2549c8e7d9357aa6743f4f",
+    "checked-exceptions.json": "e2830e06af8b2c4a87906c1bea1f3e6fd4e4b80db3e6a543e3bed0a7146d7ded"
+  },
+  "historical_pair_contract": {
+    "scenario_variant": "baseline",
+    "planner_variant": "baseline",
+    "horizon": 600,
+    "input_archive_recorded_sha256": "f18d9c64f8ad36f0445bee2588a72c3ce04297c29e88d497f68289586e5d64f5",
+    "checkpoint_bytes_reverified": false,
+    "complete_reset_goal_route_rng_identity_proven": false
+  },
+  "dispositions": {
+    "sacadrl": {
+      "contract": "retain_clearance_aware_reset_sampling",
+      "outcome": "physical_contact_failure_retained",
+      "exact_unsafe_motion_cause": "unresolved",
+      "exception_granted": false
+    },
+    "ppo": {
+      "contract": "retain_declared_velocity_delta",
+      "outcome": "physical_contact_failure_retained",
+      "exact_unsafe_motion_cause": "unresolved",
+      "exception_granted": false
+    }
+  },
+  "witnesses": [
+    {
+      "slot_id": "S025",
+      "arm": "ppo",
+      "scenario": "classic_station_platform_medium",
+      "seed": 1003,
+      "mechanism_class": "c",
+      "event_ids": [
+        "S025:new_collision"
+      ],
+      "input_identity": {
+        "arm": "ppo",
+        "scenario": "classic_station_platform_medium",
+        "scenario_sha256": "3be260502de1e020030f2d8770a9e558c5c2fcfff89f1dc2dfca2eaa3c11e53b",
+        "map_sha256": "a7c14e33955316771d299b82d611f35299bb986d39442f5cc9bf24c1368e5c2a",
+        "seeds": [
+          1003
+        ]
+      },
+      "runtime_pair": {
+        "pair": "ppo",
+        "creates_event": true,
+        "mechanism_active": true,
+        "class": "c",
+        "commit": "c9102a9c81bb60cebb760b2bac94af695bc087a4",
+        "surface": "registry-bound PPO velocity-delta action adapter",
+        "pre": {
+          "source_sha": "46809b6bc18caef2a9cd82686e9670c224459c42",
+          "success": false,
+          "collision_count": 0,
+          "steps": 600,
+          "termination_reason": "max_steps",
+          "trajectory_sha256": "0125763db62cc6d5b1136dfc024c6e3744c313b8c7f64d4685d9d90270b5bbbb",
+          "action_semantics": null
+        },
+        "post": {
+          "source_sha": "c9102a9c81bb60cebb760b2bac94af695bc087a4",
+          "success": false,
+          "collision_count": 1,
+          "steps": 119,
+          "termination_reason": "collision",
+          "trajectory_sha256": "25515101b344638668d7104f2493f950b535ca6719eba8c01c84717495979cb7",
+          "action_semantics": "velocity_delta"
+        },
+        "pre_reset_robot": {
+          "position": [
+            4.391223192359883,
+            3.315065696833959
+          ],
+          "velocity": [
+            0.0,
+            0.0
+          ],
+          "heading": 0.0
+        },
+        "post_reset_robot": {
+          "position": [
+            4.391223192359883,
+            3.315065696833959
+          ],
+          "velocity": [
+            0.0,
+            0.0
+          ],
+          "heading": 0.0
+        }
+      },
+      "cumulative_top": {
+        "success": false,
+        "collision_count": 1,
+        "termination_reason": "collision",
+        "steps": 230,
+        "horizon": 650,
+        "trajectory_sha256": "bb71957e687e37cb9bd9b0574f9bc3ba2b037b45c84e3e381d55c21f05cd9f2a",
+        "source_sha": "d90bf2436e24dea33198a8bbaf6bbf4342b0edac"
+      }
+    },
+    {
+      "slot_id": "S026",
+      "arm": "ppo",
+      "scenario": "francis2023_blind_corner",
+      "seed": 1001,
+      "mechanism_class": "c",
+      "event_ids": [
+        "S026:new_collision",
+        "S026:success_to_failure"
+      ],
+      "input_identity": {
+        "arm": "ppo",
+        "scenario": "francis2023_blind_corner",
+        "scenario_sha256": "afb5d04a3f5c7514904326c888137709defaf07be3b04d7805878820d8114789",
+        "map_sha256": "71ab3ce5436d45268d1b29f1d9c51ecd25e1cd15e9b3b0ffcd5561a69712679f",
+        "seeds": [
+          1001,
+          1003
+        ]
+      },
+      "runtime_pair": {
+        "pair": "ppo",
+        "creates_event": true,
+        "mechanism_active": true,
+        "class": "c",
+        "commit": "c9102a9c81bb60cebb760b2bac94af695bc087a4",
+        "surface": "registry-bound PPO velocity-delta action adapter",
+        "pre": {
+          "source_sha": "46809b6bc18caef2a9cd82686e9670c224459c42",
+          "success": true,
+          "collision_count": 0,
+          "steps": 220,
+          "termination_reason": "success",
+          "trajectory_sha256": "a707fab19dca911d2ddda7e416d5f31b92ba5cb1111e4bd7a7f5ee0f94a1fbf1",
+          "action_semantics": null
+        },
+        "post": {
+          "source_sha": "c9102a9c81bb60cebb760b2bac94af695bc087a4",
+          "success": false,
+          "collision_count": 1,
+          "steps": 83,
+          "termination_reason": "collision",
+          "trajectory_sha256": "1ef8f26637538037124054054d23906ca7b37f0babcffe56bc0faf9df49ae99f",
+          "action_semantics": "velocity_delta"
+        },
+        "pre_reset_robot": {
+          "position": [
+            5.4698728687849885,
+            25.39156383016797
+          ],
+          "velocity": [
+            0.0,
+            0.0
+          ],
+          "heading": 0.0
+        },
+        "post_reset_robot": {
+          "position": [
+            5.4698728687849885,
+            25.39156383016797
+          ],
+          "velocity": [
+            0.0,
+            0.0
+          ],
+          "heading": 0.0
+        }
+      },
+      "cumulative_top": {
+        "success": false,
+        "collision_count": 1,
+        "termination_reason": "collision",
+        "steps": 100,
+        "horizon": 400,
+        "trajectory_sha256": "4d6daab51f39dc666e9b5eecbbb7a228a6a365a7cabcf517db9f50369e332386",
+        "source_sha": "d90bf2436e24dea33198a8bbaf6bbf4342b0edac"
+      }
+    },
+    {
+      "slot_id": "S027",
+      "arm": "ppo",
+      "scenario": "francis2023_blind_corner",
+      "seed": 1003,
+      "mechanism_class": "c",
+      "event_ids": [
+        "S027:new_collision",
+        "S027:success_to_failure"
+      ],
+      "input_identity": {
+        "arm": "ppo",
+        "scenario": "francis2023_blind_corner",
+        "scenario_sha256": "afb5d04a3f5c7514904326c888137709defaf07be3b04d7805878820d8114789",
+        "map_sha256": "71ab3ce5436d45268d1b29f1d9c51ecd25e1cd15e9b3b0ffcd5561a69712679f",
+        "seeds": [
+          1001,
+          1003
+        ]
+      },
+      "runtime_pair": {
+        "pair": "ppo",
+        "creates_event": true,
+        "mechanism_active": true,
+        "class": "c",
+        "commit": "c9102a9c81bb60cebb760b2bac94af695bc087a4",
+        "surface": "registry-bound PPO velocity-delta action adapter",
+        "pre": {
+          "source_sha": "46809b6bc18caef2a9cd82686e9670c224459c42",
+          "success": true,
+          "collision_count": 0,
+          "steps": 225,
+          "termination_reason": "success",
+          "trajectory_sha256": "109ea9498d87bd72972e6a6abbbe6b474d9c275162e7120294855e9101d21110",
+          "action_semantics": null
+        },
+        "post": {
+          "source_sha": "c9102a9c81bb60cebb760b2bac94af695bc087a4",
+          "success": false,
+          "collision_count": 1,
+          "steps": 116,
+          "termination_reason": "collision",
+          "trajectory_sha256": "cdfd0a306587cc8f8200edc143a725584960cdf17eca7eeac04a8fefd4211087",
+          "action_semantics": "velocity_delta"
+        },
+        "pre_reset_robot": {
+          "position": [
+            5.195611596179941,
+            25.210043797889305
+          ],
+          "velocity": [
+            0.0,
+            0.0
+          ],
+          "heading": 0.0
+        },
+        "post_reset_robot": {
+          "position": [
+            5.195611596179941,
+            25.210043797889305
+          ],
+          "velocity": [
+            0.0,
+            0.0
+          ],
+          "heading": 0.0
+        }
+      },
+      "cumulative_top": {
+        "success": false,
+        "collision_count": 1,
+        "termination_reason": "collision",
+        "steps": 103,
+        "horizon": 400,
+        "trajectory_sha256": "014335e793b6b60ad6c68eead1acde790a2fece81a4ab0a1fc9fae5061412ffd",
+        "source_sha": "d90bf2436e24dea33198a8bbaf6bbf4342b0edac"
+      }
+    },
+    {
+      "slot_id": "S031",
+      "arm": "ppo",
+      "scenario": "francis2023_exiting_room",
+      "seed": 1003,
+      "mechanism_class": "c",
+      "event_ids": [
+        "S031:new_collision",
+        "S031:success_to_failure"
+      ],
+      "input_identity": {
+        "arm": "ppo",
+        "scenario": "francis2023_exiting_room",
+        "scenario_sha256": "4393ae9177100d04deaec3bb89f7bc6be0ac04338aace8a3c29a8d7bb4584137",
+        "map_sha256": "e6f42c85c016f117c370e85900941fda6aeca45a90af72c483f76d5b7905474c",
+        "seeds": [
+          1003
+        ]
+      },
+      "runtime_pair": {
+        "pair": "ppo",
+        "creates_event": true,
+        "mechanism_active": true,
+        "class": "c",
+        "commit": "c9102a9c81bb60cebb760b2bac94af695bc087a4",
+        "surface": "registry-bound PPO velocity-delta action adapter",
+        "pre": {
+          "source_sha": "46809b6bc18caef2a9cd82686e9670c224459c42",
+          "success": true,
+          "collision_count": 0,
+          "steps": 181,
+          "termination_reason": "success",
+          "trajectory_sha256": "d51f23ba56522b1fa90e3a902547015b7467f07d3d61555406d51314879a55a6",
+          "action_semantics": null
+        },
+        "post": {
+          "source_sha": "c9102a9c81bb60cebb760b2bac94af695bc087a4",
+          "success": false,
+          "collision_count": 1,
+          "steps": 48,
+          "termination_reason": "collision",
+          "trajectory_sha256": "84e846264fb7dd9fb872cc3aa394eca01cc0980ae6e69c5c414a22623ce4c81c",
+          "action_semantics": "velocity_delta"
+        },
+        "pre_reset_robot": {
+          "position": [
+            21.19561159617994,
+            9.210043797889305
+          ],
+          "velocity": [
+            -0.0,
+            0.0
+          ],
+          "heading": -3.1415927410125732
+        },
+        "post_reset_robot": {
+          "position": [
+            21.19561159617994,
+            9.210043797889305
+          ],
+          "velocity": [
+            -0.0,
+            0.0
+          ],
+          "heading": -3.1415927410125732
+        }
+      },
+      "cumulative_top": {
+        "success": false,
+        "collision_count": 1,
+        "termination_reason": "collision",
+        "steps": 37,
+        "horizon": 400,
+        "trajectory_sha256": "fe33f635ee630a5aa7f6123fd553fefb29e04ab4193600dc120eaf22ff2422fb",
+        "source_sha": "d90bf2436e24dea33198a8bbaf6bbf4342b0edac"
+      }
+    },
+    {
+      "slot_id": "S042",
+      "arm": "sacadrl",
+      "scenario": "francis2023_intersection_no_gesture",
+      "seed": 1001,
+      "mechanism_class": "b",
+      "event_ids": [
+        "S042:new_collision",
+        "S042:success_to_failure"
+      ],
+      "input_identity": {
+        "arm": "sacadrl",
+        "scenario": "francis2023_intersection_no_gesture",
+        "scenario_sha256": "e7bfa2d03d5f8c6183c2a28adf087a17f4b64c586e36aa0d484428efa4a414c2",
+        "map_sha256": "4bc2fc33c7c3d0466723bed8c0dc4314d716c5d8e1a3a3786dab2d34110826d0",
+        "seeds": [
+          1001
+        ]
+      },
+      "runtime_pair": {
+        "pair": "spawn",
+        "creates_event": true,
+        "mechanism_active": true,
+        "class": "b",
+        "commit": "b8dccb9c9f9ddc1f1cc3bb980ee260f851a727b2",
+        "surface": "robot start footprint-clearance sampling (#9739 / #9725)",
+        "pre": {
+          "source_sha": "9c3452face9f361d764a48f1053eee074c809204",
+          "success": true,
+          "collision_count": 0,
+          "steps": 234,
+          "termination_reason": "success",
+          "trajectory_sha256": "475fccfeac31638cb84b4d9b257dc447b57759ad145d21bb940fcb4fbb2f06af",
+          "action_semantics": null
+        },
+        "post": {
+          "source_sha": "b8dccb9c9f9ddc1f1cc3bb980ee260f851a727b2",
+          "success": false,
+          "collision_count": 1,
+          "steps": 43,
+          "termination_reason": "collision",
+          "trajectory_sha256": "9c110c46e7c215567b8b9d33e6a2db06d629bc00dc0a7d4d91801464b5a3fc18",
+          "action_semantics": null
+        },
+        "pre_reset_robot": {
+          "position": [
+            4.387535640902389,
+            13.04622710398411
+          ],
+          "velocity": [
+            0.0,
+            0.0
+          ],
+          "heading": 0.0
+        },
+        "post_reset_robot": {
+          "position": [
+            4.4698728687849885,
+            13.391563830167973
+          ],
+          "velocity": [
+            0.0,
+            0.0
+          ],
+          "heading": 0.0
+        }
+      },
+      "cumulative_top": {
+        "success": false,
+        "collision_count": 1,
+        "termination_reason": "collision",
+        "steps": 42,
+        "horizon": 400,
+        "trajectory_sha256": "380e373c55dffdc70370a814abaa9bcbd2536defd9e787afed0b12ca19084c67",
+        "source_sha": "d90bf2436e24dea33198a8bbaf6bbf4342b0edac"
+      }
+    },
+    {
+      "slot_id": "S044",
+      "arm": "sacadrl",
+      "scenario": "francis2023_intersection_proceed",
+      "seed": 1001,
+      "mechanism_class": "b",
+      "event_ids": [
+        "S044:new_collision",
+        "S044:success_to_failure"
+      ],
+      "input_identity": {
+        "arm": "sacadrl",
+        "scenario": "francis2023_intersection_proceed",
+        "scenario_sha256": "d92becab7593362dbd29ce199daf88248dd4fe2dfb914998f9af8a28d306ce0b",
+        "map_sha256": "4bc2fc33c7c3d0466723bed8c0dc4314d716c5d8e1a3a3786dab2d34110826d0",
+        "seeds": [
+          1001
+        ]
+      },
+      "runtime_pair": {
+        "pair": "spawn",
+        "creates_event": true,
+        "mechanism_active": true,
+        "class": "b",
+        "commit": "b8dccb9c9f9ddc1f1cc3bb980ee260f851a727b2",
+        "surface": "robot start footprint-clearance sampling (#9739 / #9725)",
+        "pre": {
+          "source_sha": "9c3452face9f361d764a48f1053eee074c809204",
+          "success": true,
+          "collision_count": 0,
+          "steps": 234,
+          "termination_reason": "success",
+          "trajectory_sha256": "475fccfeac31638cb84b4d9b257dc447b57759ad145d21bb940fcb4fbb2f06af",
+          "action_semantics": null
+        },
+        "post": {
+          "source_sha": "b8dccb9c9f9ddc1f1cc3bb980ee260f851a727b2",
+          "success": false,
+          "collision_count": 1,
+          "steps": 43,
+          "termination_reason": "collision",
+          "trajectory_sha256": "9c110c46e7c215567b8b9d33e6a2db06d629bc00dc0a7d4d91801464b5a3fc18",
+          "action_semantics": null
+        },
+        "pre_reset_robot": {
+          "position": [
+            4.387535640902389,
+            13.04622710398411
+          ],
+          "velocity": [
+            0.0,
+            0.0
+          ],
+          "heading": 0.0
+        },
+        "post_reset_robot": {
+          "position": [
+            4.4698728687849885,
+            13.391563830167973
+          ],
+          "velocity": [
+            0.0,
+            0.0
+          ],
+          "heading": 0.0
+        }
+      },
+      "cumulative_top": {
+        "success": false,
+        "collision_count": 1,
+        "termination_reason": "collision",
+        "steps": 42,
+        "horizon": 400,
+        "trajectory_sha256": "380e373c55dffdc70370a814abaa9bcbd2536defd9e787afed0b12ca19084c67",
+        "source_sha": "d90bf2436e24dea33198a8bbaf6bbf4342b0edac"
+      }
+    },
+    {
+      "slot_id": "S046",
+      "arm": "sacadrl",
+      "scenario": "francis2023_intersection_wait",
+      "seed": 1001,
+      "mechanism_class": "b",
+      "event_ids": [
+        "S046:new_collision",
+        "S046:success_to_failure"
+      ],
+      "input_identity": {
+        "arm": "sacadrl",
+        "scenario": "francis2023_intersection_wait",
+        "scenario_sha256": "619a0eddd9022842b1fd1fed38930a6484ee989d471656f38453e8375efa4fb0",
+        "map_sha256": "4bc2fc33c7c3d0466723bed8c0dc4314d716c5d8e1a3a3786dab2d34110826d0",
+        "seeds": [
+          1001
+        ]
+      },
+      "runtime_pair": {
+        "pair": "spawn",
+        "creates_event": true,
+        "mechanism_active": true,
+        "class": "b",
+        "commit": "b8dccb9c9f9ddc1f1cc3bb980ee260f851a727b2",
+        "surface": "robot start footprint-clearance sampling (#9739 / #9725)",
+        "pre": {
+          "source_sha": "9c3452face9f361d764a48f1053eee074c809204",
+          "success": true,
+          "collision_count": 0,
+          "steps": 234,
+          "termination_reason": "success",
+          "trajectory_sha256": "475fccfeac31638cb84b4d9b257dc447b57759ad145d21bb940fcb4fbb2f06af",
+          "action_semantics": null
+        },
+        "post": {
+          "source_sha": "b8dccb9c9f9ddc1f1cc3bb980ee260f851a727b2",
+          "success": false,
+          "collision_count": 1,
+          "steps": 43,
+          "termination_reason": "collision",
+          "trajectory_sha256": "9c110c46e7c215567b8b9d33e6a2db06d629bc00dc0a7d4d91801464b5a3fc18",
+          "action_semantics": null
+        },
+        "pre_reset_robot": {
+          "position": [
+            4.387535640902389,
+            13.04622710398411
+          ],
+          "velocity": [
+            0.0,
+            0.0
+          ],
+          "heading": 0.0
+        },
+        "post_reset_robot": {
+          "position": [
+            4.4698728687849885,
+            13.391563830167973
+          ],
+          "velocity": [
+            0.0,
+            0.0
+          ],
+          "heading": 0.0
+        }
+      },
+      "cumulative_top": {
+        "success": false,
+        "collision_count": 1,
+        "termination_reason": "collision",
+        "steps": 42,
+        "horizon": 400,
+        "trajectory_sha256": "380e373c55dffdc70370a814abaa9bcbd2536defd9e787afed0b12ca19084c67",
+        "source_sha": "d90bf2436e24dea33198a8bbaf6bbf4342b0edac"
+      }
+    },
+    {
+      "slot_id": "S048",
+      "arm": "sacadrl",
+      "scenario": "francis2023_narrow_hallway",
+      "seed": 1001,
+      "mechanism_class": "b",
+      "event_ids": [
+        "S048:new_collision",
+        "S048:success_to_failure"
+      ],
+      "input_identity": {
+        "arm": "sacadrl",
+        "scenario": "francis2023_narrow_hallway",
+        "scenario_sha256": "d7a18ed15c28d5be4e1bc757c5987b664115c412acc2cb50fbacd92a794162f2",
+        "map_sha256": "ef0cf11ec96a69d95fac3f4e9ffc7665549045201c59bf7c4f9895462be71c6b",
+        "seeds": [
+          1001
+        ]
+      },
+      "runtime_pair": {
+        "pair": "spawn",
+        "creates_event": true,
+        "mechanism_active": true,
+        "class": "b",
+        "commit": "b8dccb9c9f9ddc1f1cc3bb980ee260f851a727b2",
+        "surface": "robot start footprint-clearance sampling (#9739 / #9725)",
+        "pre": {
+          "source_sha": "9c3452face9f361d764a48f1053eee074c809204",
+          "success": true,
+          "collision_count": 0,
+          "steps": 234,
+          "termination_reason": "success",
+          "trajectory_sha256": "41a3596ed044532a34b0ed4da4c15059e1907af175696cfa5a7c4a12f5b43725",
+          "action_semantics": null
+        },
+        "post": {
+          "source_sha": "b8dccb9c9f9ddc1f1cc3bb980ee260f851a727b2",
+          "success": false,
+          "collision_count": 1,
+          "steps": 43,
+          "termination_reason": "collision",
+          "trajectory_sha256": "174879e386ffd0a49eff7fe8001fd9136cfb6faeb5c471afd88747b56a4fe79a",
+          "action_semantics": null
+        },
+        "pre_reset_robot": {
+          "position": [
+            4.387535640902389,
+            2.0462271039841102
+          ],
+          "velocity": [
+            0.0,
+            0.0
+          ],
+          "heading": 0.0
+        },
+        "post_reset_robot": {
+          "position": [
+            4.4698728687849885,
+            2.3915638301679727
+          ],
+          "velocity": [
+            0.0,
+            0.0
+          ],
+          "heading": 0.0
+        }
+      },
+      "cumulative_top": {
+        "success": false,
+        "collision_count": 1,
+        "termination_reason": "collision",
+        "steps": 42,
+        "horizon": 400,
+        "trajectory_sha256": "ef0e0fc8566315ad04e0b77a65dbf2b3c1b71b39a2a9e4058e656a85bc564a9c",
+        "source_sha": "d90bf2436e24dea33198a8bbaf6bbf4342b0edac"
+      }
+    },
+    {
+      "slot_id": "S050",
+      "arm": "sacadrl",
+      "scenario": "francis2023_perpendicular_traffic",
+      "seed": 1001,
+      "mechanism_class": "b",
+      "event_ids": [
+        "S050:new_collision",
+        "S050:success_to_failure"
+      ],
+      "input_identity": {
+        "arm": "sacadrl",
+        "scenario": "francis2023_perpendicular_traffic",
+        "scenario_sha256": "72857c7fc8849e333652d913fe86b98c6c09870382154f3a1b6f99c8347db4cc",
+        "map_sha256": "67ae3c66be2057e7da9a0182458de7e68c9c41d2f13848790fb73eb12664ee99",
+        "seeds": [
+          1001
+        ]
+      },
+      "runtime_pair": {
+        "pair": "spawn",
+        "creates_event": true,
+        "mechanism_active": true,
+        "class": "b",
+        "commit": "b8dccb9c9f9ddc1f1cc3bb980ee260f851a727b2",
+        "surface": "robot start footprint-clearance sampling (#9739 / #9725)",
+        "pre": {
+          "source_sha": "9c3452face9f361d764a48f1053eee074c809204",
+          "success": true,
+          "collision_count": 0,
+          "steps": 234,
+          "termination_reason": "success",
+          "trajectory_sha256": "475fccfeac31638cb84b4d9b257dc447b57759ad145d21bb940fcb4fbb2f06af",
+          "action_semantics": null
+        },
+        "post": {
+          "source_sha": "b8dccb9c9f9ddc1f1cc3bb980ee260f851a727b2",
+          "success": false,
+          "collision_count": 1,
+          "steps": 43,
+          "termination_reason": "collision",
+          "trajectory_sha256": "9c110c46e7c215567b8b9d33e6a2db06d629bc00dc0a7d4d91801464b5a3fc18",
+          "action_semantics": null
+        },
+        "pre_reset_robot": {
+          "position": [
+            4.387535640902389,
+            13.04622710398411
+          ],
+          "velocity": [
+            0.0,
+            0.0
+          ],
+          "heading": 0.0
+        },
+        "post_reset_robot": {
+          "position": [
+            4.4698728687849885,
+            13.391563830167973
+          ],
+          "velocity": [
+            0.0,
+            0.0
+          ],
+          "heading": 0.0
+        }
+      },
+      "cumulative_top": {
+        "success": false,
+        "collision_count": 1,
+        "termination_reason": "collision",
+        "steps": 42,
+        "horizon": 400,
+        "trajectory_sha256": "380e373c55dffdc70370a814abaa9bcbd2536defd9e787afed0b12ca19084c67",
+        "source_sha": "d90bf2436e24dea33198a8bbaf6bbf4342b0edac"
+      }
+    }
+  ]
+}

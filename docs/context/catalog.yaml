@@ -8181,3 +8181,7 @@ entries:
   status: evidence
   freshness: evidence
   area: training_evidence
+- path: docs/context/evidence/issue_10000_pedsweep_20261006
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence

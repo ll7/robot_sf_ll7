@@ -1,0 +1,57 @@
+{
+  "schema": "pedsweep2-width-main-check.v1",
+  "evidence_tier": "diagnostic-only",
+  "origin_main_sha": "c9b2cb582c914565bc4d98de44b08ce8e03b1a72",
+  "existing_issue": 10180,
+  "existing_issue_url": "https://github.com/ll7/robot_sf_ll7/issues/10180",
+  "duplicate_check": "All-state searches MPPI forecast / width horizon / forecast12and8; exact existing Width execution contract in #10180, no duplicate created. #10033 concerns different model retraining; #10078 concerns different denominator acceptance.",
+  "documented_width_entrypoint": "scripts/validation/run_empty_world_sweep.py",
+  "selected_campaign": "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_three_width_doorway_v1.yaml",
+  "v1_v2_campaigns_still_select_camera_ready_profile": true,
+  "selected_algo_config": "configs/algos/predictive_mppi_camera_ready.yaml",
+  "requested_mppi_horizon_steps": 12,
+  "loaded_model_id": "predictive_proxy_selected_v1",
+  "supported_forecast_steps_observed_in_prior_raw_failure": 8,
+  "prior_job": 21473,
+  "rejected_episode_slots": 9,
+  "prior_error": "predictive_mppi horizon_steps=12 exceeds or is outside the model's supported horizon of 8 steps; use 1..8. Longer forecasts require a validated predictor, not silent capping or extrapolation.",
+  "existing_compatible_release_profile": "configs/algos/predictive_mppi_release_v0_0_8.yaml",
+  "existing_release_mppi_horizon_steps": 8,
+  "existing_release_predictive_horizon_steps": 8,
+  "existing_release_rollout_dt": 0.1,
+  "fix_status": "Compatible release profile exists, but documented protected width sweep route still selects incompatible historical camera-ready profile. No fix of that selected route found in fresh origin/main.",
+  "files": [
+    {
+      "path": "scripts/validation/run_empty_world_sweep.py",
+      "sha256": "a21d31f0a5774acd4b6b617ea8cd7c2479a0a0621aca951d934dc533cfa17411",
+      "blob_url": "https://github.com/ll7/robot_sf_ll7/blob/c9b2cb582c914565bc4d98de44b08ce8e03b1a72/scripts/validation/run_empty_world_sweep.py"
+    },
+    {
+      "path": "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_three_width_doorway_v1.yaml",
+      "sha256": "9e815e03f5280c5b8366d7179a4f93d61acc914505f1379660c6467849a26e7c",
+      "blob_url": "https://github.com/ll7/robot_sf_ll7/blob/c9b2cb582c914565bc4d98de44b08ce8e03b1a72/configs/benchmarks/paper_experiment_matrix_v2_h600_s30_three_width_doorway_v1.yaml"
+    },
+    {
+      "path": "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_three_width_doorway_v2.yaml",
+      "sha256": "e3a26ccfb9df1cea343fba9f83aba1e9505494cbead7121132922bffb5c75039",
+      "blob_url": "https://github.com/ll7/robot_sf_ll7/blob/c9b2cb582c914565bc4d98de44b08ce8e03b1a72/configs/benchmarks/paper_experiment_matrix_v2_h600_s30_three_width_doorway_v2.yaml"
+    },
+    {
+      "path": "configs/algos/predictive_mppi_camera_ready.yaml",
+      "sha256": "5213a9e44c74cb79f78466d414645f6ca233d761e8fa5b77e5cfc3161ed94adb",
+      "blob_url": "https://github.com/ll7/robot_sf_ll7/blob/c9b2cb582c914565bc4d98de44b08ce8e03b1a72/configs/algos/predictive_mppi_camera_ready.yaml"
+    },
+    {
+      "path": "configs/algos/predictive_mppi_release_v0_0_8.yaml",
+      "sha256": "79f13475d9d66f0754c11038f6d52a15b3420965b6f639de7f000c5190ba820b",
+      "blob_url": "https://github.com/ll7/robot_sf_ll7/blob/c9b2cb582c914565bc4d98de44b08ce8e03b1a72/configs/algos/predictive_mppi_release_v0_0_8.yaml"
+    },
+    {
+      "path": "robot_sf/planner/predictive_mppi.py",
+      "sha256": "39c6b9ee5aff186a37d87822c2e7025e9647da9bb87b66edff484e444b77f308",
+      "blob_url": "https://github.com/ll7/robot_sf_ll7/blob/c9b2cb582c914565bc4d98de44b08ce8e03b1a72/robot_sf/planner/predictive_mppi.py"
+    }
+  ],
+  "writes": "evidence and existing issue comment only; no protected configs, anchors, runtime or graph state changes",
+  "required_disposition": "Authorized versioned successor width diagnostic/campaign with a checked predictor-window/cadence contract and fail-closed incompatibility preflight. Preserve historical protected files and failed rows; never silently cap/extrapolate or count missing performance outcomes. No fitting or success tuning."
+}

@@ -1,0 +1,388 @@
+{
+  "schema": "pedsweep2-layer-proof.v1",
+  "layers": [
+    {
+      "mode": "base_main",
+      "source_sha": "2d6b19db8e226a9408e2b504035df8efb8369ce5",
+      "scenario_variant": "top",
+      "planner_variant": "top"
+    },
+    {
+      "mode": "forces_10073",
+      "source_sha": "6b5d4a442f8ed7ffc9ca6c519be2b9cba76d9ca0",
+      "scenario_variant": "top",
+      "planner_variant": "top"
+    },
+    {
+      "mode": "radius_10075",
+      "source_sha": "6613fd0a976f4bc9904f9ce51ad153904156297f",
+      "scenario_variant": "top",
+      "planner_variant": "top"
+    },
+    {
+      "mode": "initial_10094",
+      "source_sha": "5ca040371cbef05c712bb151cdebc558d4247f5a",
+      "scenario_variant": "top",
+      "planner_variant": "top"
+    },
+    {
+      "mode": "contact_original_10104",
+      "source_sha": "52634e854076ad7a1da6be4edf17fa40baf93fd4",
+      "scenario_variant": "top",
+      "planner_variant": "top"
+    },
+    {
+      "mode": "contact_fixed_10104",
+      "source_sha": "d90bf2436e24dea33198a8bbaf6bbf4342b0edac",
+      "scenario_variant": "top",
+      "planner_variant": "top"
+    }
+  ],
+  "checked_slots": 57,
+  "identical_trajectories": 57,
+  "identical_terminals": 57,
+  "rows": [
+    {
+      "slot_id": "S001",
+      "trajectory_identical": true,
+      "terminal_identical": true,
+      "trajectory_sha256": "6fd96a4bdec8898d941cf064485520eb0d16cac8579bdf98ee4b083c0c69e3b6"
+    },
+    {
+      "slot_id": "S002",
+      "trajectory_identical": true,
+      "terminal_identical": true,
+      "trajectory_sha256": "6e9ba1b1c724913fc289de7e38a36a89480c25bc309236bac0b2f8a2f5052267"
+    },
+    {
+      "slot_id": "S003",
+      "trajectory_identical": true,
+      "terminal_identical": true,
+      "trajectory_sha256": "8492c8484ca208a8c82629d896ed83cccdea0f0b21a7fee5c906461aaa98e46e"
+    },
+    {
+      "slot_id": "S004",
+      "trajectory_identical": true,
+      "terminal_identical": true,
+      "trajectory_sha256": "96124f8a6e9c1fa344c879f145b4fb0d27ecaa4031b122101142f7178586fb06"
+    },
+    {
+      "slot_id": "S005",
+      "trajectory_identical": true,
+      "terminal_identical": true,
+      "trajectory_sha256": "a7d52f89d113fa58655392b550488feb58632fd72a68c0eafa92fdea9daa6a61"
+    },
+    {
+      "slot_id": "S006",
+      "trajectory_identical": true,
+      "terminal_identical": true,
+      "trajectory_sha256": "a7d52f89d113fa58655392b550488feb58632fd72a68c0eafa92fdea9daa6a61"
+    },
+    {
+      "slot_id": "S007",
+      "trajectory_identical": true,
+      "terminal_identical": true,
+      "trajectory_sha256": "731e18609a7f516f10580f077654d88066a4ab36023adb5d071cdcccb494e51e"
+    },
+    {
+      "slot_id": "S008",
+      "trajectory_identical": true,
+      "terminal_identical": true,
+      "trajectory_sha256": "a7d52f89d113fa58655392b550488feb58632fd72a68c0eafa92fdea9daa6a61"
+    },
+    {
+      "slot_id": "S009",
+      "trajectory_identical": true,
+      "terminal_identical": true,
+      "trajectory_sha256": "a7d52f89d113fa58655392b550488feb58632fd72a68c0eafa92fdea9daa6a61"
+    },
+    {
+      "slot_id": "S010",
+      "trajectory_identical": true,
+      "terminal_identical": true,
+      "trajectory_sha256": "d68893b653f963989d3ab80fec22c8081d337aa26c01e36abd19a2d089a1b9d0"
+    },
+    {
+      "slot_id": "S011",
+      "trajectory_identical": true,
+      "terminal_identical": true,
+      "trajectory_sha256": "a62147c5a4a2ddbe49cef81dbc7822d9f8e4e7b926f78e0d13de0fd1cf4e43bc"
+    },
+    {
+      "slot_id": "S012",
+      "trajectory_identical": true,
+      "terminal_identical": true,
+      "trajectory_sha256": "e16f08d338c9a8f2e79bfd1dcf5518b7ab46cca8835ed012ac0787a35d4381c0"
+    },
+    {
+      "slot_id": "S013",
+      "trajectory_identical": true,
+      "terminal_identical": true,
+      "trajectory_sha256": "e16f08d338c9a8f2e79bfd1dcf5518b7ab46cca8835ed012ac0787a35d4381c0"
+    },
+    {
+      "slot_id": "S014",
+      "trajectory_identical": true,
+      "terminal_identical": true,
+      "trajectory_sha256": "13bcc5d951f384bac68a80f375a98eea67edc5e8bdc34fca2e3d98e7944579f8"
+    },
+    {
+      "slot_id": "S015",
+      "trajectory_identical": true,
+      "terminal_identical": true,
+      "trajectory_sha256": "e16f08d338c9a8f2e79bfd1dcf5518b7ab46cca8835ed012ac0787a35d4381c0"
+    },
+    {
+      "slot_id": "S016",
+      "trajectory_identical": true,
+      "terminal_identical": true,
+      "trajectory_sha256": "26491081fb72794a03c8ec2290f9a53c83e4c553aa77e0906e746bae2a0c420c"
+    },
+    {
+      "slot_id": "S017",
+      "trajectory_identical": true,
+      "terminal_identical": true,
+      "trajectory_sha256": "e16f08d338c9a8f2e79bfd1dcf5518b7ab46cca8835ed012ac0787a35d4381c0"
+    },
+    {
+      "slot_id": "S018",
+      "trajectory_identical": true,
+      "terminal_identical": true,
+      "trajectory_sha256": "26491081fb72794a03c8ec2290f9a53c83e4c553aa77e0906e746bae2a0c420c"
+    },
+    {
+      "slot_id": "S019",
+      "trajectory_identical": true,
+      "terminal_identical": true,
+      "trajectory_sha256": "26491081fb72794a03c8ec2290f9a53c83e4c553aa77e0906e746bae2a0c420c"
+    },
+    {
+      "slot_id": "S020",
+      "trajectory_identical": true,
+      "terminal_identical": true,
+      "trajectory_sha256": "7e6fb5e341c55eb77bc3626829d449ec06cd481822f83cd8c8eefa535ec2451b"
+    },
+    {
+      "slot_id": "S021",
+      "trajectory_identical": true,
+      "terminal_identical": true,
+      "trajectory_sha256": "26491081fb72794a03c8ec2290f9a53c83e4c553aa77e0906e746bae2a0c420c"
+    },
+    {
+      "slot_id": "S022",
+      "trajectory_identical": true,
+      "terminal_identical": true,
+      "trajectory_sha256": "230fe7456658c77a4c9d64da8f229afb60f17ee4e2edb231e5290c12e24eceda"
+    },
+    {
+      "slot_id": "S023",
+      "trajectory_identical": true,
+      "terminal_identical": true,
+      "trajectory_sha256": "230fe7456658c77a4c9d64da8f229afb60f17ee4e2edb231e5290c12e24eceda"
+    },
+    {
+      "slot_id": "S024",
+      "trajectory_identical": true,
+      "terminal_identical": true,
+      "trajectory_sha256": "230fe7456658c77a4c9d64da8f229afb60f17ee4e2edb231e5290c12e24eceda"
+    },
+    {
+      "slot_id": "S025",
+      "trajectory_identical": true,
+      "terminal_identical": true,
+      "trajectory_sha256": "bb71957e687e37cb9bd9b0574f9bc3ba2b037b45c84e3e381d55c21f05cd9f2a"
+    },
+    {
+      "slot_id": "S026",
+      "trajectory_identical": true,
+      "terminal_identical": true,
+      "trajectory_sha256": "4d6daab51f39dc666e9b5eecbbb7a228a6a365a7cabcf517db9f50369e332386"
+    },
+    {
+      "slot_id": "S027",
+      "trajectory_identical": true,
+      "terminal_identical": true,
+      "trajectory_sha256": "014335e793b6b60ad6c68eead1acde790a2fece81a4ab0a1fc9fae5061412ffd"
+    },
+    {
+      "slot_id": "S028",
+      "trajectory_identical": true,
+      "terminal_identical": true,
+      "trajectory_sha256": "2998472fc6f50e202f75a7df55bf429e46aa05f86f5ebe4d9b6ea4ee2dac68f0"
+    },
+    {
+      "slot_id": "S029",
+      "trajectory_identical": true,
+      "terminal_identical": true,
+      "trajectory_sha256": "b6254b86532f89bac3cd9455e1b1ebd90418ebad84751f53a8958631ea735c9b"
+    },
+    {
+      "slot_id": "S030",
+      "trajectory_identical": true,
+      "terminal_identical": true,
+      "trajectory_sha256": "eb2df9cdcb6998dc4acbdb2417ad75dea047ced6e5cbe619ddba27363c640c31"
+    },
+    {
+      "slot_id": "S031",
+      "trajectory_identical": true,
+      "terminal_identical": true,
+      "trajectory_sha256": "fe33f635ee630a5aa7f6123fd553fefb29e04ab4193600dc120eaf22ff2422fb"
+    },
+    {
+      "slot_id": "S032",
+      "trajectory_identical": true,
+      "terminal_identical": true,
+      "trajectory_sha256": "2998472fc6f50e202f75a7df55bf429e46aa05f86f5ebe4d9b6ea4ee2dac68f0"
+    },
+    {
+      "slot_id": "S033",
+      "trajectory_identical": true,
+      "terminal_identical": true,
+      "trajectory_sha256": "2998472fc6f50e202f75a7df55bf429e46aa05f86f5ebe4d9b6ea4ee2dac68f0"
+    },
+    {
+      "slot_id": "S034",
+      "trajectory_identical": true,
+      "terminal_identical": true,
+      "trajectory_sha256": "2998472fc6f50e202f75a7df55bf429e46aa05f86f5ebe4d9b6ea4ee2dac68f0"
+    },
+    {
+      "slot_id": "S035",
+      "trajectory_identical": true,
+      "terminal_identical": true,
+      "trajectory_sha256": "f91e79f309f4f0d8bbb4a4874eae11783c1b8ccf7482c9119acf16570623f6f0"
+    },
+    {
+      "slot_id": "S036",
+      "trajectory_identical": true,
+      "terminal_identical": true,
+      "trajectory_sha256": "f91e79f309f4f0d8bbb4a4874eae11783c1b8ccf7482c9119acf16570623f6f0"
+    },
+    {
+      "slot_id": "S037",
+      "trajectory_identical": true,
+      "terminal_identical": true,
+      "trajectory_sha256": "24af0755e49a6132bd5373cfa466b706717dc25332714ade4f138ba1f8fd0166"
+    },
+    {
+      "slot_id": "S038",
+      "trajectory_identical": true,
+      "terminal_identical": true,
+      "trajectory_sha256": "4dccde94fe0ed5f48c29d25e70872195933e0fa1a4d1fb7f27c8d40ee3d2bdd1"
+    },
+    {
+      "slot_id": "S039",
+      "trajectory_identical": true,
+      "terminal_identical": true,
+      "trajectory_sha256": "24af0755e49a6132bd5373cfa466b706717dc25332714ade4f138ba1f8fd0166"
+    },
+    {
+      "slot_id": "S040",
+      "trajectory_identical": true,
+      "terminal_identical": true,
+      "trajectory_sha256": "4dccde94fe0ed5f48c29d25e70872195933e0fa1a4d1fb7f27c8d40ee3d2bdd1"
+    },
+    {
+      "slot_id": "S041",
+      "trajectory_identical": true,
+      "terminal_identical": true,
+      "trajectory_sha256": "2a04a28a313c4b64d61fc28b7e2c4ff0c89161f391d8712809af9db5e5823471"
+    },
+    {
+      "slot_id": "S042",
+      "trajectory_identical": true,
+      "terminal_identical": true,
+      "trajectory_sha256": "380e373c55dffdc70370a814abaa9bcbd2536defd9e787afed0b12ca19084c67"
+    },
+    {
+      "slot_id": "S043",
+      "trajectory_identical": true,
+      "terminal_identical": true,
+      "trajectory_sha256": "325b5a2395a356937d8f30b374f55a0f2500e0be4f24f5cf33a819a593f1a81d"
+    },
+    {
+      "slot_id": "S044",
+      "trajectory_identical": true,
+      "terminal_identical": true,
+      "trajectory_sha256": "380e373c55dffdc70370a814abaa9bcbd2536defd9e787afed0b12ca19084c67"
+    },
+    {
+      "slot_id": "S045",
+      "trajectory_identical": true,
+      "terminal_identical": true,
+      "trajectory_sha256": "325b5a2395a356937d8f30b374f55a0f2500e0be4f24f5cf33a819a593f1a81d"
+    },
+    {
+      "slot_id": "S046",
+      "trajectory_identical": true,
+      "terminal_identical": true,
+      "trajectory_sha256": "380e373c55dffdc70370a814abaa9bcbd2536defd9e787afed0b12ca19084c67"
+    },
+    {
+      "slot_id": "S047",
+      "trajectory_identical": true,
+      "terminal_identical": true,
+      "trajectory_sha256": "325b5a2395a356937d8f30b374f55a0f2500e0be4f24f5cf33a819a593f1a81d"
+    },
+    {
+      "slot_id": "S048",
+      "trajectory_identical": true,
+      "terminal_identical": true,
+      "trajectory_sha256": "ef0e0fc8566315ad04e0b77a65dbf2b3c1b71b39a2a9e4058e656a85bc564a9c"
+    },
+    {
+      "slot_id": "S049",
+      "trajectory_identical": true,
+      "terminal_identical": true,
+      "trajectory_sha256": "b818be9dbb230ac3f75802478c163170fd45d405bff93db8863734bf86ed51d0"
+    },
+    {
+      "slot_id": "S050",
+      "trajectory_identical": true,
+      "terminal_identical": true,
+      "trajectory_sha256": "380e373c55dffdc70370a814abaa9bcbd2536defd9e787afed0b12ca19084c67"
+    },
+    {
+      "slot_id": "S051",
+      "trajectory_identical": true,
+      "terminal_identical": true,
+      "trajectory_sha256": "325b5a2395a356937d8f30b374f55a0f2500e0be4f24f5cf33a819a593f1a81d"
+    },
+    {
+      "slot_id": "S052",
+      "trajectory_identical": true,
+      "terminal_identical": true,
+      "trajectory_sha256": "d9b543236f22ae8ee663ad6804e2c2683edbaca33b102a495300951db5c1efa1"
+    },
+    {
+      "slot_id": "S053",
+      "trajectory_identical": true,
+      "terminal_identical": true,
+      "trajectory_sha256": "d1fb7794c68417e04021737b00d2cee58cb0906f1ab6053f0906ec62420b82a9"
+    },
+    {
+      "slot_id": "S054",
+      "trajectory_identical": true,
+      "terminal_identical": true,
+      "trajectory_sha256": "76abae053cef056b5fd6a5be4a65ffa25281b5beab60bf8cec4155f9e0fef65b"
+    },
+    {
+      "slot_id": "S055",
+      "trajectory_identical": true,
+      "terminal_identical": true,
+      "trajectory_sha256": "d9b543236f22ae8ee663ad6804e2c2683edbaca33b102a495300951db5c1efa1"
+    },
+    {
+      "slot_id": "S056",
+      "trajectory_identical": true,
+      "terminal_identical": true,
+      "trajectory_sha256": "d1fb7794c68417e04021737b00d2cee58cb0906f1ab6053f0906ec62420b82a9"
+    },
+    {
+      "slot_id": "S057",
+      "trajectory_identical": true,
+      "terminal_identical": true,
+      "trajectory_sha256": "76abae053cef056b5fd6a5be4a65ffa25281b5beab60bf8cec4155f9e0fef65b"
+    }
+  ]
+}

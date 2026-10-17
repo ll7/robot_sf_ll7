@@ -1,0 +1,8 @@
+{
+  "slots": 57,
+  "matching_success_and_contact": 57,
+  "matching_common_trajectory_digests": 57,
+  "original_source_sha": "52634e854076ad7a1da6be4edf17fa40baf93fd4",
+  "replay_source_sha": "2d6b19db8e226a9408e2b504035df8efb8369ce5",
+  "claim": "These exact event trajectories already occur before the pedestrian stack; not an interaction test."
+}

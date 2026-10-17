@@ -1,0 +1,225 @@
+{
+  "schema": "pedsweep2-rectangle-pair.v1",
+  "layers": [],
+  "crossovers": [
+    {
+      "mode": "rectangle_pre",
+      "source_sha": "be7b1f05dbff966411c8bcaa070acd1676e8c0f8",
+      "scenario_variant": "baseline",
+      "planner_variant": "baseline",
+      "slot_ids": [
+        "S022",
+        "S023",
+        "S024"
+      ]
+    },
+    {
+      "mode": "rectangle_post",
+      "source_sha": "99ff79c339396ac15bcafa8e88e1671914e2e83c",
+      "scenario_variant": "baseline",
+      "planner_variant": "baseline",
+      "slot_ids": [
+        "S022",
+        "S023",
+        "S024"
+      ]
+    }
+  ],
+  "slots": [
+    {
+      "slot_id": "S022",
+      "slot": [
+        "ppo",
+        "differential_drive",
+        "classic_cross_trap_high",
+        1001
+      ],
+      "events": [
+        "success_to_failure",
+        "new_collision"
+      ],
+      "baseline": {
+        "arm": "ppo",
+        "collisions": 0,
+        "episode_id": "classic_cross_trap_high--1001--0e4d7579fabc239a",
+        "execution_error": null,
+        "execution_status": "written",
+        "has_step_trace": true,
+        "horizon": 600,
+        "kinematics": "differential_drive",
+        "max_pedestrians_in_trace": 0,
+        "min_clearance": 1.0973215367144864,
+        "outcome": "success",
+        "path_length": 48.215,
+        "path_length_from_trace": 48.22000000000004,
+        "path_over_straight": 1.1823183146184735,
+        "scenario": "classic_cross_trap_high",
+        "seed": 1001,
+        "source_file": "runs/ppo__differential_drive/episodes.jsonl",
+        "status": "success",
+        "steps": 252,
+        "straight_line": 40.780050011792866,
+        "success": true,
+        "termination_reason": "success",
+        "trace_complete": true
+      },
+      "head": {
+        "arm": "ppo",
+        "collisions": 1,
+        "episode_id": "classic_cross_trap_high--1001--45a916f7a97d8dc1",
+        "execution_error": null,
+        "execution_status": "written",
+        "has_step_trace": true,
+        "horizon": 600,
+        "kinematics": "differential_drive",
+        "max_pedestrians_in_trace": 0,
+        "min_clearance": 0.9533818508262495,
+        "outcome": "collision",
+        "path_length": 17.60000000000001,
+        "path_length_from_trace": 17.600000000000005,
+        "path_over_straight": 0.43886177117328307,
+        "scenario": "classic_cross_trap_high",
+        "seed": 1001,
+        "source_file": "runs/ppo__differential_drive/episodes.jsonl",
+        "status": "collision",
+        "steps": 98,
+        "straight_line": 40.10374372082345,
+        "success": false,
+        "termination_reason": "collision",
+        "trace_complete": true
+      }
+    },
+    {
+      "slot_id": "S023",
+      "slot": [
+        "ppo",
+        "differential_drive",
+        "classic_cross_trap_low",
+        1001
+      ],
+      "events": [
+        "success_to_failure",
+        "new_collision"
+      ],
+      "baseline": {
+        "arm": "ppo",
+        "collisions": 0,
+        "episode_id": "classic_cross_trap_low--1001--1b4098376d242d70",
+        "execution_error": null,
+        "execution_status": "written",
+        "has_step_trace": true,
+        "horizon": 600,
+        "kinematics": "differential_drive",
+        "max_pedestrians_in_trace": 0,
+        "min_clearance": 1.0973215367144864,
+        "outcome": "success",
+        "path_length": 48.215,
+        "path_length_from_trace": 48.22000000000004,
+        "path_over_straight": 1.1823183146184735,
+        "scenario": "classic_cross_trap_low",
+        "seed": 1001,
+        "source_file": "runs/ppo__differential_drive/episodes.jsonl",
+        "status": "success",
+        "steps": 252,
+        "straight_line": 40.780050011792866,
+        "success": true,
+        "termination_reason": "success",
+        "trace_complete": true
+      },
+      "head": {
+        "arm": "ppo",
+        "collisions": 1,
+        "episode_id": "classic_cross_trap_low--1001--6ad64199ffb0f2d1",
+        "execution_error": null,
+        "execution_status": "written",
+        "has_step_trace": true,
+        "horizon": 600,
+        "kinematics": "differential_drive",
+        "max_pedestrians_in_trace": 0,
+        "min_clearance": 0.9533818508262495,
+        "outcome": "collision",
+        "path_length": 17.60000000000001,
+        "path_length_from_trace": 17.600000000000005,
+        "path_over_straight": 0.43886177117328307,
+        "scenario": "classic_cross_trap_low",
+        "seed": 1001,
+        "source_file": "runs/ppo__differential_drive/episodes.jsonl",
+        "status": "collision",
+        "steps": 98,
+        "straight_line": 40.10374372082345,
+        "success": false,
+        "termination_reason": "collision",
+        "trace_complete": true
+      }
+    },
+    {
+      "slot_id": "S024",
+      "slot": [
+        "ppo",
+        "differential_drive",
+        "classic_cross_trap_medium",
+        1001
+      ],
+      "events": [
+        "success_to_failure",
+        "new_collision"
+      ],
+      "baseline": {
+        "arm": "ppo",
+        "collisions": 0,
+        "episode_id": "classic_cross_trap_medium--1001--4d0ea375e5ff0ef7",
+        "execution_error": null,
+        "execution_status": "written",
+        "has_step_trace": true,
+        "horizon": 600,
+        "kinematics": "differential_drive",
+        "max_pedestrians_in_trace": 0,
+        "min_clearance": 1.0973215367144864,
+        "outcome": "success",
+        "path_length": 48.215,
+        "path_length_from_trace": 48.22000000000004,
+        "path_over_straight": 1.1823183146184735,
+        "scenario": "classic_cross_trap_medium",
+        "seed": 1001,
+        "source_file": "runs/ppo__differential_drive/episodes.jsonl",
+        "status": "success",
+        "steps": 252,
+        "straight_line": 40.780050011792866,
+        "success": true,
+        "termination_reason": "success",
+        "trace_complete": true
+      },
+      "head": {
+        "arm": "ppo",
+        "collisions": 1,
+        "episode_id": "classic_cross_trap_medium--1001--eae67f25c02e3405",
+        "execution_error": null,
+        "execution_status": "written",
+        "has_step_trace": true,
+        "horizon": 600,
+        "kinematics": "differential_drive",
+        "max_pedestrians_in_trace": 0,
+        "min_clearance": 0.9533818508262495,
+        "outcome": "collision",
+        "path_length": 17.60000000000001,
+        "path_length_from_trace": 17.600000000000005,
+        "path_over_straight": 0.43886177117328307,
+        "scenario": "classic_cross_trap_medium",
+        "seed": 1001,
+        "source_file": "runs/ppo__differential_drive/episodes.jsonl",
+        "status": "collision",
+        "steps": 98,
+        "straight_line": 40.10374372082345,
+        "success": false,
+        "termination_reason": "collision",
+        "trace_complete": true
+      }
+    }
+  ],
+  "replacements": {
+    "scenario_adaptive_hybrid_orca_v2_bottleneck_yield": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+    "scenario_adaptive_hybrid_orca_v2_collision_guard": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+    "hybrid_rule_v3_fast_progress_static_escape": "hybrid_rule_v4_fast_progress_static_escape",
+    "hybrid_rule_v3_fast_progress_static_escape_continuous": "hybrid_rule_v4_fast_progress_static_escape_continuous"
+  }
+}

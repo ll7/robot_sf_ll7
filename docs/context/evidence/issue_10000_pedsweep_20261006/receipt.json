@@ -1,0 +1,144 @@
+{
+  "schema_version": "pedsweep-gate-receipt.v1",
+  "gate_issue": 10000,
+  "date": "2026-10-06",
+  "status": "failed",
+  "evidence_tier": "diagnostic-only",
+  "paper_facing": false,
+  "benchmark_promotion": false,
+  "tested_stack_head": "52634e854076ad7a1da6be4edf17fa40baf93fd4",
+  "baseline_source_sha": "07f7e8d43084de748915e1b1eb8b2a1603357c6e",
+  "baseline_identity": "corrected benchmark release 0.0.7 source, not software tag 0.0.7 and not moving origin/main",
+  "landing_order": [
+    10073,
+    10075,
+    10094,
+    10104
+  ],
+  "dev_seeds": [
+    1001,
+    1002,
+    1003
+  ],
+  "retired_or_sealed_episode_seeds_executed": false,
+  "slurm_job_ids": [
+    21469,
+    21470,
+    21471,
+    21472,
+    21473
+  ],
+  "evidence_suite_jobs": {
+    "top_main": 21471,
+    "baseline_main": 21472,
+    "top_width": 21473
+  },
+  "original_top_width_failed_slots": 126,
+  "max_concurrent_jobs": 2,
+  "submission_mode": "sbatch on authorized login host; no simulator execution on login host",
+  "partition": "a30",
+  "qos": "a30-cpu",
+  "cpu_per_job": 24,
+  "reserved_node_excluded": true,
+  "all_release_arms_maps_attempted": true,
+  "all_release_arms_maps_completed": false,
+  "width_expected_slots": 126,
+  "width_written_rows": 117,
+  "width_real_config_rejections": 9,
+  "input_contracts_byte_identical_between_sources": false,
+  "main_paired_slots": 2016,
+  "width_unpaired_slots": 126,
+  "new_failure_slots": 57,
+  "new_events": {
+    "success_to_failure": 55,
+    "new_collision": 30
+  },
+  "classifications": {
+    "real_defect": 57
+  },
+  "unclassified_findings": 0,
+  "checked_exception_slots": 42,
+  "excepted_contact_free_timeouts": 30,
+  "non_excepted_exception_scenario_rows": 12,
+  "refute_passed": false,
+  "material_refute_issue": 10178,
+  "empty_world_followup_issue": 10180,
+  "production_files_modified_by_receipt": false,
+  "frozen_artifacts_or_release_configs_modified": false,
+  "success_targeted_tuning": false,
+  "robot_hard_stop_yield_override": false,
+  "pedestrian_controller_hold_bypassed_by_contact_projection": true,
+  "strict_release_metadata_audit_passed": false,
+  "harness_issues": [
+    "21469/21470 missing stable_baselines3 preflight, corrected before resubmission",
+    "21471 width: 117 SNQI v1/v2 harness failures and 9 real MPPI config rejections; 21473 fixes diagnostic SNQI references only, yielding 117 rows and retaining 9 real rejections",
+    "Strict metadata scanner sees unavailable auxiliary paired-effect measurements and reset route/spawn telemetry. Omissions preserved; separately typed runtime view rescanned, diagnostic-only, no release/paper admission."
+  ],
+  "interaction_campaign_audit_completed": false,
+  "interaction_campaign_audit_issue": 9952,
+  "per_pr": {
+    "10073": {
+      "runtime_source_sha": "6b5d4a442f8ed7ffc9ca6c519be2b9cba76d9ca0",
+      "gate_passed": false,
+      "state": "blocked",
+      "reason": "Shared-stack receipt is negative; an individual passing gate is not established. No causal attribution of all observed regressions to this PR.",
+      "pedstack_own_tests": {
+        "focused_passed": 91,
+        "full_passed": 43055,
+        "full_failed": 2,
+        "full_skipped": 69,
+        "full_xfailed": 7,
+        "later_focused_passed": 16,
+        "fresh_full_pass": false,
+        "note": "Both failures cleared later; source drift during full run and historical private-path prose. No second full suite."
+      },
+      "is_draft": true,
+      "blocked_label_retained": true
+    },
+    "10075": {
+      "runtime_source_sha": "6613fd0a976f4bc9904f9ce51ad153904156297f",
+      "gate_passed": false,
+      "state": "blocked",
+      "reason": "Shared-stack receipt is negative; an individual passing gate is not established. No causal attribution of all observed regressions to this PR.",
+      "pedstack_own_tests": {
+        "focused_passed": 112,
+        "full_passed": 43089,
+        "full_failed": 0,
+        "full_skipped": 69,
+        "full_xfailed": 7,
+        "fresh_full_pass": true
+      },
+      "is_draft": true,
+      "blocked_label_retained": true
+    },
+    "10094": {
+      "runtime_source_sha": "5ca040371cbef05c712bb151cdebc558d4247f5a",
+      "gate_passed": false,
+      "state": "blocked",
+      "reason": "Shared-stack receipt is negative; an individual passing gate is not established. No causal attribution of all observed regressions to this PR.",
+      "pedstack_own_tests": {
+        "focused_passed": 62,
+        "fresh_full_pass": false,
+        "note": "Full omitted by pedstack because another full-suite lane was active."
+      },
+      "is_draft": true,
+      "blocked_label_retained": true
+    },
+    "10104": {
+      "runtime_source_sha": "52634e854076ad7a1da6be4edf17fa40baf93fd4",
+      "gate_passed": false,
+      "state": "failed",
+      "reason": "Material contact hold defect #10178 at this head; shared-stack receipt is negative.",
+      "pedstack_own_tests": {
+        "focused_passed": 174,
+        "fresh_full_pass": false,
+        "note": "Full omitted by pedstack because another full-suite lane was active; material refute #10178 now open."
+      },
+      "is_draft": true,
+      "blocked_label_retained": true
+    }
+  },
+  "revival": "Resolve or explicitly disposition the real defects without success tuning; rerun/review the changed runtime head, obtain per-PR passing gate and own applicable validation/domain disposition before readiness.",
+  "runtime_issue_rows": 0,
+  "paired_main_runtime_qualified": true
+}

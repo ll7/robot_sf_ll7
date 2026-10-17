@@ -1,0 +1,104 @@
+[
+  {
+    "path": "configs/algos/prediction_planner_release_v0_0_8.yaml",
+    "head_blob_url": "https://github.com/ll7/robot_sf_ll7/blob/d90bf2436e24dea33198a8bbaf6bbf4342b0edac/configs/algos/prediction_planner_release_v0_0_8.yaml",
+    "history": [
+      "dab4e23e83db9d85a5e31c9fe7eeb7e49d91710d fix(prediction): retain base occupancy costs and document wall limitation",
+      "da0d2c9ea360969c8448379d9d5f48a4d8a9da5b fix(prediction): correct collector frames, wall costs, horizons and heading lattice",
+      "9e0b00989a8696d1c25ff77b5649fd704c87186f fix: restore training cadence and exact static recovery clearance",
+      "0cf58853df3215cd73f6e3bbed69ec85f96e094a fix: restore checkpoint forecast windows and declare emergency braking",
+      "604794af04afff20efd940e2acb4a16675ab2103 fix: restore physical release geometry and drive-bound planning",
+      "c53fc0a4afa84def8dce49f854f7bf9ef2352803 fix: version physical clearance for release arms (#9750)"
+    ]
+  },
+  {
+    "path": "configs/algos/socnav_release_v0_0_8.yaml",
+    "head_blob_url": "https://github.com/ll7/robot_sf_ll7/blob/d90bf2436e24dea33198a8bbaf6bbf4342b0edac/configs/algos/socnav_release_v0_0_8.yaml",
+    "history": [
+      "87883083c88b52e41de0db88f65f43f254ab0f37 fix(sacadrl): retain working release preference and reject oversized inputs",
+      "ba9d58e90b73952074ea5eaf5cd39c9b90b16a44 fix(planner): align SA-CADRL release inputs and sampling drive forecasts",
+      "c53fc0a4afa84def8dce49f854f7bf9ef2352803 fix: version physical clearance for release arms (#9750)"
+    ]
+  },
+  {
+    "path": "configs/algos/guarded_ppo_release_v0_0_8.yaml",
+    "head_blob_url": "https://github.com/ll7/robot_sf_ll7/blob/d90bf2436e24dea33198a8bbaf6bbf4342b0edac/configs/algos/guarded_ppo_release_v0_0_8.yaml",
+    "history": [
+      "93ba0d75fbecc69ddeb62bbf77a435de385caa3b fix: bind release planner configs to physical geometry (#9750) (#9926)"
+    ]
+  },
+  {
+    "path": "configs/baselines/ppo_release_robot_0_0_8_cpu.yaml",
+    "head_blob_url": "https://github.com/ll7/robot_sf_ll7/blob/d90bf2436e24dea33198a8bbaf6bbf4342b0edac/configs/baselines/ppo_release_robot_0_0_8_cpu.yaml",
+    "history": [
+      "e60b35354ff03212a586f14aea14f478bd21c5f5 Bind doorway PPO to release robot and clarify public provenance",
+      "b258ff0635b8c9aefc8c88af68e9cc18dd27d90c feat(benchmark): bind release PPO to the release-robot retrain"
+    ]
+  },
+  {
+    "path": "configs/benchmarks/horizon_schedules/release_0_0_8_authored_v1.yaml",
+    "head_blob_url": "https://github.com/ll7/robot_sf_ll7/blob/d90bf2436e24dea33198a8bbaf6bbf4342b0edac/configs/benchmarks/horizon_schedules/release_0_0_8_authored_v1.yaml",
+    "history": [
+      "596f137147d68c89fa1e6025bed4d8103a0b2bb4 fix: enforce scheduled budget floor and approve H600 overtaking",
+      "cb16bc2ec7f3a7ee768b3271f8b85a1ac47681cd fix(benchmark): declare pinned authored scenario budgets for 0.0.8"
+    ]
+  },
+  {
+    "path": "robot_sf/benchmark/map_runner_policies/ppo_family.py",
+    "head_blob_url": "https://github.com/ll7/robot_sf_ll7/blob/d90bf2436e24dea33198a8bbaf6bbf4342b0edac/robot_sf/benchmark/map_runner_policies/ppo_family.py",
+    "history": []
+  },
+  {
+    "path": "robot_sf/benchmark/map_runner/map_runner_goals.py",
+    "head_blob_url": "https://github.com/ll7/robot_sf_ll7/blob/d90bf2436e24dea33198a8bbaf6bbf4342b0edac/robot_sf/benchmark/map_runner/map_runner_goals.py",
+    "history": []
+  },
+  {
+    "path": "robot_sf/sim/sim_config.py",
+    "head_blob_url": "https://github.com/ll7/robot_sf_ll7/blob/d90bf2436e24dea33198a8bbaf6bbf4342b0edac/robot_sf/sim/sim_config.py",
+    "history": [
+      "905a00cbcb53efaded836fb8980d1f1e09762484 fix: preserve combined pedestrian and episode configuration after main merge",
+      "de3c596590e5173374dbd7e68ad34fbc04208e93 chore: integrate repaired calibration and main into pedestrian contact",
+      "22e86ee9607034553c8620b52fa75d801e163770 chore: integrate repaired force profiles and main into pedestrian validation",
+      "fd7fb7917179225345fb6260cb852fde2ddcd0fc chore: synchronize pedestrian force profiles with main",
+      "56d73a4cad05fec11fa77be80a99f0da0c32cc48 feat(sim): add opt-in pedestrian body exclusion and bounded wall handling",
+      "ce0f9701a02d31e03a9d4071ab61668928df86bb merge: integrate current main and reconcile authored H400 doorway identity",
+      "22b7b7a0f6359de3a00d2e061e56504e72091ba7 feat(validation): measure source protocols and unify opt-in pedestrian radius",
+      "2ab0f8ed6f2245a097f3ea7b00f7bd29e0bf8290 feat: add opt-in pedestrian wall calibration candidate for 0.0.9",
+      "68007267e4dcedc90edaf0f05654965dcb463f33 fix: guard package B candidate seeds and clarify group truncation",
+      "3355ac6e74a71623caf48c20b17d172c6229917e fix(pedestrians): repair seeded entry points, group fractions and replay streams",
+      "e5d25f089669565b3bd65a4f53afff05a322b0db fix(sim): isolate pedestrian sampling and apply safe reset configuration",
+      "11bb0cf59a10e57a507c6ba7887eee6aaa5e282a fix(benchmark): preserve integer scheduled episode budgets",
+      "f9358b9281fa6ee77243f305d516db7fedcb3528 fix(benchmark): version robot goal clearance sampling (#9859) (#9875)",
+      "da77a26ed8649e9cd1a114ce7e2c735b8df223b2 fix(sim): version social-force angle wrapping (#9764) (#9878)"
+    ]
+  },
+  {
+    "path": "configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4_s30_h600_release_0_0_8_frozen.yaml",
+    "head_blob_url": "https://github.com/ll7/robot_sf_ll7/blob/d90bf2436e24dea33198a8bbaf6bbf4342b0edac/configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4_s30_h600_release_0_0_8_frozen.yaml",
+    "history": [
+      "5c27a404beb51f8b0207f726dcef49b143364d99 feat(benchmark): freeze 0.0.8 hybrid v4 parameters (#9932)"
+    ]
+  },
+  {
+    "path": "configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard_v4_s30_h600_release_0_0_8_frozen.yaml",
+    "head_blob_url": "https://github.com/ll7/robot_sf_ll7/blob/d90bf2436e24dea33198a8bbaf6bbf4342b0edac/configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard_v4_s30_h600_release_0_0_8_frozen.yaml",
+    "history": [
+      "5c27a404beb51f8b0207f726dcef49b143364d99 feat(benchmark): freeze 0.0.8 hybrid v4 parameters (#9932)"
+    ]
+  },
+  {
+    "path": "configs/policy_search/candidates/hybrid_rule_v4_fast_progress_static_escape_s30_h600_release_0_0_8_frozen.yaml",
+    "head_blob_url": "https://github.com/ll7/robot_sf_ll7/blob/d90bf2436e24dea33198a8bbaf6bbf4342b0edac/configs/policy_search/candidates/hybrid_rule_v4_fast_progress_static_escape_s30_h600_release_0_0_8_frozen.yaml",
+    "history": [
+      "5c27a404beb51f8b0207f726dcef49b143364d99 feat(benchmark): freeze 0.0.8 hybrid v4 parameters (#9932)"
+    ]
+  },
+  {
+    "path": "configs/policy_search/candidates/hybrid_rule_v4_fast_progress_static_escape_continuous_s30_h600_release_0_0_8_frozen.yaml",
+    "head_blob_url": "https://github.com/ll7/robot_sf_ll7/blob/d90bf2436e24dea33198a8bbaf6bbf4342b0edac/configs/policy_search/candidates/hybrid_rule_v4_fast_progress_static_escape_continuous_s30_h600_release_0_0_8_frozen.yaml",
+    "history": [
+      "5c27a404beb51f8b0207f726dcef49b143364d99 feat(benchmark): freeze 0.0.8 hybrid v4 parameters (#9932)"
+    ]
+  }
+]

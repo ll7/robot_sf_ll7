@@ -1,0 +1,903 @@
+[
+  {
+    "slot_id": "S001",
+    "arm": "guarded_ppo",
+    "scenario": "francis2023_crowd_navigation",
+    "seed": 1001,
+    "events": [
+      "success_to_failure"
+    ],
+    "parsed_geometry_fields_changed": [
+      "robot_routes"
+    ],
+    "baseline_geometry_sha256": "15b07c1d8500d70455ee406a38b9944d398d30d6ca8871dffb283317064d207f",
+    "top_geometry_sha256": "15270fe9307aa710315425fbfd46f8d0d377adcb045dca8f20e07dd3497579d7",
+    "resolved_robot_config_changed": false
+  },
+  {
+    "slot_id": "S002",
+    "arm": "guarded_ppo",
+    "scenario": "francis2023_crowd_navigation",
+    "seed": 1003,
+    "events": [
+      "success_to_failure"
+    ],
+    "parsed_geometry_fields_changed": [
+      "robot_routes"
+    ],
+    "baseline_geometry_sha256": "15b07c1d8500d70455ee406a38b9944d398d30d6ca8871dffb283317064d207f",
+    "top_geometry_sha256": "15270fe9307aa710315425fbfd46f8d0d377adcb045dca8f20e07dd3497579d7",
+    "resolved_robot_config_changed": false
+  },
+  {
+    "slot_id": "S003",
+    "arm": "guarded_ppo",
+    "scenario": "francis2023_pedestrian_overtaking",
+    "seed": 1001,
+    "events": [
+      "success_to_failure"
+    ],
+    "parsed_geometry_fields_changed": [
+      "robot_routes",
+      "robot_spawn_zones",
+      "obstacles",
+      "bounds"
+    ],
+    "baseline_geometry_sha256": "ce5f41fd19772fbba9af64200912ee44536531512441694719b4bf235cc657fc",
+    "top_geometry_sha256": "c427a1083b3330b8d45d9aba0b6cde0fba49b700035b1ea89d724e422b6d1877",
+    "resolved_robot_config_changed": true
+  },
+  {
+    "slot_id": "S004",
+    "arm": "guarded_ppo",
+    "scenario": "francis2023_pedestrian_overtaking",
+    "seed": 1003,
+    "events": [
+      "success_to_failure"
+    ],
+    "parsed_geometry_fields_changed": [
+      "robot_routes",
+      "robot_spawn_zones",
+      "obstacles",
+      "bounds"
+    ],
+    "baseline_geometry_sha256": "ce5f41fd19772fbba9af64200912ee44536531512441694719b4bf235cc657fc",
+    "top_geometry_sha256": "c427a1083b3330b8d45d9aba0b6cde0fba49b700035b1ea89d724e422b6d1877",
+    "resolved_robot_config_changed": true
+  },
+  {
+    "slot_id": "S005",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape",
+    "scenario": "francis2023_accompanying_peer",
+    "seed": 1002,
+    "events": [
+      "success_to_failure"
+    ],
+    "parsed_geometry_fields_changed": [
+      "robot_routes"
+    ],
+    "baseline_geometry_sha256": "e6d5cd6a2dd8729129f16d5bd424074a7d2571f361811aa8799fd83d758e8525",
+    "top_geometry_sha256": "aecd5eefe52ff53c76244ae9e6cc85ec07e0101d66f4c1ca524767063ba723bc",
+    "resolved_robot_config_changed": false
+  },
+  {
+    "slot_id": "S006",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape",
+    "scenario": "francis2023_down_path",
+    "seed": 1002,
+    "events": [
+      "success_to_failure"
+    ],
+    "parsed_geometry_fields_changed": [
+      "robot_routes"
+    ],
+    "baseline_geometry_sha256": "e6d5cd6a2dd8729129f16d5bd424074a7d2571f361811aa8799fd83d758e8525",
+    "top_geometry_sha256": "aecd5eefe52ff53c76244ae9e6cc85ec07e0101d66f4c1ca524767063ba723bc",
+    "resolved_robot_config_changed": false
+  },
+  {
+    "slot_id": "S007",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape",
+    "scenario": "francis2023_entering_room",
+    "seed": 1002,
+    "events": [
+      "success_to_failure"
+    ],
+    "parsed_geometry_fields_changed": [
+      "robot_routes"
+    ],
+    "baseline_geometry_sha256": "ba33b833031a5288f5c6352833184a60a1195d68c7856fef1b5479c2d9737c6d",
+    "top_geometry_sha256": "37c921016165ebcfd92ef5838db551f340aadd7bfb676063f96708c3edbb0c7f",
+    "resolved_robot_config_changed": false
+  },
+  {
+    "slot_id": "S008",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape",
+    "scenario": "francis2023_following_human",
+    "seed": 1002,
+    "events": [
+      "success_to_failure"
+    ],
+    "parsed_geometry_fields_changed": [
+      "robot_routes"
+    ],
+    "baseline_geometry_sha256": "e6d5cd6a2dd8729129f16d5bd424074a7d2571f361811aa8799fd83d758e8525",
+    "top_geometry_sha256": "aecd5eefe52ff53c76244ae9e6cc85ec07e0101d66f4c1ca524767063ba723bc",
+    "resolved_robot_config_changed": false
+  },
+  {
+    "slot_id": "S009",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape",
+    "scenario": "francis2023_leading_human",
+    "seed": 1002,
+    "events": [
+      "success_to_failure"
+    ],
+    "parsed_geometry_fields_changed": [
+      "robot_routes"
+    ],
+    "baseline_geometry_sha256": "e6d5cd6a2dd8729129f16d5bd424074a7d2571f361811aa8799fd83d758e8525",
+    "top_geometry_sha256": "aecd5eefe52ff53c76244ae9e6cc85ec07e0101d66f4c1ca524767063ba723bc",
+    "resolved_robot_config_changed": false
+  },
+  {
+    "slot_id": "S010",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape",
+    "scenario": "francis2023_narrow_hallway",
+    "seed": 1002,
+    "events": [
+      "success_to_failure"
+    ],
+    "parsed_geometry_fields_changed": [
+      "robot_routes"
+    ],
+    "baseline_geometry_sha256": "6c5e02e8f4e6b087c102036958784056ebd7ab770123456f40a394615f9b577c",
+    "top_geometry_sha256": "040ea4148d682fd7a170daa809fc8c8f0912faf4c60a48c5f50cce752fbfaefa",
+    "resolved_robot_config_changed": false
+  },
+  {
+    "slot_id": "S011",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape",
+    "scenario": "francis2023_pedestrian_overtaking",
+    "seed": 1002,
+    "events": [
+      "success_to_failure"
+    ],
+    "parsed_geometry_fields_changed": [
+      "robot_routes",
+      "robot_spawn_zones",
+      "obstacles",
+      "bounds"
+    ],
+    "baseline_geometry_sha256": "ce5f41fd19772fbba9af64200912ee44536531512441694719b4bf235cc657fc",
+    "top_geometry_sha256": "c427a1083b3330b8d45d9aba0b6cde0fba49b700035b1ea89d724e422b6d1877",
+    "resolved_robot_config_changed": true
+  },
+  {
+    "slot_id": "S012",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_accompanying_peer",
+    "seed": 1002,
+    "events": [
+      "success_to_failure"
+    ],
+    "parsed_geometry_fields_changed": [
+      "robot_routes"
+    ],
+    "baseline_geometry_sha256": "e6d5cd6a2dd8729129f16d5bd424074a7d2571f361811aa8799fd83d758e8525",
+    "top_geometry_sha256": "aecd5eefe52ff53c76244ae9e6cc85ec07e0101d66f4c1ca524767063ba723bc",
+    "resolved_robot_config_changed": false
+  },
+  {
+    "slot_id": "S013",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_down_path",
+    "seed": 1002,
+    "events": [
+      "success_to_failure"
+    ],
+    "parsed_geometry_fields_changed": [
+      "robot_routes"
+    ],
+    "baseline_geometry_sha256": "e6d5cd6a2dd8729129f16d5bd424074a7d2571f361811aa8799fd83d758e8525",
+    "top_geometry_sha256": "aecd5eefe52ff53c76244ae9e6cc85ec07e0101d66f4c1ca524767063ba723bc",
+    "resolved_robot_config_changed": false
+  },
+  {
+    "slot_id": "S014",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_entering_room",
+    "seed": 1002,
+    "events": [
+      "success_to_failure"
+    ],
+    "parsed_geometry_fields_changed": [
+      "robot_routes"
+    ],
+    "baseline_geometry_sha256": "ba33b833031a5288f5c6352833184a60a1195d68c7856fef1b5479c2d9737c6d",
+    "top_geometry_sha256": "37c921016165ebcfd92ef5838db551f340aadd7bfb676063f96708c3edbb0c7f",
+    "resolved_robot_config_changed": false
+  },
+  {
+    "slot_id": "S015",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_following_human",
+    "seed": 1002,
+    "events": [
+      "success_to_failure"
+    ],
+    "parsed_geometry_fields_changed": [
+      "robot_routes"
+    ],
+    "baseline_geometry_sha256": "e6d5cd6a2dd8729129f16d5bd424074a7d2571f361811aa8799fd83d758e8525",
+    "top_geometry_sha256": "aecd5eefe52ff53c76244ae9e6cc85ec07e0101d66f4c1ca524767063ba723bc",
+    "resolved_robot_config_changed": false
+  },
+  {
+    "slot_id": "S016",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_frontal_approach",
+    "seed": 1002,
+    "events": [
+      "success_to_failure"
+    ],
+    "parsed_geometry_fields_changed": [
+      "robot_routes"
+    ],
+    "baseline_geometry_sha256": "ce5f41fd19772fbba9af64200912ee44536531512441694719b4bf235cc657fc",
+    "top_geometry_sha256": "8cda38fbc1d4cfa6a7eacb914c719bb0628e2ede7d44412302d528f22c05ac8f",
+    "resolved_robot_config_changed": false
+  },
+  {
+    "slot_id": "S017",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_leading_human",
+    "seed": 1002,
+    "events": [
+      "success_to_failure"
+    ],
+    "parsed_geometry_fields_changed": [
+      "robot_routes"
+    ],
+    "baseline_geometry_sha256": "e6d5cd6a2dd8729129f16d5bd424074a7d2571f361811aa8799fd83d758e8525",
+    "top_geometry_sha256": "aecd5eefe52ff53c76244ae9e6cc85ec07e0101d66f4c1ca524767063ba723bc",
+    "resolved_robot_config_changed": false
+  },
+  {
+    "slot_id": "S018",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_parallel_traffic",
+    "seed": 1002,
+    "events": [
+      "success_to_failure"
+    ],
+    "parsed_geometry_fields_changed": [
+      "robot_routes"
+    ],
+    "baseline_geometry_sha256": "ce5f41fd19772fbba9af64200912ee44536531512441694719b4bf235cc657fc",
+    "top_geometry_sha256": "8cda38fbc1d4cfa6a7eacb914c719bb0628e2ede7d44412302d528f22c05ac8f",
+    "resolved_robot_config_changed": false
+  },
+  {
+    "slot_id": "S019",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_pedestrian_obstruction",
+    "seed": 1002,
+    "events": [
+      "success_to_failure"
+    ],
+    "parsed_geometry_fields_changed": [
+      "robot_routes"
+    ],
+    "baseline_geometry_sha256": "ce5f41fd19772fbba9af64200912ee44536531512441694719b4bf235cc657fc",
+    "top_geometry_sha256": "8cda38fbc1d4cfa6a7eacb914c719bb0628e2ede7d44412302d528f22c05ac8f",
+    "resolved_robot_config_changed": false
+  },
+  {
+    "slot_id": "S020",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_pedestrian_overtaking",
+    "seed": 1002,
+    "events": [
+      "success_to_failure"
+    ],
+    "parsed_geometry_fields_changed": [
+      "robot_routes",
+      "robot_spawn_zones",
+      "obstacles",
+      "bounds"
+    ],
+    "baseline_geometry_sha256": "ce5f41fd19772fbba9af64200912ee44536531512441694719b4bf235cc657fc",
+    "top_geometry_sha256": "c427a1083b3330b8d45d9aba0b6cde0fba49b700035b1ea89d724e422b6d1877",
+    "resolved_robot_config_changed": true
+  },
+  {
+    "slot_id": "S021",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_robot_overtaking",
+    "seed": 1002,
+    "events": [
+      "success_to_failure"
+    ],
+    "parsed_geometry_fields_changed": [
+      "robot_routes"
+    ],
+    "baseline_geometry_sha256": "ce5f41fd19772fbba9af64200912ee44536531512441694719b4bf235cc657fc",
+    "top_geometry_sha256": "8cda38fbc1d4cfa6a7eacb914c719bb0628e2ede7d44412302d528f22c05ac8f",
+    "resolved_robot_config_changed": false
+  },
+  {
+    "slot_id": "S022",
+    "arm": "ppo",
+    "scenario": "classic_cross_trap_high",
+    "seed": 1001,
+    "events": [
+      "success_to_failure",
+      "new_collision"
+    ],
+    "parsed_geometry_fields_changed": [
+      "robot_routes"
+    ],
+    "baseline_geometry_sha256": "30daf2475fc0979c20d2a374e0114dc12e15186f490c1efe4065406251e975d3",
+    "top_geometry_sha256": "6b94c82b45711f35a205650a97042d7ec1222c8c0dffb2a8c15b1b2a8f434cad",
+    "resolved_robot_config_changed": false
+  },
+  {
+    "slot_id": "S023",
+    "arm": "ppo",
+    "scenario": "classic_cross_trap_low",
+    "seed": 1001,
+    "events": [
+      "success_to_failure",
+      "new_collision"
+    ],
+    "parsed_geometry_fields_changed": [
+      "robot_routes"
+    ],
+    "baseline_geometry_sha256": "30daf2475fc0979c20d2a374e0114dc12e15186f490c1efe4065406251e975d3",
+    "top_geometry_sha256": "6b94c82b45711f35a205650a97042d7ec1222c8c0dffb2a8c15b1b2a8f434cad",
+    "resolved_robot_config_changed": false
+  },
+  {
+    "slot_id": "S024",
+    "arm": "ppo",
+    "scenario": "classic_cross_trap_medium",
+    "seed": 1001,
+    "events": [
+      "success_to_failure",
+      "new_collision"
+    ],
+    "parsed_geometry_fields_changed": [
+      "robot_routes"
+    ],
+    "baseline_geometry_sha256": "30daf2475fc0979c20d2a374e0114dc12e15186f490c1efe4065406251e975d3",
+    "top_geometry_sha256": "6b94c82b45711f35a205650a97042d7ec1222c8c0dffb2a8c15b1b2a8f434cad",
+    "resolved_robot_config_changed": false
+  },
+  {
+    "slot_id": "S025",
+    "arm": "ppo",
+    "scenario": "classic_station_platform_medium",
+    "seed": 1003,
+    "events": [
+      "new_collision"
+    ],
+    "parsed_geometry_fields_changed": [
+      "robot_routes"
+    ],
+    "baseline_geometry_sha256": "8b3e9bc8a07729cf63c6f691678026de4555743330ffcc562c13f1c2094bcdf6",
+    "top_geometry_sha256": "9ee88c4b1a1e5156bdf8fb7eaf3cc3e8ac23e66a1a502269550799eae248fb86",
+    "resolved_robot_config_changed": false
+  },
+  {
+    "slot_id": "S026",
+    "arm": "ppo",
+    "scenario": "francis2023_blind_corner",
+    "seed": 1001,
+    "events": [
+      "success_to_failure",
+      "new_collision"
+    ],
+    "parsed_geometry_fields_changed": [
+      "robot_routes"
+    ],
+    "baseline_geometry_sha256": "b0de5946c67dbc014c1cea91c13dcf41dd5b12e822d9cd25eccc53c756891c6b",
+    "top_geometry_sha256": "b6d2a3d765a10155b6ab1ab0301dfe572bc8b74ef5b28d6b8306d9841f114281",
+    "resolved_robot_config_changed": false
+  },
+  {
+    "slot_id": "S027",
+    "arm": "ppo",
+    "scenario": "francis2023_blind_corner",
+    "seed": 1003,
+    "events": [
+      "success_to_failure",
+      "new_collision"
+    ],
+    "parsed_geometry_fields_changed": [
+      "robot_routes"
+    ],
+    "baseline_geometry_sha256": "b0de5946c67dbc014c1cea91c13dcf41dd5b12e822d9cd25eccc53c756891c6b",
+    "top_geometry_sha256": "b6d2a3d765a10155b6ab1ab0301dfe572bc8b74ef5b28d6b8306d9841f114281",
+    "resolved_robot_config_changed": false
+  },
+  {
+    "slot_id": "S028",
+    "arm": "ppo",
+    "scenario": "francis2023_circular_crossing",
+    "seed": 1001,
+    "events": [
+      "success_to_failure",
+      "new_collision"
+    ],
+    "parsed_geometry_fields_changed": [
+      "robot_routes"
+    ],
+    "baseline_geometry_sha256": "185d050ad0b31f38eea59d3ad5ee1a4d136f2d0318f30a5296c9c8d11081a6a4",
+    "top_geometry_sha256": "133d3403b00b8afe21104d48a091b6ca631252d23372eaf63534427d7919918b",
+    "resolved_robot_config_changed": false
+  },
+  {
+    "slot_id": "S029",
+    "arm": "ppo",
+    "scenario": "francis2023_entering_room",
+    "seed": 1001,
+    "events": [
+      "success_to_failure",
+      "new_collision"
+    ],
+    "parsed_geometry_fields_changed": [
+      "robot_routes"
+    ],
+    "baseline_geometry_sha256": "ba33b833031a5288f5c6352833184a60a1195d68c7856fef1b5479c2d9737c6d",
+    "top_geometry_sha256": "37c921016165ebcfd92ef5838db551f340aadd7bfb676063f96708c3edbb0c7f",
+    "resolved_robot_config_changed": false
+  },
+  {
+    "slot_id": "S030",
+    "arm": "ppo",
+    "scenario": "francis2023_entering_room",
+    "seed": 1002,
+    "events": [
+      "success_to_failure",
+      "new_collision"
+    ],
+    "parsed_geometry_fields_changed": [
+      "robot_routes"
+    ],
+    "baseline_geometry_sha256": "ba33b833031a5288f5c6352833184a60a1195d68c7856fef1b5479c2d9737c6d",
+    "top_geometry_sha256": "37c921016165ebcfd92ef5838db551f340aadd7bfb676063f96708c3edbb0c7f",
+    "resolved_robot_config_changed": false
+  },
+  {
+    "slot_id": "S031",
+    "arm": "ppo",
+    "scenario": "francis2023_exiting_room",
+    "seed": 1003,
+    "events": [
+      "success_to_failure",
+      "new_collision"
+    ],
+    "parsed_geometry_fields_changed": [
+      "robot_routes"
+    ],
+    "baseline_geometry_sha256": "3df0a1f065f1e96ffd2ff2af918c229872d3bf83a90bb7b6f843d81b618bcc2b",
+    "top_geometry_sha256": "eb42b93dafa2e38d712f81a5ee69d5d96131ccf68c69afce8ae6d62a904be93d",
+    "resolved_robot_config_changed": false
+  },
+  {
+    "slot_id": "S032",
+    "arm": "ppo",
+    "scenario": "francis2023_join_group",
+    "seed": 1001,
+    "events": [
+      "success_to_failure",
+      "new_collision"
+    ],
+    "parsed_geometry_fields_changed": [
+      "robot_routes"
+    ],
+    "baseline_geometry_sha256": "185d050ad0b31f38eea59d3ad5ee1a4d136f2d0318f30a5296c9c8d11081a6a4",
+    "top_geometry_sha256": "133d3403b00b8afe21104d48a091b6ca631252d23372eaf63534427d7919918b",
+    "resolved_robot_config_changed": false
+  },
+  {
+    "slot_id": "S033",
+    "arm": "ppo",
+    "scenario": "francis2023_leave_group",
+    "seed": 1001,
+    "events": [
+      "success_to_failure",
+      "new_collision"
+    ],
+    "parsed_geometry_fields_changed": [
+      "robot_routes"
+    ],
+    "baseline_geometry_sha256": "185d050ad0b31f38eea59d3ad5ee1a4d136f2d0318f30a5296c9c8d11081a6a4",
+    "top_geometry_sha256": "133d3403b00b8afe21104d48a091b6ca631252d23372eaf63534427d7919918b",
+    "resolved_robot_config_changed": false
+  },
+  {
+    "slot_id": "S034",
+    "arm": "ppo",
+    "scenario": "francis2023_robot_crowding",
+    "seed": 1001,
+    "events": [
+      "success_to_failure",
+      "new_collision"
+    ],
+    "parsed_geometry_fields_changed": [
+      "robot_routes"
+    ],
+    "baseline_geometry_sha256": "185d050ad0b31f38eea59d3ad5ee1a4d136f2d0318f30a5296c9c8d11081a6a4",
+    "top_geometry_sha256": "133d3403b00b8afe21104d48a091b6ca631252d23372eaf63534427d7919918b",
+    "resolved_robot_config_changed": false
+  },
+  {
+    "slot_id": "S035",
+    "arm": "prediction_planner",
+    "scenario": "classic_t_intersection_low",
+    "seed": 1003,
+    "events": [
+      "success_to_failure",
+      "new_collision"
+    ],
+    "parsed_geometry_fields_changed": [
+      "robot_routes"
+    ],
+    "baseline_geometry_sha256": "27f4cf4159780e3e7331dae9f873325b3c404223bbd2eff819b74fafda951da5",
+    "top_geometry_sha256": "d8c167113ceb72e21180ab362bc03a98e92cbb0bb1008eba16d291e56ec973d2",
+    "resolved_robot_config_changed": false
+  },
+  {
+    "slot_id": "S036",
+    "arm": "prediction_planner",
+    "scenario": "classic_t_intersection_medium",
+    "seed": 1003,
+    "events": [
+      "success_to_failure",
+      "new_collision"
+    ],
+    "parsed_geometry_fields_changed": [
+      "robot_routes"
+    ],
+    "baseline_geometry_sha256": "27f4cf4159780e3e7331dae9f873325b3c404223bbd2eff819b74fafda951da5",
+    "top_geometry_sha256": "d8c167113ceb72e21180ab362bc03a98e92cbb0bb1008eba16d291e56ec973d2",
+    "resolved_robot_config_changed": false
+  },
+  {
+    "slot_id": "S037",
+    "arm": "sacadrl",
+    "scenario": "classic_head_on_corridor_low",
+    "seed": 1002,
+    "events": [
+      "success_to_failure",
+      "new_collision"
+    ],
+    "parsed_geometry_fields_changed": [
+      "robot_routes"
+    ],
+    "baseline_geometry_sha256": "a005bd3f0c8b56690198ab5d577f1cf8d5a5e43ef4fe7e7bc2256f0f4d5beb69",
+    "top_geometry_sha256": "229b1937ad40077ff6abf71a33415c27f81cfbd7977d3d5a7aa8700ea14fea40",
+    "resolved_robot_config_changed": false
+  },
+  {
+    "slot_id": "S038",
+    "arm": "sacadrl",
+    "scenario": "classic_head_on_corridor_low",
+    "seed": 1003,
+    "events": [
+      "success_to_failure",
+      "new_collision"
+    ],
+    "parsed_geometry_fields_changed": [
+      "robot_routes"
+    ],
+    "baseline_geometry_sha256": "a005bd3f0c8b56690198ab5d577f1cf8d5a5e43ef4fe7e7bc2256f0f4d5beb69",
+    "top_geometry_sha256": "229b1937ad40077ff6abf71a33415c27f81cfbd7977d3d5a7aa8700ea14fea40",
+    "resolved_robot_config_changed": false
+  },
+  {
+    "slot_id": "S039",
+    "arm": "sacadrl",
+    "scenario": "classic_head_on_corridor_medium",
+    "seed": 1002,
+    "events": [
+      "success_to_failure",
+      "new_collision"
+    ],
+    "parsed_geometry_fields_changed": [
+      "robot_routes"
+    ],
+    "baseline_geometry_sha256": "a005bd3f0c8b56690198ab5d577f1cf8d5a5e43ef4fe7e7bc2256f0f4d5beb69",
+    "top_geometry_sha256": "229b1937ad40077ff6abf71a33415c27f81cfbd7977d3d5a7aa8700ea14fea40",
+    "resolved_robot_config_changed": false
+  },
+  {
+    "slot_id": "S040",
+    "arm": "sacadrl",
+    "scenario": "classic_head_on_corridor_medium",
+    "seed": 1003,
+    "events": [
+      "success_to_failure",
+      "new_collision"
+    ],
+    "parsed_geometry_fields_changed": [
+      "robot_routes"
+    ],
+    "baseline_geometry_sha256": "a005bd3f0c8b56690198ab5d577f1cf8d5a5e43ef4fe7e7bc2256f0f4d5beb69",
+    "top_geometry_sha256": "229b1937ad40077ff6abf71a33415c27f81cfbd7977d3d5a7aa8700ea14fea40",
+    "resolved_robot_config_changed": false
+  },
+  {
+    "slot_id": "S041",
+    "arm": "sacadrl",
+    "scenario": "francis2023_blind_corner",
+    "seed": 1001,
+    "events": [
+      "new_collision"
+    ],
+    "parsed_geometry_fields_changed": [
+      "robot_routes"
+    ],
+    "baseline_geometry_sha256": "b0de5946c67dbc014c1cea91c13dcf41dd5b12e822d9cd25eccc53c756891c6b",
+    "top_geometry_sha256": "b6d2a3d765a10155b6ab1ab0301dfe572bc8b74ef5b28d6b8306d9841f114281",
+    "resolved_robot_config_changed": false
+  },
+  {
+    "slot_id": "S042",
+    "arm": "sacadrl",
+    "scenario": "francis2023_intersection_no_gesture",
+    "seed": 1001,
+    "events": [
+      "success_to_failure",
+      "new_collision"
+    ],
+    "parsed_geometry_fields_changed": [
+      "robot_routes"
+    ],
+    "baseline_geometry_sha256": "0ce52cefeca01ddcc035f588d9a2c8fe2637fbd2d406c852324c002780914567",
+    "top_geometry_sha256": "61268baa227da4353f03d47e85a324a4a631b790fcf2247f1c73b137eac93ff8",
+    "resolved_robot_config_changed": false
+  },
+  {
+    "slot_id": "S043",
+    "arm": "sacadrl",
+    "scenario": "francis2023_intersection_no_gesture",
+    "seed": 1002,
+    "events": [
+      "success_to_failure",
+      "new_collision"
+    ],
+    "parsed_geometry_fields_changed": [
+      "robot_routes"
+    ],
+    "baseline_geometry_sha256": "0ce52cefeca01ddcc035f588d9a2c8fe2637fbd2d406c852324c002780914567",
+    "top_geometry_sha256": "61268baa227da4353f03d47e85a324a4a631b790fcf2247f1c73b137eac93ff8",
+    "resolved_robot_config_changed": false
+  },
+  {
+    "slot_id": "S044",
+    "arm": "sacadrl",
+    "scenario": "francis2023_intersection_proceed",
+    "seed": 1001,
+    "events": [
+      "success_to_failure",
+      "new_collision"
+    ],
+    "parsed_geometry_fields_changed": [
+      "robot_routes"
+    ],
+    "baseline_geometry_sha256": "0ce52cefeca01ddcc035f588d9a2c8fe2637fbd2d406c852324c002780914567",
+    "top_geometry_sha256": "61268baa227da4353f03d47e85a324a4a631b790fcf2247f1c73b137eac93ff8",
+    "resolved_robot_config_changed": false
+  },
+  {
+    "slot_id": "S045",
+    "arm": "sacadrl",
+    "scenario": "francis2023_intersection_proceed",
+    "seed": 1002,
+    "events": [
+      "success_to_failure",
+      "new_collision"
+    ],
+    "parsed_geometry_fields_changed": [
+      "robot_routes"
+    ],
+    "baseline_geometry_sha256": "0ce52cefeca01ddcc035f588d9a2c8fe2637fbd2d406c852324c002780914567",
+    "top_geometry_sha256": "61268baa227da4353f03d47e85a324a4a631b790fcf2247f1c73b137eac93ff8",
+    "resolved_robot_config_changed": false
+  },
+  {
+    "slot_id": "S046",
+    "arm": "sacadrl",
+    "scenario": "francis2023_intersection_wait",
+    "seed": 1001,
+    "events": [
+      "success_to_failure",
+      "new_collision"
+    ],
+    "parsed_geometry_fields_changed": [
+      "robot_routes"
+    ],
+    "baseline_geometry_sha256": "0ce52cefeca01ddcc035f588d9a2c8fe2637fbd2d406c852324c002780914567",
+    "top_geometry_sha256": "61268baa227da4353f03d47e85a324a4a631b790fcf2247f1c73b137eac93ff8",
+    "resolved_robot_config_changed": false
+  },
+  {
+    "slot_id": "S047",
+    "arm": "sacadrl",
+    "scenario": "francis2023_intersection_wait",
+    "seed": 1002,
+    "events": [
+      "success_to_failure",
+      "new_collision"
+    ],
+    "parsed_geometry_fields_changed": [
+      "robot_routes"
+    ],
+    "baseline_geometry_sha256": "0ce52cefeca01ddcc035f588d9a2c8fe2637fbd2d406c852324c002780914567",
+    "top_geometry_sha256": "61268baa227da4353f03d47e85a324a4a631b790fcf2247f1c73b137eac93ff8",
+    "resolved_robot_config_changed": false
+  },
+  {
+    "slot_id": "S048",
+    "arm": "sacadrl",
+    "scenario": "francis2023_narrow_hallway",
+    "seed": 1001,
+    "events": [
+      "success_to_failure",
+      "new_collision"
+    ],
+    "parsed_geometry_fields_changed": [
+      "robot_routes"
+    ],
+    "baseline_geometry_sha256": "6c5e02e8f4e6b087c102036958784056ebd7ab770123456f40a394615f9b577c",
+    "top_geometry_sha256": "040ea4148d682fd7a170daa809fc8c8f0912faf4c60a48c5f50cce752fbfaefa",
+    "resolved_robot_config_changed": false
+  },
+  {
+    "slot_id": "S049",
+    "arm": "sacadrl",
+    "scenario": "francis2023_narrow_hallway",
+    "seed": 1002,
+    "events": [
+      "success_to_failure",
+      "new_collision"
+    ],
+    "parsed_geometry_fields_changed": [
+      "robot_routes"
+    ],
+    "baseline_geometry_sha256": "6c5e02e8f4e6b087c102036958784056ebd7ab770123456f40a394615f9b577c",
+    "top_geometry_sha256": "040ea4148d682fd7a170daa809fc8c8f0912faf4c60a48c5f50cce752fbfaefa",
+    "resolved_robot_config_changed": false
+  },
+  {
+    "slot_id": "S050",
+    "arm": "sacadrl",
+    "scenario": "francis2023_perpendicular_traffic",
+    "seed": 1001,
+    "events": [
+      "success_to_failure",
+      "new_collision"
+    ],
+    "parsed_geometry_fields_changed": [
+      "robot_routes"
+    ],
+    "baseline_geometry_sha256": "0ce52cefeca01ddcc035f588d9a2c8fe2637fbd2d406c852324c002780914567",
+    "top_geometry_sha256": "61268baa227da4353f03d47e85a324a4a631b790fcf2247f1c73b137eac93ff8",
+    "resolved_robot_config_changed": false
+  },
+  {
+    "slot_id": "S051",
+    "arm": "sacadrl",
+    "scenario": "francis2023_perpendicular_traffic",
+    "seed": 1002,
+    "events": [
+      "success_to_failure",
+      "new_collision"
+    ],
+    "parsed_geometry_fields_changed": [
+      "robot_routes"
+    ],
+    "baseline_geometry_sha256": "0ce52cefeca01ddcc035f588d9a2c8fe2637fbd2d406c852324c002780914567",
+    "top_geometry_sha256": "61268baa227da4353f03d47e85a324a4a631b790fcf2247f1c73b137eac93ff8",
+    "resolved_robot_config_changed": false
+  },
+  {
+    "slot_id": "S052",
+    "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+    "scenario": "francis2023_entering_room",
+    "seed": 1002,
+    "events": [
+      "success_to_failure"
+    ],
+    "parsed_geometry_fields_changed": [
+      "robot_routes"
+    ],
+    "baseline_geometry_sha256": "ba33b833031a5288f5c6352833184a60a1195d68c7856fef1b5479c2d9737c6d",
+    "top_geometry_sha256": "37c921016165ebcfd92ef5838db551f340aadd7bfb676063f96708c3edbb0c7f",
+    "resolved_robot_config_changed": false
+  },
+  {
+    "slot_id": "S053",
+    "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+    "scenario": "francis2023_narrow_hallway",
+    "seed": 1002,
+    "events": [
+      "success_to_failure"
+    ],
+    "parsed_geometry_fields_changed": [
+      "robot_routes"
+    ],
+    "baseline_geometry_sha256": "6c5e02e8f4e6b087c102036958784056ebd7ab770123456f40a394615f9b577c",
+    "top_geometry_sha256": "040ea4148d682fd7a170daa809fc8c8f0912faf4c60a48c5f50cce752fbfaefa",
+    "resolved_robot_config_changed": false
+  },
+  {
+    "slot_id": "S054",
+    "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+    "scenario": "francis2023_pedestrian_overtaking",
+    "seed": 1002,
+    "events": [
+      "success_to_failure"
+    ],
+    "parsed_geometry_fields_changed": [
+      "robot_routes",
+      "robot_spawn_zones",
+      "obstacles",
+      "bounds"
+    ],
+    "baseline_geometry_sha256": "ce5f41fd19772fbba9af64200912ee44536531512441694719b4bf235cc657fc",
+    "top_geometry_sha256": "c427a1083b3330b8d45d9aba0b6cde0fba49b700035b1ea89d724e422b6d1877",
+    "resolved_robot_config_changed": true
+  },
+  {
+    "slot_id": "S055",
+    "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+    "scenario": "francis2023_entering_room",
+    "seed": 1002,
+    "events": [
+      "success_to_failure"
+    ],
+    "parsed_geometry_fields_changed": [
+      "robot_routes"
+    ],
+    "baseline_geometry_sha256": "ba33b833031a5288f5c6352833184a60a1195d68c7856fef1b5479c2d9737c6d",
+    "top_geometry_sha256": "37c921016165ebcfd92ef5838db551f340aadd7bfb676063f96708c3edbb0c7f",
+    "resolved_robot_config_changed": false
+  },
+  {
+    "slot_id": "S056",
+    "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+    "scenario": "francis2023_narrow_hallway",
+    "seed": 1002,
+    "events": [
+      "success_to_failure"
+    ],
+    "parsed_geometry_fields_changed": [
+      "robot_routes"
+    ],
+    "baseline_geometry_sha256": "6c5e02e8f4e6b087c102036958784056ebd7ab770123456f40a394615f9b577c",
+    "top_geometry_sha256": "040ea4148d682fd7a170daa809fc8c8f0912faf4c60a48c5f50cce752fbfaefa",
+    "resolved_robot_config_changed": false
+  },
+  {
+    "slot_id": "S057",
+    "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+    "scenario": "francis2023_pedestrian_overtaking",
+    "seed": 1002,
+    "events": [
+      "success_to_failure"
+    ],
+    "parsed_geometry_fields_changed": [
+      "robot_routes",
+      "robot_spawn_zones",
+      "obstacles",
+      "bounds"
+    ],
+    "baseline_geometry_sha256": "ce5f41fd19772fbba9af64200912ee44536531512441694719b4bf235cc657fc",
+    "top_geometry_sha256": "c427a1083b3330b8d45d9aba0b6cde0fba49b700035b1ea89d724e422b6d1877",
+    "resolved_robot_config_changed": true
+  }
+]

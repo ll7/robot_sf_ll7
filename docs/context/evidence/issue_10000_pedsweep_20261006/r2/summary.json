@@ -1,0 +1,125 @@
+{
+  "schema_version": "pedsweep2-attribution.v1",
+  "evidence_tier": "diagnostic-only",
+  "event_labels": 85,
+  "episode_slots": 57,
+  "counts": {
+    "a": 0,
+    "b": 37,
+    "c": 38,
+    "d": 0,
+    "unexplained": 10
+  },
+  "classified": 75,
+  "missing_modes": [],
+  "layer_modes": [
+    "base_main",
+    "forces_10073",
+    "radius_10075",
+    "initial_10094",
+    "contact_original_10104",
+    "contact_fixed_10104"
+  ],
+  "written_by_mode": {
+    "base_main": 57,
+    "forces_10073": 57,
+    "radius_10075": 57,
+    "initial_10094": 57,
+    "contact_original_10104": 57,
+    "contact_fixed_10104": 57,
+    "baseline_scenarios": 57,
+    "baseline_planners": 57,
+    "baseline_both": 57,
+    "baseline_reproduction": 57
+  },
+  "pedestrian_chain_identical_slots": 57,
+  "forbidden_inference": "Controlled diagnostic mechanism-class attribution is not a passing behavior/release gate or individual PR readiness.",
+  "counts_by_event": {
+    "success_to_failure": {
+      "b": 20,
+      "c": 28,
+      "unexplained": 7
+    },
+    "new_collision": {
+      "unexplained": 3,
+      "c": 10,
+      "b": 17
+    }
+  },
+  "counts_by_arm": {
+    "guarded_ppo": {
+      "b": 4
+    },
+    "hybrid_rule_v4_fast_progress_static_escape": {
+      "c": 6,
+      "unexplained": 1
+    },
+    "hybrid_rule_v4_fast_progress_static_escape_continuous": {
+      "c": 9,
+      "unexplained": 1
+    },
+    "ppo": {
+      "unexplained": 6,
+      "c": 19
+    },
+    "prediction_planner": {
+      "b": 4
+    },
+    "sacadrl": {
+      "b": 29
+    },
+    "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4": {
+      "unexplained": 1,
+      "c": 2
+    },
+    "scenario_adaptive_hybrid_orca_v2_collision_guard_v4": {
+      "unexplained": 1,
+      "c": 2
+    }
+  },
+  "runtime_pair_episode_rows": 44,
+  "rectangle_pair_episode_rows": 6,
+  "runtime_pair_mechanisms_proved": 17,
+  "unexplained_events": [
+    {
+      "event_id": "S007:success_to_failure",
+      "cause": "both one-axis interventions remove event; multiple sufficient explanations, no unique class"
+    },
+    {
+      "event_id": "S014:success_to_failure",
+      "cause": "both one-axis interventions remove event; multiple sufficient explanations, no unique class"
+    },
+    {
+      "event_id": "S022:success_to_failure",
+      "cause": "historical rectangle pair with absolute PPO succeeds on both sides; PPO-adapter pair with triangle sampler also succeeds on both sides; current baseline-input/profile runtime collides. Sampler/action-adapter interaction is a candidate across differing source histories, not an isolated single-class explanation"
+    },
+    {
+      "event_id": "S022:new_collision",
+      "cause": "historical rectangle pair with absolute PPO succeeds on both sides; PPO-adapter pair with triangle sampler also succeeds on both sides; current baseline-input/profile runtime collides. Sampler/action-adapter interaction is a candidate across differing source histories, not an isolated single-class explanation"
+    },
+    {
+      "event_id": "S023:success_to_failure",
+      "cause": "historical rectangle pair with absolute PPO succeeds on both sides; PPO-adapter pair with triangle sampler also succeeds on both sides; current baseline-input/profile runtime collides. Sampler/action-adapter interaction is a candidate across differing source histories, not an isolated single-class explanation"
+    },
+    {
+      "event_id": "S023:new_collision",
+      "cause": "historical rectangle pair with absolute PPO succeeds on both sides; PPO-adapter pair with triangle sampler also succeeds on both sides; current baseline-input/profile runtime collides. Sampler/action-adapter interaction is a candidate across differing source histories, not an isolated single-class explanation"
+    },
+    {
+      "event_id": "S024:success_to_failure",
+      "cause": "historical rectangle pair with absolute PPO succeeds on both sides; PPO-adapter pair with triangle sampler also succeeds on both sides; current baseline-input/profile runtime collides. Sampler/action-adapter interaction is a candidate across differing source histories, not an isolated single-class explanation"
+    },
+    {
+      "event_id": "S024:new_collision",
+      "cause": "historical rectangle pair with absolute PPO succeeds on both sides; PPO-adapter pair with triangle sampler also succeeds on both sides; current baseline-input/profile runtime collides. Sampler/action-adapter interaction is a candidate across differing source histories, not an isolated single-class explanation"
+    },
+    {
+      "event_id": "S052:success_to_failure",
+      "cause": "both one-axis interventions remove event; multiple sufficient explanations, no unique class"
+    },
+    {
+      "event_id": "S055:success_to_failure",
+      "cause": "both one-axis interventions remove event; multiple sufficient explanations, no unique class"
+    }
+  ]
+}

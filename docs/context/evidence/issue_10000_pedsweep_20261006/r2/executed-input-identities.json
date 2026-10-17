@@ -1,0 +1,5116 @@
+[
+  {
+    "mode": "baseline_planners",
+    "arm": "guarded_ppo",
+    "scenario": "francis2023_pedestrian_overtaking",
+    "scenario_sha256": "d18e5400c0a6a6a2d3c1c2e3a116bab71f29772cd542ea30ea7aec0cc8923346",
+    "map_sha256": "265884fa9a2a37b37f9d1090ce59ac3e88b1034bbf33a89816fb3f4156d28592",
+    "seeds": [
+      1001,
+      1003
+    ]
+  },
+  {
+    "mode": "baseline_planners",
+    "arm": "guarded_ppo",
+    "scenario": "francis2023_crowd_navigation",
+    "scenario_sha256": "4def8ec8f6ac96a5e26f287aa4ebf63b0ea8a96525ef4fa12debdc5c3e65b4fd",
+    "map_sha256": "5274dbd2c17d90a7d48af38af7dbeb134e9647ba0926e0a825cf9b4af27ba4dc",
+    "seeds": [
+      1001,
+      1003
+    ]
+  },
+  {
+    "mode": "baseline_planners",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape",
+    "scenario": "francis2023_pedestrian_overtaking",
+    "scenario_sha256": "d18e5400c0a6a6a2d3c1c2e3a116bab71f29772cd542ea30ea7aec0cc8923346",
+    "map_sha256": "265884fa9a2a37b37f9d1090ce59ac3e88b1034bbf33a89816fb3f4156d28592",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_planners",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape",
+    "scenario": "francis2023_down_path",
+    "scenario_sha256": "19f7ebf2d230b01ffb57f82c31c4ec8fd38ddd8c2a8d5a96298c880b3b742cae",
+    "map_sha256": "56e68a19ccc76fbcd634d1ad5188947d85f37e6c4b191f25b60e5753d2754cd4",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_planners",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape",
+    "scenario": "francis2023_narrow_hallway",
+    "scenario_sha256": "8a8bb50ace72859f1e2f3e95d12d7bc7a0292e5bf5766aa3ff501da1cb07d246",
+    "map_sha256": "d4016dc32bc4a2715dc088f510da92a6e7739513d5971022bd18478e3181cb8a",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_planners",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape",
+    "scenario": "francis2023_entering_room",
+    "scenario_sha256": "374d81107eefc3a6b1fbc75d317e211b8362a6f57a2085bc40329fb660058a76",
+    "map_sha256": "1506b9ddbee141c7256c92802cb6513d3add4cf5a270a9bad3dd197ec7a69166",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_planners",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape",
+    "scenario": "francis2023_following_human",
+    "scenario_sha256": "4f821b7ee2f9ceeab9a6b86b152a91bffb879e47dff197bc25e70853e01f4ce1",
+    "map_sha256": "56e68a19ccc76fbcd634d1ad5188947d85f37e6c4b191f25b60e5753d2754cd4",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_planners",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape",
+    "scenario": "francis2023_leading_human",
+    "scenario_sha256": "511e56ea2c7116a6232ad9610922d5a662a767384c404953a054a5034a041870",
+    "map_sha256": "56e68a19ccc76fbcd634d1ad5188947d85f37e6c4b191f25b60e5753d2754cd4",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_planners",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape",
+    "scenario": "francis2023_accompanying_peer",
+    "scenario_sha256": "f40e59ca1d34887af43aa6486e13032c231688202d342e9877661970980a273b",
+    "map_sha256": "56e68a19ccc76fbcd634d1ad5188947d85f37e6c4b191f25b60e5753d2754cd4",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_planners",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_frontal_approach",
+    "scenario_sha256": "21adb30f2f2c3b1dea447746ed6aee37191ac14cd2a5438038798a5f614a669c",
+    "map_sha256": "076bd939f2411133ae2dd272ec51615060fc055c75351472178dc42e7c5a976d",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_planners",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_pedestrian_obstruction",
+    "scenario_sha256": "5820be2a292e70b54c16c185c4224d88d6e1e43aa0b97adaa62c86526d72ad86",
+    "map_sha256": "3035bb837b24b710762d2d9b26777e7b355ec93cf425153120d99ea329c154fe",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_planners",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_pedestrian_overtaking",
+    "scenario_sha256": "d18e5400c0a6a6a2d3c1c2e3a116bab71f29772cd542ea30ea7aec0cc8923346",
+    "map_sha256": "265884fa9a2a37b37f9d1090ce59ac3e88b1034bbf33a89816fb3f4156d28592",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_planners",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_robot_overtaking",
+    "scenario_sha256": "1932ce9416410334b6fef994079092a88c5af399250a55a6929742d70864d38b",
+    "map_sha256": "7681d0b11d861aae9ffe58241f6da114c5ccdf68105b061d1770c54aff2ce999",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_planners",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_down_path",
+    "scenario_sha256": "19f7ebf2d230b01ffb57f82c31c4ec8fd38ddd8c2a8d5a96298c880b3b742cae",
+    "map_sha256": "56e68a19ccc76fbcd634d1ad5188947d85f37e6c4b191f25b60e5753d2754cd4",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_planners",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_entering_room",
+    "scenario_sha256": "374d81107eefc3a6b1fbc75d317e211b8362a6f57a2085bc40329fb660058a76",
+    "map_sha256": "1506b9ddbee141c7256c92802cb6513d3add4cf5a270a9bad3dd197ec7a69166",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_planners",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_following_human",
+    "scenario_sha256": "4f821b7ee2f9ceeab9a6b86b152a91bffb879e47dff197bc25e70853e01f4ce1",
+    "map_sha256": "56e68a19ccc76fbcd634d1ad5188947d85f37e6c4b191f25b60e5753d2754cd4",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_planners",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_leading_human",
+    "scenario_sha256": "511e56ea2c7116a6232ad9610922d5a662a767384c404953a054a5034a041870",
+    "map_sha256": "56e68a19ccc76fbcd634d1ad5188947d85f37e6c4b191f25b60e5753d2754cd4",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_planners",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_accompanying_peer",
+    "scenario_sha256": "f40e59ca1d34887af43aa6486e13032c231688202d342e9877661970980a273b",
+    "map_sha256": "56e68a19ccc76fbcd634d1ad5188947d85f37e6c4b191f25b60e5753d2754cd4",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_planners",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_parallel_traffic",
+    "scenario_sha256": "5d5ce2bf1b1781f55d0ac9f537a740199a03325c2510cd7ec16fc2ce4103a1d5",
+    "map_sha256": "62bc1ccceb667edfb1d4986539458984b400958e1e81098276df76304edccba6",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_planners",
+    "arm": "ppo",
+    "scenario": "classic_station_platform_medium",
+    "scenario_sha256": "e528bacec1e14e1ece674867d49b8e6865e1b9eb47c8ce0c47e733742a6cf5b8",
+    "map_sha256": "39017d6623ca72ec8020f76025d09cd1135cc8d6868d93a58575e265375845d4",
+    "seeds": [
+      1003
+    ]
+  },
+  {
+    "mode": "baseline_planners",
+    "arm": "ppo",
+    "scenario": "classic_cross_trap_low",
+    "scenario_sha256": "9425bd1d7715b20e1f60c27050b3a59a7069df9831123d7d3520ec12baa07a7f",
+    "map_sha256": "d3bc9ad6205108a480469338282611730410787cc897abd4d71f3f0fbd47d6a8",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "baseline_planners",
+    "arm": "ppo",
+    "scenario": "classic_cross_trap_medium",
+    "scenario_sha256": "92ae8148551c52d511435e916ef0b1a21984d71c1d10aa8db432fdd7e171c199",
+    "map_sha256": "d3bc9ad6205108a480469338282611730410787cc897abd4d71f3f0fbd47d6a8",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "baseline_planners",
+    "arm": "ppo",
+    "scenario": "classic_cross_trap_high",
+    "scenario_sha256": "4caaaa7f96f4a20a307708b82929cd9687c822592caa7e43dba2130fee2bfb3c",
+    "map_sha256": "d3bc9ad6205108a480469338282611730410787cc897abd4d71f3f0fbd47d6a8",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "baseline_planners",
+    "arm": "ppo",
+    "scenario": "francis2023_blind_corner",
+    "scenario_sha256": "01edba30966f9f046aecf605f5a19f1b7848d7fcf0ea0753ca5bc379b514f4ce",
+    "map_sha256": "0eb4c229fbceb711bbe6747d84b6a2db315890fb817c68900da3ebb8a6217317",
+    "seeds": [
+      1001,
+      1003
+    ]
+  },
+  {
+    "mode": "baseline_planners",
+    "arm": "ppo",
+    "scenario": "francis2023_entering_room",
+    "scenario_sha256": "374d81107eefc3a6b1fbc75d317e211b8362a6f57a2085bc40329fb660058a76",
+    "map_sha256": "1506b9ddbee141c7256c92802cb6513d3add4cf5a270a9bad3dd197ec7a69166",
+    "seeds": [
+      1001,
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_planners",
+    "arm": "ppo",
+    "scenario": "francis2023_exiting_room",
+    "scenario_sha256": "c4842cbe457fce84b14fbb5278df72828335e304b0f118f012811aa73d04eb6f",
+    "map_sha256": "cfd25fa09fd2a315f84f39408e57c0ec59bff14ea86d6020a07b93d75a3e434c",
+    "seeds": [
+      1003
+    ]
+  },
+  {
+    "mode": "baseline_planners",
+    "arm": "ppo",
+    "scenario": "francis2023_join_group",
+    "scenario_sha256": "0375df1d146e9c42449da8226b18d889444d32e12807b27b50171cae527016af",
+    "map_sha256": "72a76ca81c1449be9cc736778a719beb000b5197814facf68cf0854f23ad6a54",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "baseline_planners",
+    "arm": "ppo",
+    "scenario": "francis2023_leave_group",
+    "scenario_sha256": "d0aa07b519cf6e66c627ae6ce07ad9955c559fab3c1b0cdaab514d43c53b2650",
+    "map_sha256": "b69538eb45eee2c177218cdf35d29c2e3d6e6395f7da4199abb031d2ac37eda5",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "baseline_planners",
+    "arm": "ppo",
+    "scenario": "francis2023_circular_crossing",
+    "scenario_sha256": "3145b0c8b860eebdbd66409149d27b2521355da855d3683c263b12af81f63e59",
+    "map_sha256": "efe54d7488e68048c610d087fabf16dadf5b8ac049f2c18fcebebe7a0aa766b8",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "baseline_planners",
+    "arm": "ppo",
+    "scenario": "francis2023_robot_crowding",
+    "scenario_sha256": "c789ab2074322fbf69fab17d5b5dc4cd40dd3ab8c2e1ddfb298b30de2feffdfd",
+    "map_sha256": "8ced0ecd8402a30842a888ad7a2d463322c7383d38dde93a4e015e87b469b80f",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "baseline_planners",
+    "arm": "prediction_planner",
+    "scenario": "classic_t_intersection_low",
+    "scenario_sha256": "294cae2c8a1e16c4f04da7f6d18d06e30237d020968c35682602a662783e7052",
+    "map_sha256": "111f58b931f66647af201cab235e9c3285afb71f8b731cef40286b6c9cda8877",
+    "seeds": [
+      1003
+    ]
+  },
+  {
+    "mode": "baseline_planners",
+    "arm": "prediction_planner",
+    "scenario": "classic_t_intersection_medium",
+    "scenario_sha256": "398734ab64a950f29259ea3a6efe76a9b02b952880f4d060c2d239b54ba7bf1f",
+    "map_sha256": "111f58b931f66647af201cab235e9c3285afb71f8b731cef40286b6c9cda8877",
+    "seeds": [
+      1003
+    ]
+  },
+  {
+    "mode": "baseline_planners",
+    "arm": "sacadrl",
+    "scenario": "classic_head_on_corridor_low",
+    "scenario_sha256": "7709293a19d499342b76f8757ce4a93636099bfc00299fb1b52fc0d799ab17a9",
+    "map_sha256": "e25e068d97d6e060e5e0e19387f23b1e63dc7b0f687bd1b7d95ccf2dd46b9457",
+    "seeds": [
+      1002,
+      1003
+    ]
+  },
+  {
+    "mode": "baseline_planners",
+    "arm": "sacadrl",
+    "scenario": "classic_head_on_corridor_medium",
+    "scenario_sha256": "2421aa7d92555cf0038de44987c7b1affeaede608336a56e26b2b468db644df1",
+    "map_sha256": "e25e068d97d6e060e5e0e19387f23b1e63dc7b0f687bd1b7d95ccf2dd46b9457",
+    "seeds": [
+      1002,
+      1003
+    ]
+  },
+  {
+    "mode": "baseline_planners",
+    "arm": "sacadrl",
+    "scenario": "francis2023_intersection_no_gesture",
+    "scenario_sha256": "132b3b9649dd58642ad648ceb3e2fa44acd6883c234398a07a72bc96da097348",
+    "map_sha256": "4a3670c3062e305ee26c64387def7357f42ec58dcdb3640de5e6a9493b163ea7",
+    "seeds": [
+      1001,
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_planners",
+    "arm": "sacadrl",
+    "scenario": "francis2023_blind_corner",
+    "scenario_sha256": "01edba30966f9f046aecf605f5a19f1b7848d7fcf0ea0753ca5bc379b514f4ce",
+    "map_sha256": "0eb4c229fbceb711bbe6747d84b6a2db315890fb817c68900da3ebb8a6217317",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "baseline_planners",
+    "arm": "sacadrl",
+    "scenario": "francis2023_narrow_hallway",
+    "scenario_sha256": "8a8bb50ace72859f1e2f3e95d12d7bc7a0292e5bf5766aa3ff501da1cb07d246",
+    "map_sha256": "d4016dc32bc4a2715dc088f510da92a6e7739513d5971022bd18478e3181cb8a",
+    "seeds": [
+      1001,
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_planners",
+    "arm": "sacadrl",
+    "scenario": "francis2023_intersection_wait",
+    "scenario_sha256": "8406d491805db44bd9c7817954ca28c1136ce17024d0ee25e20012043d163f75",
+    "map_sha256": "4a3670c3062e305ee26c64387def7357f42ec58dcdb3640de5e6a9493b163ea7",
+    "seeds": [
+      1001,
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_planners",
+    "arm": "sacadrl",
+    "scenario": "francis2023_intersection_proceed",
+    "scenario_sha256": "5243abd6e86ed1871885c837fec582fd5bdf64c053d3ad4c67da3c27f9a216d4",
+    "map_sha256": "4a3670c3062e305ee26c64387def7357f42ec58dcdb3640de5e6a9493b163ea7",
+    "seeds": [
+      1001,
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_planners",
+    "arm": "sacadrl",
+    "scenario": "francis2023_perpendicular_traffic",
+    "scenario_sha256": "2ba28abbd682476e0f8112e950744f2d52c6aaa3b155efa0ed9d0f213f3c8cdc",
+    "map_sha256": "75ae14f525c561ebc70ecaa399a96d04f2957f1b6b06d197d770c573c59963dc",
+    "seeds": [
+      1001,
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_planners",
+    "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+    "scenario": "francis2023_pedestrian_overtaking",
+    "scenario_sha256": "d18e5400c0a6a6a2d3c1c2e3a116bab71f29772cd542ea30ea7aec0cc8923346",
+    "map_sha256": "265884fa9a2a37b37f9d1090ce59ac3e88b1034bbf33a89816fb3f4156d28592",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_planners",
+    "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+    "scenario": "francis2023_narrow_hallway",
+    "scenario_sha256": "8a8bb50ace72859f1e2f3e95d12d7bc7a0292e5bf5766aa3ff501da1cb07d246",
+    "map_sha256": "d4016dc32bc4a2715dc088f510da92a6e7739513d5971022bd18478e3181cb8a",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_planners",
+    "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+    "scenario": "francis2023_entering_room",
+    "scenario_sha256": "374d81107eefc3a6b1fbc75d317e211b8362a6f57a2085bc40329fb660058a76",
+    "map_sha256": "1506b9ddbee141c7256c92802cb6513d3add4cf5a270a9bad3dd197ec7a69166",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_planners",
+    "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+    "scenario": "francis2023_pedestrian_overtaking",
+    "scenario_sha256": "d18e5400c0a6a6a2d3c1c2e3a116bab71f29772cd542ea30ea7aec0cc8923346",
+    "map_sha256": "265884fa9a2a37b37f9d1090ce59ac3e88b1034bbf33a89816fb3f4156d28592",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_planners",
+    "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+    "scenario": "francis2023_narrow_hallway",
+    "scenario_sha256": "8a8bb50ace72859f1e2f3e95d12d7bc7a0292e5bf5766aa3ff501da1cb07d246",
+    "map_sha256": "d4016dc32bc4a2715dc088f510da92a6e7739513d5971022bd18478e3181cb8a",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_planners",
+    "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+    "scenario": "francis2023_entering_room",
+    "scenario_sha256": "374d81107eefc3a6b1fbc75d317e211b8362a6f57a2085bc40329fb660058a76",
+    "map_sha256": "1506b9ddbee141c7256c92802cb6513d3add4cf5a270a9bad3dd197ec7a69166",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_both",
+    "arm": "guarded_ppo",
+    "scenario": "francis2023_pedestrian_overtaking",
+    "scenario_sha256": "fce60cce9b0a9d3549d9cd670b313969b32576123004fee9a986798bbdc58255",
+    "map_sha256": "5963604a715d9caf6fcfc2c3737b545d4f4ee0bcbd7f0b7707ca5876796b7ef7",
+    "seeds": [
+      1001,
+      1003
+    ]
+  },
+  {
+    "mode": "baseline_both",
+    "arm": "guarded_ppo",
+    "scenario": "francis2023_crowd_navigation",
+    "scenario_sha256": "fde43cf456249765f668a60232b78c6b1b8a346bac4c8ca380f63d8752752748",
+    "map_sha256": "90dcec15efdd3ff8c9bc9eab31229c22526d4cb946e7d2e8bfd6f83de2c463f4",
+    "seeds": [
+      1001,
+      1003
+    ]
+  },
+  {
+    "mode": "baseline_both",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape",
+    "scenario": "francis2023_pedestrian_overtaking",
+    "scenario_sha256": "fce60cce9b0a9d3549d9cd670b313969b32576123004fee9a986798bbdc58255",
+    "map_sha256": "5963604a715d9caf6fcfc2c3737b545d4f4ee0bcbd7f0b7707ca5876796b7ef7",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_both",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape",
+    "scenario": "francis2023_down_path",
+    "scenario_sha256": "7217e432f6622b9286342881b946c682d1bc6fe074b6c1adaf8a6696005060fd",
+    "map_sha256": "8456ca8567a58e5154a99e216cd39dba2dee828fe421d3fe1b1f293a1d74a007",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_both",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape",
+    "scenario": "francis2023_narrow_hallway",
+    "scenario_sha256": "d7a18ed15c28d5be4e1bc757c5987b664115c412acc2cb50fbacd92a794162f2",
+    "map_sha256": "ef0cf11ec96a69d95fac3f4e9ffc7665549045201c59bf7c4f9895462be71c6b",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_both",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape",
+    "scenario": "francis2023_entering_room",
+    "scenario_sha256": "44b06f805870c155769b146f756f99e95a0c67def22b1416a782a01469c481b3",
+    "map_sha256": "eeb5be812c733ddfb8b0a5295eb99533c90c68d56de562733aa7d2bfd0363aa9",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_both",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape",
+    "scenario": "francis2023_following_human",
+    "scenario_sha256": "acc7a8de140b6e28e8057580dc796dad137ff1b7fbdfecef137e7bd7d8cc7766",
+    "map_sha256": "8456ca8567a58e5154a99e216cd39dba2dee828fe421d3fe1b1f293a1d74a007",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_both",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape",
+    "scenario": "francis2023_leading_human",
+    "scenario_sha256": "92cb2f266c3e530363be4356ed295bb50c0a5130da195777551de058c5ce15be",
+    "map_sha256": "8456ca8567a58e5154a99e216cd39dba2dee828fe421d3fe1b1f293a1d74a007",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_both",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape",
+    "scenario": "francis2023_accompanying_peer",
+    "scenario_sha256": "4c8893366672a45ca8e454184ca0974c3175307e228c43dc618a024a20decfd5",
+    "map_sha256": "8456ca8567a58e5154a99e216cd39dba2dee828fe421d3fe1b1f293a1d74a007",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_both",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_frontal_approach",
+    "scenario_sha256": "9a859479fe2697cda508e6c9846f7aa1dba3bfb15fc5d282cb1a1c531c9fa8f2",
+    "map_sha256": "365e34e3a5f08c383ce4577c282b5758969fb2073b98df07504eefa82e5e8240",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_both",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_pedestrian_obstruction",
+    "scenario_sha256": "78af976a1a0f1f86c3b6ad11de4143bce6d92cc437f4d0b1304093565c5baa83",
+    "map_sha256": "e5c78b7105f2e9535e8b71fd9faf0a98d1fc12f9e12d5d2dd1a59fdb0f887f24",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_both",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_pedestrian_overtaking",
+    "scenario_sha256": "fce60cce9b0a9d3549d9cd670b313969b32576123004fee9a986798bbdc58255",
+    "map_sha256": "5963604a715d9caf6fcfc2c3737b545d4f4ee0bcbd7f0b7707ca5876796b7ef7",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_both",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_robot_overtaking",
+    "scenario_sha256": "73ac47a4760202376a92b1056d7f3f195ba2a743f19ca0bd141d04cefafc02c7",
+    "map_sha256": "90bb35d6e579a28f3ab5c6d91f45c9c7e8a6dc5985539bba8901d00853e8cf25",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_both",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_down_path",
+    "scenario_sha256": "7217e432f6622b9286342881b946c682d1bc6fe074b6c1adaf8a6696005060fd",
+    "map_sha256": "8456ca8567a58e5154a99e216cd39dba2dee828fe421d3fe1b1f293a1d74a007",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_both",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_entering_room",
+    "scenario_sha256": "44b06f805870c155769b146f756f99e95a0c67def22b1416a782a01469c481b3",
+    "map_sha256": "eeb5be812c733ddfb8b0a5295eb99533c90c68d56de562733aa7d2bfd0363aa9",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_both",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_following_human",
+    "scenario_sha256": "acc7a8de140b6e28e8057580dc796dad137ff1b7fbdfecef137e7bd7d8cc7766",
+    "map_sha256": "8456ca8567a58e5154a99e216cd39dba2dee828fe421d3fe1b1f293a1d74a007",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_both",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_leading_human",
+    "scenario_sha256": "92cb2f266c3e530363be4356ed295bb50c0a5130da195777551de058c5ce15be",
+    "map_sha256": "8456ca8567a58e5154a99e216cd39dba2dee828fe421d3fe1b1f293a1d74a007",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_both",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_accompanying_peer",
+    "scenario_sha256": "4c8893366672a45ca8e454184ca0974c3175307e228c43dc618a024a20decfd5",
+    "map_sha256": "8456ca8567a58e5154a99e216cd39dba2dee828fe421d3fe1b1f293a1d74a007",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_both",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_parallel_traffic",
+    "scenario_sha256": "a66f66dbd2380eb4d04ef3db8bd1555f340b9f971faf6c08626f5543a2924da4",
+    "map_sha256": "df1ec5f272601901b9d820ef8d3b0cb61ee592c031a215474db0bee37a29ad7f",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_both",
+    "arm": "ppo",
+    "scenario": "classic_station_platform_medium",
+    "scenario_sha256": "3be260502de1e020030f2d8770a9e558c5c2fcfff89f1dc2dfca2eaa3c11e53b",
+    "map_sha256": "a7c14e33955316771d299b82d611f35299bb986d39442f5cc9bf24c1368e5c2a",
+    "seeds": [
+      1003
+    ]
+  },
+  {
+    "mode": "baseline_both",
+    "arm": "ppo",
+    "scenario": "classic_cross_trap_low",
+    "scenario_sha256": "ef7e24a539c895c612c74b08dd50328146c84eee31097c41421fa527ac833f1f",
+    "map_sha256": "dec460721d422340653732125f8b02b76f793fb916446275ccefff60fea9c911",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "baseline_both",
+    "arm": "ppo",
+    "scenario": "classic_cross_trap_medium",
+    "scenario_sha256": "f8e66c4db92011c0f7f3bcd9a78c38368a734f0ee5d160bbbe6ff4f8609a7edf",
+    "map_sha256": "dec460721d422340653732125f8b02b76f793fb916446275ccefff60fea9c911",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "baseline_both",
+    "arm": "ppo",
+    "scenario": "classic_cross_trap_high",
+    "scenario_sha256": "5ba72ccec5e16ea83997170babcdf58cd40e34a8219f7c1a987df64fa61e1d0f",
+    "map_sha256": "dec460721d422340653732125f8b02b76f793fb916446275ccefff60fea9c911",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "baseline_both",
+    "arm": "ppo",
+    "scenario": "francis2023_blind_corner",
+    "scenario_sha256": "afb5d04a3f5c7514904326c888137709defaf07be3b04d7805878820d8114789",
+    "map_sha256": "71ab3ce5436d45268d1b29f1d9c51ecd25e1cd15e9b3b0ffcd5561a69712679f",
+    "seeds": [
+      1001,
+      1003
+    ]
+  },
+  {
+    "mode": "baseline_both",
+    "arm": "ppo",
+    "scenario": "francis2023_entering_room",
+    "scenario_sha256": "44b06f805870c155769b146f756f99e95a0c67def22b1416a782a01469c481b3",
+    "map_sha256": "eeb5be812c733ddfb8b0a5295eb99533c90c68d56de562733aa7d2bfd0363aa9",
+    "seeds": [
+      1001,
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_both",
+    "arm": "ppo",
+    "scenario": "francis2023_exiting_room",
+    "scenario_sha256": "4393ae9177100d04deaec3bb89f7bc6be0ac04338aace8a3c29a8d7bb4584137",
+    "map_sha256": "e6f42c85c016f117c370e85900941fda6aeca45a90af72c483f76d5b7905474c",
+    "seeds": [
+      1003
+    ]
+  },
+  {
+    "mode": "baseline_both",
+    "arm": "ppo",
+    "scenario": "francis2023_join_group",
+    "scenario_sha256": "0bb617020031cb65a8be7500f7d21fd60cf65a577b8b068c08f818bdd8fe6bdb",
+    "map_sha256": "72eae7b5bee45cf9a1aa1e086aeb4b3d9d1a87d61e69ed5c467908bb67d3fded",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "baseline_both",
+    "arm": "ppo",
+    "scenario": "francis2023_leave_group",
+    "scenario_sha256": "1d29358f82cbdf82fa39121ddb363e4b9e7fcb0ddefb71ea99dd1b29ecfd99ac",
+    "map_sha256": "b5d90d5eda27621038087c18b70a4f7872aa256faddf915c4c577768edc2898e",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "baseline_both",
+    "arm": "ppo",
+    "scenario": "francis2023_circular_crossing",
+    "scenario_sha256": "f8b53b955aa6d21bb3f99803da997cee5d428cd517f7e62990ea1f3aff77bd81",
+    "map_sha256": "c67c90be944dab027603cd4f0823979150d6a900aad2070fc7d2f8cce915fa5a",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "baseline_both",
+    "arm": "ppo",
+    "scenario": "francis2023_robot_crowding",
+    "scenario_sha256": "6555e5d257647637afb1be4ad4900b1943adbf1a8921ac03039a8ac87d0d8d6d",
+    "map_sha256": "202c0222a132e9c5e67316646765541aca92ccb56fd5416b604a1ff77bc15617",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "baseline_both",
+    "arm": "prediction_planner",
+    "scenario": "classic_t_intersection_low",
+    "scenario_sha256": "0910e88e6cf9715cd43fd9540a804faa5335f28c6a0ca0d1863e18a29beea4ab",
+    "map_sha256": "c6dea0b640bc23d7c95c7c5e1dddf0e4df6e30ee4942f7e93af8556f41b4beb5",
+    "seeds": [
+      1003
+    ]
+  },
+  {
+    "mode": "baseline_both",
+    "arm": "prediction_planner",
+    "scenario": "classic_t_intersection_medium",
+    "scenario_sha256": "6c8a4f6c847e718567f6713f7d92d8dbdf8fec529cf6ec5c05d2fc17609582e5",
+    "map_sha256": "c6dea0b640bc23d7c95c7c5e1dddf0e4df6e30ee4942f7e93af8556f41b4beb5",
+    "seeds": [
+      1003
+    ]
+  },
+  {
+    "mode": "baseline_both",
+    "arm": "sacadrl",
+    "scenario": "classic_head_on_corridor_low",
+    "scenario_sha256": "804c0c37604e43b237a0783401641d3c15b23e12695b81c1d1a7e5c81999fa8f",
+    "map_sha256": "89f439ac1f04561e0cd550c16be01a9674dc6fe80ba196f0dcc8f8f3c641f11b",
+    "seeds": [
+      1002,
+      1003
+    ]
+  },
+  {
+    "mode": "baseline_both",
+    "arm": "sacadrl",
+    "scenario": "classic_head_on_corridor_medium",
+    "scenario_sha256": "e4513f830ac98f43e81ec3fb0ce64b946b556b24d29fae7ae67abd7ab60b06f1",
+    "map_sha256": "89f439ac1f04561e0cd550c16be01a9674dc6fe80ba196f0dcc8f8f3c641f11b",
+    "seeds": [
+      1002,
+      1003
+    ]
+  },
+  {
+    "mode": "baseline_both",
+    "arm": "sacadrl",
+    "scenario": "francis2023_intersection_no_gesture",
+    "scenario_sha256": "e7bfa2d03d5f8c6183c2a28adf087a17f4b64c586e36aa0d484428efa4a414c2",
+    "map_sha256": "4bc2fc33c7c3d0466723bed8c0dc4314d716c5d8e1a3a3786dab2d34110826d0",
+    "seeds": [
+      1001,
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_both",
+    "arm": "sacadrl",
+    "scenario": "francis2023_blind_corner",
+    "scenario_sha256": "afb5d04a3f5c7514904326c888137709defaf07be3b04d7805878820d8114789",
+    "map_sha256": "71ab3ce5436d45268d1b29f1d9c51ecd25e1cd15e9b3b0ffcd5561a69712679f",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "baseline_both",
+    "arm": "sacadrl",
+    "scenario": "francis2023_narrow_hallway",
+    "scenario_sha256": "d7a18ed15c28d5be4e1bc757c5987b664115c412acc2cb50fbacd92a794162f2",
+    "map_sha256": "ef0cf11ec96a69d95fac3f4e9ffc7665549045201c59bf7c4f9895462be71c6b",
+    "seeds": [
+      1001,
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_both",
+    "arm": "sacadrl",
+    "scenario": "francis2023_intersection_wait",
+    "scenario_sha256": "619a0eddd9022842b1fd1fed38930a6484ee989d471656f38453e8375efa4fb0",
+    "map_sha256": "4bc2fc33c7c3d0466723bed8c0dc4314d716c5d8e1a3a3786dab2d34110826d0",
+    "seeds": [
+      1001,
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_both",
+    "arm": "sacadrl",
+    "scenario": "francis2023_intersection_proceed",
+    "scenario_sha256": "d92becab7593362dbd29ce199daf88248dd4fe2dfb914998f9af8a28d306ce0b",
+    "map_sha256": "4bc2fc33c7c3d0466723bed8c0dc4314d716c5d8e1a3a3786dab2d34110826d0",
+    "seeds": [
+      1001,
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_both",
+    "arm": "sacadrl",
+    "scenario": "francis2023_perpendicular_traffic",
+    "scenario_sha256": "72857c7fc8849e333652d913fe86b98c6c09870382154f3a1b6f99c8347db4cc",
+    "map_sha256": "67ae3c66be2057e7da9a0182458de7e68c9c41d2f13848790fb73eb12664ee99",
+    "seeds": [
+      1001,
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_both",
+    "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+    "scenario": "francis2023_pedestrian_overtaking",
+    "scenario_sha256": "fce60cce9b0a9d3549d9cd670b313969b32576123004fee9a986798bbdc58255",
+    "map_sha256": "5963604a715d9caf6fcfc2c3737b545d4f4ee0bcbd7f0b7707ca5876796b7ef7",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_both",
+    "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+    "scenario": "francis2023_narrow_hallway",
+    "scenario_sha256": "d7a18ed15c28d5be4e1bc757c5987b664115c412acc2cb50fbacd92a794162f2",
+    "map_sha256": "ef0cf11ec96a69d95fac3f4e9ffc7665549045201c59bf7c4f9895462be71c6b",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_both",
+    "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+    "scenario": "francis2023_entering_room",
+    "scenario_sha256": "44b06f805870c155769b146f756f99e95a0c67def22b1416a782a01469c481b3",
+    "map_sha256": "eeb5be812c733ddfb8b0a5295eb99533c90c68d56de562733aa7d2bfd0363aa9",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_both",
+    "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+    "scenario": "francis2023_pedestrian_overtaking",
+    "scenario_sha256": "fce60cce9b0a9d3549d9cd670b313969b32576123004fee9a986798bbdc58255",
+    "map_sha256": "5963604a715d9caf6fcfc2c3737b545d4f4ee0bcbd7f0b7707ca5876796b7ef7",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_both",
+    "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+    "scenario": "francis2023_narrow_hallway",
+    "scenario_sha256": "d7a18ed15c28d5be4e1bc757c5987b664115c412acc2cb50fbacd92a794162f2",
+    "map_sha256": "ef0cf11ec96a69d95fac3f4e9ffc7665549045201c59bf7c4f9895462be71c6b",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_both",
+    "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+    "scenario": "francis2023_entering_room",
+    "scenario_sha256": "44b06f805870c155769b146f756f99e95a0c67def22b1416a782a01469c481b3",
+    "map_sha256": "eeb5be812c733ddfb8b0a5295eb99533c90c68d56de562733aa7d2bfd0363aa9",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_scenarios",
+    "arm": "guarded_ppo",
+    "scenario": "francis2023_pedestrian_overtaking",
+    "scenario_sha256": "fce60cce9b0a9d3549d9cd670b313969b32576123004fee9a986798bbdc58255",
+    "map_sha256": "5963604a715d9caf6fcfc2c3737b545d4f4ee0bcbd7f0b7707ca5876796b7ef7",
+    "seeds": [
+      1001,
+      1003
+    ]
+  },
+  {
+    "mode": "baseline_scenarios",
+    "arm": "guarded_ppo",
+    "scenario": "francis2023_crowd_navigation",
+    "scenario_sha256": "fde43cf456249765f668a60232b78c6b1b8a346bac4c8ca380f63d8752752748",
+    "map_sha256": "90dcec15efdd3ff8c9bc9eab31229c22526d4cb946e7d2e8bfd6f83de2c463f4",
+    "seeds": [
+      1001,
+      1003
+    ]
+  },
+  {
+    "mode": "baseline_scenarios",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape",
+    "scenario": "francis2023_pedestrian_overtaking",
+    "scenario_sha256": "fce60cce9b0a9d3549d9cd670b313969b32576123004fee9a986798bbdc58255",
+    "map_sha256": "5963604a715d9caf6fcfc2c3737b545d4f4ee0bcbd7f0b7707ca5876796b7ef7",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_scenarios",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape",
+    "scenario": "francis2023_down_path",
+    "scenario_sha256": "7217e432f6622b9286342881b946c682d1bc6fe074b6c1adaf8a6696005060fd",
+    "map_sha256": "8456ca8567a58e5154a99e216cd39dba2dee828fe421d3fe1b1f293a1d74a007",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_scenarios",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape",
+    "scenario": "francis2023_narrow_hallway",
+    "scenario_sha256": "d7a18ed15c28d5be4e1bc757c5987b664115c412acc2cb50fbacd92a794162f2",
+    "map_sha256": "ef0cf11ec96a69d95fac3f4e9ffc7665549045201c59bf7c4f9895462be71c6b",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_scenarios",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape",
+    "scenario": "francis2023_entering_room",
+    "scenario_sha256": "44b06f805870c155769b146f756f99e95a0c67def22b1416a782a01469c481b3",
+    "map_sha256": "eeb5be812c733ddfb8b0a5295eb99533c90c68d56de562733aa7d2bfd0363aa9",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_scenarios",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape",
+    "scenario": "francis2023_following_human",
+    "scenario_sha256": "acc7a8de140b6e28e8057580dc796dad137ff1b7fbdfecef137e7bd7d8cc7766",
+    "map_sha256": "8456ca8567a58e5154a99e216cd39dba2dee828fe421d3fe1b1f293a1d74a007",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_scenarios",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape",
+    "scenario": "francis2023_leading_human",
+    "scenario_sha256": "92cb2f266c3e530363be4356ed295bb50c0a5130da195777551de058c5ce15be",
+    "map_sha256": "8456ca8567a58e5154a99e216cd39dba2dee828fe421d3fe1b1f293a1d74a007",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_scenarios",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape",
+    "scenario": "francis2023_accompanying_peer",
+    "scenario_sha256": "4c8893366672a45ca8e454184ca0974c3175307e228c43dc618a024a20decfd5",
+    "map_sha256": "8456ca8567a58e5154a99e216cd39dba2dee828fe421d3fe1b1f293a1d74a007",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_scenarios",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_frontal_approach",
+    "scenario_sha256": "9a859479fe2697cda508e6c9846f7aa1dba3bfb15fc5d282cb1a1c531c9fa8f2",
+    "map_sha256": "365e34e3a5f08c383ce4577c282b5758969fb2073b98df07504eefa82e5e8240",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_scenarios",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_pedestrian_obstruction",
+    "scenario_sha256": "78af976a1a0f1f86c3b6ad11de4143bce6d92cc437f4d0b1304093565c5baa83",
+    "map_sha256": "e5c78b7105f2e9535e8b71fd9faf0a98d1fc12f9e12d5d2dd1a59fdb0f887f24",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_scenarios",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_pedestrian_overtaking",
+    "scenario_sha256": "fce60cce9b0a9d3549d9cd670b313969b32576123004fee9a986798bbdc58255",
+    "map_sha256": "5963604a715d9caf6fcfc2c3737b545d4f4ee0bcbd7f0b7707ca5876796b7ef7",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_scenarios",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_robot_overtaking",
+    "scenario_sha256": "73ac47a4760202376a92b1056d7f3f195ba2a743f19ca0bd141d04cefafc02c7",
+    "map_sha256": "90bb35d6e579a28f3ab5c6d91f45c9c7e8a6dc5985539bba8901d00853e8cf25",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_scenarios",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_down_path",
+    "scenario_sha256": "7217e432f6622b9286342881b946c682d1bc6fe074b6c1adaf8a6696005060fd",
+    "map_sha256": "8456ca8567a58e5154a99e216cd39dba2dee828fe421d3fe1b1f293a1d74a007",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_scenarios",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_entering_room",
+    "scenario_sha256": "44b06f805870c155769b146f756f99e95a0c67def22b1416a782a01469c481b3",
+    "map_sha256": "eeb5be812c733ddfb8b0a5295eb99533c90c68d56de562733aa7d2bfd0363aa9",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_scenarios",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_following_human",
+    "scenario_sha256": "acc7a8de140b6e28e8057580dc796dad137ff1b7fbdfecef137e7bd7d8cc7766",
+    "map_sha256": "8456ca8567a58e5154a99e216cd39dba2dee828fe421d3fe1b1f293a1d74a007",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_scenarios",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_leading_human",
+    "scenario_sha256": "92cb2f266c3e530363be4356ed295bb50c0a5130da195777551de058c5ce15be",
+    "map_sha256": "8456ca8567a58e5154a99e216cd39dba2dee828fe421d3fe1b1f293a1d74a007",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_scenarios",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_accompanying_peer",
+    "scenario_sha256": "4c8893366672a45ca8e454184ca0974c3175307e228c43dc618a024a20decfd5",
+    "map_sha256": "8456ca8567a58e5154a99e216cd39dba2dee828fe421d3fe1b1f293a1d74a007",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_scenarios",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_parallel_traffic",
+    "scenario_sha256": "a66f66dbd2380eb4d04ef3db8bd1555f340b9f971faf6c08626f5543a2924da4",
+    "map_sha256": "df1ec5f272601901b9d820ef8d3b0cb61ee592c031a215474db0bee37a29ad7f",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_scenarios",
+    "arm": "ppo",
+    "scenario": "classic_station_platform_medium",
+    "scenario_sha256": "3be260502de1e020030f2d8770a9e558c5c2fcfff89f1dc2dfca2eaa3c11e53b",
+    "map_sha256": "a7c14e33955316771d299b82d611f35299bb986d39442f5cc9bf24c1368e5c2a",
+    "seeds": [
+      1003
+    ]
+  },
+  {
+    "mode": "baseline_scenarios",
+    "arm": "ppo",
+    "scenario": "classic_cross_trap_low",
+    "scenario_sha256": "ef7e24a539c895c612c74b08dd50328146c84eee31097c41421fa527ac833f1f",
+    "map_sha256": "dec460721d422340653732125f8b02b76f793fb916446275ccefff60fea9c911",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "baseline_scenarios",
+    "arm": "ppo",
+    "scenario": "classic_cross_trap_medium",
+    "scenario_sha256": "f8e66c4db92011c0f7f3bcd9a78c38368a734f0ee5d160bbbe6ff4f8609a7edf",
+    "map_sha256": "dec460721d422340653732125f8b02b76f793fb916446275ccefff60fea9c911",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "baseline_scenarios",
+    "arm": "ppo",
+    "scenario": "classic_cross_trap_high",
+    "scenario_sha256": "5ba72ccec5e16ea83997170babcdf58cd40e34a8219f7c1a987df64fa61e1d0f",
+    "map_sha256": "dec460721d422340653732125f8b02b76f793fb916446275ccefff60fea9c911",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "baseline_scenarios",
+    "arm": "ppo",
+    "scenario": "francis2023_blind_corner",
+    "scenario_sha256": "afb5d04a3f5c7514904326c888137709defaf07be3b04d7805878820d8114789",
+    "map_sha256": "71ab3ce5436d45268d1b29f1d9c51ecd25e1cd15e9b3b0ffcd5561a69712679f",
+    "seeds": [
+      1001,
+      1003
+    ]
+  },
+  {
+    "mode": "baseline_scenarios",
+    "arm": "ppo",
+    "scenario": "francis2023_entering_room",
+    "scenario_sha256": "44b06f805870c155769b146f756f99e95a0c67def22b1416a782a01469c481b3",
+    "map_sha256": "eeb5be812c733ddfb8b0a5295eb99533c90c68d56de562733aa7d2bfd0363aa9",
+    "seeds": [
+      1001,
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_scenarios",
+    "arm": "ppo",
+    "scenario": "francis2023_exiting_room",
+    "scenario_sha256": "4393ae9177100d04deaec3bb89f7bc6be0ac04338aace8a3c29a8d7bb4584137",
+    "map_sha256": "e6f42c85c016f117c370e85900941fda6aeca45a90af72c483f76d5b7905474c",
+    "seeds": [
+      1003
+    ]
+  },
+  {
+    "mode": "baseline_scenarios",
+    "arm": "ppo",
+    "scenario": "francis2023_join_group",
+    "scenario_sha256": "0bb617020031cb65a8be7500f7d21fd60cf65a577b8b068c08f818bdd8fe6bdb",
+    "map_sha256": "72eae7b5bee45cf9a1aa1e086aeb4b3d9d1a87d61e69ed5c467908bb67d3fded",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "baseline_scenarios",
+    "arm": "ppo",
+    "scenario": "francis2023_leave_group",
+    "scenario_sha256": "1d29358f82cbdf82fa39121ddb363e4b9e7fcb0ddefb71ea99dd1b29ecfd99ac",
+    "map_sha256": "b5d90d5eda27621038087c18b70a4f7872aa256faddf915c4c577768edc2898e",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "baseline_scenarios",
+    "arm": "ppo",
+    "scenario": "francis2023_circular_crossing",
+    "scenario_sha256": "f8b53b955aa6d21bb3f99803da997cee5d428cd517f7e62990ea1f3aff77bd81",
+    "map_sha256": "c67c90be944dab027603cd4f0823979150d6a900aad2070fc7d2f8cce915fa5a",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "baseline_scenarios",
+    "arm": "ppo",
+    "scenario": "francis2023_robot_crowding",
+    "scenario_sha256": "6555e5d257647637afb1be4ad4900b1943adbf1a8921ac03039a8ac87d0d8d6d",
+    "map_sha256": "202c0222a132e9c5e67316646765541aca92ccb56fd5416b604a1ff77bc15617",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "baseline_scenarios",
+    "arm": "prediction_planner",
+    "scenario": "classic_t_intersection_low",
+    "scenario_sha256": "0910e88e6cf9715cd43fd9540a804faa5335f28c6a0ca0d1863e18a29beea4ab",
+    "map_sha256": "c6dea0b640bc23d7c95c7c5e1dddf0e4df6e30ee4942f7e93af8556f41b4beb5",
+    "seeds": [
+      1003
+    ]
+  },
+  {
+    "mode": "baseline_scenarios",
+    "arm": "prediction_planner",
+    "scenario": "classic_t_intersection_medium",
+    "scenario_sha256": "6c8a4f6c847e718567f6713f7d92d8dbdf8fec529cf6ec5c05d2fc17609582e5",
+    "map_sha256": "c6dea0b640bc23d7c95c7c5e1dddf0e4df6e30ee4942f7e93af8556f41b4beb5",
+    "seeds": [
+      1003
+    ]
+  },
+  {
+    "mode": "baseline_scenarios",
+    "arm": "sacadrl",
+    "scenario": "classic_head_on_corridor_low",
+    "scenario_sha256": "804c0c37604e43b237a0783401641d3c15b23e12695b81c1d1a7e5c81999fa8f",
+    "map_sha256": "89f439ac1f04561e0cd550c16be01a9674dc6fe80ba196f0dcc8f8f3c641f11b",
+    "seeds": [
+      1002,
+      1003
+    ]
+  },
+  {
+    "mode": "baseline_scenarios",
+    "arm": "sacadrl",
+    "scenario": "classic_head_on_corridor_medium",
+    "scenario_sha256": "e4513f830ac98f43e81ec3fb0ce64b946b556b24d29fae7ae67abd7ab60b06f1",
+    "map_sha256": "89f439ac1f04561e0cd550c16be01a9674dc6fe80ba196f0dcc8f8f3c641f11b",
+    "seeds": [
+      1002,
+      1003
+    ]
+  },
+  {
+    "mode": "baseline_scenarios",
+    "arm": "sacadrl",
+    "scenario": "francis2023_intersection_no_gesture",
+    "scenario_sha256": "e7bfa2d03d5f8c6183c2a28adf087a17f4b64c586e36aa0d484428efa4a414c2",
+    "map_sha256": "4bc2fc33c7c3d0466723bed8c0dc4314d716c5d8e1a3a3786dab2d34110826d0",
+    "seeds": [
+      1001,
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_scenarios",
+    "arm": "sacadrl",
+    "scenario": "francis2023_blind_corner",
+    "scenario_sha256": "afb5d04a3f5c7514904326c888137709defaf07be3b04d7805878820d8114789",
+    "map_sha256": "71ab3ce5436d45268d1b29f1d9c51ecd25e1cd15e9b3b0ffcd5561a69712679f",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "baseline_scenarios",
+    "arm": "sacadrl",
+    "scenario": "francis2023_narrow_hallway",
+    "scenario_sha256": "d7a18ed15c28d5be4e1bc757c5987b664115c412acc2cb50fbacd92a794162f2",
+    "map_sha256": "ef0cf11ec96a69d95fac3f4e9ffc7665549045201c59bf7c4f9895462be71c6b",
+    "seeds": [
+      1001,
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_scenarios",
+    "arm": "sacadrl",
+    "scenario": "francis2023_intersection_wait",
+    "scenario_sha256": "619a0eddd9022842b1fd1fed38930a6484ee989d471656f38453e8375efa4fb0",
+    "map_sha256": "4bc2fc33c7c3d0466723bed8c0dc4314d716c5d8e1a3a3786dab2d34110826d0",
+    "seeds": [
+      1001,
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_scenarios",
+    "arm": "sacadrl",
+    "scenario": "francis2023_intersection_proceed",
+    "scenario_sha256": "d92becab7593362dbd29ce199daf88248dd4fe2dfb914998f9af8a28d306ce0b",
+    "map_sha256": "4bc2fc33c7c3d0466723bed8c0dc4314d716c5d8e1a3a3786dab2d34110826d0",
+    "seeds": [
+      1001,
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_scenarios",
+    "arm": "sacadrl",
+    "scenario": "francis2023_perpendicular_traffic",
+    "scenario_sha256": "72857c7fc8849e333652d913fe86b98c6c09870382154f3a1b6f99c8347db4cc",
+    "map_sha256": "67ae3c66be2057e7da9a0182458de7e68c9c41d2f13848790fb73eb12664ee99",
+    "seeds": [
+      1001,
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_scenarios",
+    "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+    "scenario": "francis2023_pedestrian_overtaking",
+    "scenario_sha256": "fce60cce9b0a9d3549d9cd670b313969b32576123004fee9a986798bbdc58255",
+    "map_sha256": "5963604a715d9caf6fcfc2c3737b545d4f4ee0bcbd7f0b7707ca5876796b7ef7",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_scenarios",
+    "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+    "scenario": "francis2023_narrow_hallway",
+    "scenario_sha256": "d7a18ed15c28d5be4e1bc757c5987b664115c412acc2cb50fbacd92a794162f2",
+    "map_sha256": "ef0cf11ec96a69d95fac3f4e9ffc7665549045201c59bf7c4f9895462be71c6b",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_scenarios",
+    "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+    "scenario": "francis2023_entering_room",
+    "scenario_sha256": "44b06f805870c155769b146f756f99e95a0c67def22b1416a782a01469c481b3",
+    "map_sha256": "eeb5be812c733ddfb8b0a5295eb99533c90c68d56de562733aa7d2bfd0363aa9",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_scenarios",
+    "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+    "scenario": "francis2023_pedestrian_overtaking",
+    "scenario_sha256": "fce60cce9b0a9d3549d9cd670b313969b32576123004fee9a986798bbdc58255",
+    "map_sha256": "5963604a715d9caf6fcfc2c3737b545d4f4ee0bcbd7f0b7707ca5876796b7ef7",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_scenarios",
+    "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+    "scenario": "francis2023_narrow_hallway",
+    "scenario_sha256": "d7a18ed15c28d5be4e1bc757c5987b664115c412acc2cb50fbacd92a794162f2",
+    "map_sha256": "ef0cf11ec96a69d95fac3f4e9ffc7665549045201c59bf7c4f9895462be71c6b",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_scenarios",
+    "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+    "scenario": "francis2023_entering_room",
+    "scenario_sha256": "44b06f805870c155769b146f756f99e95a0c67def22b1416a782a01469c481b3",
+    "map_sha256": "eeb5be812c733ddfb8b0a5295eb99533c90c68d56de562733aa7d2bfd0363aa9",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "base_main",
+    "arm": "guarded_ppo",
+    "scenario": "francis2023_pedestrian_overtaking",
+    "scenario_sha256": "d18e5400c0a6a6a2d3c1c2e3a116bab71f29772cd542ea30ea7aec0cc8923346",
+    "map_sha256": "265884fa9a2a37b37f9d1090ce59ac3e88b1034bbf33a89816fb3f4156d28592",
+    "seeds": [
+      1001,
+      1003
+    ]
+  },
+  {
+    "mode": "base_main",
+    "arm": "guarded_ppo",
+    "scenario": "francis2023_crowd_navigation",
+    "scenario_sha256": "4def8ec8f6ac96a5e26f287aa4ebf63b0ea8a96525ef4fa12debdc5c3e65b4fd",
+    "map_sha256": "5274dbd2c17d90a7d48af38af7dbeb134e9647ba0926e0a825cf9b4af27ba4dc",
+    "seeds": [
+      1001,
+      1003
+    ]
+  },
+  {
+    "mode": "base_main",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape",
+    "scenario": "francis2023_pedestrian_overtaking",
+    "scenario_sha256": "d18e5400c0a6a6a2d3c1c2e3a116bab71f29772cd542ea30ea7aec0cc8923346",
+    "map_sha256": "265884fa9a2a37b37f9d1090ce59ac3e88b1034bbf33a89816fb3f4156d28592",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "base_main",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape",
+    "scenario": "francis2023_down_path",
+    "scenario_sha256": "19f7ebf2d230b01ffb57f82c31c4ec8fd38ddd8c2a8d5a96298c880b3b742cae",
+    "map_sha256": "56e68a19ccc76fbcd634d1ad5188947d85f37e6c4b191f25b60e5753d2754cd4",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "base_main",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape",
+    "scenario": "francis2023_narrow_hallway",
+    "scenario_sha256": "8a8bb50ace72859f1e2f3e95d12d7bc7a0292e5bf5766aa3ff501da1cb07d246",
+    "map_sha256": "d4016dc32bc4a2715dc088f510da92a6e7739513d5971022bd18478e3181cb8a",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "base_main",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape",
+    "scenario": "francis2023_entering_room",
+    "scenario_sha256": "374d81107eefc3a6b1fbc75d317e211b8362a6f57a2085bc40329fb660058a76",
+    "map_sha256": "1506b9ddbee141c7256c92802cb6513d3add4cf5a270a9bad3dd197ec7a69166",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "base_main",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape",
+    "scenario": "francis2023_following_human",
+    "scenario_sha256": "4f821b7ee2f9ceeab9a6b86b152a91bffb879e47dff197bc25e70853e01f4ce1",
+    "map_sha256": "56e68a19ccc76fbcd634d1ad5188947d85f37e6c4b191f25b60e5753d2754cd4",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "base_main",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape",
+    "scenario": "francis2023_leading_human",
+    "scenario_sha256": "511e56ea2c7116a6232ad9610922d5a662a767384c404953a054a5034a041870",
+    "map_sha256": "56e68a19ccc76fbcd634d1ad5188947d85f37e6c4b191f25b60e5753d2754cd4",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "base_main",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape",
+    "scenario": "francis2023_accompanying_peer",
+    "scenario_sha256": "f40e59ca1d34887af43aa6486e13032c231688202d342e9877661970980a273b",
+    "map_sha256": "56e68a19ccc76fbcd634d1ad5188947d85f37e6c4b191f25b60e5753d2754cd4",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "base_main",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_frontal_approach",
+    "scenario_sha256": "21adb30f2f2c3b1dea447746ed6aee37191ac14cd2a5438038798a5f614a669c",
+    "map_sha256": "076bd939f2411133ae2dd272ec51615060fc055c75351472178dc42e7c5a976d",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "base_main",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_pedestrian_obstruction",
+    "scenario_sha256": "5820be2a292e70b54c16c185c4224d88d6e1e43aa0b97adaa62c86526d72ad86",
+    "map_sha256": "3035bb837b24b710762d2d9b26777e7b355ec93cf425153120d99ea329c154fe",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "base_main",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_pedestrian_overtaking",
+    "scenario_sha256": "d18e5400c0a6a6a2d3c1c2e3a116bab71f29772cd542ea30ea7aec0cc8923346",
+    "map_sha256": "265884fa9a2a37b37f9d1090ce59ac3e88b1034bbf33a89816fb3f4156d28592",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "base_main",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_robot_overtaking",
+    "scenario_sha256": "1932ce9416410334b6fef994079092a88c5af399250a55a6929742d70864d38b",
+    "map_sha256": "7681d0b11d861aae9ffe58241f6da114c5ccdf68105b061d1770c54aff2ce999",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "base_main",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_down_path",
+    "scenario_sha256": "19f7ebf2d230b01ffb57f82c31c4ec8fd38ddd8c2a8d5a96298c880b3b742cae",
+    "map_sha256": "56e68a19ccc76fbcd634d1ad5188947d85f37e6c4b191f25b60e5753d2754cd4",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "base_main",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_entering_room",
+    "scenario_sha256": "374d81107eefc3a6b1fbc75d317e211b8362a6f57a2085bc40329fb660058a76",
+    "map_sha256": "1506b9ddbee141c7256c92802cb6513d3add4cf5a270a9bad3dd197ec7a69166",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "base_main",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_following_human",
+    "scenario_sha256": "4f821b7ee2f9ceeab9a6b86b152a91bffb879e47dff197bc25e70853e01f4ce1",
+    "map_sha256": "56e68a19ccc76fbcd634d1ad5188947d85f37e6c4b191f25b60e5753d2754cd4",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "base_main",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_leading_human",
+    "scenario_sha256": "511e56ea2c7116a6232ad9610922d5a662a767384c404953a054a5034a041870",
+    "map_sha256": "56e68a19ccc76fbcd634d1ad5188947d85f37e6c4b191f25b60e5753d2754cd4",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "base_main",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_accompanying_peer",
+    "scenario_sha256": "f40e59ca1d34887af43aa6486e13032c231688202d342e9877661970980a273b",
+    "map_sha256": "56e68a19ccc76fbcd634d1ad5188947d85f37e6c4b191f25b60e5753d2754cd4",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "base_main",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_parallel_traffic",
+    "scenario_sha256": "5d5ce2bf1b1781f55d0ac9f537a740199a03325c2510cd7ec16fc2ce4103a1d5",
+    "map_sha256": "62bc1ccceb667edfb1d4986539458984b400958e1e81098276df76304edccba6",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "base_main",
+    "arm": "ppo",
+    "scenario": "classic_station_platform_medium",
+    "scenario_sha256": "e528bacec1e14e1ece674867d49b8e6865e1b9eb47c8ce0c47e733742a6cf5b8",
+    "map_sha256": "39017d6623ca72ec8020f76025d09cd1135cc8d6868d93a58575e265375845d4",
+    "seeds": [
+      1003
+    ]
+  },
+  {
+    "mode": "base_main",
+    "arm": "ppo",
+    "scenario": "classic_cross_trap_low",
+    "scenario_sha256": "9425bd1d7715b20e1f60c27050b3a59a7069df9831123d7d3520ec12baa07a7f",
+    "map_sha256": "d3bc9ad6205108a480469338282611730410787cc897abd4d71f3f0fbd47d6a8",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "base_main",
+    "arm": "ppo",
+    "scenario": "classic_cross_trap_medium",
+    "scenario_sha256": "92ae8148551c52d511435e916ef0b1a21984d71c1d10aa8db432fdd7e171c199",
+    "map_sha256": "d3bc9ad6205108a480469338282611730410787cc897abd4d71f3f0fbd47d6a8",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "base_main",
+    "arm": "ppo",
+    "scenario": "classic_cross_trap_high",
+    "scenario_sha256": "4caaaa7f96f4a20a307708b82929cd9687c822592caa7e43dba2130fee2bfb3c",
+    "map_sha256": "d3bc9ad6205108a480469338282611730410787cc897abd4d71f3f0fbd47d6a8",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "base_main",
+    "arm": "ppo",
+    "scenario": "francis2023_blind_corner",
+    "scenario_sha256": "01edba30966f9f046aecf605f5a19f1b7848d7fcf0ea0753ca5bc379b514f4ce",
+    "map_sha256": "0eb4c229fbceb711bbe6747d84b6a2db315890fb817c68900da3ebb8a6217317",
+    "seeds": [
+      1001,
+      1003
+    ]
+  },
+  {
+    "mode": "base_main",
+    "arm": "ppo",
+    "scenario": "francis2023_entering_room",
+    "scenario_sha256": "374d81107eefc3a6b1fbc75d317e211b8362a6f57a2085bc40329fb660058a76",
+    "map_sha256": "1506b9ddbee141c7256c92802cb6513d3add4cf5a270a9bad3dd197ec7a69166",
+    "seeds": [
+      1001,
+      1002
+    ]
+  },
+  {
+    "mode": "base_main",
+    "arm": "ppo",
+    "scenario": "francis2023_exiting_room",
+    "scenario_sha256": "c4842cbe457fce84b14fbb5278df72828335e304b0f118f012811aa73d04eb6f",
+    "map_sha256": "cfd25fa09fd2a315f84f39408e57c0ec59bff14ea86d6020a07b93d75a3e434c",
+    "seeds": [
+      1003
+    ]
+  },
+  {
+    "mode": "base_main",
+    "arm": "ppo",
+    "scenario": "francis2023_join_group",
+    "scenario_sha256": "0375df1d146e9c42449da8226b18d889444d32e12807b27b50171cae527016af",
+    "map_sha256": "72a76ca81c1449be9cc736778a719beb000b5197814facf68cf0854f23ad6a54",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "base_main",
+    "arm": "ppo",
+    "scenario": "francis2023_leave_group",
+    "scenario_sha256": "d0aa07b519cf6e66c627ae6ce07ad9955c559fab3c1b0cdaab514d43c53b2650",
+    "map_sha256": "b69538eb45eee2c177218cdf35d29c2e3d6e6395f7da4199abb031d2ac37eda5",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "base_main",
+    "arm": "ppo",
+    "scenario": "francis2023_circular_crossing",
+    "scenario_sha256": "3145b0c8b860eebdbd66409149d27b2521355da855d3683c263b12af81f63e59",
+    "map_sha256": "efe54d7488e68048c610d087fabf16dadf5b8ac049f2c18fcebebe7a0aa766b8",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "base_main",
+    "arm": "ppo",
+    "scenario": "francis2023_robot_crowding",
+    "scenario_sha256": "c789ab2074322fbf69fab17d5b5dc4cd40dd3ab8c2e1ddfb298b30de2feffdfd",
+    "map_sha256": "8ced0ecd8402a30842a888ad7a2d463322c7383d38dde93a4e015e87b469b80f",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "base_main",
+    "arm": "prediction_planner",
+    "scenario": "classic_t_intersection_low",
+    "scenario_sha256": "294cae2c8a1e16c4f04da7f6d18d06e30237d020968c35682602a662783e7052",
+    "map_sha256": "111f58b931f66647af201cab235e9c3285afb71f8b731cef40286b6c9cda8877",
+    "seeds": [
+      1003
+    ]
+  },
+  {
+    "mode": "base_main",
+    "arm": "prediction_planner",
+    "scenario": "classic_t_intersection_medium",
+    "scenario_sha256": "398734ab64a950f29259ea3a6efe76a9b02b952880f4d060c2d239b54ba7bf1f",
+    "map_sha256": "111f58b931f66647af201cab235e9c3285afb71f8b731cef40286b6c9cda8877",
+    "seeds": [
+      1003
+    ]
+  },
+  {
+    "mode": "base_main",
+    "arm": "sacadrl",
+    "scenario": "classic_head_on_corridor_low",
+    "scenario_sha256": "7709293a19d499342b76f8757ce4a93636099bfc00299fb1b52fc0d799ab17a9",
+    "map_sha256": "e25e068d97d6e060e5e0e19387f23b1e63dc7b0f687bd1b7d95ccf2dd46b9457",
+    "seeds": [
+      1002,
+      1003
+    ]
+  },
+  {
+    "mode": "base_main",
+    "arm": "sacadrl",
+    "scenario": "classic_head_on_corridor_medium",
+    "scenario_sha256": "2421aa7d92555cf0038de44987c7b1affeaede608336a56e26b2b468db644df1",
+    "map_sha256": "e25e068d97d6e060e5e0e19387f23b1e63dc7b0f687bd1b7d95ccf2dd46b9457",
+    "seeds": [
+      1002,
+      1003
+    ]
+  },
+  {
+    "mode": "base_main",
+    "arm": "sacadrl",
+    "scenario": "francis2023_intersection_no_gesture",
+    "scenario_sha256": "132b3b9649dd58642ad648ceb3e2fa44acd6883c234398a07a72bc96da097348",
+    "map_sha256": "4a3670c3062e305ee26c64387def7357f42ec58dcdb3640de5e6a9493b163ea7",
+    "seeds": [
+      1001,
+      1002
+    ]
+  },
+  {
+    "mode": "base_main",
+    "arm": "sacadrl",
+    "scenario": "francis2023_blind_corner",
+    "scenario_sha256": "01edba30966f9f046aecf605f5a19f1b7848d7fcf0ea0753ca5bc379b514f4ce",
+    "map_sha256": "0eb4c229fbceb711bbe6747d84b6a2db315890fb817c68900da3ebb8a6217317",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "base_main",
+    "arm": "sacadrl",
+    "scenario": "francis2023_narrow_hallway",
+    "scenario_sha256": "8a8bb50ace72859f1e2f3e95d12d7bc7a0292e5bf5766aa3ff501da1cb07d246",
+    "map_sha256": "d4016dc32bc4a2715dc088f510da92a6e7739513d5971022bd18478e3181cb8a",
+    "seeds": [
+      1001,
+      1002
+    ]
+  },
+  {
+    "mode": "base_main",
+    "arm": "sacadrl",
+    "scenario": "francis2023_intersection_wait",
+    "scenario_sha256": "8406d491805db44bd9c7817954ca28c1136ce17024d0ee25e20012043d163f75",
+    "map_sha256": "4a3670c3062e305ee26c64387def7357f42ec58dcdb3640de5e6a9493b163ea7",
+    "seeds": [
+      1001,
+      1002
+    ]
+  },
+  {
+    "mode": "base_main",
+    "arm": "sacadrl",
+    "scenario": "francis2023_intersection_proceed",
+    "scenario_sha256": "5243abd6e86ed1871885c837fec582fd5bdf64c053d3ad4c67da3c27f9a216d4",
+    "map_sha256": "4a3670c3062e305ee26c64387def7357f42ec58dcdb3640de5e6a9493b163ea7",
+    "seeds": [
+      1001,
+      1002
+    ]
+  },
+  {
+    "mode": "base_main",
+    "arm": "sacadrl",
+    "scenario": "francis2023_perpendicular_traffic",
+    "scenario_sha256": "2ba28abbd682476e0f8112e950744f2d52c6aaa3b155efa0ed9d0f213f3c8cdc",
+    "map_sha256": "75ae14f525c561ebc70ecaa399a96d04f2957f1b6b06d197d770c573c59963dc",
+    "seeds": [
+      1001,
+      1002
+    ]
+  },
+  {
+    "mode": "base_main",
+    "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+    "scenario": "francis2023_pedestrian_overtaking",
+    "scenario_sha256": "d18e5400c0a6a6a2d3c1c2e3a116bab71f29772cd542ea30ea7aec0cc8923346",
+    "map_sha256": "265884fa9a2a37b37f9d1090ce59ac3e88b1034bbf33a89816fb3f4156d28592",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "base_main",
+    "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+    "scenario": "francis2023_narrow_hallway",
+    "scenario_sha256": "8a8bb50ace72859f1e2f3e95d12d7bc7a0292e5bf5766aa3ff501da1cb07d246",
+    "map_sha256": "d4016dc32bc4a2715dc088f510da92a6e7739513d5971022bd18478e3181cb8a",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "base_main",
+    "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+    "scenario": "francis2023_entering_room",
+    "scenario_sha256": "374d81107eefc3a6b1fbc75d317e211b8362a6f57a2085bc40329fb660058a76",
+    "map_sha256": "1506b9ddbee141c7256c92802cb6513d3add4cf5a270a9bad3dd197ec7a69166",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "base_main",
+    "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+    "scenario": "francis2023_pedestrian_overtaking",
+    "scenario_sha256": "d18e5400c0a6a6a2d3c1c2e3a116bab71f29772cd542ea30ea7aec0cc8923346",
+    "map_sha256": "265884fa9a2a37b37f9d1090ce59ac3e88b1034bbf33a89816fb3f4156d28592",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "base_main",
+    "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+    "scenario": "francis2023_narrow_hallway",
+    "scenario_sha256": "8a8bb50ace72859f1e2f3e95d12d7bc7a0292e5bf5766aa3ff501da1cb07d246",
+    "map_sha256": "d4016dc32bc4a2715dc088f510da92a6e7739513d5971022bd18478e3181cb8a",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "base_main",
+    "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+    "scenario": "francis2023_entering_room",
+    "scenario_sha256": "374d81107eefc3a6b1fbc75d317e211b8362a6f57a2085bc40329fb660058a76",
+    "map_sha256": "1506b9ddbee141c7256c92802cb6513d3add4cf5a270a9bad3dd197ec7a69166",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "contact_fixed_10104",
+    "arm": "guarded_ppo",
+    "scenario": "francis2023_pedestrian_overtaking",
+    "scenario_sha256": "d18e5400c0a6a6a2d3c1c2e3a116bab71f29772cd542ea30ea7aec0cc8923346",
+    "map_sha256": "265884fa9a2a37b37f9d1090ce59ac3e88b1034bbf33a89816fb3f4156d28592",
+    "seeds": [
+      1001,
+      1003
+    ]
+  },
+  {
+    "mode": "contact_fixed_10104",
+    "arm": "guarded_ppo",
+    "scenario": "francis2023_crowd_navigation",
+    "scenario_sha256": "4def8ec8f6ac96a5e26f287aa4ebf63b0ea8a96525ef4fa12debdc5c3e65b4fd",
+    "map_sha256": "5274dbd2c17d90a7d48af38af7dbeb134e9647ba0926e0a825cf9b4af27ba4dc",
+    "seeds": [
+      1001,
+      1003
+    ]
+  },
+  {
+    "mode": "contact_fixed_10104",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape",
+    "scenario": "francis2023_pedestrian_overtaking",
+    "scenario_sha256": "d18e5400c0a6a6a2d3c1c2e3a116bab71f29772cd542ea30ea7aec0cc8923346",
+    "map_sha256": "265884fa9a2a37b37f9d1090ce59ac3e88b1034bbf33a89816fb3f4156d28592",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "contact_fixed_10104",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape",
+    "scenario": "francis2023_down_path",
+    "scenario_sha256": "19f7ebf2d230b01ffb57f82c31c4ec8fd38ddd8c2a8d5a96298c880b3b742cae",
+    "map_sha256": "56e68a19ccc76fbcd634d1ad5188947d85f37e6c4b191f25b60e5753d2754cd4",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "contact_fixed_10104",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape",
+    "scenario": "francis2023_narrow_hallway",
+    "scenario_sha256": "8a8bb50ace72859f1e2f3e95d12d7bc7a0292e5bf5766aa3ff501da1cb07d246",
+    "map_sha256": "d4016dc32bc4a2715dc088f510da92a6e7739513d5971022bd18478e3181cb8a",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "contact_fixed_10104",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape",
+    "scenario": "francis2023_entering_room",
+    "scenario_sha256": "374d81107eefc3a6b1fbc75d317e211b8362a6f57a2085bc40329fb660058a76",
+    "map_sha256": "1506b9ddbee141c7256c92802cb6513d3add4cf5a270a9bad3dd197ec7a69166",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "contact_fixed_10104",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape",
+    "scenario": "francis2023_following_human",
+    "scenario_sha256": "4f821b7ee2f9ceeab9a6b86b152a91bffb879e47dff197bc25e70853e01f4ce1",
+    "map_sha256": "56e68a19ccc76fbcd634d1ad5188947d85f37e6c4b191f25b60e5753d2754cd4",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "contact_fixed_10104",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape",
+    "scenario": "francis2023_leading_human",
+    "scenario_sha256": "511e56ea2c7116a6232ad9610922d5a662a767384c404953a054a5034a041870",
+    "map_sha256": "56e68a19ccc76fbcd634d1ad5188947d85f37e6c4b191f25b60e5753d2754cd4",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "contact_fixed_10104",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape",
+    "scenario": "francis2023_accompanying_peer",
+    "scenario_sha256": "f40e59ca1d34887af43aa6486e13032c231688202d342e9877661970980a273b",
+    "map_sha256": "56e68a19ccc76fbcd634d1ad5188947d85f37e6c4b191f25b60e5753d2754cd4",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "contact_fixed_10104",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_frontal_approach",
+    "scenario_sha256": "21adb30f2f2c3b1dea447746ed6aee37191ac14cd2a5438038798a5f614a669c",
+    "map_sha256": "076bd939f2411133ae2dd272ec51615060fc055c75351472178dc42e7c5a976d",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "contact_fixed_10104",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_pedestrian_obstruction",
+    "scenario_sha256": "5820be2a292e70b54c16c185c4224d88d6e1e43aa0b97adaa62c86526d72ad86",
+    "map_sha256": "3035bb837b24b710762d2d9b26777e7b355ec93cf425153120d99ea329c154fe",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "contact_fixed_10104",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_pedestrian_overtaking",
+    "scenario_sha256": "d18e5400c0a6a6a2d3c1c2e3a116bab71f29772cd542ea30ea7aec0cc8923346",
+    "map_sha256": "265884fa9a2a37b37f9d1090ce59ac3e88b1034bbf33a89816fb3f4156d28592",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "contact_fixed_10104",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_robot_overtaking",
+    "scenario_sha256": "1932ce9416410334b6fef994079092a88c5af399250a55a6929742d70864d38b",
+    "map_sha256": "7681d0b11d861aae9ffe58241f6da114c5ccdf68105b061d1770c54aff2ce999",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "contact_fixed_10104",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_down_path",
+    "scenario_sha256": "19f7ebf2d230b01ffb57f82c31c4ec8fd38ddd8c2a8d5a96298c880b3b742cae",
+    "map_sha256": "56e68a19ccc76fbcd634d1ad5188947d85f37e6c4b191f25b60e5753d2754cd4",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "contact_fixed_10104",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_entering_room",
+    "scenario_sha256": "374d81107eefc3a6b1fbc75d317e211b8362a6f57a2085bc40329fb660058a76",
+    "map_sha256": "1506b9ddbee141c7256c92802cb6513d3add4cf5a270a9bad3dd197ec7a69166",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "contact_fixed_10104",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_following_human",
+    "scenario_sha256": "4f821b7ee2f9ceeab9a6b86b152a91bffb879e47dff197bc25e70853e01f4ce1",
+    "map_sha256": "56e68a19ccc76fbcd634d1ad5188947d85f37e6c4b191f25b60e5753d2754cd4",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "contact_fixed_10104",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_leading_human",
+    "scenario_sha256": "511e56ea2c7116a6232ad9610922d5a662a767384c404953a054a5034a041870",
+    "map_sha256": "56e68a19ccc76fbcd634d1ad5188947d85f37e6c4b191f25b60e5753d2754cd4",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "contact_fixed_10104",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_accompanying_peer",
+    "scenario_sha256": "f40e59ca1d34887af43aa6486e13032c231688202d342e9877661970980a273b",
+    "map_sha256": "56e68a19ccc76fbcd634d1ad5188947d85f37e6c4b191f25b60e5753d2754cd4",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "contact_fixed_10104",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_parallel_traffic",
+    "scenario_sha256": "5d5ce2bf1b1781f55d0ac9f537a740199a03325c2510cd7ec16fc2ce4103a1d5",
+    "map_sha256": "62bc1ccceb667edfb1d4986539458984b400958e1e81098276df76304edccba6",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "contact_fixed_10104",
+    "arm": "ppo",
+    "scenario": "classic_station_platform_medium",
+    "scenario_sha256": "e528bacec1e14e1ece674867d49b8e6865e1b9eb47c8ce0c47e733742a6cf5b8",
+    "map_sha256": "39017d6623ca72ec8020f76025d09cd1135cc8d6868d93a58575e265375845d4",
+    "seeds": [
+      1003
+    ]
+  },
+  {
+    "mode": "contact_fixed_10104",
+    "arm": "ppo",
+    "scenario": "classic_cross_trap_low",
+    "scenario_sha256": "9425bd1d7715b20e1f60c27050b3a59a7069df9831123d7d3520ec12baa07a7f",
+    "map_sha256": "d3bc9ad6205108a480469338282611730410787cc897abd4d71f3f0fbd47d6a8",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "contact_fixed_10104",
+    "arm": "ppo",
+    "scenario": "classic_cross_trap_medium",
+    "scenario_sha256": "92ae8148551c52d511435e916ef0b1a21984d71c1d10aa8db432fdd7e171c199",
+    "map_sha256": "d3bc9ad6205108a480469338282611730410787cc897abd4d71f3f0fbd47d6a8",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "contact_fixed_10104",
+    "arm": "ppo",
+    "scenario": "classic_cross_trap_high",
+    "scenario_sha256": "4caaaa7f96f4a20a307708b82929cd9687c822592caa7e43dba2130fee2bfb3c",
+    "map_sha256": "d3bc9ad6205108a480469338282611730410787cc897abd4d71f3f0fbd47d6a8",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "contact_fixed_10104",
+    "arm": "ppo",
+    "scenario": "francis2023_blind_corner",
+    "scenario_sha256": "01edba30966f9f046aecf605f5a19f1b7848d7fcf0ea0753ca5bc379b514f4ce",
+    "map_sha256": "0eb4c229fbceb711bbe6747d84b6a2db315890fb817c68900da3ebb8a6217317",
+    "seeds": [
+      1001,
+      1003
+    ]
+  },
+  {
+    "mode": "contact_fixed_10104",
+    "arm": "ppo",
+    "scenario": "francis2023_entering_room",
+    "scenario_sha256": "374d81107eefc3a6b1fbc75d317e211b8362a6f57a2085bc40329fb660058a76",
+    "map_sha256": "1506b9ddbee141c7256c92802cb6513d3add4cf5a270a9bad3dd197ec7a69166",
+    "seeds": [
+      1001,
+      1002
+    ]
+  },
+  {
+    "mode": "contact_fixed_10104",
+    "arm": "ppo",
+    "scenario": "francis2023_exiting_room",
+    "scenario_sha256": "c4842cbe457fce84b14fbb5278df72828335e304b0f118f012811aa73d04eb6f",
+    "map_sha256": "cfd25fa09fd2a315f84f39408e57c0ec59bff14ea86d6020a07b93d75a3e434c",
+    "seeds": [
+      1003
+    ]
+  },
+  {
+    "mode": "contact_fixed_10104",
+    "arm": "ppo",
+    "scenario": "francis2023_join_group",
+    "scenario_sha256": "0375df1d146e9c42449da8226b18d889444d32e12807b27b50171cae527016af",
+    "map_sha256": "72a76ca81c1449be9cc736778a719beb000b5197814facf68cf0854f23ad6a54",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "contact_fixed_10104",
+    "arm": "ppo",
+    "scenario": "francis2023_leave_group",
+    "scenario_sha256": "d0aa07b519cf6e66c627ae6ce07ad9955c559fab3c1b0cdaab514d43c53b2650",
+    "map_sha256": "b69538eb45eee2c177218cdf35d29c2e3d6e6395f7da4199abb031d2ac37eda5",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "contact_fixed_10104",
+    "arm": "ppo",
+    "scenario": "francis2023_circular_crossing",
+    "scenario_sha256": "3145b0c8b860eebdbd66409149d27b2521355da855d3683c263b12af81f63e59",
+    "map_sha256": "efe54d7488e68048c610d087fabf16dadf5b8ac049f2c18fcebebe7a0aa766b8",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "contact_fixed_10104",
+    "arm": "ppo",
+    "scenario": "francis2023_robot_crowding",
+    "scenario_sha256": "c789ab2074322fbf69fab17d5b5dc4cd40dd3ab8c2e1ddfb298b30de2feffdfd",
+    "map_sha256": "8ced0ecd8402a30842a888ad7a2d463322c7383d38dde93a4e015e87b469b80f",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "contact_fixed_10104",
+    "arm": "prediction_planner",
+    "scenario": "classic_t_intersection_low",
+    "scenario_sha256": "294cae2c8a1e16c4f04da7f6d18d06e30237d020968c35682602a662783e7052",
+    "map_sha256": "111f58b931f66647af201cab235e9c3285afb71f8b731cef40286b6c9cda8877",
+    "seeds": [
+      1003
+    ]
+  },
+  {
+    "mode": "contact_fixed_10104",
+    "arm": "prediction_planner",
+    "scenario": "classic_t_intersection_medium",
+    "scenario_sha256": "398734ab64a950f29259ea3a6efe76a9b02b952880f4d060c2d239b54ba7bf1f",
+    "map_sha256": "111f58b931f66647af201cab235e9c3285afb71f8b731cef40286b6c9cda8877",
+    "seeds": [
+      1003
+    ]
+  },
+  {
+    "mode": "contact_fixed_10104",
+    "arm": "sacadrl",
+    "scenario": "classic_head_on_corridor_low",
+    "scenario_sha256": "7709293a19d499342b76f8757ce4a93636099bfc00299fb1b52fc0d799ab17a9",
+    "map_sha256": "e25e068d97d6e060e5e0e19387f23b1e63dc7b0f687bd1b7d95ccf2dd46b9457",
+    "seeds": [
+      1002,
+      1003
+    ]
+  },
+  {
+    "mode": "contact_fixed_10104",
+    "arm": "sacadrl",
+    "scenario": "classic_head_on_corridor_medium",
+    "scenario_sha256": "2421aa7d92555cf0038de44987c7b1affeaede608336a56e26b2b468db644df1",
+    "map_sha256": "e25e068d97d6e060e5e0e19387f23b1e63dc7b0f687bd1b7d95ccf2dd46b9457",
+    "seeds": [
+      1002,
+      1003
+    ]
+  },
+  {
+    "mode": "contact_fixed_10104",
+    "arm": "sacadrl",
+    "scenario": "francis2023_intersection_no_gesture",
+    "scenario_sha256": "132b3b9649dd58642ad648ceb3e2fa44acd6883c234398a07a72bc96da097348",
+    "map_sha256": "4a3670c3062e305ee26c64387def7357f42ec58dcdb3640de5e6a9493b163ea7",
+    "seeds": [
+      1001,
+      1002
+    ]
+  },
+  {
+    "mode": "contact_fixed_10104",
+    "arm": "sacadrl",
+    "scenario": "francis2023_blind_corner",
+    "scenario_sha256": "01edba30966f9f046aecf605f5a19f1b7848d7fcf0ea0753ca5bc379b514f4ce",
+    "map_sha256": "0eb4c229fbceb711bbe6747d84b6a2db315890fb817c68900da3ebb8a6217317",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "contact_fixed_10104",
+    "arm": "sacadrl",
+    "scenario": "francis2023_narrow_hallway",
+    "scenario_sha256": "8a8bb50ace72859f1e2f3e95d12d7bc7a0292e5bf5766aa3ff501da1cb07d246",
+    "map_sha256": "d4016dc32bc4a2715dc088f510da92a6e7739513d5971022bd18478e3181cb8a",
+    "seeds": [
+      1001,
+      1002
+    ]
+  },
+  {
+    "mode": "contact_fixed_10104",
+    "arm": "sacadrl",
+    "scenario": "francis2023_intersection_wait",
+    "scenario_sha256": "8406d491805db44bd9c7817954ca28c1136ce17024d0ee25e20012043d163f75",
+    "map_sha256": "4a3670c3062e305ee26c64387def7357f42ec58dcdb3640de5e6a9493b163ea7",
+    "seeds": [
+      1001,
+      1002
+    ]
+  },
+  {
+    "mode": "contact_fixed_10104",
+    "arm": "sacadrl",
+    "scenario": "francis2023_intersection_proceed",
+    "scenario_sha256": "5243abd6e86ed1871885c837fec582fd5bdf64c053d3ad4c67da3c27f9a216d4",
+    "map_sha256": "4a3670c3062e305ee26c64387def7357f42ec58dcdb3640de5e6a9493b163ea7",
+    "seeds": [
+      1001,
+      1002
+    ]
+  },
+  {
+    "mode": "contact_fixed_10104",
+    "arm": "sacadrl",
+    "scenario": "francis2023_perpendicular_traffic",
+    "scenario_sha256": "2ba28abbd682476e0f8112e950744f2d52c6aaa3b155efa0ed9d0f213f3c8cdc",
+    "map_sha256": "75ae14f525c561ebc70ecaa399a96d04f2957f1b6b06d197d770c573c59963dc",
+    "seeds": [
+      1001,
+      1002
+    ]
+  },
+  {
+    "mode": "contact_fixed_10104",
+    "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+    "scenario": "francis2023_pedestrian_overtaking",
+    "scenario_sha256": "d18e5400c0a6a6a2d3c1c2e3a116bab71f29772cd542ea30ea7aec0cc8923346",
+    "map_sha256": "265884fa9a2a37b37f9d1090ce59ac3e88b1034bbf33a89816fb3f4156d28592",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "contact_fixed_10104",
+    "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+    "scenario": "francis2023_narrow_hallway",
+    "scenario_sha256": "8a8bb50ace72859f1e2f3e95d12d7bc7a0292e5bf5766aa3ff501da1cb07d246",
+    "map_sha256": "d4016dc32bc4a2715dc088f510da92a6e7739513d5971022bd18478e3181cb8a",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "contact_fixed_10104",
+    "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+    "scenario": "francis2023_entering_room",
+    "scenario_sha256": "374d81107eefc3a6b1fbc75d317e211b8362a6f57a2085bc40329fb660058a76",
+    "map_sha256": "1506b9ddbee141c7256c92802cb6513d3add4cf5a270a9bad3dd197ec7a69166",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "contact_fixed_10104",
+    "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+    "scenario": "francis2023_pedestrian_overtaking",
+    "scenario_sha256": "d18e5400c0a6a6a2d3c1c2e3a116bab71f29772cd542ea30ea7aec0cc8923346",
+    "map_sha256": "265884fa9a2a37b37f9d1090ce59ac3e88b1034bbf33a89816fb3f4156d28592",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "contact_fixed_10104",
+    "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+    "scenario": "francis2023_narrow_hallway",
+    "scenario_sha256": "8a8bb50ace72859f1e2f3e95d12d7bc7a0292e5bf5766aa3ff501da1cb07d246",
+    "map_sha256": "d4016dc32bc4a2715dc088f510da92a6e7739513d5971022bd18478e3181cb8a",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "contact_fixed_10104",
+    "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+    "scenario": "francis2023_entering_room",
+    "scenario_sha256": "374d81107eefc3a6b1fbc75d317e211b8362a6f57a2085bc40329fb660058a76",
+    "map_sha256": "1506b9ddbee141c7256c92802cb6513d3add4cf5a270a9bad3dd197ec7a69166",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "contact_original_10104",
+    "arm": "guarded_ppo",
+    "scenario": "francis2023_pedestrian_overtaking",
+    "scenario_sha256": "d18e5400c0a6a6a2d3c1c2e3a116bab71f29772cd542ea30ea7aec0cc8923346",
+    "map_sha256": "265884fa9a2a37b37f9d1090ce59ac3e88b1034bbf33a89816fb3f4156d28592",
+    "seeds": [
+      1001,
+      1003
+    ]
+  },
+  {
+    "mode": "contact_original_10104",
+    "arm": "guarded_ppo",
+    "scenario": "francis2023_crowd_navigation",
+    "scenario_sha256": "4def8ec8f6ac96a5e26f287aa4ebf63b0ea8a96525ef4fa12debdc5c3e65b4fd",
+    "map_sha256": "5274dbd2c17d90a7d48af38af7dbeb134e9647ba0926e0a825cf9b4af27ba4dc",
+    "seeds": [
+      1001,
+      1003
+    ]
+  },
+  {
+    "mode": "contact_original_10104",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape",
+    "scenario": "francis2023_pedestrian_overtaking",
+    "scenario_sha256": "d18e5400c0a6a6a2d3c1c2e3a116bab71f29772cd542ea30ea7aec0cc8923346",
+    "map_sha256": "265884fa9a2a37b37f9d1090ce59ac3e88b1034bbf33a89816fb3f4156d28592",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "contact_original_10104",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape",
+    "scenario": "francis2023_down_path",
+    "scenario_sha256": "19f7ebf2d230b01ffb57f82c31c4ec8fd38ddd8c2a8d5a96298c880b3b742cae",
+    "map_sha256": "56e68a19ccc76fbcd634d1ad5188947d85f37e6c4b191f25b60e5753d2754cd4",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "contact_original_10104",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape",
+    "scenario": "francis2023_narrow_hallway",
+    "scenario_sha256": "8a8bb50ace72859f1e2f3e95d12d7bc7a0292e5bf5766aa3ff501da1cb07d246",
+    "map_sha256": "d4016dc32bc4a2715dc088f510da92a6e7739513d5971022bd18478e3181cb8a",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "contact_original_10104",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape",
+    "scenario": "francis2023_entering_room",
+    "scenario_sha256": "374d81107eefc3a6b1fbc75d317e211b8362a6f57a2085bc40329fb660058a76",
+    "map_sha256": "1506b9ddbee141c7256c92802cb6513d3add4cf5a270a9bad3dd197ec7a69166",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "contact_original_10104",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape",
+    "scenario": "francis2023_following_human",
+    "scenario_sha256": "4f821b7ee2f9ceeab9a6b86b152a91bffb879e47dff197bc25e70853e01f4ce1",
+    "map_sha256": "56e68a19ccc76fbcd634d1ad5188947d85f37e6c4b191f25b60e5753d2754cd4",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "contact_original_10104",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape",
+    "scenario": "francis2023_leading_human",
+    "scenario_sha256": "511e56ea2c7116a6232ad9610922d5a662a767384c404953a054a5034a041870",
+    "map_sha256": "56e68a19ccc76fbcd634d1ad5188947d85f37e6c4b191f25b60e5753d2754cd4",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "contact_original_10104",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape",
+    "scenario": "francis2023_accompanying_peer",
+    "scenario_sha256": "f40e59ca1d34887af43aa6486e13032c231688202d342e9877661970980a273b",
+    "map_sha256": "56e68a19ccc76fbcd634d1ad5188947d85f37e6c4b191f25b60e5753d2754cd4",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "contact_original_10104",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_frontal_approach",
+    "scenario_sha256": "21adb30f2f2c3b1dea447746ed6aee37191ac14cd2a5438038798a5f614a669c",
+    "map_sha256": "076bd939f2411133ae2dd272ec51615060fc055c75351472178dc42e7c5a976d",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "contact_original_10104",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_pedestrian_obstruction",
+    "scenario_sha256": "5820be2a292e70b54c16c185c4224d88d6e1e43aa0b97adaa62c86526d72ad86",
+    "map_sha256": "3035bb837b24b710762d2d9b26777e7b355ec93cf425153120d99ea329c154fe",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "contact_original_10104",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_pedestrian_overtaking",
+    "scenario_sha256": "d18e5400c0a6a6a2d3c1c2e3a116bab71f29772cd542ea30ea7aec0cc8923346",
+    "map_sha256": "265884fa9a2a37b37f9d1090ce59ac3e88b1034bbf33a89816fb3f4156d28592",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "contact_original_10104",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_robot_overtaking",
+    "scenario_sha256": "1932ce9416410334b6fef994079092a88c5af399250a55a6929742d70864d38b",
+    "map_sha256": "7681d0b11d861aae9ffe58241f6da114c5ccdf68105b061d1770c54aff2ce999",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "contact_original_10104",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_down_path",
+    "scenario_sha256": "19f7ebf2d230b01ffb57f82c31c4ec8fd38ddd8c2a8d5a96298c880b3b742cae",
+    "map_sha256": "56e68a19ccc76fbcd634d1ad5188947d85f37e6c4b191f25b60e5753d2754cd4",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "contact_original_10104",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_entering_room",
+    "scenario_sha256": "374d81107eefc3a6b1fbc75d317e211b8362a6f57a2085bc40329fb660058a76",
+    "map_sha256": "1506b9ddbee141c7256c92802cb6513d3add4cf5a270a9bad3dd197ec7a69166",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "contact_original_10104",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_following_human",
+    "scenario_sha256": "4f821b7ee2f9ceeab9a6b86b152a91bffb879e47dff197bc25e70853e01f4ce1",
+    "map_sha256": "56e68a19ccc76fbcd634d1ad5188947d85f37e6c4b191f25b60e5753d2754cd4",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "contact_original_10104",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_leading_human",
+    "scenario_sha256": "511e56ea2c7116a6232ad9610922d5a662a767384c404953a054a5034a041870",
+    "map_sha256": "56e68a19ccc76fbcd634d1ad5188947d85f37e6c4b191f25b60e5753d2754cd4",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "contact_original_10104",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_accompanying_peer",
+    "scenario_sha256": "f40e59ca1d34887af43aa6486e13032c231688202d342e9877661970980a273b",
+    "map_sha256": "56e68a19ccc76fbcd634d1ad5188947d85f37e6c4b191f25b60e5753d2754cd4",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "contact_original_10104",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_parallel_traffic",
+    "scenario_sha256": "5d5ce2bf1b1781f55d0ac9f537a740199a03325c2510cd7ec16fc2ce4103a1d5",
+    "map_sha256": "62bc1ccceb667edfb1d4986539458984b400958e1e81098276df76304edccba6",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "contact_original_10104",
+    "arm": "ppo",
+    "scenario": "classic_station_platform_medium",
+    "scenario_sha256": "e528bacec1e14e1ece674867d49b8e6865e1b9eb47c8ce0c47e733742a6cf5b8",
+    "map_sha256": "39017d6623ca72ec8020f76025d09cd1135cc8d6868d93a58575e265375845d4",
+    "seeds": [
+      1003
+    ]
+  },
+  {
+    "mode": "contact_original_10104",
+    "arm": "ppo",
+    "scenario": "classic_cross_trap_low",
+    "scenario_sha256": "9425bd1d7715b20e1f60c27050b3a59a7069df9831123d7d3520ec12baa07a7f",
+    "map_sha256": "d3bc9ad6205108a480469338282611730410787cc897abd4d71f3f0fbd47d6a8",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "contact_original_10104",
+    "arm": "ppo",
+    "scenario": "classic_cross_trap_medium",
+    "scenario_sha256": "92ae8148551c52d511435e916ef0b1a21984d71c1d10aa8db432fdd7e171c199",
+    "map_sha256": "d3bc9ad6205108a480469338282611730410787cc897abd4d71f3f0fbd47d6a8",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "contact_original_10104",
+    "arm": "ppo",
+    "scenario": "classic_cross_trap_high",
+    "scenario_sha256": "4caaaa7f96f4a20a307708b82929cd9687c822592caa7e43dba2130fee2bfb3c",
+    "map_sha256": "d3bc9ad6205108a480469338282611730410787cc897abd4d71f3f0fbd47d6a8",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "contact_original_10104",
+    "arm": "ppo",
+    "scenario": "francis2023_blind_corner",
+    "scenario_sha256": "01edba30966f9f046aecf605f5a19f1b7848d7fcf0ea0753ca5bc379b514f4ce",
+    "map_sha256": "0eb4c229fbceb711bbe6747d84b6a2db315890fb817c68900da3ebb8a6217317",
+    "seeds": [
+      1001,
+      1003
+    ]
+  },
+  {
+    "mode": "contact_original_10104",
+    "arm": "ppo",
+    "scenario": "francis2023_entering_room",
+    "scenario_sha256": "374d81107eefc3a6b1fbc75d317e211b8362a6f57a2085bc40329fb660058a76",
+    "map_sha256": "1506b9ddbee141c7256c92802cb6513d3add4cf5a270a9bad3dd197ec7a69166",
+    "seeds": [
+      1001,
+      1002
+    ]
+  },
+  {
+    "mode": "contact_original_10104",
+    "arm": "ppo",
+    "scenario": "francis2023_exiting_room",
+    "scenario_sha256": "c4842cbe457fce84b14fbb5278df72828335e304b0f118f012811aa73d04eb6f",
+    "map_sha256": "cfd25fa09fd2a315f84f39408e57c0ec59bff14ea86d6020a07b93d75a3e434c",
+    "seeds": [
+      1003
+    ]
+  },
+  {
+    "mode": "contact_original_10104",
+    "arm": "ppo",
+    "scenario": "francis2023_join_group",
+    "scenario_sha256": "0375df1d146e9c42449da8226b18d889444d32e12807b27b50171cae527016af",
+    "map_sha256": "72a76ca81c1449be9cc736778a719beb000b5197814facf68cf0854f23ad6a54",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "contact_original_10104",
+    "arm": "ppo",
+    "scenario": "francis2023_leave_group",
+    "scenario_sha256": "d0aa07b519cf6e66c627ae6ce07ad9955c559fab3c1b0cdaab514d43c53b2650",
+    "map_sha256": "b69538eb45eee2c177218cdf35d29c2e3d6e6395f7da4199abb031d2ac37eda5",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "contact_original_10104",
+    "arm": "ppo",
+    "scenario": "francis2023_circular_crossing",
+    "scenario_sha256": "3145b0c8b860eebdbd66409149d27b2521355da855d3683c263b12af81f63e59",
+    "map_sha256": "efe54d7488e68048c610d087fabf16dadf5b8ac049f2c18fcebebe7a0aa766b8",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "contact_original_10104",
+    "arm": "ppo",
+    "scenario": "francis2023_robot_crowding",
+    "scenario_sha256": "c789ab2074322fbf69fab17d5b5dc4cd40dd3ab8c2e1ddfb298b30de2feffdfd",
+    "map_sha256": "8ced0ecd8402a30842a888ad7a2d463322c7383d38dde93a4e015e87b469b80f",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "contact_original_10104",
+    "arm": "prediction_planner",
+    "scenario": "classic_t_intersection_low",
+    "scenario_sha256": "294cae2c8a1e16c4f04da7f6d18d06e30237d020968c35682602a662783e7052",
+    "map_sha256": "111f58b931f66647af201cab235e9c3285afb71f8b731cef40286b6c9cda8877",
+    "seeds": [
+      1003
+    ]
+  },
+  {
+    "mode": "contact_original_10104",
+    "arm": "prediction_planner",
+    "scenario": "classic_t_intersection_medium",
+    "scenario_sha256": "398734ab64a950f29259ea3a6efe76a9b02b952880f4d060c2d239b54ba7bf1f",
+    "map_sha256": "111f58b931f66647af201cab235e9c3285afb71f8b731cef40286b6c9cda8877",
+    "seeds": [
+      1003
+    ]
+  },
+  {
+    "mode": "contact_original_10104",
+    "arm": "sacadrl",
+    "scenario": "classic_head_on_corridor_low",
+    "scenario_sha256": "7709293a19d499342b76f8757ce4a93636099bfc00299fb1b52fc0d799ab17a9",
+    "map_sha256": "e25e068d97d6e060e5e0e19387f23b1e63dc7b0f687bd1b7d95ccf2dd46b9457",
+    "seeds": [
+      1002,
+      1003
+    ]
+  },
+  {
+    "mode": "contact_original_10104",
+    "arm": "sacadrl",
+    "scenario": "classic_head_on_corridor_medium",
+    "scenario_sha256": "2421aa7d92555cf0038de44987c7b1affeaede608336a56e26b2b468db644df1",
+    "map_sha256": "e25e068d97d6e060e5e0e19387f23b1e63dc7b0f687bd1b7d95ccf2dd46b9457",
+    "seeds": [
+      1002,
+      1003
+    ]
+  },
+  {
+    "mode": "contact_original_10104",
+    "arm": "sacadrl",
+    "scenario": "francis2023_intersection_no_gesture",
+    "scenario_sha256": "132b3b9649dd58642ad648ceb3e2fa44acd6883c234398a07a72bc96da097348",
+    "map_sha256": "4a3670c3062e305ee26c64387def7357f42ec58dcdb3640de5e6a9493b163ea7",
+    "seeds": [
+      1001,
+      1002
+    ]
+  },
+  {
+    "mode": "contact_original_10104",
+    "arm": "sacadrl",
+    "scenario": "francis2023_blind_corner",
+    "scenario_sha256": "01edba30966f9f046aecf605f5a19f1b7848d7fcf0ea0753ca5bc379b514f4ce",
+    "map_sha256": "0eb4c229fbceb711bbe6747d84b6a2db315890fb817c68900da3ebb8a6217317",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "contact_original_10104",
+    "arm": "sacadrl",
+    "scenario": "francis2023_narrow_hallway",
+    "scenario_sha256": "8a8bb50ace72859f1e2f3e95d12d7bc7a0292e5bf5766aa3ff501da1cb07d246",
+    "map_sha256": "d4016dc32bc4a2715dc088f510da92a6e7739513d5971022bd18478e3181cb8a",
+    "seeds": [
+      1001,
+      1002
+    ]
+  },
+  {
+    "mode": "contact_original_10104",
+    "arm": "sacadrl",
+    "scenario": "francis2023_intersection_wait",
+    "scenario_sha256": "8406d491805db44bd9c7817954ca28c1136ce17024d0ee25e20012043d163f75",
+    "map_sha256": "4a3670c3062e305ee26c64387def7357f42ec58dcdb3640de5e6a9493b163ea7",
+    "seeds": [
+      1001,
+      1002
+    ]
+  },
+  {
+    "mode": "contact_original_10104",
+    "arm": "sacadrl",
+    "scenario": "francis2023_intersection_proceed",
+    "scenario_sha256": "5243abd6e86ed1871885c837fec582fd5bdf64c053d3ad4c67da3c27f9a216d4",
+    "map_sha256": "4a3670c3062e305ee26c64387def7357f42ec58dcdb3640de5e6a9493b163ea7",
+    "seeds": [
+      1001,
+      1002
+    ]
+  },
+  {
+    "mode": "contact_original_10104",
+    "arm": "sacadrl",
+    "scenario": "francis2023_perpendicular_traffic",
+    "scenario_sha256": "2ba28abbd682476e0f8112e950744f2d52c6aaa3b155efa0ed9d0f213f3c8cdc",
+    "map_sha256": "75ae14f525c561ebc70ecaa399a96d04f2957f1b6b06d197d770c573c59963dc",
+    "seeds": [
+      1001,
+      1002
+    ]
+  },
+  {
+    "mode": "contact_original_10104",
+    "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+    "scenario": "francis2023_pedestrian_overtaking",
+    "scenario_sha256": "d18e5400c0a6a6a2d3c1c2e3a116bab71f29772cd542ea30ea7aec0cc8923346",
+    "map_sha256": "265884fa9a2a37b37f9d1090ce59ac3e88b1034bbf33a89816fb3f4156d28592",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "contact_original_10104",
+    "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+    "scenario": "francis2023_narrow_hallway",
+    "scenario_sha256": "8a8bb50ace72859f1e2f3e95d12d7bc7a0292e5bf5766aa3ff501da1cb07d246",
+    "map_sha256": "d4016dc32bc4a2715dc088f510da92a6e7739513d5971022bd18478e3181cb8a",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "contact_original_10104",
+    "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+    "scenario": "francis2023_entering_room",
+    "scenario_sha256": "374d81107eefc3a6b1fbc75d317e211b8362a6f57a2085bc40329fb660058a76",
+    "map_sha256": "1506b9ddbee141c7256c92802cb6513d3add4cf5a270a9bad3dd197ec7a69166",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "contact_original_10104",
+    "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+    "scenario": "francis2023_pedestrian_overtaking",
+    "scenario_sha256": "d18e5400c0a6a6a2d3c1c2e3a116bab71f29772cd542ea30ea7aec0cc8923346",
+    "map_sha256": "265884fa9a2a37b37f9d1090ce59ac3e88b1034bbf33a89816fb3f4156d28592",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "contact_original_10104",
+    "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+    "scenario": "francis2023_narrow_hallway",
+    "scenario_sha256": "8a8bb50ace72859f1e2f3e95d12d7bc7a0292e5bf5766aa3ff501da1cb07d246",
+    "map_sha256": "d4016dc32bc4a2715dc088f510da92a6e7739513d5971022bd18478e3181cb8a",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "contact_original_10104",
+    "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+    "scenario": "francis2023_entering_room",
+    "scenario_sha256": "374d81107eefc3a6b1fbc75d317e211b8362a6f57a2085bc40329fb660058a76",
+    "map_sha256": "1506b9ddbee141c7256c92802cb6513d3add4cf5a270a9bad3dd197ec7a69166",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "forces_10073",
+    "arm": "guarded_ppo",
+    "scenario": "francis2023_pedestrian_overtaking",
+    "scenario_sha256": "d18e5400c0a6a6a2d3c1c2e3a116bab71f29772cd542ea30ea7aec0cc8923346",
+    "map_sha256": "265884fa9a2a37b37f9d1090ce59ac3e88b1034bbf33a89816fb3f4156d28592",
+    "seeds": [
+      1001,
+      1003
+    ]
+  },
+  {
+    "mode": "forces_10073",
+    "arm": "guarded_ppo",
+    "scenario": "francis2023_crowd_navigation",
+    "scenario_sha256": "4def8ec8f6ac96a5e26f287aa4ebf63b0ea8a96525ef4fa12debdc5c3e65b4fd",
+    "map_sha256": "5274dbd2c17d90a7d48af38af7dbeb134e9647ba0926e0a825cf9b4af27ba4dc",
+    "seeds": [
+      1001,
+      1003
+    ]
+  },
+  {
+    "mode": "forces_10073",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape",
+    "scenario": "francis2023_pedestrian_overtaking",
+    "scenario_sha256": "d18e5400c0a6a6a2d3c1c2e3a116bab71f29772cd542ea30ea7aec0cc8923346",
+    "map_sha256": "265884fa9a2a37b37f9d1090ce59ac3e88b1034bbf33a89816fb3f4156d28592",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "forces_10073",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape",
+    "scenario": "francis2023_down_path",
+    "scenario_sha256": "19f7ebf2d230b01ffb57f82c31c4ec8fd38ddd8c2a8d5a96298c880b3b742cae",
+    "map_sha256": "56e68a19ccc76fbcd634d1ad5188947d85f37e6c4b191f25b60e5753d2754cd4",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "forces_10073",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape",
+    "scenario": "francis2023_narrow_hallway",
+    "scenario_sha256": "8a8bb50ace72859f1e2f3e95d12d7bc7a0292e5bf5766aa3ff501da1cb07d246",
+    "map_sha256": "d4016dc32bc4a2715dc088f510da92a6e7739513d5971022bd18478e3181cb8a",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "forces_10073",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape",
+    "scenario": "francis2023_entering_room",
+    "scenario_sha256": "374d81107eefc3a6b1fbc75d317e211b8362a6f57a2085bc40329fb660058a76",
+    "map_sha256": "1506b9ddbee141c7256c92802cb6513d3add4cf5a270a9bad3dd197ec7a69166",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "forces_10073",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape",
+    "scenario": "francis2023_following_human",
+    "scenario_sha256": "4f821b7ee2f9ceeab9a6b86b152a91bffb879e47dff197bc25e70853e01f4ce1",
+    "map_sha256": "56e68a19ccc76fbcd634d1ad5188947d85f37e6c4b191f25b60e5753d2754cd4",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "forces_10073",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape",
+    "scenario": "francis2023_leading_human",
+    "scenario_sha256": "511e56ea2c7116a6232ad9610922d5a662a767384c404953a054a5034a041870",
+    "map_sha256": "56e68a19ccc76fbcd634d1ad5188947d85f37e6c4b191f25b60e5753d2754cd4",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "forces_10073",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape",
+    "scenario": "francis2023_accompanying_peer",
+    "scenario_sha256": "f40e59ca1d34887af43aa6486e13032c231688202d342e9877661970980a273b",
+    "map_sha256": "56e68a19ccc76fbcd634d1ad5188947d85f37e6c4b191f25b60e5753d2754cd4",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "forces_10073",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_frontal_approach",
+    "scenario_sha256": "21adb30f2f2c3b1dea447746ed6aee37191ac14cd2a5438038798a5f614a669c",
+    "map_sha256": "076bd939f2411133ae2dd272ec51615060fc055c75351472178dc42e7c5a976d",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "forces_10073",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_pedestrian_obstruction",
+    "scenario_sha256": "5820be2a292e70b54c16c185c4224d88d6e1e43aa0b97adaa62c86526d72ad86",
+    "map_sha256": "3035bb837b24b710762d2d9b26777e7b355ec93cf425153120d99ea329c154fe",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "forces_10073",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_pedestrian_overtaking",
+    "scenario_sha256": "d18e5400c0a6a6a2d3c1c2e3a116bab71f29772cd542ea30ea7aec0cc8923346",
+    "map_sha256": "265884fa9a2a37b37f9d1090ce59ac3e88b1034bbf33a89816fb3f4156d28592",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "forces_10073",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_robot_overtaking",
+    "scenario_sha256": "1932ce9416410334b6fef994079092a88c5af399250a55a6929742d70864d38b",
+    "map_sha256": "7681d0b11d861aae9ffe58241f6da114c5ccdf68105b061d1770c54aff2ce999",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "forces_10073",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_down_path",
+    "scenario_sha256": "19f7ebf2d230b01ffb57f82c31c4ec8fd38ddd8c2a8d5a96298c880b3b742cae",
+    "map_sha256": "56e68a19ccc76fbcd634d1ad5188947d85f37e6c4b191f25b60e5753d2754cd4",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "forces_10073",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_entering_room",
+    "scenario_sha256": "374d81107eefc3a6b1fbc75d317e211b8362a6f57a2085bc40329fb660058a76",
+    "map_sha256": "1506b9ddbee141c7256c92802cb6513d3add4cf5a270a9bad3dd197ec7a69166",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "forces_10073",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_following_human",
+    "scenario_sha256": "4f821b7ee2f9ceeab9a6b86b152a91bffb879e47dff197bc25e70853e01f4ce1",
+    "map_sha256": "56e68a19ccc76fbcd634d1ad5188947d85f37e6c4b191f25b60e5753d2754cd4",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "forces_10073",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_leading_human",
+    "scenario_sha256": "511e56ea2c7116a6232ad9610922d5a662a767384c404953a054a5034a041870",
+    "map_sha256": "56e68a19ccc76fbcd634d1ad5188947d85f37e6c4b191f25b60e5753d2754cd4",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "forces_10073",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_accompanying_peer",
+    "scenario_sha256": "f40e59ca1d34887af43aa6486e13032c231688202d342e9877661970980a273b",
+    "map_sha256": "56e68a19ccc76fbcd634d1ad5188947d85f37e6c4b191f25b60e5753d2754cd4",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "forces_10073",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_parallel_traffic",
+    "scenario_sha256": "5d5ce2bf1b1781f55d0ac9f537a740199a03325c2510cd7ec16fc2ce4103a1d5",
+    "map_sha256": "62bc1ccceb667edfb1d4986539458984b400958e1e81098276df76304edccba6",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "forces_10073",
+    "arm": "ppo",
+    "scenario": "classic_station_platform_medium",
+    "scenario_sha256": "e528bacec1e14e1ece674867d49b8e6865e1b9eb47c8ce0c47e733742a6cf5b8",
+    "map_sha256": "39017d6623ca72ec8020f76025d09cd1135cc8d6868d93a58575e265375845d4",
+    "seeds": [
+      1003
+    ]
+  },
+  {
+    "mode": "forces_10073",
+    "arm": "ppo",
+    "scenario": "classic_cross_trap_low",
+    "scenario_sha256": "9425bd1d7715b20e1f60c27050b3a59a7069df9831123d7d3520ec12baa07a7f",
+    "map_sha256": "d3bc9ad6205108a480469338282611730410787cc897abd4d71f3f0fbd47d6a8",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "forces_10073",
+    "arm": "ppo",
+    "scenario": "classic_cross_trap_medium",
+    "scenario_sha256": "92ae8148551c52d511435e916ef0b1a21984d71c1d10aa8db432fdd7e171c199",
+    "map_sha256": "d3bc9ad6205108a480469338282611730410787cc897abd4d71f3f0fbd47d6a8",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "forces_10073",
+    "arm": "ppo",
+    "scenario": "classic_cross_trap_high",
+    "scenario_sha256": "4caaaa7f96f4a20a307708b82929cd9687c822592caa7e43dba2130fee2bfb3c",
+    "map_sha256": "d3bc9ad6205108a480469338282611730410787cc897abd4d71f3f0fbd47d6a8",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "forces_10073",
+    "arm": "ppo",
+    "scenario": "francis2023_blind_corner",
+    "scenario_sha256": "01edba30966f9f046aecf605f5a19f1b7848d7fcf0ea0753ca5bc379b514f4ce",
+    "map_sha256": "0eb4c229fbceb711bbe6747d84b6a2db315890fb817c68900da3ebb8a6217317",
+    "seeds": [
+      1001,
+      1003
+    ]
+  },
+  {
+    "mode": "forces_10073",
+    "arm": "ppo",
+    "scenario": "francis2023_entering_room",
+    "scenario_sha256": "374d81107eefc3a6b1fbc75d317e211b8362a6f57a2085bc40329fb660058a76",
+    "map_sha256": "1506b9ddbee141c7256c92802cb6513d3add4cf5a270a9bad3dd197ec7a69166",
+    "seeds": [
+      1001,
+      1002
+    ]
+  },
+  {
+    "mode": "forces_10073",
+    "arm": "ppo",
+    "scenario": "francis2023_exiting_room",
+    "scenario_sha256": "c4842cbe457fce84b14fbb5278df72828335e304b0f118f012811aa73d04eb6f",
+    "map_sha256": "cfd25fa09fd2a315f84f39408e57c0ec59bff14ea86d6020a07b93d75a3e434c",
+    "seeds": [
+      1003
+    ]
+  },
+  {
+    "mode": "forces_10073",
+    "arm": "ppo",
+    "scenario": "francis2023_join_group",
+    "scenario_sha256": "0375df1d146e9c42449da8226b18d889444d32e12807b27b50171cae527016af",
+    "map_sha256": "72a76ca81c1449be9cc736778a719beb000b5197814facf68cf0854f23ad6a54",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "forces_10073",
+    "arm": "ppo",
+    "scenario": "francis2023_leave_group",
+    "scenario_sha256": "d0aa07b519cf6e66c627ae6ce07ad9955c559fab3c1b0cdaab514d43c53b2650",
+    "map_sha256": "b69538eb45eee2c177218cdf35d29c2e3d6e6395f7da4199abb031d2ac37eda5",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "forces_10073",
+    "arm": "ppo",
+    "scenario": "francis2023_circular_crossing",
+    "scenario_sha256": "3145b0c8b860eebdbd66409149d27b2521355da855d3683c263b12af81f63e59",
+    "map_sha256": "efe54d7488e68048c610d087fabf16dadf5b8ac049f2c18fcebebe7a0aa766b8",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "forces_10073",
+    "arm": "ppo",
+    "scenario": "francis2023_robot_crowding",
+    "scenario_sha256": "c789ab2074322fbf69fab17d5b5dc4cd40dd3ab8c2e1ddfb298b30de2feffdfd",
+    "map_sha256": "8ced0ecd8402a30842a888ad7a2d463322c7383d38dde93a4e015e87b469b80f",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "forces_10073",
+    "arm": "prediction_planner",
+    "scenario": "classic_t_intersection_low",
+    "scenario_sha256": "294cae2c8a1e16c4f04da7f6d18d06e30237d020968c35682602a662783e7052",
+    "map_sha256": "111f58b931f66647af201cab235e9c3285afb71f8b731cef40286b6c9cda8877",
+    "seeds": [
+      1003
+    ]
+  },
+  {
+    "mode": "forces_10073",
+    "arm": "prediction_planner",
+    "scenario": "classic_t_intersection_medium",
+    "scenario_sha256": "398734ab64a950f29259ea3a6efe76a9b02b952880f4d060c2d239b54ba7bf1f",
+    "map_sha256": "111f58b931f66647af201cab235e9c3285afb71f8b731cef40286b6c9cda8877",
+    "seeds": [
+      1003
+    ]
+  },
+  {
+    "mode": "forces_10073",
+    "arm": "sacadrl",
+    "scenario": "classic_head_on_corridor_low",
+    "scenario_sha256": "7709293a19d499342b76f8757ce4a93636099bfc00299fb1b52fc0d799ab17a9",
+    "map_sha256": "e25e068d97d6e060e5e0e19387f23b1e63dc7b0f687bd1b7d95ccf2dd46b9457",
+    "seeds": [
+      1002,
+      1003
+    ]
+  },
+  {
+    "mode": "forces_10073",
+    "arm": "sacadrl",
+    "scenario": "classic_head_on_corridor_medium",
+    "scenario_sha256": "2421aa7d92555cf0038de44987c7b1affeaede608336a56e26b2b468db644df1",
+    "map_sha256": "e25e068d97d6e060e5e0e19387f23b1e63dc7b0f687bd1b7d95ccf2dd46b9457",
+    "seeds": [
+      1002,
+      1003
+    ]
+  },
+  {
+    "mode": "forces_10073",
+    "arm": "sacadrl",
+    "scenario": "francis2023_intersection_no_gesture",
+    "scenario_sha256": "132b3b9649dd58642ad648ceb3e2fa44acd6883c234398a07a72bc96da097348",
+    "map_sha256": "4a3670c3062e305ee26c64387def7357f42ec58dcdb3640de5e6a9493b163ea7",
+    "seeds": [
+      1001,
+      1002
+    ]
+  },
+  {
+    "mode": "forces_10073",
+    "arm": "sacadrl",
+    "scenario": "francis2023_blind_corner",
+    "scenario_sha256": "01edba30966f9f046aecf605f5a19f1b7848d7fcf0ea0753ca5bc379b514f4ce",
+    "map_sha256": "0eb4c229fbceb711bbe6747d84b6a2db315890fb817c68900da3ebb8a6217317",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "forces_10073",
+    "arm": "sacadrl",
+    "scenario": "francis2023_narrow_hallway",
+    "scenario_sha256": "8a8bb50ace72859f1e2f3e95d12d7bc7a0292e5bf5766aa3ff501da1cb07d246",
+    "map_sha256": "d4016dc32bc4a2715dc088f510da92a6e7739513d5971022bd18478e3181cb8a",
+    "seeds": [
+      1001,
+      1002
+    ]
+  },
+  {
+    "mode": "forces_10073",
+    "arm": "sacadrl",
+    "scenario": "francis2023_intersection_wait",
+    "scenario_sha256": "8406d491805db44bd9c7817954ca28c1136ce17024d0ee25e20012043d163f75",
+    "map_sha256": "4a3670c3062e305ee26c64387def7357f42ec58dcdb3640de5e6a9493b163ea7",
+    "seeds": [
+      1001,
+      1002
+    ]
+  },
+  {
+    "mode": "forces_10073",
+    "arm": "sacadrl",
+    "scenario": "francis2023_intersection_proceed",
+    "scenario_sha256": "5243abd6e86ed1871885c837fec582fd5bdf64c053d3ad4c67da3c27f9a216d4",
+    "map_sha256": "4a3670c3062e305ee26c64387def7357f42ec58dcdb3640de5e6a9493b163ea7",
+    "seeds": [
+      1001,
+      1002
+    ]
+  },
+  {
+    "mode": "forces_10073",
+    "arm": "sacadrl",
+    "scenario": "francis2023_perpendicular_traffic",
+    "scenario_sha256": "2ba28abbd682476e0f8112e950744f2d52c6aaa3b155efa0ed9d0f213f3c8cdc",
+    "map_sha256": "75ae14f525c561ebc70ecaa399a96d04f2957f1b6b06d197d770c573c59963dc",
+    "seeds": [
+      1001,
+      1002
+    ]
+  },
+  {
+    "mode": "forces_10073",
+    "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+    "scenario": "francis2023_pedestrian_overtaking",
+    "scenario_sha256": "d18e5400c0a6a6a2d3c1c2e3a116bab71f29772cd542ea30ea7aec0cc8923346",
+    "map_sha256": "265884fa9a2a37b37f9d1090ce59ac3e88b1034bbf33a89816fb3f4156d28592",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "forces_10073",
+    "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+    "scenario": "francis2023_narrow_hallway",
+    "scenario_sha256": "8a8bb50ace72859f1e2f3e95d12d7bc7a0292e5bf5766aa3ff501da1cb07d246",
+    "map_sha256": "d4016dc32bc4a2715dc088f510da92a6e7739513d5971022bd18478e3181cb8a",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "forces_10073",
+    "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+    "scenario": "francis2023_entering_room",
+    "scenario_sha256": "374d81107eefc3a6b1fbc75d317e211b8362a6f57a2085bc40329fb660058a76",
+    "map_sha256": "1506b9ddbee141c7256c92802cb6513d3add4cf5a270a9bad3dd197ec7a69166",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "forces_10073",
+    "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+    "scenario": "francis2023_pedestrian_overtaking",
+    "scenario_sha256": "d18e5400c0a6a6a2d3c1c2e3a116bab71f29772cd542ea30ea7aec0cc8923346",
+    "map_sha256": "265884fa9a2a37b37f9d1090ce59ac3e88b1034bbf33a89816fb3f4156d28592",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "forces_10073",
+    "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+    "scenario": "francis2023_narrow_hallway",
+    "scenario_sha256": "8a8bb50ace72859f1e2f3e95d12d7bc7a0292e5bf5766aa3ff501da1cb07d246",
+    "map_sha256": "d4016dc32bc4a2715dc088f510da92a6e7739513d5971022bd18478e3181cb8a",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "forces_10073",
+    "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+    "scenario": "francis2023_entering_room",
+    "scenario_sha256": "374d81107eefc3a6b1fbc75d317e211b8362a6f57a2085bc40329fb660058a76",
+    "map_sha256": "1506b9ddbee141c7256c92802cb6513d3add4cf5a270a9bad3dd197ec7a69166",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "initial_10094",
+    "arm": "guarded_ppo",
+    "scenario": "francis2023_pedestrian_overtaking",
+    "scenario_sha256": "d18e5400c0a6a6a2d3c1c2e3a116bab71f29772cd542ea30ea7aec0cc8923346",
+    "map_sha256": "265884fa9a2a37b37f9d1090ce59ac3e88b1034bbf33a89816fb3f4156d28592",
+    "seeds": [
+      1001,
+      1003
+    ]
+  },
+  {
+    "mode": "initial_10094",
+    "arm": "guarded_ppo",
+    "scenario": "francis2023_crowd_navigation",
+    "scenario_sha256": "4def8ec8f6ac96a5e26f287aa4ebf63b0ea8a96525ef4fa12debdc5c3e65b4fd",
+    "map_sha256": "5274dbd2c17d90a7d48af38af7dbeb134e9647ba0926e0a825cf9b4af27ba4dc",
+    "seeds": [
+      1001,
+      1003
+    ]
+  },
+  {
+    "mode": "initial_10094",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape",
+    "scenario": "francis2023_pedestrian_overtaking",
+    "scenario_sha256": "d18e5400c0a6a6a2d3c1c2e3a116bab71f29772cd542ea30ea7aec0cc8923346",
+    "map_sha256": "265884fa9a2a37b37f9d1090ce59ac3e88b1034bbf33a89816fb3f4156d28592",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "initial_10094",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape",
+    "scenario": "francis2023_down_path",
+    "scenario_sha256": "19f7ebf2d230b01ffb57f82c31c4ec8fd38ddd8c2a8d5a96298c880b3b742cae",
+    "map_sha256": "56e68a19ccc76fbcd634d1ad5188947d85f37e6c4b191f25b60e5753d2754cd4",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "initial_10094",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape",
+    "scenario": "francis2023_narrow_hallway",
+    "scenario_sha256": "8a8bb50ace72859f1e2f3e95d12d7bc7a0292e5bf5766aa3ff501da1cb07d246",
+    "map_sha256": "d4016dc32bc4a2715dc088f510da92a6e7739513d5971022bd18478e3181cb8a",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "initial_10094",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape",
+    "scenario": "francis2023_entering_room",
+    "scenario_sha256": "374d81107eefc3a6b1fbc75d317e211b8362a6f57a2085bc40329fb660058a76",
+    "map_sha256": "1506b9ddbee141c7256c92802cb6513d3add4cf5a270a9bad3dd197ec7a69166",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "initial_10094",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape",
+    "scenario": "francis2023_following_human",
+    "scenario_sha256": "4f821b7ee2f9ceeab9a6b86b152a91bffb879e47dff197bc25e70853e01f4ce1",
+    "map_sha256": "56e68a19ccc76fbcd634d1ad5188947d85f37e6c4b191f25b60e5753d2754cd4",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "initial_10094",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape",
+    "scenario": "francis2023_leading_human",
+    "scenario_sha256": "511e56ea2c7116a6232ad9610922d5a662a767384c404953a054a5034a041870",
+    "map_sha256": "56e68a19ccc76fbcd634d1ad5188947d85f37e6c4b191f25b60e5753d2754cd4",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "initial_10094",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape",
+    "scenario": "francis2023_accompanying_peer",
+    "scenario_sha256": "f40e59ca1d34887af43aa6486e13032c231688202d342e9877661970980a273b",
+    "map_sha256": "56e68a19ccc76fbcd634d1ad5188947d85f37e6c4b191f25b60e5753d2754cd4",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "initial_10094",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_frontal_approach",
+    "scenario_sha256": "21adb30f2f2c3b1dea447746ed6aee37191ac14cd2a5438038798a5f614a669c",
+    "map_sha256": "076bd939f2411133ae2dd272ec51615060fc055c75351472178dc42e7c5a976d",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "initial_10094",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_pedestrian_obstruction",
+    "scenario_sha256": "5820be2a292e70b54c16c185c4224d88d6e1e43aa0b97adaa62c86526d72ad86",
+    "map_sha256": "3035bb837b24b710762d2d9b26777e7b355ec93cf425153120d99ea329c154fe",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "initial_10094",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_pedestrian_overtaking",
+    "scenario_sha256": "d18e5400c0a6a6a2d3c1c2e3a116bab71f29772cd542ea30ea7aec0cc8923346",
+    "map_sha256": "265884fa9a2a37b37f9d1090ce59ac3e88b1034bbf33a89816fb3f4156d28592",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "initial_10094",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_robot_overtaking",
+    "scenario_sha256": "1932ce9416410334b6fef994079092a88c5af399250a55a6929742d70864d38b",
+    "map_sha256": "7681d0b11d861aae9ffe58241f6da114c5ccdf68105b061d1770c54aff2ce999",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "initial_10094",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_down_path",
+    "scenario_sha256": "19f7ebf2d230b01ffb57f82c31c4ec8fd38ddd8c2a8d5a96298c880b3b742cae",
+    "map_sha256": "56e68a19ccc76fbcd634d1ad5188947d85f37e6c4b191f25b60e5753d2754cd4",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "initial_10094",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_entering_room",
+    "scenario_sha256": "374d81107eefc3a6b1fbc75d317e211b8362a6f57a2085bc40329fb660058a76",
+    "map_sha256": "1506b9ddbee141c7256c92802cb6513d3add4cf5a270a9bad3dd197ec7a69166",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "initial_10094",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_following_human",
+    "scenario_sha256": "4f821b7ee2f9ceeab9a6b86b152a91bffb879e47dff197bc25e70853e01f4ce1",
+    "map_sha256": "56e68a19ccc76fbcd634d1ad5188947d85f37e6c4b191f25b60e5753d2754cd4",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "initial_10094",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_leading_human",
+    "scenario_sha256": "511e56ea2c7116a6232ad9610922d5a662a767384c404953a054a5034a041870",
+    "map_sha256": "56e68a19ccc76fbcd634d1ad5188947d85f37e6c4b191f25b60e5753d2754cd4",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "initial_10094",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_accompanying_peer",
+    "scenario_sha256": "f40e59ca1d34887af43aa6486e13032c231688202d342e9877661970980a273b",
+    "map_sha256": "56e68a19ccc76fbcd634d1ad5188947d85f37e6c4b191f25b60e5753d2754cd4",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "initial_10094",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_parallel_traffic",
+    "scenario_sha256": "5d5ce2bf1b1781f55d0ac9f537a740199a03325c2510cd7ec16fc2ce4103a1d5",
+    "map_sha256": "62bc1ccceb667edfb1d4986539458984b400958e1e81098276df76304edccba6",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "initial_10094",
+    "arm": "ppo",
+    "scenario": "classic_station_platform_medium",
+    "scenario_sha256": "e528bacec1e14e1ece674867d49b8e6865e1b9eb47c8ce0c47e733742a6cf5b8",
+    "map_sha256": "39017d6623ca72ec8020f76025d09cd1135cc8d6868d93a58575e265375845d4",
+    "seeds": [
+      1003
+    ]
+  },
+  {
+    "mode": "initial_10094",
+    "arm": "ppo",
+    "scenario": "classic_cross_trap_low",
+    "scenario_sha256": "9425bd1d7715b20e1f60c27050b3a59a7069df9831123d7d3520ec12baa07a7f",
+    "map_sha256": "d3bc9ad6205108a480469338282611730410787cc897abd4d71f3f0fbd47d6a8",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "initial_10094",
+    "arm": "ppo",
+    "scenario": "classic_cross_trap_medium",
+    "scenario_sha256": "92ae8148551c52d511435e916ef0b1a21984d71c1d10aa8db432fdd7e171c199",
+    "map_sha256": "d3bc9ad6205108a480469338282611730410787cc897abd4d71f3f0fbd47d6a8",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "initial_10094",
+    "arm": "ppo",
+    "scenario": "classic_cross_trap_high",
+    "scenario_sha256": "4caaaa7f96f4a20a307708b82929cd9687c822592caa7e43dba2130fee2bfb3c",
+    "map_sha256": "d3bc9ad6205108a480469338282611730410787cc897abd4d71f3f0fbd47d6a8",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "initial_10094",
+    "arm": "ppo",
+    "scenario": "francis2023_blind_corner",
+    "scenario_sha256": "01edba30966f9f046aecf605f5a19f1b7848d7fcf0ea0753ca5bc379b514f4ce",
+    "map_sha256": "0eb4c229fbceb711bbe6747d84b6a2db315890fb817c68900da3ebb8a6217317",
+    "seeds": [
+      1001,
+      1003
+    ]
+  },
+  {
+    "mode": "initial_10094",
+    "arm": "ppo",
+    "scenario": "francis2023_entering_room",
+    "scenario_sha256": "374d81107eefc3a6b1fbc75d317e211b8362a6f57a2085bc40329fb660058a76",
+    "map_sha256": "1506b9ddbee141c7256c92802cb6513d3add4cf5a270a9bad3dd197ec7a69166",
+    "seeds": [
+      1001,
+      1002
+    ]
+  },
+  {
+    "mode": "initial_10094",
+    "arm": "ppo",
+    "scenario": "francis2023_exiting_room",
+    "scenario_sha256": "c4842cbe457fce84b14fbb5278df72828335e304b0f118f012811aa73d04eb6f",
+    "map_sha256": "cfd25fa09fd2a315f84f39408e57c0ec59bff14ea86d6020a07b93d75a3e434c",
+    "seeds": [
+      1003
+    ]
+  },
+  {
+    "mode": "initial_10094",
+    "arm": "ppo",
+    "scenario": "francis2023_join_group",
+    "scenario_sha256": "0375df1d146e9c42449da8226b18d889444d32e12807b27b50171cae527016af",
+    "map_sha256": "72a76ca81c1449be9cc736778a719beb000b5197814facf68cf0854f23ad6a54",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "initial_10094",
+    "arm": "ppo",
+    "scenario": "francis2023_leave_group",
+    "scenario_sha256": "d0aa07b519cf6e66c627ae6ce07ad9955c559fab3c1b0cdaab514d43c53b2650",
+    "map_sha256": "b69538eb45eee2c177218cdf35d29c2e3d6e6395f7da4199abb031d2ac37eda5",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "initial_10094",
+    "arm": "ppo",
+    "scenario": "francis2023_circular_crossing",
+    "scenario_sha256": "3145b0c8b860eebdbd66409149d27b2521355da855d3683c263b12af81f63e59",
+    "map_sha256": "efe54d7488e68048c610d087fabf16dadf5b8ac049f2c18fcebebe7a0aa766b8",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "initial_10094",
+    "arm": "ppo",
+    "scenario": "francis2023_robot_crowding",
+    "scenario_sha256": "c789ab2074322fbf69fab17d5b5dc4cd40dd3ab8c2e1ddfb298b30de2feffdfd",
+    "map_sha256": "8ced0ecd8402a30842a888ad7a2d463322c7383d38dde93a4e015e87b469b80f",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "initial_10094",
+    "arm": "prediction_planner",
+    "scenario": "classic_t_intersection_low",
+    "scenario_sha256": "294cae2c8a1e16c4f04da7f6d18d06e30237d020968c35682602a662783e7052",
+    "map_sha256": "111f58b931f66647af201cab235e9c3285afb71f8b731cef40286b6c9cda8877",
+    "seeds": [
+      1003
+    ]
+  },
+  {
+    "mode": "initial_10094",
+    "arm": "prediction_planner",
+    "scenario": "classic_t_intersection_medium",
+    "scenario_sha256": "398734ab64a950f29259ea3a6efe76a9b02b952880f4d060c2d239b54ba7bf1f",
+    "map_sha256": "111f58b931f66647af201cab235e9c3285afb71f8b731cef40286b6c9cda8877",
+    "seeds": [
+      1003
+    ]
+  },
+  {
+    "mode": "initial_10094",
+    "arm": "sacadrl",
+    "scenario": "classic_head_on_corridor_low",
+    "scenario_sha256": "7709293a19d499342b76f8757ce4a93636099bfc00299fb1b52fc0d799ab17a9",
+    "map_sha256": "e25e068d97d6e060e5e0e19387f23b1e63dc7b0f687bd1b7d95ccf2dd46b9457",
+    "seeds": [
+      1002,
+      1003
+    ]
+  },
+  {
+    "mode": "initial_10094",
+    "arm": "sacadrl",
+    "scenario": "classic_head_on_corridor_medium",
+    "scenario_sha256": "2421aa7d92555cf0038de44987c7b1affeaede608336a56e26b2b468db644df1",
+    "map_sha256": "e25e068d97d6e060e5e0e19387f23b1e63dc7b0f687bd1b7d95ccf2dd46b9457",
+    "seeds": [
+      1002,
+      1003
+    ]
+  },
+  {
+    "mode": "initial_10094",
+    "arm": "sacadrl",
+    "scenario": "francis2023_intersection_no_gesture",
+    "scenario_sha256": "132b3b9649dd58642ad648ceb3e2fa44acd6883c234398a07a72bc96da097348",
+    "map_sha256": "4a3670c3062e305ee26c64387def7357f42ec58dcdb3640de5e6a9493b163ea7",
+    "seeds": [
+      1001,
+      1002
+    ]
+  },
+  {
+    "mode": "initial_10094",
+    "arm": "sacadrl",
+    "scenario": "francis2023_blind_corner",
+    "scenario_sha256": "01edba30966f9f046aecf605f5a19f1b7848d7fcf0ea0753ca5bc379b514f4ce",
+    "map_sha256": "0eb4c229fbceb711bbe6747d84b6a2db315890fb817c68900da3ebb8a6217317",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "initial_10094",
+    "arm": "sacadrl",
+    "scenario": "francis2023_narrow_hallway",
+    "scenario_sha256": "8a8bb50ace72859f1e2f3e95d12d7bc7a0292e5bf5766aa3ff501da1cb07d246",
+    "map_sha256": "d4016dc32bc4a2715dc088f510da92a6e7739513d5971022bd18478e3181cb8a",
+    "seeds": [
+      1001,
+      1002
+    ]
+  },
+  {
+    "mode": "initial_10094",
+    "arm": "sacadrl",
+    "scenario": "francis2023_intersection_wait",
+    "scenario_sha256": "8406d491805db44bd9c7817954ca28c1136ce17024d0ee25e20012043d163f75",
+    "map_sha256": "4a3670c3062e305ee26c64387def7357f42ec58dcdb3640de5e6a9493b163ea7",
+    "seeds": [
+      1001,
+      1002
+    ]
+  },
+  {
+    "mode": "initial_10094",
+    "arm": "sacadrl",
+    "scenario": "francis2023_intersection_proceed",
+    "scenario_sha256": "5243abd6e86ed1871885c837fec582fd5bdf64c053d3ad4c67da3c27f9a216d4",
+    "map_sha256": "4a3670c3062e305ee26c64387def7357f42ec58dcdb3640de5e6a9493b163ea7",
+    "seeds": [
+      1001,
+      1002
+    ]
+  },
+  {
+    "mode": "initial_10094",
+    "arm": "sacadrl",
+    "scenario": "francis2023_perpendicular_traffic",
+    "scenario_sha256": "2ba28abbd682476e0f8112e950744f2d52c6aaa3b155efa0ed9d0f213f3c8cdc",
+    "map_sha256": "75ae14f525c561ebc70ecaa399a96d04f2957f1b6b06d197d770c573c59963dc",
+    "seeds": [
+      1001,
+      1002
+    ]
+  },
+  {
+    "mode": "initial_10094",
+    "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+    "scenario": "francis2023_pedestrian_overtaking",
+    "scenario_sha256": "d18e5400c0a6a6a2d3c1c2e3a116bab71f29772cd542ea30ea7aec0cc8923346",
+    "map_sha256": "265884fa9a2a37b37f9d1090ce59ac3e88b1034bbf33a89816fb3f4156d28592",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "initial_10094",
+    "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+    "scenario": "francis2023_narrow_hallway",
+    "scenario_sha256": "8a8bb50ace72859f1e2f3e95d12d7bc7a0292e5bf5766aa3ff501da1cb07d246",
+    "map_sha256": "d4016dc32bc4a2715dc088f510da92a6e7739513d5971022bd18478e3181cb8a",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "initial_10094",
+    "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+    "scenario": "francis2023_entering_room",
+    "scenario_sha256": "374d81107eefc3a6b1fbc75d317e211b8362a6f57a2085bc40329fb660058a76",
+    "map_sha256": "1506b9ddbee141c7256c92802cb6513d3add4cf5a270a9bad3dd197ec7a69166",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "initial_10094",
+    "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+    "scenario": "francis2023_pedestrian_overtaking",
+    "scenario_sha256": "d18e5400c0a6a6a2d3c1c2e3a116bab71f29772cd542ea30ea7aec0cc8923346",
+    "map_sha256": "265884fa9a2a37b37f9d1090ce59ac3e88b1034bbf33a89816fb3f4156d28592",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "initial_10094",
+    "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+    "scenario": "francis2023_narrow_hallway",
+    "scenario_sha256": "8a8bb50ace72859f1e2f3e95d12d7bc7a0292e5bf5766aa3ff501da1cb07d246",
+    "map_sha256": "d4016dc32bc4a2715dc088f510da92a6e7739513d5971022bd18478e3181cb8a",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "initial_10094",
+    "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+    "scenario": "francis2023_entering_room",
+    "scenario_sha256": "374d81107eefc3a6b1fbc75d317e211b8362a6f57a2085bc40329fb660058a76",
+    "map_sha256": "1506b9ddbee141c7256c92802cb6513d3add4cf5a270a9bad3dd197ec7a69166",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "radius_10075",
+    "arm": "guarded_ppo",
+    "scenario": "francis2023_pedestrian_overtaking",
+    "scenario_sha256": "d18e5400c0a6a6a2d3c1c2e3a116bab71f29772cd542ea30ea7aec0cc8923346",
+    "map_sha256": "265884fa9a2a37b37f9d1090ce59ac3e88b1034bbf33a89816fb3f4156d28592",
+    "seeds": [
+      1001,
+      1003
+    ]
+  },
+  {
+    "mode": "radius_10075",
+    "arm": "guarded_ppo",
+    "scenario": "francis2023_crowd_navigation",
+    "scenario_sha256": "4def8ec8f6ac96a5e26f287aa4ebf63b0ea8a96525ef4fa12debdc5c3e65b4fd",
+    "map_sha256": "5274dbd2c17d90a7d48af38af7dbeb134e9647ba0926e0a825cf9b4af27ba4dc",
+    "seeds": [
+      1001,
+      1003
+    ]
+  },
+  {
+    "mode": "radius_10075",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape",
+    "scenario": "francis2023_pedestrian_overtaking",
+    "scenario_sha256": "d18e5400c0a6a6a2d3c1c2e3a116bab71f29772cd542ea30ea7aec0cc8923346",
+    "map_sha256": "265884fa9a2a37b37f9d1090ce59ac3e88b1034bbf33a89816fb3f4156d28592",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "radius_10075",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape",
+    "scenario": "francis2023_down_path",
+    "scenario_sha256": "19f7ebf2d230b01ffb57f82c31c4ec8fd38ddd8c2a8d5a96298c880b3b742cae",
+    "map_sha256": "56e68a19ccc76fbcd634d1ad5188947d85f37e6c4b191f25b60e5753d2754cd4",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "radius_10075",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape",
+    "scenario": "francis2023_narrow_hallway",
+    "scenario_sha256": "8a8bb50ace72859f1e2f3e95d12d7bc7a0292e5bf5766aa3ff501da1cb07d246",
+    "map_sha256": "d4016dc32bc4a2715dc088f510da92a6e7739513d5971022bd18478e3181cb8a",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "radius_10075",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape",
+    "scenario": "francis2023_entering_room",
+    "scenario_sha256": "374d81107eefc3a6b1fbc75d317e211b8362a6f57a2085bc40329fb660058a76",
+    "map_sha256": "1506b9ddbee141c7256c92802cb6513d3add4cf5a270a9bad3dd197ec7a69166",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "radius_10075",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape",
+    "scenario": "francis2023_following_human",
+    "scenario_sha256": "4f821b7ee2f9ceeab9a6b86b152a91bffb879e47dff197bc25e70853e01f4ce1",
+    "map_sha256": "56e68a19ccc76fbcd634d1ad5188947d85f37e6c4b191f25b60e5753d2754cd4",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "radius_10075",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape",
+    "scenario": "francis2023_leading_human",
+    "scenario_sha256": "511e56ea2c7116a6232ad9610922d5a662a767384c404953a054a5034a041870",
+    "map_sha256": "56e68a19ccc76fbcd634d1ad5188947d85f37e6c4b191f25b60e5753d2754cd4",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "radius_10075",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape",
+    "scenario": "francis2023_accompanying_peer",
+    "scenario_sha256": "f40e59ca1d34887af43aa6486e13032c231688202d342e9877661970980a273b",
+    "map_sha256": "56e68a19ccc76fbcd634d1ad5188947d85f37e6c4b191f25b60e5753d2754cd4",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "radius_10075",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_frontal_approach",
+    "scenario_sha256": "21adb30f2f2c3b1dea447746ed6aee37191ac14cd2a5438038798a5f614a669c",
+    "map_sha256": "076bd939f2411133ae2dd272ec51615060fc055c75351472178dc42e7c5a976d",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "radius_10075",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_pedestrian_obstruction",
+    "scenario_sha256": "5820be2a292e70b54c16c185c4224d88d6e1e43aa0b97adaa62c86526d72ad86",
+    "map_sha256": "3035bb837b24b710762d2d9b26777e7b355ec93cf425153120d99ea329c154fe",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "radius_10075",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_pedestrian_overtaking",
+    "scenario_sha256": "d18e5400c0a6a6a2d3c1c2e3a116bab71f29772cd542ea30ea7aec0cc8923346",
+    "map_sha256": "265884fa9a2a37b37f9d1090ce59ac3e88b1034bbf33a89816fb3f4156d28592",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "radius_10075",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_robot_overtaking",
+    "scenario_sha256": "1932ce9416410334b6fef994079092a88c5af399250a55a6929742d70864d38b",
+    "map_sha256": "7681d0b11d861aae9ffe58241f6da114c5ccdf68105b061d1770c54aff2ce999",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "radius_10075",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_down_path",
+    "scenario_sha256": "19f7ebf2d230b01ffb57f82c31c4ec8fd38ddd8c2a8d5a96298c880b3b742cae",
+    "map_sha256": "56e68a19ccc76fbcd634d1ad5188947d85f37e6c4b191f25b60e5753d2754cd4",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "radius_10075",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_entering_room",
+    "scenario_sha256": "374d81107eefc3a6b1fbc75d317e211b8362a6f57a2085bc40329fb660058a76",
+    "map_sha256": "1506b9ddbee141c7256c92802cb6513d3add4cf5a270a9bad3dd197ec7a69166",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "radius_10075",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_following_human",
+    "scenario_sha256": "4f821b7ee2f9ceeab9a6b86b152a91bffb879e47dff197bc25e70853e01f4ce1",
+    "map_sha256": "56e68a19ccc76fbcd634d1ad5188947d85f37e6c4b191f25b60e5753d2754cd4",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "radius_10075",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_leading_human",
+    "scenario_sha256": "511e56ea2c7116a6232ad9610922d5a662a767384c404953a054a5034a041870",
+    "map_sha256": "56e68a19ccc76fbcd634d1ad5188947d85f37e6c4b191f25b60e5753d2754cd4",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "radius_10075",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_accompanying_peer",
+    "scenario_sha256": "f40e59ca1d34887af43aa6486e13032c231688202d342e9877661970980a273b",
+    "map_sha256": "56e68a19ccc76fbcd634d1ad5188947d85f37e6c4b191f25b60e5753d2754cd4",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "radius_10075",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_parallel_traffic",
+    "scenario_sha256": "5d5ce2bf1b1781f55d0ac9f537a740199a03325c2510cd7ec16fc2ce4103a1d5",
+    "map_sha256": "62bc1ccceb667edfb1d4986539458984b400958e1e81098276df76304edccba6",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "radius_10075",
+    "arm": "ppo",
+    "scenario": "classic_station_platform_medium",
+    "scenario_sha256": "e528bacec1e14e1ece674867d49b8e6865e1b9eb47c8ce0c47e733742a6cf5b8",
+    "map_sha256": "39017d6623ca72ec8020f76025d09cd1135cc8d6868d93a58575e265375845d4",
+    "seeds": [
+      1003
+    ]
+  },
+  {
+    "mode": "radius_10075",
+    "arm": "ppo",
+    "scenario": "classic_cross_trap_low",
+    "scenario_sha256": "9425bd1d7715b20e1f60c27050b3a59a7069df9831123d7d3520ec12baa07a7f",
+    "map_sha256": "d3bc9ad6205108a480469338282611730410787cc897abd4d71f3f0fbd47d6a8",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "radius_10075",
+    "arm": "ppo",
+    "scenario": "classic_cross_trap_medium",
+    "scenario_sha256": "92ae8148551c52d511435e916ef0b1a21984d71c1d10aa8db432fdd7e171c199",
+    "map_sha256": "d3bc9ad6205108a480469338282611730410787cc897abd4d71f3f0fbd47d6a8",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "radius_10075",
+    "arm": "ppo",
+    "scenario": "classic_cross_trap_high",
+    "scenario_sha256": "4caaaa7f96f4a20a307708b82929cd9687c822592caa7e43dba2130fee2bfb3c",
+    "map_sha256": "d3bc9ad6205108a480469338282611730410787cc897abd4d71f3f0fbd47d6a8",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "radius_10075",
+    "arm": "ppo",
+    "scenario": "francis2023_blind_corner",
+    "scenario_sha256": "01edba30966f9f046aecf605f5a19f1b7848d7fcf0ea0753ca5bc379b514f4ce",
+    "map_sha256": "0eb4c229fbceb711bbe6747d84b6a2db315890fb817c68900da3ebb8a6217317",
+    "seeds": [
+      1001,
+      1003
+    ]
+  },
+  {
+    "mode": "radius_10075",
+    "arm": "ppo",
+    "scenario": "francis2023_entering_room",
+    "scenario_sha256": "374d81107eefc3a6b1fbc75d317e211b8362a6f57a2085bc40329fb660058a76",
+    "map_sha256": "1506b9ddbee141c7256c92802cb6513d3add4cf5a270a9bad3dd197ec7a69166",
+    "seeds": [
+      1001,
+      1002
+    ]
+  },
+  {
+    "mode": "radius_10075",
+    "arm": "ppo",
+    "scenario": "francis2023_exiting_room",
+    "scenario_sha256": "c4842cbe457fce84b14fbb5278df72828335e304b0f118f012811aa73d04eb6f",
+    "map_sha256": "cfd25fa09fd2a315f84f39408e57c0ec59bff14ea86d6020a07b93d75a3e434c",
+    "seeds": [
+      1003
+    ]
+  },
+  {
+    "mode": "radius_10075",
+    "arm": "ppo",
+    "scenario": "francis2023_join_group",
+    "scenario_sha256": "0375df1d146e9c42449da8226b18d889444d32e12807b27b50171cae527016af",
+    "map_sha256": "72a76ca81c1449be9cc736778a719beb000b5197814facf68cf0854f23ad6a54",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "radius_10075",
+    "arm": "ppo",
+    "scenario": "francis2023_leave_group",
+    "scenario_sha256": "d0aa07b519cf6e66c627ae6ce07ad9955c559fab3c1b0cdaab514d43c53b2650",
+    "map_sha256": "b69538eb45eee2c177218cdf35d29c2e3d6e6395f7da4199abb031d2ac37eda5",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "radius_10075",
+    "arm": "ppo",
+    "scenario": "francis2023_circular_crossing",
+    "scenario_sha256": "3145b0c8b860eebdbd66409149d27b2521355da855d3683c263b12af81f63e59",
+    "map_sha256": "efe54d7488e68048c610d087fabf16dadf5b8ac049f2c18fcebebe7a0aa766b8",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "radius_10075",
+    "arm": "ppo",
+    "scenario": "francis2023_robot_crowding",
+    "scenario_sha256": "c789ab2074322fbf69fab17d5b5dc4cd40dd3ab8c2e1ddfb298b30de2feffdfd",
+    "map_sha256": "8ced0ecd8402a30842a888ad7a2d463322c7383d38dde93a4e015e87b469b80f",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "radius_10075",
+    "arm": "prediction_planner",
+    "scenario": "classic_t_intersection_low",
+    "scenario_sha256": "294cae2c8a1e16c4f04da7f6d18d06e30237d020968c35682602a662783e7052",
+    "map_sha256": "111f58b931f66647af201cab235e9c3285afb71f8b731cef40286b6c9cda8877",
+    "seeds": [
+      1003
+    ]
+  },
+  {
+    "mode": "radius_10075",
+    "arm": "prediction_planner",
+    "scenario": "classic_t_intersection_medium",
+    "scenario_sha256": "398734ab64a950f29259ea3a6efe76a9b02b952880f4d060c2d239b54ba7bf1f",
+    "map_sha256": "111f58b931f66647af201cab235e9c3285afb71f8b731cef40286b6c9cda8877",
+    "seeds": [
+      1003
+    ]
+  },
+  {
+    "mode": "radius_10075",
+    "arm": "sacadrl",
+    "scenario": "classic_head_on_corridor_low",
+    "scenario_sha256": "7709293a19d499342b76f8757ce4a93636099bfc00299fb1b52fc0d799ab17a9",
+    "map_sha256": "e25e068d97d6e060e5e0e19387f23b1e63dc7b0f687bd1b7d95ccf2dd46b9457",
+    "seeds": [
+      1002,
+      1003
+    ]
+  },
+  {
+    "mode": "radius_10075",
+    "arm": "sacadrl",
+    "scenario": "classic_head_on_corridor_medium",
+    "scenario_sha256": "2421aa7d92555cf0038de44987c7b1affeaede608336a56e26b2b468db644df1",
+    "map_sha256": "e25e068d97d6e060e5e0e19387f23b1e63dc7b0f687bd1b7d95ccf2dd46b9457",
+    "seeds": [
+      1002,
+      1003
+    ]
+  },
+  {
+    "mode": "radius_10075",
+    "arm": "sacadrl",
+    "scenario": "francis2023_intersection_no_gesture",
+    "scenario_sha256": "132b3b9649dd58642ad648ceb3e2fa44acd6883c234398a07a72bc96da097348",
+    "map_sha256": "4a3670c3062e305ee26c64387def7357f42ec58dcdb3640de5e6a9493b163ea7",
+    "seeds": [
+      1001,
+      1002
+    ]
+  },
+  {
+    "mode": "radius_10075",
+    "arm": "sacadrl",
+    "scenario": "francis2023_blind_corner",
+    "scenario_sha256": "01edba30966f9f046aecf605f5a19f1b7848d7fcf0ea0753ca5bc379b514f4ce",
+    "map_sha256": "0eb4c229fbceb711bbe6747d84b6a2db315890fb817c68900da3ebb8a6217317",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "radius_10075",
+    "arm": "sacadrl",
+    "scenario": "francis2023_narrow_hallway",
+    "scenario_sha256": "8a8bb50ace72859f1e2f3e95d12d7bc7a0292e5bf5766aa3ff501da1cb07d246",
+    "map_sha256": "d4016dc32bc4a2715dc088f510da92a6e7739513d5971022bd18478e3181cb8a",
+    "seeds": [
+      1001,
+      1002
+    ]
+  },
+  {
+    "mode": "radius_10075",
+    "arm": "sacadrl",
+    "scenario": "francis2023_intersection_wait",
+    "scenario_sha256": "8406d491805db44bd9c7817954ca28c1136ce17024d0ee25e20012043d163f75",
+    "map_sha256": "4a3670c3062e305ee26c64387def7357f42ec58dcdb3640de5e6a9493b163ea7",
+    "seeds": [
+      1001,
+      1002
+    ]
+  },
+  {
+    "mode": "radius_10075",
+    "arm": "sacadrl",
+    "scenario": "francis2023_intersection_proceed",
+    "scenario_sha256": "5243abd6e86ed1871885c837fec582fd5bdf64c053d3ad4c67da3c27f9a216d4",
+    "map_sha256": "4a3670c3062e305ee26c64387def7357f42ec58dcdb3640de5e6a9493b163ea7",
+    "seeds": [
+      1001,
+      1002
+    ]
+  },
+  {
+    "mode": "radius_10075",
+    "arm": "sacadrl",
+    "scenario": "francis2023_perpendicular_traffic",
+    "scenario_sha256": "2ba28abbd682476e0f8112e950744f2d52c6aaa3b155efa0ed9d0f213f3c8cdc",
+    "map_sha256": "75ae14f525c561ebc70ecaa399a96d04f2957f1b6b06d197d770c573c59963dc",
+    "seeds": [
+      1001,
+      1002
+    ]
+  },
+  {
+    "mode": "radius_10075",
+    "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+    "scenario": "francis2023_pedestrian_overtaking",
+    "scenario_sha256": "d18e5400c0a6a6a2d3c1c2e3a116bab71f29772cd542ea30ea7aec0cc8923346",
+    "map_sha256": "265884fa9a2a37b37f9d1090ce59ac3e88b1034bbf33a89816fb3f4156d28592",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "radius_10075",
+    "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+    "scenario": "francis2023_narrow_hallway",
+    "scenario_sha256": "8a8bb50ace72859f1e2f3e95d12d7bc7a0292e5bf5766aa3ff501da1cb07d246",
+    "map_sha256": "d4016dc32bc4a2715dc088f510da92a6e7739513d5971022bd18478e3181cb8a",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "radius_10075",
+    "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+    "scenario": "francis2023_entering_room",
+    "scenario_sha256": "374d81107eefc3a6b1fbc75d317e211b8362a6f57a2085bc40329fb660058a76",
+    "map_sha256": "1506b9ddbee141c7256c92802cb6513d3add4cf5a270a9bad3dd197ec7a69166",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "radius_10075",
+    "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+    "scenario": "francis2023_pedestrian_overtaking",
+    "scenario_sha256": "d18e5400c0a6a6a2d3c1c2e3a116bab71f29772cd542ea30ea7aec0cc8923346",
+    "map_sha256": "265884fa9a2a37b37f9d1090ce59ac3e88b1034bbf33a89816fb3f4156d28592",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "radius_10075",
+    "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+    "scenario": "francis2023_narrow_hallway",
+    "scenario_sha256": "8a8bb50ace72859f1e2f3e95d12d7bc7a0292e5bf5766aa3ff501da1cb07d246",
+    "map_sha256": "d4016dc32bc4a2715dc088f510da92a6e7739513d5971022bd18478e3181cb8a",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "radius_10075",
+    "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+    "scenario": "francis2023_entering_room",
+    "scenario_sha256": "374d81107eefc3a6b1fbc75d317e211b8362a6f57a2085bc40329fb660058a76",
+    "map_sha256": "1506b9ddbee141c7256c92802cb6513d3add4cf5a270a9bad3dd197ec7a69166",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_reproduction",
+    "arm": "guarded_ppo",
+    "scenario": "francis2023_pedestrian_overtaking",
+    "scenario_sha256": "fce60cce9b0a9d3549d9cd670b313969b32576123004fee9a986798bbdc58255",
+    "map_sha256": "5963604a715d9caf6fcfc2c3737b545d4f4ee0bcbd7f0b7707ca5876796b7ef7",
+    "seeds": [
+      1001,
+      1003
+    ]
+  },
+  {
+    "mode": "baseline_reproduction",
+    "arm": "guarded_ppo",
+    "scenario": "francis2023_crowd_navigation",
+    "scenario_sha256": "fde43cf456249765f668a60232b78c6b1b8a346bac4c8ca380f63d8752752748",
+    "map_sha256": "90dcec15efdd3ff8c9bc9eab31229c22526d4cb946e7d2e8bfd6f83de2c463f4",
+    "seeds": [
+      1001,
+      1003
+    ]
+  },
+  {
+    "mode": "baseline_reproduction",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape",
+    "scenario": "francis2023_pedestrian_overtaking",
+    "scenario_sha256": "fce60cce9b0a9d3549d9cd670b313969b32576123004fee9a986798bbdc58255",
+    "map_sha256": "5963604a715d9caf6fcfc2c3737b545d4f4ee0bcbd7f0b7707ca5876796b7ef7",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_reproduction",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape",
+    "scenario": "francis2023_down_path",
+    "scenario_sha256": "7217e432f6622b9286342881b946c682d1bc6fe074b6c1adaf8a6696005060fd",
+    "map_sha256": "8456ca8567a58e5154a99e216cd39dba2dee828fe421d3fe1b1f293a1d74a007",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_reproduction",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape",
+    "scenario": "francis2023_narrow_hallway",
+    "scenario_sha256": "d7a18ed15c28d5be4e1bc757c5987b664115c412acc2cb50fbacd92a794162f2",
+    "map_sha256": "ef0cf11ec96a69d95fac3f4e9ffc7665549045201c59bf7c4f9895462be71c6b",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_reproduction",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape",
+    "scenario": "francis2023_entering_room",
+    "scenario_sha256": "44b06f805870c155769b146f756f99e95a0c67def22b1416a782a01469c481b3",
+    "map_sha256": "eeb5be812c733ddfb8b0a5295eb99533c90c68d56de562733aa7d2bfd0363aa9",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_reproduction",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape",
+    "scenario": "francis2023_following_human",
+    "scenario_sha256": "acc7a8de140b6e28e8057580dc796dad137ff1b7fbdfecef137e7bd7d8cc7766",
+    "map_sha256": "8456ca8567a58e5154a99e216cd39dba2dee828fe421d3fe1b1f293a1d74a007",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_reproduction",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape",
+    "scenario": "francis2023_leading_human",
+    "scenario_sha256": "92cb2f266c3e530363be4356ed295bb50c0a5130da195777551de058c5ce15be",
+    "map_sha256": "8456ca8567a58e5154a99e216cd39dba2dee828fe421d3fe1b1f293a1d74a007",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_reproduction",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape",
+    "scenario": "francis2023_accompanying_peer",
+    "scenario_sha256": "4c8893366672a45ca8e454184ca0974c3175307e228c43dc618a024a20decfd5",
+    "map_sha256": "8456ca8567a58e5154a99e216cd39dba2dee828fe421d3fe1b1f293a1d74a007",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_reproduction",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_frontal_approach",
+    "scenario_sha256": "9a859479fe2697cda508e6c9846f7aa1dba3bfb15fc5d282cb1a1c531c9fa8f2",
+    "map_sha256": "365e34e3a5f08c383ce4577c282b5758969fb2073b98df07504eefa82e5e8240",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_reproduction",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_pedestrian_obstruction",
+    "scenario_sha256": "78af976a1a0f1f86c3b6ad11de4143bce6d92cc437f4d0b1304093565c5baa83",
+    "map_sha256": "e5c78b7105f2e9535e8b71fd9faf0a98d1fc12f9e12d5d2dd1a59fdb0f887f24",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_reproduction",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_pedestrian_overtaking",
+    "scenario_sha256": "fce60cce9b0a9d3549d9cd670b313969b32576123004fee9a986798bbdc58255",
+    "map_sha256": "5963604a715d9caf6fcfc2c3737b545d4f4ee0bcbd7f0b7707ca5876796b7ef7",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_reproduction",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_robot_overtaking",
+    "scenario_sha256": "73ac47a4760202376a92b1056d7f3f195ba2a743f19ca0bd141d04cefafc02c7",
+    "map_sha256": "90bb35d6e579a28f3ab5c6d91f45c9c7e8a6dc5985539bba8901d00853e8cf25",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_reproduction",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_down_path",
+    "scenario_sha256": "7217e432f6622b9286342881b946c682d1bc6fe074b6c1adaf8a6696005060fd",
+    "map_sha256": "8456ca8567a58e5154a99e216cd39dba2dee828fe421d3fe1b1f293a1d74a007",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_reproduction",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_entering_room",
+    "scenario_sha256": "44b06f805870c155769b146f756f99e95a0c67def22b1416a782a01469c481b3",
+    "map_sha256": "eeb5be812c733ddfb8b0a5295eb99533c90c68d56de562733aa7d2bfd0363aa9",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_reproduction",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_following_human",
+    "scenario_sha256": "acc7a8de140b6e28e8057580dc796dad137ff1b7fbdfecef137e7bd7d8cc7766",
+    "map_sha256": "8456ca8567a58e5154a99e216cd39dba2dee828fe421d3fe1b1f293a1d74a007",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_reproduction",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_leading_human",
+    "scenario_sha256": "92cb2f266c3e530363be4356ed295bb50c0a5130da195777551de058c5ce15be",
+    "map_sha256": "8456ca8567a58e5154a99e216cd39dba2dee828fe421d3fe1b1f293a1d74a007",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_reproduction",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_accompanying_peer",
+    "scenario_sha256": "4c8893366672a45ca8e454184ca0974c3175307e228c43dc618a024a20decfd5",
+    "map_sha256": "8456ca8567a58e5154a99e216cd39dba2dee828fe421d3fe1b1f293a1d74a007",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_reproduction",
+    "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "scenario": "francis2023_parallel_traffic",
+    "scenario_sha256": "a66f66dbd2380eb4d04ef3db8bd1555f340b9f971faf6c08626f5543a2924da4",
+    "map_sha256": "df1ec5f272601901b9d820ef8d3b0cb61ee592c031a215474db0bee37a29ad7f",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_reproduction",
+    "arm": "ppo",
+    "scenario": "classic_station_platform_medium",
+    "scenario_sha256": "3be260502de1e020030f2d8770a9e558c5c2fcfff89f1dc2dfca2eaa3c11e53b",
+    "map_sha256": "a7c14e33955316771d299b82d611f35299bb986d39442f5cc9bf24c1368e5c2a",
+    "seeds": [
+      1003
+    ]
+  },
+  {
+    "mode": "baseline_reproduction",
+    "arm": "ppo",
+    "scenario": "classic_cross_trap_low",
+    "scenario_sha256": "ef7e24a539c895c612c74b08dd50328146c84eee31097c41421fa527ac833f1f",
+    "map_sha256": "dec460721d422340653732125f8b02b76f793fb916446275ccefff60fea9c911",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "baseline_reproduction",
+    "arm": "ppo",
+    "scenario": "classic_cross_trap_medium",
+    "scenario_sha256": "f8e66c4db92011c0f7f3bcd9a78c38368a734f0ee5d160bbbe6ff4f8609a7edf",
+    "map_sha256": "dec460721d422340653732125f8b02b76f793fb916446275ccefff60fea9c911",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "baseline_reproduction",
+    "arm": "ppo",
+    "scenario": "classic_cross_trap_high",
+    "scenario_sha256": "5ba72ccec5e16ea83997170babcdf58cd40e34a8219f7c1a987df64fa61e1d0f",
+    "map_sha256": "dec460721d422340653732125f8b02b76f793fb916446275ccefff60fea9c911",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "baseline_reproduction",
+    "arm": "ppo",
+    "scenario": "francis2023_blind_corner",
+    "scenario_sha256": "afb5d04a3f5c7514904326c888137709defaf07be3b04d7805878820d8114789",
+    "map_sha256": "71ab3ce5436d45268d1b29f1d9c51ecd25e1cd15e9b3b0ffcd5561a69712679f",
+    "seeds": [
+      1001,
+      1003
+    ]
+  },
+  {
+    "mode": "baseline_reproduction",
+    "arm": "ppo",
+    "scenario": "francis2023_entering_room",
+    "scenario_sha256": "44b06f805870c155769b146f756f99e95a0c67def22b1416a782a01469c481b3",
+    "map_sha256": "eeb5be812c733ddfb8b0a5295eb99533c90c68d56de562733aa7d2bfd0363aa9",
+    "seeds": [
+      1001,
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_reproduction",
+    "arm": "ppo",
+    "scenario": "francis2023_exiting_room",
+    "scenario_sha256": "4393ae9177100d04deaec3bb89f7bc6be0ac04338aace8a3c29a8d7bb4584137",
+    "map_sha256": "e6f42c85c016f117c370e85900941fda6aeca45a90af72c483f76d5b7905474c",
+    "seeds": [
+      1003
+    ]
+  },
+  {
+    "mode": "baseline_reproduction",
+    "arm": "ppo",
+    "scenario": "francis2023_join_group",
+    "scenario_sha256": "0bb617020031cb65a8be7500f7d21fd60cf65a577b8b068c08f818bdd8fe6bdb",
+    "map_sha256": "72eae7b5bee45cf9a1aa1e086aeb4b3d9d1a87d61e69ed5c467908bb67d3fded",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "baseline_reproduction",
+    "arm": "ppo",
+    "scenario": "francis2023_leave_group",
+    "scenario_sha256": "1d29358f82cbdf82fa39121ddb363e4b9e7fcb0ddefb71ea99dd1b29ecfd99ac",
+    "map_sha256": "b5d90d5eda27621038087c18b70a4f7872aa256faddf915c4c577768edc2898e",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "baseline_reproduction",
+    "arm": "ppo",
+    "scenario": "francis2023_circular_crossing",
+    "scenario_sha256": "f8b53b955aa6d21bb3f99803da997cee5d428cd517f7e62990ea1f3aff77bd81",
+    "map_sha256": "c67c90be944dab027603cd4f0823979150d6a900aad2070fc7d2f8cce915fa5a",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "baseline_reproduction",
+    "arm": "ppo",
+    "scenario": "francis2023_robot_crowding",
+    "scenario_sha256": "6555e5d257647637afb1be4ad4900b1943adbf1a8921ac03039a8ac87d0d8d6d",
+    "map_sha256": "202c0222a132e9c5e67316646765541aca92ccb56fd5416b604a1ff77bc15617",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "baseline_reproduction",
+    "arm": "prediction_planner",
+    "scenario": "classic_t_intersection_low",
+    "scenario_sha256": "0910e88e6cf9715cd43fd9540a804faa5335f28c6a0ca0d1863e18a29beea4ab",
+    "map_sha256": "c6dea0b640bc23d7c95c7c5e1dddf0e4df6e30ee4942f7e93af8556f41b4beb5",
+    "seeds": [
+      1003
+    ]
+  },
+  {
+    "mode": "baseline_reproduction",
+    "arm": "prediction_planner",
+    "scenario": "classic_t_intersection_medium",
+    "scenario_sha256": "6c8a4f6c847e718567f6713f7d92d8dbdf8fec529cf6ec5c05d2fc17609582e5",
+    "map_sha256": "c6dea0b640bc23d7c95c7c5e1dddf0e4df6e30ee4942f7e93af8556f41b4beb5",
+    "seeds": [
+      1003
+    ]
+  },
+  {
+    "mode": "baseline_reproduction",
+    "arm": "sacadrl",
+    "scenario": "classic_head_on_corridor_low",
+    "scenario_sha256": "804c0c37604e43b237a0783401641d3c15b23e12695b81c1d1a7e5c81999fa8f",
+    "map_sha256": "89f439ac1f04561e0cd550c16be01a9674dc6fe80ba196f0dcc8f8f3c641f11b",
+    "seeds": [
+      1002,
+      1003
+    ]
+  },
+  {
+    "mode": "baseline_reproduction",
+    "arm": "sacadrl",
+    "scenario": "classic_head_on_corridor_medium",
+    "scenario_sha256": "e4513f830ac98f43e81ec3fb0ce64b946b556b24d29fae7ae67abd7ab60b06f1",
+    "map_sha256": "89f439ac1f04561e0cd550c16be01a9674dc6fe80ba196f0dcc8f8f3c641f11b",
+    "seeds": [
+      1002,
+      1003
+    ]
+  },
+  {
+    "mode": "baseline_reproduction",
+    "arm": "sacadrl",
+    "scenario": "francis2023_intersection_no_gesture",
+    "scenario_sha256": "e7bfa2d03d5f8c6183c2a28adf087a17f4b64c586e36aa0d484428efa4a414c2",
+    "map_sha256": "4bc2fc33c7c3d0466723bed8c0dc4314d716c5d8e1a3a3786dab2d34110826d0",
+    "seeds": [
+      1001,
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_reproduction",
+    "arm": "sacadrl",
+    "scenario": "francis2023_blind_corner",
+    "scenario_sha256": "afb5d04a3f5c7514904326c888137709defaf07be3b04d7805878820d8114789",
+    "map_sha256": "71ab3ce5436d45268d1b29f1d9c51ecd25e1cd15e9b3b0ffcd5561a69712679f",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "baseline_reproduction",
+    "arm": "sacadrl",
+    "scenario": "francis2023_narrow_hallway",
+    "scenario_sha256": "d7a18ed15c28d5be4e1bc757c5987b664115c412acc2cb50fbacd92a794162f2",
+    "map_sha256": "ef0cf11ec96a69d95fac3f4e9ffc7665549045201c59bf7c4f9895462be71c6b",
+    "seeds": [
+      1001,
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_reproduction",
+    "arm": "sacadrl",
+    "scenario": "francis2023_intersection_wait",
+    "scenario_sha256": "619a0eddd9022842b1fd1fed38930a6484ee989d471656f38453e8375efa4fb0",
+    "map_sha256": "4bc2fc33c7c3d0466723bed8c0dc4314d716c5d8e1a3a3786dab2d34110826d0",
+    "seeds": [
+      1001,
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_reproduction",
+    "arm": "sacadrl",
+    "scenario": "francis2023_intersection_proceed",
+    "scenario_sha256": "d92becab7593362dbd29ce199daf88248dd4fe2dfb914998f9af8a28d306ce0b",
+    "map_sha256": "4bc2fc33c7c3d0466723bed8c0dc4314d716c5d8e1a3a3786dab2d34110826d0",
+    "seeds": [
+      1001,
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_reproduction",
+    "arm": "sacadrl",
+    "scenario": "francis2023_perpendicular_traffic",
+    "scenario_sha256": "72857c7fc8849e333652d913fe86b98c6c09870382154f3a1b6f99c8347db4cc",
+    "map_sha256": "67ae3c66be2057e7da9a0182458de7e68c9c41d2f13848790fb73eb12664ee99",
+    "seeds": [
+      1001,
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_reproduction",
+    "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+    "scenario": "francis2023_pedestrian_overtaking",
+    "scenario_sha256": "fce60cce9b0a9d3549d9cd670b313969b32576123004fee9a986798bbdc58255",
+    "map_sha256": "5963604a715d9caf6fcfc2c3737b545d4f4ee0bcbd7f0b7707ca5876796b7ef7",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_reproduction",
+    "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+    "scenario": "francis2023_narrow_hallway",
+    "scenario_sha256": "d7a18ed15c28d5be4e1bc757c5987b664115c412acc2cb50fbacd92a794162f2",
+    "map_sha256": "ef0cf11ec96a69d95fac3f4e9ffc7665549045201c59bf7c4f9895462be71c6b",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_reproduction",
+    "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+    "scenario": "francis2023_entering_room",
+    "scenario_sha256": "44b06f805870c155769b146f756f99e95a0c67def22b1416a782a01469c481b3",
+    "map_sha256": "eeb5be812c733ddfb8b0a5295eb99533c90c68d56de562733aa7d2bfd0363aa9",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_reproduction",
+    "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+    "scenario": "francis2023_pedestrian_overtaking",
+    "scenario_sha256": "fce60cce9b0a9d3549d9cd670b313969b32576123004fee9a986798bbdc58255",
+    "map_sha256": "5963604a715d9caf6fcfc2c3737b545d4f4ee0bcbd7f0b7707ca5876796b7ef7",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_reproduction",
+    "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+    "scenario": "francis2023_narrow_hallway",
+    "scenario_sha256": "d7a18ed15c28d5be4e1bc757c5987b664115c412acc2cb50fbacd92a794162f2",
+    "map_sha256": "ef0cf11ec96a69d95fac3f4e9ffc7665549045201c59bf7c4f9895462be71c6b",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "baseline_reproduction",
+    "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+    "scenario": "francis2023_entering_room",
+    "scenario_sha256": "44b06f805870c155769b146f756f99e95a0c67def22b1416a782a01469c481b3",
+    "map_sha256": "eeb5be812c733ddfb8b0a5295eb99533c90c68d56de562733aa7d2bfd0363aa9",
+    "seeds": [
+      1002
+    ]
+  },
+  {
+    "mode": "ppo_post",
+    "arm": "ppo",
+    "scenario": "classic_station_platform_medium",
+    "scenario_sha256": "3be260502de1e020030f2d8770a9e558c5c2fcfff89f1dc2dfca2eaa3c11e53b",
+    "map_sha256": "a7c14e33955316771d299b82d611f35299bb986d39442f5cc9bf24c1368e5c2a",
+    "seeds": [
+      1003
+    ]
+  },
+  {
+    "mode": "ppo_post",
+    "arm": "ppo",
+    "scenario": "classic_cross_trap_low",
+    "scenario_sha256": "ef7e24a539c895c612c74b08dd50328146c84eee31097c41421fa527ac833f1f",
+    "map_sha256": "dec460721d422340653732125f8b02b76f793fb916446275ccefff60fea9c911",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "ppo_post",
+    "arm": "ppo",
+    "scenario": "classic_cross_trap_medium",
+    "scenario_sha256": "f8e66c4db92011c0f7f3bcd9a78c38368a734f0ee5d160bbbe6ff4f8609a7edf",
+    "map_sha256": "dec460721d422340653732125f8b02b76f793fb916446275ccefff60fea9c911",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "ppo_post",
+    "arm": "ppo",
+    "scenario": "classic_cross_trap_high",
+    "scenario_sha256": "5ba72ccec5e16ea83997170babcdf58cd40e34a8219f7c1a987df64fa61e1d0f",
+    "map_sha256": "dec460721d422340653732125f8b02b76f793fb916446275ccefff60fea9c911",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "ppo_post",
+    "arm": "ppo",
+    "scenario": "francis2023_blind_corner",
+    "scenario_sha256": "afb5d04a3f5c7514904326c888137709defaf07be3b04d7805878820d8114789",
+    "map_sha256": "71ab3ce5436d45268d1b29f1d9c51ecd25e1cd15e9b3b0ffcd5561a69712679f",
+    "seeds": [
+      1001,
+      1003
+    ]
+  },
+  {
+    "mode": "ppo_post",
+    "arm": "ppo",
+    "scenario": "francis2023_exiting_room",
+    "scenario_sha256": "4393ae9177100d04deaec3bb89f7bc6be0ac04338aace8a3c29a8d7bb4584137",
+    "map_sha256": "e6f42c85c016f117c370e85900941fda6aeca45a90af72c483f76d5b7905474c",
+    "seeds": [
+      1003
+    ]
+  },
+  {
+    "mode": "ppo_pre",
+    "arm": "ppo",
+    "scenario": "classic_station_platform_medium",
+    "scenario_sha256": "3be260502de1e020030f2d8770a9e558c5c2fcfff89f1dc2dfca2eaa3c11e53b",
+    "map_sha256": "a7c14e33955316771d299b82d611f35299bb986d39442f5cc9bf24c1368e5c2a",
+    "seeds": [
+      1003
+    ]
+  },
+  {
+    "mode": "ppo_pre",
+    "arm": "ppo",
+    "scenario": "classic_cross_trap_low",
+    "scenario_sha256": "ef7e24a539c895c612c74b08dd50328146c84eee31097c41421fa527ac833f1f",
+    "map_sha256": "dec460721d422340653732125f8b02b76f793fb916446275ccefff60fea9c911",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "ppo_pre",
+    "arm": "ppo",
+    "scenario": "classic_cross_trap_medium",
+    "scenario_sha256": "f8e66c4db92011c0f7f3bcd9a78c38368a734f0ee5d160bbbe6ff4f8609a7edf",
+    "map_sha256": "dec460721d422340653732125f8b02b76f793fb916446275ccefff60fea9c911",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "ppo_pre",
+    "arm": "ppo",
+    "scenario": "classic_cross_trap_high",
+    "scenario_sha256": "5ba72ccec5e16ea83997170babcdf58cd40e34a8219f7c1a987df64fa61e1d0f",
+    "map_sha256": "dec460721d422340653732125f8b02b76f793fb916446275ccefff60fea9c911",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "ppo_pre",
+    "arm": "ppo",
+    "scenario": "francis2023_blind_corner",
+    "scenario_sha256": "afb5d04a3f5c7514904326c888137709defaf07be3b04d7805878820d8114789",
+    "map_sha256": "71ab3ce5436d45268d1b29f1d9c51ecd25e1cd15e9b3b0ffcd5561a69712679f",
+    "seeds": [
+      1001,
+      1003
+    ]
+  },
+  {
+    "mode": "ppo_pre",
+    "arm": "ppo",
+    "scenario": "francis2023_exiting_room",
+    "scenario_sha256": "4393ae9177100d04deaec3bb89f7bc6be0ac04338aace8a3c29a8d7bb4584137",
+    "map_sha256": "e6f42c85c016f117c370e85900941fda6aeca45a90af72c483f76d5b7905474c",
+    "seeds": [
+      1003
+    ]
+  },
+  {
+    "mode": "spawn_post",
+    "arm": "ppo",
+    "scenario": "classic_station_platform_medium",
+    "scenario_sha256": "3be260502de1e020030f2d8770a9e558c5c2fcfff89f1dc2dfca2eaa3c11e53b",
+    "map_sha256": "a7c14e33955316771d299b82d611f35299bb986d39442f5cc9bf24c1368e5c2a",
+    "seeds": [
+      1003
+    ]
+  },
+  {
+    "mode": "spawn_post",
+    "arm": "ppo",
+    "scenario": "classic_cross_trap_low",
+    "scenario_sha256": "ef7e24a539c895c612c74b08dd50328146c84eee31097c41421fa527ac833f1f",
+    "map_sha256": "dec460721d422340653732125f8b02b76f793fb916446275ccefff60fea9c911",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "spawn_post",
+    "arm": "ppo",
+    "scenario": "classic_cross_trap_medium",
+    "scenario_sha256": "f8e66c4db92011c0f7f3bcd9a78c38368a734f0ee5d160bbbe6ff4f8609a7edf",
+    "map_sha256": "dec460721d422340653732125f8b02b76f793fb916446275ccefff60fea9c911",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "spawn_post",
+    "arm": "ppo",
+    "scenario": "classic_cross_trap_high",
+    "scenario_sha256": "5ba72ccec5e16ea83997170babcdf58cd40e34a8219f7c1a987df64fa61e1d0f",
+    "map_sha256": "dec460721d422340653732125f8b02b76f793fb916446275ccefff60fea9c911",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "spawn_post",
+    "arm": "ppo",
+    "scenario": "francis2023_blind_corner",
+    "scenario_sha256": "afb5d04a3f5c7514904326c888137709defaf07be3b04d7805878820d8114789",
+    "map_sha256": "71ab3ce5436d45268d1b29f1d9c51ecd25e1cd15e9b3b0ffcd5561a69712679f",
+    "seeds": [
+      1001,
+      1003
+    ]
+  },
+  {
+    "mode": "spawn_post",
+    "arm": "ppo",
+    "scenario": "francis2023_exiting_room",
+    "scenario_sha256": "4393ae9177100d04deaec3bb89f7bc6be0ac04338aace8a3c29a8d7bb4584137",
+    "map_sha256": "e6f42c85c016f117c370e85900941fda6aeca45a90af72c483f76d5b7905474c",
+    "seeds": [
+      1003
+    ]
+  },
+  {
+    "mode": "spawn_post",
+    "arm": "sacadrl",
+    "scenario": "francis2023_intersection_no_gesture",
+    "scenario_sha256": "e7bfa2d03d5f8c6183c2a28adf087a17f4b64c586e36aa0d484428efa4a414c2",
+    "map_sha256": "4bc2fc33c7c3d0466723bed8c0dc4314d716c5d8e1a3a3786dab2d34110826d0",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "spawn_post",
+    "arm": "sacadrl",
+    "scenario": "francis2023_narrow_hallway",
+    "scenario_sha256": "d7a18ed15c28d5be4e1bc757c5987b664115c412acc2cb50fbacd92a794162f2",
+    "map_sha256": "ef0cf11ec96a69d95fac3f4e9ffc7665549045201c59bf7c4f9895462be71c6b",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "spawn_post",
+    "arm": "sacadrl",
+    "scenario": "francis2023_intersection_wait",
+    "scenario_sha256": "619a0eddd9022842b1fd1fed38930a6484ee989d471656f38453e8375efa4fb0",
+    "map_sha256": "4bc2fc33c7c3d0466723bed8c0dc4314d716c5d8e1a3a3786dab2d34110826d0",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "spawn_post",
+    "arm": "sacadrl",
+    "scenario": "francis2023_intersection_proceed",
+    "scenario_sha256": "d92becab7593362dbd29ce199daf88248dd4fe2dfb914998f9af8a28d306ce0b",
+    "map_sha256": "4bc2fc33c7c3d0466723bed8c0dc4314d716c5d8e1a3a3786dab2d34110826d0",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "spawn_post",
+    "arm": "sacadrl",
+    "scenario": "francis2023_perpendicular_traffic",
+    "scenario_sha256": "72857c7fc8849e333652d913fe86b98c6c09870382154f3a1b6f99c8347db4cc",
+    "map_sha256": "67ae3c66be2057e7da9a0182458de7e68c9c41d2f13848790fb73eb12664ee99",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "spawn_pre",
+    "arm": "ppo",
+    "scenario": "classic_station_platform_medium",
+    "scenario_sha256": "3be260502de1e020030f2d8770a9e558c5c2fcfff89f1dc2dfca2eaa3c11e53b",
+    "map_sha256": "a7c14e33955316771d299b82d611f35299bb986d39442f5cc9bf24c1368e5c2a",
+    "seeds": [
+      1003
+    ]
+  },
+  {
+    "mode": "spawn_pre",
+    "arm": "ppo",
+    "scenario": "classic_cross_trap_low",
+    "scenario_sha256": "ef7e24a539c895c612c74b08dd50328146c84eee31097c41421fa527ac833f1f",
+    "map_sha256": "dec460721d422340653732125f8b02b76f793fb916446275ccefff60fea9c911",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "spawn_pre",
+    "arm": "ppo",
+    "scenario": "classic_cross_trap_medium",
+    "scenario_sha256": "f8e66c4db92011c0f7f3bcd9a78c38368a734f0ee5d160bbbe6ff4f8609a7edf",
+    "map_sha256": "dec460721d422340653732125f8b02b76f793fb916446275ccefff60fea9c911",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "spawn_pre",
+    "arm": "ppo",
+    "scenario": "classic_cross_trap_high",
+    "scenario_sha256": "5ba72ccec5e16ea83997170babcdf58cd40e34a8219f7c1a987df64fa61e1d0f",
+    "map_sha256": "dec460721d422340653732125f8b02b76f793fb916446275ccefff60fea9c911",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "spawn_pre",
+    "arm": "ppo",
+    "scenario": "francis2023_blind_corner",
+    "scenario_sha256": "afb5d04a3f5c7514904326c888137709defaf07be3b04d7805878820d8114789",
+    "map_sha256": "71ab3ce5436d45268d1b29f1d9c51ecd25e1cd15e9b3b0ffcd5561a69712679f",
+    "seeds": [
+      1001,
+      1003
+    ]
+  },
+  {
+    "mode": "spawn_pre",
+    "arm": "ppo",
+    "scenario": "francis2023_exiting_room",
+    "scenario_sha256": "4393ae9177100d04deaec3bb89f7bc6be0ac04338aace8a3c29a8d7bb4584137",
+    "map_sha256": "e6f42c85c016f117c370e85900941fda6aeca45a90af72c483f76d5b7905474c",
+    "seeds": [
+      1003
+    ]
+  },
+  {
+    "mode": "spawn_pre",
+    "arm": "sacadrl",
+    "scenario": "francis2023_intersection_no_gesture",
+    "scenario_sha256": "e7bfa2d03d5f8c6183c2a28adf087a17f4b64c586e36aa0d484428efa4a414c2",
+    "map_sha256": "4bc2fc33c7c3d0466723bed8c0dc4314d716c5d8e1a3a3786dab2d34110826d0",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "spawn_pre",
+    "arm": "sacadrl",
+    "scenario": "francis2023_narrow_hallway",
+    "scenario_sha256": "d7a18ed15c28d5be4e1bc757c5987b664115c412acc2cb50fbacd92a794162f2",
+    "map_sha256": "ef0cf11ec96a69d95fac3f4e9ffc7665549045201c59bf7c4f9895462be71c6b",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "spawn_pre",
+    "arm": "sacadrl",
+    "scenario": "francis2023_intersection_wait",
+    "scenario_sha256": "619a0eddd9022842b1fd1fed38930a6484ee989d471656f38453e8375efa4fb0",
+    "map_sha256": "4bc2fc33c7c3d0466723bed8c0dc4314d716c5d8e1a3a3786dab2d34110826d0",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "spawn_pre",
+    "arm": "sacadrl",
+    "scenario": "francis2023_intersection_proceed",
+    "scenario_sha256": "d92becab7593362dbd29ce199daf88248dd4fe2dfb914998f9af8a28d306ce0b",
+    "map_sha256": "4bc2fc33c7c3d0466723bed8c0dc4314d716c5d8e1a3a3786dab2d34110826d0",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "spawn_pre",
+    "arm": "sacadrl",
+    "scenario": "francis2023_perpendicular_traffic",
+    "scenario_sha256": "72857c7fc8849e333652d913fe86b98c6c09870382154f3a1b6f99c8347db4cc",
+    "map_sha256": "67ae3c66be2057e7da9a0182458de7e68c9c41d2f13848790fb73eb12664ee99",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "rectangle_post",
+    "arm": "ppo",
+    "scenario": "classic_cross_trap_low",
+    "scenario_sha256": "ef7e24a539c895c612c74b08dd50328146c84eee31097c41421fa527ac833f1f",
+    "map_sha256": "dec460721d422340653732125f8b02b76f793fb916446275ccefff60fea9c911",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "rectangle_post",
+    "arm": "ppo",
+    "scenario": "classic_cross_trap_medium",
+    "scenario_sha256": "f8e66c4db92011c0f7f3bcd9a78c38368a734f0ee5d160bbbe6ff4f8609a7edf",
+    "map_sha256": "dec460721d422340653732125f8b02b76f793fb916446275ccefff60fea9c911",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "rectangle_post",
+    "arm": "ppo",
+    "scenario": "classic_cross_trap_high",
+    "scenario_sha256": "5ba72ccec5e16ea83997170babcdf58cd40e34a8219f7c1a987df64fa61e1d0f",
+    "map_sha256": "dec460721d422340653732125f8b02b76f793fb916446275ccefff60fea9c911",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "rectangle_pre",
+    "arm": "ppo",
+    "scenario": "classic_cross_trap_low",
+    "scenario_sha256": "ef7e24a539c895c612c74b08dd50328146c84eee31097c41421fa527ac833f1f",
+    "map_sha256": "dec460721d422340653732125f8b02b76f793fb916446275ccefff60fea9c911",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "rectangle_pre",
+    "arm": "ppo",
+    "scenario": "classic_cross_trap_medium",
+    "scenario_sha256": "f8e66c4db92011c0f7f3bcd9a78c38368a734f0ee5d160bbbe6ff4f8609a7edf",
+    "map_sha256": "dec460721d422340653732125f8b02b76f793fb916446275ccefff60fea9c911",
+    "seeds": [
+      1001
+    ]
+  },
+  {
+    "mode": "rectangle_pre",
+    "arm": "ppo",
+    "scenario": "classic_cross_trap_high",
+    "scenario_sha256": "5ba72ccec5e16ea83997170babcdf58cd40e34a8219f7c1a987df64fa61e1d0f",
+    "map_sha256": "dec460721d422340653732125f8b02b76f793fb916446275ccefff60fea9c911",
+    "seeds": [
+      1001
+    ]
+  }
+]

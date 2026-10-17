@@ -1,0 +1,245 @@
+{
+  "schema_version": "pedsweep-baseline-map-proof.v1",
+  "source_sha": "07f7e8d43084de748915e1b1eb8b2a1603357c6e",
+  "map_count": 33,
+  "copied_maps": 19,
+  "method": "Parse original and derived XML, remove only declared single_ped_ circles from original, compare complete remaining serialized trees including text/attributes/order. No environment reset/step. Uncopied maps covered by empty production diff.",
+  "maps": [
+    {
+      "source_path": "maps/svg_maps/classic_bottleneck.svg",
+      "source_sha256": "65772c0ec5ef521b9ee1332fdee433e8bfa25b8c06753692ea1bf2c667b74357",
+      "diagnostic_copy": false,
+      "production_tree_unchanged": true
+    },
+    {
+      "source_path": "maps/svg_maps/classic_bottleneck_high.svg",
+      "source_sha256": "bf074d4cbf53a9b6785604f32053d44b6694caa41e5222aa66e59ce90b7b4403",
+      "diagnostic_copy": true,
+      "removed_pedestrian_circles": 6,
+      "derived_sha256": "339fd4bbb408e71614bc868ab5d7b8f364d9666a59527f859640db6a68688b6e",
+      "remaining_xml_structure_and_attributes_identical": true
+    },
+    {
+      "source_path": "maps/svg_maps/classic_bottleneck_medium.svg",
+      "source_sha256": "d8401829a4828fca80083f506096389218b5d1178c4f3c4ac35f47340bdbdc4b",
+      "diagnostic_copy": true,
+      "removed_pedestrian_circles": 2,
+      "derived_sha256": "339fd4bbb408e71614bc868ab5d7b8f364d9666a59527f859640db6a68688b6e",
+      "remaining_xml_structure_and_attributes_identical": true
+    },
+    {
+      "source_path": "maps/svg_maps/classic_crossing.svg",
+      "source_sha256": "dec460721d422340653732125f8b02b76f793fb916446275ccefff60fea9c911",
+      "diagnostic_copy": false,
+      "production_tree_unchanged": true
+    },
+    {
+      "source_path": "maps/svg_maps/classic_doorway.svg",
+      "source_sha256": "42f3911d15c8a2edc61e177d2d25fbb8416810ba937b2ec5009ad6220308cb48",
+      "diagnostic_copy": false,
+      "production_tree_unchanged": true
+    },
+    {
+      "source_path": "maps/svg_maps/classic_group_crossing.svg",
+      "source_sha256": "fcd08b528c091e4b929f06dd5e268f8e092e89ac75df348d2a7346445420476b",
+      "diagnostic_copy": false,
+      "production_tree_unchanged": true
+    },
+    {
+      "source_path": "maps/svg_maps/classic_head_on_corridor.svg",
+      "source_sha256": "89f439ac1f04561e0cd550c16be01a9674dc6fe80ba196f0dcc8f8f3c641f11b",
+      "diagnostic_copy": false,
+      "production_tree_unchanged": true
+    },
+    {
+      "source_path": "maps/svg_maps/classic_merging.svg",
+      "source_sha256": "3a9d1d566542d60a3a9feab57e7c225b818eb37a3e26c1ca30f12a469e22397a",
+      "diagnostic_copy": false,
+      "production_tree_unchanged": true
+    },
+    {
+      "source_path": "maps/svg_maps/classic_overtaking.svg",
+      "source_sha256": "dbcbaaf8eb96b89017451b5dbd8cc1806c610a2c29b39c132a9fa71e7cd47153",
+      "diagnostic_copy": false,
+      "production_tree_unchanged": true
+    },
+    {
+      "source_path": "maps/svg_maps/classic_realworld_bottleneck.svg",
+      "source_sha256": "6219c0dc6e8ede2ea91bd0916c1224ff43df3bacb6332bdabcc7eba829095c11",
+      "diagnostic_copy": true,
+      "removed_pedestrian_circles": 16,
+      "derived_sha256": "9a65df174c760b9640bf912e228655492a875e9c9ec85a5ecc431ebdc9a914b0",
+      "remaining_xml_structure_and_attributes_identical": true
+    },
+    {
+      "source_path": "maps/svg_maps/classic_station_platform.svg",
+      "source_sha256": "5f03421ac3d16d6008e92e00634fa9f3d0c896304ffd204691d79a3a115be156",
+      "diagnostic_copy": true,
+      "removed_pedestrian_circles": 8,
+      "derived_sha256": "a7c14e33955316771d299b82d611f35299bb986d39442f5cc9bf24c1368e5c2a",
+      "remaining_xml_structure_and_attributes_identical": true
+    },
+    {
+      "source_path": "maps/svg_maps/classic_t_intersection.svg",
+      "source_sha256": "c6dea0b640bc23d7c95c7c5e1dddf0e4df6e30ee4942f7e93af8556f41b4beb5",
+      "diagnostic_copy": false,
+      "production_tree_unchanged": true
+    },
+    {
+      "source_path": "maps/svg_maps/classic_urban_crossing.svg",
+      "source_sha256": "305261b242008fcaa9b298cdc5fa0334ddaf96bf7a2c83c11d49f5ea0fdaf5e0",
+      "diagnostic_copy": false,
+      "production_tree_unchanged": true
+    },
+    {
+      "source_path": "maps/svg_maps/francis2023/francis2023_blind_corner.svg",
+      "source_sha256": "8359a5d5999552b8abd9781c82ee7cad4b2052bb458b94d348578e5dda586ef8",
+      "diagnostic_copy": true,
+      "removed_pedestrian_circles": 2,
+      "derived_sha256": "71ab3ce5436d45268d1b29f1d9c51ecd25e1cd15e9b3b0ffcd5561a69712679f",
+      "remaining_xml_structure_and_attributes_identical": true
+    },
+    {
+      "source_path": "maps/svg_maps/francis2023/francis2023_circular_crossing.svg",
+      "source_sha256": "c67c90be944dab027603cd4f0823979150d6a900aad2070fc7d2f8cce915fa5a",
+      "diagnostic_copy": false,
+      "production_tree_unchanged": true
+    },
+    {
+      "source_path": "maps/svg_maps/francis2023/francis2023_crowd_navigation.svg",
+      "source_sha256": "90dcec15efdd3ff8c9bc9eab31229c22526d4cb946e7d2e8bfd6f83de2c463f4",
+      "diagnostic_copy": false,
+      "production_tree_unchanged": true
+    },
+    {
+      "source_path": "maps/svg_maps/francis2023/francis2023_down_path.svg",
+      "source_sha256": "a195335ea021714a93a2aaab6e8494580d7c442f84d648b995a003104ff1c519",
+      "diagnostic_copy": true,
+      "removed_pedestrian_circles": 2,
+      "derived_sha256": "8456ca8567a58e5154a99e216cd39dba2dee828fe421d3fe1b1f293a1d74a007",
+      "remaining_xml_structure_and_attributes_identical": true
+    },
+    {
+      "source_path": "maps/svg_maps/francis2023/francis2023_entering_elevator.svg",
+      "source_sha256": "fa52e7b55bae9ae8a1fdfc0c13cd3e18e43d2c005cb325fe9a978fa1c39f6c10",
+      "diagnostic_copy": true,
+      "removed_pedestrian_circles": 2,
+      "derived_sha256": "91cf05af6e27d0b1b5ca24301033123005dc031e5b5d17a8d70e69930a15b27e",
+      "remaining_xml_structure_and_attributes_identical": true
+    },
+    {
+      "source_path": "maps/svg_maps/francis2023/francis2023_entering_room.svg",
+      "source_sha256": "3d18c06ee133949b14e4274c548b19b61f10ed518c105b5a94f660b53376c945",
+      "diagnostic_copy": true,
+      "removed_pedestrian_circles": 2,
+      "derived_sha256": "eeb5be812c733ddfb8b0a5295eb99533c90c68d56de562733aa7d2bfd0363aa9",
+      "remaining_xml_structure_and_attributes_identical": true
+    },
+    {
+      "source_path": "maps/svg_maps/francis2023/francis2023_exiting_elevator.svg",
+      "source_sha256": "3e09a3ef263b0ba0b2f0ad68a33157db6c78bb8794535675f4db33457cf76e75",
+      "diagnostic_copy": true,
+      "removed_pedestrian_circles": 2,
+      "derived_sha256": "45372f27730cfee3cea75d96b462bab9ddc6d5d13c048f1533f595de63a4d975",
+      "remaining_xml_structure_and_attributes_identical": true
+    },
+    {
+      "source_path": "maps/svg_maps/francis2023/francis2023_exiting_room.svg",
+      "source_sha256": "6968e1d3459f213638406340a258a3b61c7e80bf56976802b110491cd9d4d6fc",
+      "diagnostic_copy": true,
+      "removed_pedestrian_circles": 2,
+      "derived_sha256": "e6f42c85c016f117c370e85900941fda6aeca45a90af72c483f76d5b7905474c",
+      "remaining_xml_structure_and_attributes_identical": true
+    },
+    {
+      "source_path": "maps/svg_maps/francis2023/francis2023_frontal_approach.svg",
+      "source_sha256": "685092e88811f450f47e5350965122f9a4cc8aff084b2584a628804a96f20e33",
+      "diagnostic_copy": true,
+      "removed_pedestrian_circles": 2,
+      "derived_sha256": "365e34e3a5f08c383ce4577c282b5758969fb2073b98df07504eefa82e5e8240",
+      "remaining_xml_structure_and_attributes_identical": true
+    },
+    {
+      "source_path": "maps/svg_maps/francis2023/francis2023_intersection_no_gesture.svg",
+      "source_sha256": "416caeb391a0f8a12d25c6346a38d023e210c173c9275e08823171fbce172723",
+      "diagnostic_copy": true,
+      "removed_pedestrian_circles": 2,
+      "derived_sha256": "4bc2fc33c7c3d0466723bed8c0dc4314d716c5d8e1a3a3786dab2d34110826d0",
+      "remaining_xml_structure_and_attributes_identical": true
+    },
+    {
+      "source_path": "maps/svg_maps/francis2023/francis2023_join_group.svg",
+      "source_sha256": "787bddcc270cc56e0703616ff2d9ad9a1a63890227fbbc6257670c1503aa8c7a",
+      "diagnostic_copy": true,
+      "removed_pedestrian_circles": 6,
+      "derived_sha256": "72eae7b5bee45cf9a1aa1e086aeb4b3d9d1a87d61e69ed5c467908bb67d3fded",
+      "remaining_xml_structure_and_attributes_identical": true
+    },
+    {
+      "source_path": "maps/svg_maps/francis2023/francis2023_leave_group.svg",
+      "source_sha256": "869256f3d5d3b32810873dd3ab668678774a86b043d1612c58e8492d4c9c02a7",
+      "diagnostic_copy": true,
+      "removed_pedestrian_circles": 6,
+      "derived_sha256": "b5d90d5eda27621038087c18b70a4f7872aa256faddf915c4c577768edc2898e",
+      "remaining_xml_structure_and_attributes_identical": true
+    },
+    {
+      "source_path": "maps/svg_maps/francis2023/francis2023_narrow_doorway.svg",
+      "source_sha256": "7538ed173d462a5107afc1a1e43b5b2e6d2bc5c9604035cdec9a551e20a8b15e",
+      "diagnostic_copy": true,
+      "removed_pedestrian_circles": 2,
+      "derived_sha256": "5f900bf1487684149eab8d9dbd934c2f972d5ea2ae3bef4dc86aec3c81ae081f",
+      "remaining_xml_structure_and_attributes_identical": true
+    },
+    {
+      "source_path": "maps/svg_maps/francis2023/francis2023_narrow_hallway.svg",
+      "source_sha256": "d592f0fff7fe604119db92fba6146acee6f55f99c360e8768cd5c6a8bf670467",
+      "diagnostic_copy": true,
+      "removed_pedestrian_circles": 2,
+      "derived_sha256": "ef0cf11ec96a69d95fac3f4e9ffc7665549045201c59bf7c4f9895462be71c6b",
+      "remaining_xml_structure_and_attributes_identical": true
+    },
+    {
+      "source_path": "maps/svg_maps/francis2023/francis2023_parallel_traffic.svg",
+      "source_sha256": "df1ec5f272601901b9d820ef8d3b0cb61ee592c031a215474db0bee37a29ad7f",
+      "diagnostic_copy": false,
+      "production_tree_unchanged": true
+    },
+    {
+      "source_path": "maps/svg_maps/francis2023/francis2023_ped_obstruction.svg",
+      "source_sha256": "5360ced91b6bb3f2d36510988c0b23a69a7baa40c3bf909f1816bce4eb9a35bc",
+      "diagnostic_copy": true,
+      "removed_pedestrian_circles": 2,
+      "derived_sha256": "e5c78b7105f2e9535e8b71fd9faf0a98d1fc12f9e12d5d2dd1a59fdb0f887f24",
+      "remaining_xml_structure_and_attributes_identical": true
+    },
+    {
+      "source_path": "maps/svg_maps/francis2023/francis2023_ped_overtaking.svg",
+      "source_sha256": "76f0746da014d61f50ee0f96914cb2d42c11aa78f0ecfe2022d0e4ddff7344d1",
+      "diagnostic_copy": true,
+      "removed_pedestrian_circles": 2,
+      "derived_sha256": "5963604a715d9caf6fcfc2c3737b545d4f4ee0bcbd7f0b7707ca5876796b7ef7",
+      "remaining_xml_structure_and_attributes_identical": true
+    },
+    {
+      "source_path": "maps/svg_maps/francis2023/francis2023_perpendicular_traffic.svg",
+      "source_sha256": "67ae3c66be2057e7da9a0182458de7e68c9c41d2f13848790fb73eb12664ee99",
+      "diagnostic_copy": false,
+      "production_tree_unchanged": true
+    },
+    {
+      "source_path": "maps/svg_maps/francis2023/francis2023_robot_crowding.svg",
+      "source_sha256": "202c0222a132e9c5e67316646765541aca92ccb56fd5416b604a1ff77bc15617",
+      "diagnostic_copy": false,
+      "production_tree_unchanged": true
+    },
+    {
+      "source_path": "maps/svg_maps/francis2023/francis2023_robot_overtaking.svg",
+      "source_sha256": "13f5927f1aec35b8653b2daa13d0e2832f300b1d808ce7a9a317a8fa93d264fe",
+      "diagnostic_copy": true,
+      "removed_pedestrian_circles": 2,
+      "derived_sha256": "90bb35d6e579a28f3ab5c6d91f45c9c7e8a6dc5985539bba8901d00853e8cf25",
+      "remaining_xml_structure_and_attributes_identical": true
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "schema_version": "pedsweep-width-input-identity.v1",
+  "source_sha": "52634e854076ad7a1da6be4edf17fa40baf93fd4",
+  "original_job": 21471,
+  "repair_job": 21473,
+  "changed_reporting_fields": {
+    "snqi_weights": {
+      "before": "configs/benchmarks/snqi_weights_camera_ready_v3.json",
+      "after": null
+    },
+    "snqi_baseline": {
+      "before": "configs/benchmarks/snqi_baseline_camera_ready_v3.json",
+      "after": null
+    }
+  },
+  "all_other_campaign_fields_equal": true,
+  "scenario_payloads_equal": true,
+  "normalization": "Only private source/results materialization prefixes; source scenario/control values are never normalized away.",
+  "canonical_control_payload_sha256": "6528e21f34b435166f8daf7986335b395a9afda1285e95acb870be96dd206567",
+  "canonical_scenario_payload_sha256": "dc83d4e63a8cab7f75af63c05f628aaaaaee809f3df2d44f3849c4eaf05ceacb",
+  "anchor_files_modified_or_relabelled": false,
+  "production_diffs_empty": true
+}

@@ -1,0 +1,66 @@
+[
+  {
+    "from_mode": "base_main",
+    "to_mode": "forces_10073",
+    "from_sha": "2d6b19db8e226a9408e2b504035df8efb8369ce5",
+    "to_sha": "6b5d4a442f8ed7ffc9ca6c519be2b9cba76d9ca0",
+    "production_changed_paths": [
+      "robot_sf/sim/obstacle_force_profile.py",
+      "robot_sf/sim/sim_config.py",
+      "robot_sf/sim/simulator.py",
+      "robot_sf/training/scenario_loader.py"
+    ]
+  },
+  {
+    "from_mode": "forces_10073",
+    "to_mode": "radius_10075",
+    "from_sha": "6b5d4a442f8ed7ffc9ca6c519be2b9cba76d9ca0",
+    "to_sha": "6613fd0a976f4bc9904f9ce51ad153904156297f",
+    "production_changed_paths": [
+      "robot_sf/benchmark/runner.py",
+      "robot_sf/research/pedestrian_validation.py",
+      "robot_sf/sim/obstacle_force_profile.py",
+      "robot_sf/sim/sim_config.py",
+      "robot_sf/sim/simulator.py",
+      "robot_sf/training/scenario_loader.py"
+    ]
+  },
+  {
+    "from_mode": "radius_10075",
+    "to_mode": "initial_10094",
+    "from_sha": "6613fd0a976f4bc9904f9ce51ad153904156297f",
+    "to_sha": "5ca040371cbef05c712bb151cdebc558d4247f5a",
+    "production_changed_paths": [
+      "robot_sf/research/pedestrian_acceptance.py",
+      "robot_sf/research/pedestrian_initial_state.py"
+    ]
+  },
+  {
+    "from_mode": "initial_10094",
+    "to_mode": "contact_original_10104",
+    "from_sha": "5ca040371cbef05c712bb151cdebc558d4247f5a",
+    "to_sha": "52634e854076ad7a1da6be4edf17fa40baf93fd4",
+    "production_changed_paths": [
+      "fast-pysf/pysocialforce/contact.py",
+      "fast-pysf/pysocialforce/forces.py",
+      "fast-pysf/pysocialforce/simulator.py",
+      "robot_sf/benchmark/map_runner/map_runner_episode.py",
+      "robot_sf/research/pedestrian_acceptance.py",
+      "robot_sf/research/pedestrian_validation.py",
+      "robot_sf/sim/sim_config.py",
+      "robot_sf/sim/simulator.py",
+      "robot_sf/training/scenario_loader.py"
+    ]
+  },
+  {
+    "from_mode": "contact_original_10104",
+    "to_mode": "contact_fixed_10104",
+    "from_sha": "52634e854076ad7a1da6be4edf17fa40baf93fd4",
+    "to_sha": "d90bf2436e24dea33198a8bbaf6bbf4342b0edac",
+    "production_changed_paths": [
+      "fast-pysf/pysocialforce/contact.py",
+      "fast-pysf/pysocialforce/scene.py",
+      "robot_sf/ped_npc/ped_behavior.py"
+    ]
+  }
+]

@@ -1,0 +1,12 @@
+{
+  "schema_version": "pedsweep2-baseline-harness-correction.v1",
+  "class": "harness_issue",
+  "failed_job": 21478,
+  "failed_mode": "baseline_reproduction",
+  "cause": "scenario_actor_source_census audit API not present in exact 0.0.7 source; import failed before any reset/step",
+  "repair": "version-guarded legacy public-field actor-free assertions from original validated baseline harness; every raw reset/step actor list remains mandatory",
+  "unchanged": "baseline source, maps, scenario payload, planner profiles, H600, seeds, thresholds, models, anchors",
+  "exact_allowed_legacy_source": "07f7e8d43084de748915e1b1eb8b2a1603357c6e",
+  "rerun_expected_rows": 57,
+  "driver_sha256": "91123190935070dfe0288ce821cb7cb54ac2e092ebc70fd6095a3df320c5765e"
+}

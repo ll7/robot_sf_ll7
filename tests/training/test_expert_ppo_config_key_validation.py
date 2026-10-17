@@ -300,9 +300,9 @@ def test_all_tracked_canonical_expert_configs_load() -> None:
     # the release-robot retrain) adds four release-robot leaves; their issue-791
     # parent becomes a shared intermediate base, so the runnable inventory grows
     # by three.
-    # Development policy leaves remain canonical; inherited delta-recovery
-    # overlays remain shared bases. The train010 restart adds two runnable leaves.
-    assert len(config_paths) == 150
+    # Development policy leaves remain canonical. Inherited development overlays,
+    # including the train010 restart, remain outside this runnable-leaf inventory.
+    assert len(config_paths) == 148
     release_robot_leaves = {
         "configs/training/ppo/ablations/expert_ppo_release_contract_a_seed1001.yaml",
         "configs/training/ppo/ablations/expert_ppo_release_contract_a_seed1002.yaml",

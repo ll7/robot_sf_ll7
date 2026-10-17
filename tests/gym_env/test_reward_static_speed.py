@@ -63,8 +63,9 @@ def test_robot_env_supplies_static_clearance_and_physical_speed():
         env.close()
 
 
-def test_default_reward_skips_static_clearance_geometry(monkeypatch):
-    """A zero default preserves the environment path without a geometry query."""
+@pytest.mark.parametrize("custom_reward", [False, True])
+def test_default_reward_skips_static_clearance_geometry(monkeypatch, custom_reward):
+    """Default and unrelated custom rewards skip static-reward geometry work."""
     from robot_sf.gym_env import robot_env
 
     def unexpected_geometry(*_args, **_kwargs):
@@ -73,10 +74,42 @@ def test_default_reward_skips_static_clearance_geometry(monkeypatch):
     monkeypatch.setattr(robot_env, "robot_obstacle_clearance", unexpected_geometry, raising=False)
     config = RobotSimulationConfig()
     config.sim_config.ped_density_by_area = 0.0
-    env = make_robot_env(config=config, seed=1001, reward_name="route_completion_v3")
+    reward_options = (
+        {"reward_func": lambda _meta: 1.0}
+        if custom_reward
+        else {"reward_name": "route_completion_v3"}
+    )
+    env = make_robot_env(config=config, seed=1001, **reward_options)
+    try:
+        env.reset(seed=1001)
+        _, reward, _, _, info = env.step((0.5, 0.0))
+        meta = info["meta"]
+        assert "static_obstacle_clearance" not in meta
+        if custom_reward:
+            assert reward == pytest.approx(1.0)
+    finally:
+        env.close()
+
+
+def test_later_curriculum_stage_enables_static_clearance_metadata():
+    """An opt-in later stage must be recognized when the environment is built."""
+    config = RobotSimulationConfig()
+    config.sim_config.ped_density_by_area = 0.0
+    env = make_robot_env(
+        config=config,
+        seed=1001,
+        reward_name="route_completion_v3",
+        reward_curriculum={
+            "stages": [
+                {"until_episodes": 2},
+                {"reward_kwargs": {"weights": {"static_speed": -2.0}}},
+            ]
+        },
+    )
     try:
         env.reset(seed=1001)
         meta = env.step((0.5, 0.0))[-1]["meta"]
-        assert "static_obstacle_clearance" not in meta
+        assert "static_obstacle_clearance" in meta
+        assert meta["robot_speed"] == pytest.approx(abs(env.simulator.robots[0].current_speed[0]))
     finally:
         env.close()

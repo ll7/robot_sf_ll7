@@ -39,7 +39,7 @@ from robot_sf.benchmark.event_ledger import EPISODE_EVENT_LEDGER_SCHEMA_VERSION
 
 SCHEMA_VERSION = "release-row-anomalies.v1"
 DETECTOR_VERSION = "1.0.1"
-COLLISION_DETECTOR_VERSION = "1.1.0"
+COLLISION_DETECTOR_VERSION = "1.1.1"
 ORBIT_DETECTOR_VERSION = "1.1.0"
 DEFAULT_CONFIG: dict[str, Any] = {
     "short_collision_max_steps": 20,
@@ -428,6 +428,29 @@ def _collision_integer_count(value: object) -> tuple[int | None, str | None]:
     return None, "missing_or_nonfinite"
 
 
+def _typed_ledger_identity_problems(row: Mapping[str, Any], ledger: Mapping[str, Any]) -> list[str]:
+    """Bind typed reconciliation to the episode that produced it.
+
+    Returns:
+        Named identity mismatches; arm labels may differ from runtime algorithms.
+    """
+    problems: list[str] = []
+    identity = {
+        "scenario_id": row["scenario_id"],
+        "seed": row["seed"],
+        "planner": str(row.get("algo") or row.get("planner") or "unknown"),
+        "software_commit": str(row["git_hash"]) if row.get("git_hash") is not None else None,
+    }
+    for field, expected in identity.items():
+        if (
+            field not in ledger
+            or ledger[field] != expected
+            or (field == "seed" and type(ledger[field]) is not int)
+        ):
+            problems.append(f"ledger_{field}_mismatch")
+    return problems
+
+
 def _typed_ledger_collision_problems(row: Mapping[str, Any], total: int | None) -> list[str]:
     """Check equivalent typed-ledger fields without counting exact events.
 
@@ -441,6 +464,7 @@ def _typed_ledger_collision_problems(row: Mapping[str, Any], total: int | None) 
     if ledger["schema_version"] != EPISODE_EVENT_LEDGER_SCHEMA_VERSION:
         return ["unsupported_event_ledger_schema"]
     problems: list[str] = []
+    problems.extend(_typed_ledger_identity_problems(row, ledger))
     reconciliation = ledger.get("reconciliation")
     exact = ledger.get("exact_events")
     if not isinstance(reconciliation, Mapping):

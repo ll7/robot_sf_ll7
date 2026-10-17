@@ -1,0 +1,40 @@
+{
+  "reviewed_head": "4fa512f5fea59735feb1a6733c86e9a7cdbac6b3",
+  "review_findings_fixed": [
+    "two broad exception handlers narrowed to OS/runtime/value/type/import failures; unexpected exceptions propagate",
+    "recovered local episode commit preserved via exact Git commit/tree archive plus verifiable public-base metadata diff"
+  ],
+  "broad_exception_entries": 206,
+  "tests_passed": 122,
+  "test_breakdown": {
+    "analysis": 5,
+    "contract": 93,
+    "canonical_batch_resume": 24
+  },
+  "public_base_custody_verification": {
+    "artifact_path": "docs/context/robsweep/validation/review-fix-custody.log",
+    "public_clone_has_recovered_commit": false,
+    "preserved_base_paths": 13165,
+    "diagnostic_additions": 157,
+    "git_objects": 14,
+    "source_files": 42,
+    "runtime_diff_bytes": 0
+  },
+  "negative_controls": {
+    "corrupt_archived_object": "rejected with SHA256 mismatch",
+    "corrupt_metadata_diff": "rejected with reconstructed-tree diff mismatch"
+  },
+  "scientific_records_changed": false,
+  "configuration_pr_10363_changed": false,
+  "baseline_changes": false,
+  "local_ci_equivalents": {
+    "ruff_check": "passed",
+    "ruff_format_check": "passed",
+    "broad_exception_ratchet": "passed; 206",
+    "ty_advisory_ratchet": "passed; 6435 general / 6432 exception-adjusted",
+    "docs_evidence_integrity": "passed",
+    "evidence_registry_ratchet": "passed; 492",
+    "pr_contract_check": "passed",
+    "behaviour_receipt": "accepted or out of scope; no behavior-bearing path"
+  }
+}

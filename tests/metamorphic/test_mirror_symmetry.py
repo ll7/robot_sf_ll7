@@ -19,6 +19,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from pysocialforce.config import (
+    LEGACY_SHIFTED_GRADIENT_V1,
     SOCIAL_FORCE_KERNEL_LEGACY_UNWRAPPED_V1,
     SOCIAL_FORCE_KERNEL_WRAPPED_V2,
 )
@@ -40,6 +41,7 @@ from tests.metamorphic.planner_arms import (
     mirror_x,
     mirror_y,
     release_arm,
+    robot_env_config,
     rotate_90,
     run_arm_episode,
 )
@@ -512,6 +514,13 @@ def test_release_hybrid_v3_outcome_is_mirror_and_rotation_invariant() -> None:
         assert episode.status == "ok"
         outcomes[name] = (episode.success, episode.collision, episode.step_limit_reached)
     assert set(outcomes.values()) == {(True, False, False)}, outcomes
+
+
+def test_release_arm_harness_pins_historical_pedestrian_wall_law() -> None:
+    """Release-arm metamorphic fixtures must not inherit the moving 0.1.0 default."""
+    config = robot_env_config(interaction_scene(), max_steps=10)
+
+    assert config.sim_config.obstacle_force_law == LEGACY_SHIFTED_GRADIENT_V1
 
 
 def test_diagnostic_hybrid_v4_trace_is_mirror_equivariant() -> None:

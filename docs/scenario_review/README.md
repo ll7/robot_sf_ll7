@@ -6,6 +6,10 @@ visualization specs, component request/result envelopes with capability
 descriptors, and experiment recipes. Diagnostic tooling only — no
 scientific admission, benchmark results, or simulator/planner changes.
 
+The [native metric drift coverage note](./native_metric_drift.md) records the
+sealed-ledger successor reference, future enforcement-reference checks and the
+remaining cross-platform acceptance boundary.
+
 The offline [Benchmark Auditor campaign scan](./audit_scan.md) accounts for
 recorded campaign rows and emits deterministic BA-03 detector signals without
 rerunning simulations.

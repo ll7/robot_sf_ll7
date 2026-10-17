@@ -1,0 +1,472 @@
+{
+  "treatment": "swap",
+  "planner": "predictive_mppi",
+  "requested": 300,
+  "elapsed_s": 5351.843770709005,
+  "completed_prefix_rows": 35,
+  "total_retained_records": 300,
+  "prefix_bytes_preserved": true,
+  "original_controller_exit_verified": true,
+  "prefix_artifact": {
+    "artifact_path": "docs/context/robsweep/evidence/resume/swap_predictive_mppi_prefix.jsonl.gz",
+    "sha256": "a922d548e05548762a5f4e80d45536d86b3769258dda5dc8154d86dd5b238c6d"
+  },
+  "result": {
+    "total_jobs": 265,
+    "workers": 4,
+    "parallel_execution": true,
+    "batch_runtime_sec": 5351.633576227003,
+    "written": 265,
+    "successful_jobs": 265,
+    "failed_jobs": 0,
+    "skipped_jobs": 0,
+    "failures": [],
+    "out_path": "docs/context/robsweep/evidence/episodes/swap_predictive_mppi.jsonl",
+    "algorithm_readiness": {
+      "name": "predictive_mppi",
+      "tier": "experimental",
+      "profile": "experimental"
+    },
+    "algorithm_metadata_contract": {
+      "algorithm": "predictive_mppi",
+      "status": "ok",
+      "canonical_algorithm": "predictive_mppi",
+      "baseline_category": "learning",
+      "policy_semantics": "predictive_sequence_optimizer",
+      "observation_spec": {
+        "default_mode": "socnav_state",
+        "supported_modes": [
+          "socnav_state"
+        ],
+        "inputs": [
+          "robot_state",
+          "goal",
+          "pedestrians",
+          "prediction_model"
+        ],
+        "notes": "Predictive MPPI consumes SocNav state and learned prediction features.",
+        "active_mode": "socnav_state",
+        "observation_level": "tracked_agents_no_noise",
+        "override_applied": false
+      },
+      "observation_level": {
+        "key": "tracked_agents_no_noise",
+        "display_name": "Perfect tracked agents",
+        "perception_assumption": "perfect_tracking_without_noise",
+        "active_observation_mode": "socnav_state",
+        "compatible_observation_modes": [
+          "socnav_state",
+          "headed_socnav_state",
+          "gst_human_state"
+        ],
+        "required_inputs": [
+          "robot_state",
+          "goal",
+          "tracked_agents"
+        ],
+        "noise_policy": "none",
+        "occlusion_policy": "none",
+        "interpretation": "benchmark_metadata_not_sensor_certification"
+      },
+      "planner_kinematics": {
+        "robot_kinematics": "differential_drive",
+        "planner_command_space": "unicycle_vw",
+        "supports_native_commands": false,
+        "supports_adapter_commands": true,
+        "execution_mode": "adapter",
+        "adapter_name": "PredictiveMPPIAdapter",
+        "adapter_active": true,
+        "scenario_kinematics": [
+          "differential_drive"
+        ]
+      },
+      "planner_contract": {
+        "planner_id": "predictive_mppi",
+        "observation_contract": {
+          "mode": "socnav_state",
+          "active_mode": "socnav_state",
+          "observation_level": "tracked_agents_no_noise",
+          "perception_assumption": "perfect_tracking_without_noise",
+          "supported_modes": [
+            "socnav_state"
+          ],
+          "required_inputs": [
+            "robot_state",
+            "goal",
+            "pedestrians",
+            "prediction_model"
+          ],
+          "frame": "world",
+          "normalization": "raw",
+          "pedestrian_ordering": "distance_ascending",
+          "missing_value": null,
+          "notes": "Predictive MPPI consumes SocNav state and learned prediction features."
+        },
+        "action_contract": {
+          "command_space": "unicycle_vw",
+          "output_keys": [
+            "v",
+            "omega"
+          ],
+          "frame": "robot",
+          "normalization": "raw",
+          "units": "mps_radps",
+          "scaling": "none",
+          "compatible_robot_kinematics": [
+            "differential_drive"
+          ],
+          "active_robot_kinematics": "differential_drive",
+          "bounds": {},
+          "notes": ""
+        },
+        "reset_contract": "seeded_reset",
+        "scenario_requirements": [],
+        "compatibility_scope": "metadata_only",
+        "notes": "Compatibility metadata only; not a benchmark quality claim."
+      },
+      "adapter_impact": {
+        "requested": false,
+        "native_steps": 0,
+        "adapted_steps": 0,
+        "status": "disabled"
+      },
+      "learned_checkpoint_observation_contract": {
+        "status": "not_applicable",
+        "metadata_source": "algorithm_default",
+        "active_observation_mode": "socnav_state",
+        "observation_level": "tracked_agents_no_noise",
+        "observation_level_key": "tracked_agents_no_noise",
+        "planner_observation_mode": null
+      },
+      "planner_runtime": {
+        "planner_type": "PredictiveMPPIAdapter",
+        "recovery_kind": "mixed",
+        "no_admissible_command": true,
+        "no_admissible_command_count": 192,
+        "recovery_command": false,
+        "recovery_command_count": 0,
+        "last_decision": {
+          "recovery_kind": "mixed",
+          "no_admissible_command": true,
+          "no_admissible_command_count": 192,
+          "recovery_command": false,
+          "recovery_command_count": 0
+        },
+        "planner_target_xy": [
+          17.0,
+          10.0
+        ],
+        "foresight_prediction": {
+          "requested_model_id": "predictive_proxy_selected_v1",
+          "requested_checkpoint_path": "predictive_proxy_selected_v1",
+          "requested_checkpoint_sha256": "0e7e775fd09509543761d8326237c4f85b0cc540fb24f98b3c5f8f7c0009fccc",
+          "observed_checkpoint_sha256": "0e7e775fd09509543761d8326237c4f85b0cc540fb24f98b3c5f8f7c0009fccc",
+          "load_status": "loaded",
+          "effective_prediction_mode": "predictive_foresight",
+          "fallback_used": false,
+          "fallback_reason": null,
+          "load_error": null
+        }
+      },
+      "kinematics_feasibility": {
+        "commands_evaluated": 67794,
+        "infeasible_native_count": 0,
+        "projected_count": 0,
+        "projection_rate": 0.0,
+        "infeasible_rate": 0.0,
+        "mean_abs_delta_linear": 0.0,
+        "mean_abs_delta_angular": 0.0,
+        "max_abs_delta_linear": 0.0,
+        "max_abs_delta_angular": 0.0
+      },
+      "ammv_feasibility": {
+        "schema_version": "ammv_feasibility.v1",
+        "evidence_kind": "diagnostic_proxy",
+        "proxy_kind": "internal_non_hardware",
+        "status": "available",
+        "episode_count": 265,
+        "commands_evaluated": 67794,
+        "min_stability_margin": 0.2660550458715598,
+        "tip_over_violation": false,
+        "n_curvature_violations": 3227,
+        "feasible": false
+      }
+    },
+    "preflight": {
+      "status": "ok",
+      "learned_policy_contract": {
+        "status": "not_applicable"
+      },
+      "algorithm_metadata_contract": {
+        "algorithm": "predictive_mppi",
+        "status": "ok",
+        "canonical_algorithm": "predictive_mppi",
+        "baseline_category": "learning",
+        "policy_semantics": "predictive_sequence_optimizer",
+        "observation_spec": {
+          "default_mode": "socnav_state",
+          "supported_modes": [
+            "socnav_state"
+          ],
+          "inputs": [
+            "robot_state",
+            "goal",
+            "pedestrians",
+            "prediction_model"
+          ],
+          "notes": "Predictive MPPI consumes SocNav state and learned prediction features.",
+          "active_mode": "socnav_state",
+          "observation_level": "tracked_agents_no_noise",
+          "override_applied": false
+        },
+        "observation_level": {
+          "key": "tracked_agents_no_noise",
+          "display_name": "Perfect tracked agents",
+          "perception_assumption": "perfect_tracking_without_noise",
+          "active_observation_mode": "socnav_state",
+          "compatible_observation_modes": [
+            "socnav_state",
+            "headed_socnav_state",
+            "gst_human_state"
+          ],
+          "required_inputs": [
+            "robot_state",
+            "goal",
+            "tracked_agents"
+          ],
+          "noise_policy": "none",
+          "occlusion_policy": "none",
+          "interpretation": "benchmark_metadata_not_sensor_certification"
+        },
+        "planner_kinematics": {
+          "robot_kinematics": "differential_drive",
+          "planner_command_space": "unicycle_vw",
+          "supports_native_commands": false,
+          "supports_adapter_commands": true,
+          "execution_mode": "adapter",
+          "adapter_name": "PredictiveMPPIAdapter",
+          "adapter_active": true,
+          "scenario_kinematics": [
+            "differential_drive"
+          ]
+        },
+        "planner_contract": {
+          "planner_id": "predictive_mppi",
+          "observation_contract": {
+            "mode": "socnav_state",
+            "active_mode": "socnav_state",
+            "observation_level": "tracked_agents_no_noise",
+            "perception_assumption": "perfect_tracking_without_noise",
+            "supported_modes": [
+              "socnav_state"
+            ],
+            "required_inputs": [
+              "robot_state",
+              "goal",
+              "pedestrians",
+              "prediction_model"
+            ],
+            "frame": "world",
+            "normalization": "raw",
+            "pedestrian_ordering": "distance_ascending",
+            "missing_value": null,
+            "notes": "Predictive MPPI consumes SocNav state and learned prediction features."
+          },
+          "action_contract": {
+            "command_space": "unicycle_vw",
+            "output_keys": [
+              "v",
+              "omega"
+            ],
+            "frame": "robot",
+            "normalization": "raw",
+            "units": "mps_radps",
+            "scaling": "none",
+            "compatible_robot_kinematics": [
+              "differential_drive"
+            ],
+            "active_robot_kinematics": "differential_drive",
+            "bounds": {},
+            "notes": ""
+          },
+          "reset_contract": "seeded_reset",
+          "scenario_requirements": [],
+          "compatibility_scope": "metadata_only",
+          "notes": "Compatibility metadata only; not a benchmark quality claim."
+        },
+        "adapter_impact": {
+          "requested": false,
+          "native_steps": 0,
+          "adapted_steps": 0,
+          "status": "disabled"
+        },
+        "learned_checkpoint_observation_contract": {
+          "status": "not_applicable",
+          "metadata_source": "algorithm_default",
+          "active_observation_mode": "socnav_state",
+          "observation_level": "tracked_agents_no_noise",
+          "observation_level_key": "tracked_agents_no_noise",
+          "planner_observation_mode": null
+        },
+        "planner_runtime": {
+          "planner_type": "PredictiveMPPIAdapter",
+          "recovery_kind": "mixed",
+          "no_admissible_command": true,
+          "no_admissible_command_count": 192,
+          "recovery_command": false,
+          "recovery_command_count": 0,
+          "last_decision": {
+            "recovery_kind": "mixed",
+            "no_admissible_command": true,
+            "no_admissible_command_count": 192,
+            "recovery_command": false,
+            "recovery_command_count": 0
+          },
+          "planner_target_xy": [
+            17.0,
+            10.0
+          ],
+          "foresight_prediction": {
+            "requested_model_id": "predictive_proxy_selected_v1",
+            "requested_checkpoint_path": "predictive_proxy_selected_v1",
+            "requested_checkpoint_sha256": "0e7e775fd09509543761d8326237c4f85b0cc540fb24f98b3c5f8f7c0009fccc",
+            "observed_checkpoint_sha256": "0e7e775fd09509543761d8326237c4f85b0cc540fb24f98b3c5f8f7c0009fccc",
+            "load_status": "loaded",
+            "effective_prediction_mode": "predictive_foresight",
+            "fallback_used": false,
+            "fallback_reason": null,
+            "load_error": null
+          }
+        },
+        "kinematics_feasibility": {
+          "commands_evaluated": 67794,
+          "infeasible_native_count": 0,
+          "projected_count": 0,
+          "projection_rate": 0.0,
+          "infeasible_rate": 0.0,
+          "mean_abs_delta_linear": 0.0,
+          "mean_abs_delta_angular": 0.0,
+          "max_abs_delta_linear": 0.0,
+          "max_abs_delta_angular": 0.0
+        },
+        "ammv_feasibility": {
+          "schema_version": "ammv_feasibility.v1",
+          "evidence_kind": "diagnostic_proxy",
+          "proxy_kind": "internal_non_hardware",
+          "status": "available",
+          "episode_count": 265,
+          "commands_evaluated": 67794,
+          "min_stability_margin": 0.2660550458715598,
+          "tip_over_violation": false,
+          "n_curvature_violations": 3227,
+          "feasible": false
+        }
+      }
+    },
+    "observation_noise": {
+      "enabled": false,
+      "profile": "none",
+      "seed": null,
+      "pose_noise_std_m": 0.0,
+      "heading_noise_std_rad": 0.0,
+      "lidar_dropout_prob": 0.0,
+      "lidar_dropout_value": 0.0,
+      "pedestrian_position_noise_std_m": 0.0,
+      "pedestrian_false_negative_prob": 0.0,
+      "pedestrian_occlusion_max_range_m": null,
+      "observation_delay_steps": 0,
+      "pedestrian_false_positive_prob": 0.0,
+      "pedestrian_false_positive_radius_m": 4.0,
+      "pedestrian_false_positive_radius": 0.35,
+      "interpretation": "non_calibrated_benchmark_robustness_noise_not_a_real_sensor_model"
+    },
+    "observation_noise_hash": "0a5609f0b2b1",
+    "tracking_precision": {
+      "enabled": false,
+      "target_motp_m": 0.0,
+      "speed_contract": {
+        "threshold_m": 2.5,
+        "default_speed": 2.0,
+        "defensive_speed": 0.5,
+        "mode": "diagnostic"
+      },
+      "seed_salt": 0,
+      "schema_version": "tracking_precision_contract.v1",
+      "interpretation": "internal_non_hardware_tracking_precision_proxy_not_a_real_sensor_model"
+    },
+    "tracking_precision_hash": "d06cee655fee",
+    "observation_level": "tracked_agents_no_noise",
+    "metrics": {
+      "collision": 0.0,
+      "collision_count": 0.0,
+      "collision_rate": 0.0,
+      "collision_status": {
+        "status": "available",
+        "reason": null,
+        "denominator": 265,
+        "source": "episode.metrics.collisions"
+      }
+    },
+    "synthetic_actuation_profile": null,
+    "latency_stress_profile": null,
+    "latency_stress_metrics": null,
+    "provenance": {
+      "protocol_version": "0.1.0",
+      "commit_hash": "22172f6cacc8b3e63825793db604c820ff21080a",
+      "run_id": "72fd4e55f92f411a924b2e28d6814dfa",
+      "python_version": "3.13.14",
+      "artifact_pointer_status": "local_jsonl_present",
+      "config_identity": {
+        "schema_path": "robot_sf/benchmark/schemas/episode.schema.v1.json",
+        "scenario_path": "docs/context/robsweep/inputs/legacy.yaml",
+        "scenario_count": 10,
+        "scenario_matrix_hash": "a734b324bc819821",
+        "algo": "predictive_mppi",
+        "algo_config_path": "docs/context/robsweep/inputs/predictive_mppi_swap.yaml",
+        "benchmark_profile": "experimental",
+        "metric_affecting_config": {
+          "schema": "metric_affecting_run_config.v1",
+          "sensor_noise": {
+            "scan_noise": [
+              0.005,
+              0.002
+            ],
+            "scan_noise_enabled": true
+          },
+          "collision_regime": {
+            "regime": "terminate_on_contact",
+            "peds_have_static_obstacle_forces": true,
+            "peds_have_robot_repulsion": true
+          },
+          "interpretation": "metric_affecting_run_config: run settings that change what reported metrics mean; two result sets are only directly comparable when these settings match",
+          "actuation_envelope": {
+            "schema": "actuation_envelope.v1",
+            "drive_model": "differential_drive",
+            "max_forward_accel_m_s2": 1.0,
+            "max_braking_decel_m_s2": 1.0,
+            "braking_distinct_from_accel": false,
+            "stopping_distance_envelope_m": 2.0,
+            "envelope_formula": "v^2 / (2a) at peak forward speed and max braking deceleration",
+            "peak_forward_speed_m_s": 2.0,
+            "interpretation": "actuation_envelope: enforced acceleration/braking authority and the resulting worst-case stopping distance v^2/(2a); near-miss / TTC readings must be interpreted against this braking capability, not in isolation"
+          }
+        }
+      },
+      "seed_identity": {
+        "suite_key": "default",
+        "total_jobs": 265,
+        "written": 265
+      },
+      "invocation": "scripts/validation/resume_examiner_mppi_20261012.py --arm swap --workers 4 --old-controller-pid 1456082",
+      "result_manifest_path": "docs/context/robsweep/evidence/episodes/swap_predictive_mppi.jsonl.provenance.json",
+      "result_manifest_status": "available"
+    },
+    "benchmark_availability": {
+      "execution_mode": "adapter",
+      "readiness_status": "adapter",
+      "availability_status": "available",
+      "benchmark_success": true,
+      "availability_reason": null
+    }
+  }
+}

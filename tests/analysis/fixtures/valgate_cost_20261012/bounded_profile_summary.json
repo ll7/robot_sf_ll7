@@ -1,0 +1,214 @@
+{
+  "source_revision": "33a4735900153e742828227cc2171436ea09cd90",
+  "source_script": "scripts/validation/run_empty_world_sweep.py",
+  "suite": "main",
+  "arms": [
+    "predictive_mppi"
+  ],
+  "scenarios": [
+    "francis2023_blind_corner"
+  ],
+  "seeds": [
+    1001,
+    1002
+  ],
+  "workers": 1,
+  "arm_isolation": "in_process",
+  "authored_horizon": 400,
+  "step_traces": true,
+  "wall_cap_s": 300,
+  "process_exit": 124,
+  "requested_episodes": 2,
+  "written_episodes": 1,
+  "complete": false,
+  "profile_total_s": 301.37716351800475,
+  "total_calls": 712677794,
+  "primitive_calls": 710957355,
+  "profile_artifact": {
+    "path": "bounded_profile.json.gz",
+    "sha256": "ba6659d4cf87720346d5d3079f548860c6300c486df1a737737c00f849ef423b"
+  },
+  "top_functions": [
+    {
+      "file": "robot_sf/planner/predictive_mppi.py",
+      "line": 484,
+      "function": "_batch_sequence_rollout",
+      "primitive_calls": 1353,
+      "calls": 1353,
+      "self_s": 4.24676105,
+      "cumulative_s": 263.52244189600003
+    },
+    {
+      "file": "robot_sf/planner/socnav_occupancy.py",
+      "line": 89,
+      "function": "_exact_obstacle_clearance",
+      "primitive_calls": 5254732,
+      "calls": 5254732,
+      "self_s": 4.616096888,
+      "cumulative_s": 154.95751774000001
+    },
+    {
+      "file": "robot_sf/planner/clearance_geometry.py",
+      "line": 112,
+      "function": "clearance",
+      "primitive_calls": 5254732,
+      "calls": 5254732,
+      "self_s": 9.345547943000001,
+      "cumulative_s": 148.074972476
+    },
+    {
+      "file": "robot_sf/planner/predictive_mppi.py",
+      "line": 160,
+      "function": "_recovery_drive_rollout",
+      "primitive_calls": 174453,
+      "calls": 174453,
+      "self_s": 5.243556605,
+      "cumulative_s": 134.091218364
+    },
+    {
+      "file": ".venv/lib/python3.13/site-packages/torch/serialization.py",
+      "line": 2163,
+      "function": "persistent_load",
+      "primitive_calls": 24,
+      "calls": 33,
+      "self_s": 0.8476228530000001,
+      "cumulative_s": 109.905139332
+    },
+    {
+      "file": ".venv/lib/python3.13/site-packages/shapely/decorators.py",
+      "line": 73,
+      "function": "wrapped",
+      "primitive_calls": 24924671,
+      "calls": 24924671,
+      "self_s": 25.912509931000002,
+      "cumulative_s": 76.34702543
+    },
+    {
+      "file": "robot_sf/planner/socnav_occupancy.py",
+      "line": 354,
+      "function": "_path_penalty",
+      "primitive_calls": 177356,
+      "calls": 177356,
+      "self_s": 3.1583226460000002,
+      "cumulative_s": 56.421062754000005
+    },
+    {
+      "file": "robot_sf/planner/socnav_occupancy.py",
+      "line": 302,
+      "function": "_grid_value",
+      "primitive_calls": 2837696,
+      "calls": 2837696,
+      "self_s": 2.080593153,
+      "cumulative_s": 47.314614602000006
+    },
+    {
+      "file": "robot_sf/planner/socnav_occupancy.py",
+      "line": 233,
+      "function": "_world_to_grid",
+      "primitive_calls": 2837696,
+      "calls": 2837696,
+      "self_s": 15.861299189,
+      "cumulative_s": 45.234021449000004
+    },
+    {
+      "file": ".venv/lib/python3.13/site-packages/shapely/geometry/point.py",
+      "line": 54,
+      "function": "__new__",
+      "primitive_calls": 5255502,
+      "calls": 5255502,
+      "self_s": 9.014241121000001,
+      "cumulative_s": 40.038983867000006
+    },
+    {
+      "file": ".venv/lib/python3.13/site-packages/shapely/decorators.py",
+      "line": 171,
+      "function": "wrapper",
+      "primitive_calls": 9132004,
+      "calls": 9132121,
+      "self_s": 3.8781641270000002,
+      "cumulative_s": 37.159224924
+    },
+    {
+      "file": "robot_sf/planner/drive_rollout.py",
+      "line": 8,
+      "function": "native_drive_rollout",
+      "primitive_calls": 174453,
+      "calls": 174453,
+      "self_s": 2.136141033,
+      "cumulative_s": 36.79645747
+    },
+    {
+      "file": "robot_sf/planner/drive_rollout.py",
+      "line": 26,
+      "function": "advance",
+      "primitive_calls": 3867461,
+      "calls": 3867461,
+      "self_s": 10.299999508,
+      "cumulative_s": 32.59809895
+    },
+    {
+      "file": ".venv/lib/python3.13/site-packages/shapely/geometry/linestring.py",
+      "line": 40,
+      "function": "__new__",
+      "primitive_calls": 3867404,
+      "calls": 3867404,
+      "self_s": 5.9597327280000005,
+      "cumulative_s": 31.167151855
+    },
+    {
+      "file": "robot_sf/planner/predictive_mppi.py",
+      "line": 255,
+      "function": "_min_obstacle_clearance",
+      "primitive_calls": 1387496,
+      "calls": 1387496,
+      "self_s": 0.39084221700000005,
+      "cumulative_s": 27.952303374000003
+    },
+    {
+      "file": ".venv/lib/python3.13/site-packages/shapely/geometry/base.py",
+      "line": 343,
+      "function": "distance",
+      "primitive_calls": 5254784,
+      "calls": 5254784,
+      "self_s": 2.361844892,
+      "cumulative_s": 22.87225913
+    },
+    {
+      "file": "robot_sf/planner/socnav_occupancy.py",
+      "line": 53,
+      "function": "_as_1d_float",
+      "primitive_calls": 18705788,
+      "calls": 18705788,
+      "self_s": 9.456134572,
+      "cumulative_s": 22.411077225
+    },
+    {
+      "file": ".venv/lib/python3.13/site-packages/shapely/geometry/base.py",
+      "line": 772,
+      "function": "contains",
+      "primitive_calls": 5254902,
+      "calls": 5254902,
+      "self_s": 2.291018514,
+      "cumulative_s": 21.094858567000003
+    },
+    {
+      "file": ".venv/lib/python3.13/site-packages/tensorflow/python/util/dispatch.py",
+      "line": 1053,
+      "function": "_add_dispatch_for_unary_elementwise_api",
+      "primitive_calls": 115,
+      "calls": 115,
+      "self_s": 0.000401752,
+      "cumulative_s": 20.2829379
+    },
+    {
+      "file": "robot_sf/robot/differential_drive.py",
+      "line": 376,
+      "function": "apply_action",
+      "primitive_calls": 3867799,
+      "calls": 3867799,
+      "self_s": 1.000778588,
+      "cumulative_s": 18.282356027000002
+    }
+  ],
+  "private_raw_disposition": "Preserved under lanes/valgate/evidence/before and lanes/valgate/evidence/before.prof; incomplete diagnostics, no receipt."
+}

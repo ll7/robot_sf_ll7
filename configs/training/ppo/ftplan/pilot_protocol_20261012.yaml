@@ -1,0 +1,69 @@
+schema: ppo-ftplan-pilot.v1
+state: prepared_not_submitted
+author_approval_date: '2026-10-12'
+source:
+  model_id: ppo_release_robot_b1002_last_20261001
+  release_role: plain_PPO_0_0_8
+  source_recipe: configs/training/ppo/expert_ppo_release_contract_b_seed1002.yaml
+  wandb_complete_artifact: ll7/robot_sf/ppotrain-b-seed1002-20260930-complete:v0
+  normalization: none
+  training_linear_speed_cap_m_s: 2.0
+  training_reverse_enabled: false
+  configured_reward_curriculum: false
+  reward_name: route_completion_v3
+  action_semantics: velocity_delta
+  num_envs: 18
+  cnn_channels: [32, 64, 64]
+additional_source_arms: []
+training_config: configs/training/ppo/ftplan/released_warm_weighted_3m_20261012.template
+initialization_seeds: [100001, 100002, 100003]
+training_master_seeds: [100001, 100002, 100003]
+training_episode_range: [100000, 199999]
+steps_per_seed: 3000000
+segment_steps: 1000000
+selection:
+  receipt_status: completed
+  fallback_used: false
+  execution_errors: 0
+  seed_range: [1031, 1060]
+  scenario_count: 48
+  runner: canonical_benchmark_runner_and_released_checkpoint_adapter
+  device: cpu
+  baseline: released_checkpoint_on_identical_selection_pairs
+  continue_rule: latest_selection_success_strictly_above_previous_selection_success
+  first_segment_rule: selection_success_strictly_above_released_baseline
+  stop_rule: stop_seed_on_no_improvement_or_any_nan_or_fallback
+  checkpoint_rule: best_selection_success_before_any_report_evaluation
+  ties: earliest_checkpoint
+  stopped_seeds: retained_no_replacement
+report:
+  seed_range: [1101, 1130]
+  scenario_count: 48
+  device: cpu
+  use: once_after_checkpoint_choice_never_for_selection
+preservation:
+  checkpoints: [released_source, warm_initialization, each_segment_final, selection_best, final]
+  destinations: [external_hub, wandb_artifact]
+  verify: sha256_and_independent_readback
+  include: [source_head, resolved_configs, worker_seed_receipts, model_normalization_companions_if_any, selection_rows, manifests, logs]
+prerequisites:
+  - controlled_seed_replication_reports_complete_with_worker_receipt_audit_and_durable_readback
+  - seed_policy_and_spawn_receipt_implementation_independently_reviewed_and_merged
+  - warm_start_and_family_weighting_implementation_independently_reviewed_and_merged
+  - checkpoint_environment_observation_and_action_spaces_match_without_silent_conversion
+  - plain_ppo_predictive_foresight_disabled
+  - behaviour_receipt_and_hosted_required_checks
+cost:
+  reference: issue_9628_job11724_10m_steps_8h04m_one_l40s_22_workers_cross_recipe_proxy
+  estimation: 9m_steps_times_8h04m_per_10m_times_22_over_18_workers
+  measured_b1002_throughput: false
+  training_l40s_gpu_hours: 8.87
+  training_uncertainty_fraction: 0.5
+  rounded_training_budget_l40s_gpu_hours: 15
+  training_worker_core_hours_nominal: 159.7
+  cpu_selection_episodes_max: 14400
+  cpu_report_episodes_max: 4320
+  evaluation_cpu_hours: unmeasured_measure_first_baseline
+  note: heuristic_worker_scaling_and_smaller_CNN_are_unmeasured_reestimate_after_first_segment_no_hardware_equivalence_claim
+claim_boundary: development_tuning_only_no_release_or_paper_admission
+obstacle_observation_feature: deferred_issue_9609_April_probe_does_not_establish_B1002_signature

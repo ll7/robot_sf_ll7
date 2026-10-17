@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 import numpy as np
 from gymnasium import spaces
+from pysocialforce.config import LEGACY_SHIFTED_GRADIENT_V1
 
 from robot_sf.common.types import Rect
 from robot_sf.gym_env.env_config import EnvSettings
@@ -33,6 +34,7 @@ from robot_sf.nav.map_config import (
     MapDefinitionPool,
 )
 from robot_sf.nav.occupancy_grid import GridChannel, GridConfig
+from robot_sf.sim.sim_config import SimulationSettings
 
 
 def _minimal_map_def() -> MapDefinition:
@@ -177,15 +179,51 @@ def test_robot_env_hash_changes_only_for_opted_in_goal_policy() -> None:
 def test_robot_env_hash_preserves_legacy_goal_sampling_identity() -> None:
     """Absent and explicit legacy sampling retain the same config identity."""
     cfg = EnvSettings(
+        sim_config=SimulationSettings(obstacle_force_law=LEGACY_SHIFTED_GRADIENT_V1),
         map_pool=MapDefinitionPool(
             maps_folder="fixture",
             map_defs={"fixture": _minimal_map_def()},
-        )
+        ),
     )
     implicit_legacy_hash = _stable_config_hash(cfg)
 
     cfg.sim_config.robot_goal_sampling_policy = ROBOT_GOAL_SAMPLING_LEGACY_V1
     assert _stable_config_hash(cfg) == implicit_legacy_hash
+
+
+def test_robot_env_missing_wall_selector_matches_legacy_identity_byte_for_byte() -> None:
+    """Missing and explicit legacy wall selectors retain the same pinned identity."""
+    cfg = EnvSettings(
+        map_pool=MapDefinitionPool(maps_folder="fixture", map_defs={"fixture": _minimal_map_def()})
+    )
+    explicit_legacy = EnvSettings(
+        sim_config=SimulationSettings(obstacle_force_law=LEGACY_SHIFTED_GRADIENT_V1),
+        map_pool=MapDefinitionPool(maps_folder="fixture", map_defs={"fixture": _minimal_map_def()}),
+    )
+    # ab3c014bd (merged by 408ffb1ba, #10278) renamed serialized rollover fields;
+    # dae7470d0 (#10295) integrated that identity change with the wall-law pins.
+    assert _stable_config_hash(cfg).encode("ascii") == b"c8ac3dfe358aac1e"
+    assert _stable_config_hash(cfg).encode("ascii") == _stable_config_hash(explicit_legacy).encode(
+        "ascii"
+    )
+    assert cfg.sim_config.obstacle_force_law == LEGACY_SHIFTED_GRADIENT_V1
+    assert cfg.sim_config.obstacle_force_law_resolution_mode == "defaulted_missing"
+
+
+def test_robot_env_hash_pins_explicit_body_edge_wall_identity() -> None:
+    """Explicit body-edge walls have a pinned identity independent of goal-policy spelling."""
+    cfg = EnvSettings(
+        sim_config=SimulationSettings(obstacle_force_law="body_edge_exponential_v3"),
+        map_pool=MapDefinitionPool(maps_folder="fixture", map_defs={"fixture": _minimal_map_def()}),
+    )
+    # ab3c014bd (#10278) renamed serialized rollover fields to
+    # two_wheel_axle_track_m and single_wheel_axle_to_cog_m; dae7470d0 (#10295)
+    # integrated that identity change without updating this pin.
+    # The geometry values and wall law did not change; the config identity did.
+    assert _stable_config_hash(cfg) == "e4bcf1d2f4d295af"
+
+    cfg.sim_config.robot_goal_sampling_policy = ROBOT_GOAL_SAMPLING_LEGACY_V1
+    assert _stable_config_hash(cfg) == "e4bcf1d2f4d295af"
 
 
 def test_robot_env_hash_changes_for_corrected_goal_sampling_policy() -> None:

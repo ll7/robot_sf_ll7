@@ -4,14 +4,8 @@ on:
   merge_group:
   push:
     branches: [main]
-    paths-ignore:
-      - "**/*.md"
-      - "docs/**"
   pull_request:
     types: [opened, reopened, synchronize, ready_for_review]
-    paths-ignore:
-      - "**/*.md"
-      - "docs/**"
   workflow_dispatch:
     inputs:
       retry_failed:
@@ -93,6 +87,7 @@ jobs:
       cancel-in-progress: false
     outputs:
       run_full_ci: ${{ steps.decision.outputs.run_full_ci }}
+      docs_only: ${{ steps.docs.outputs.docs_only }}
       compat_os: ${{ steps.paths.outputs.compat_os }}
       examples_smoke: ${{ steps.paths.outputs.examples_smoke }}
       notebooks_smoke: ${{ steps.paths.outputs.notebooks_smoke }}
@@ -106,13 +101,60 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - name: Detect documentation-only changes
+        id: docs
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PUSH_BASE_SHA: ${{ github.event.before }}
+          GROUP_BASE_SHA: ${{ github.event.merge_group.base_sha }}
+          GROUP_HEAD_SHA: ${{ github.event.merge_group.head_sha }}
+        run: |
+          python - <<'PYTHON'
+          import os
+          import subprocess
+
+          from scripts.dev.check_ci_needs import docs_only_changed_files
+
+          event = os.environ["GITHUB_EVENT_NAME"]
+          if event == "pull_request":
+              base, head, separator = os.environ["PR_BASE_SHA"], os.environ["PR_HEAD_SHA"], "..."
+          elif event == "push":
+              base, head, separator = os.environ["PUSH_BASE_SHA"], os.environ["GITHUB_SHA"], ".."
+          elif event == "merge_group":
+              base, head, separator = os.environ["GROUP_BASE_SHA"], os.environ["GROUP_HEAD_SHA"], ".."
+          else:
+              base, head, separator = "", "", ".."
+          docs_only = False
+          # Manual runs, missing history, and empty diffs retain full admission.
+          if base and head and set(base) != {"0"}:
+              try:
+                  changed = subprocess.check_output([
+                      "git", "diff", "--no-renames", "--name-only", "-z", f"{base}{separator}{head}", "--"
+                  ]).split(b"\0")
+                  paths = [os.fsdecode(path) for path in changed if path]
+                  # The shared manifest governs coverage exemptions too. Disable
+                  # rename detection so both endpoints must qualify as docs.
+                  docs_only = docs_only_changed_files(paths, complete=True)
+              except subprocess.CalledProcessError:
+                  print("::warning::Cannot classify changed paths; retaining full CI")
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              output.write(f"docs_only={str(docs_only).lower()}\n")
+          print(f"Documentation-only changes: {docs_only}")
+          PYTHON
+
       - name: Elect exact-head full-matrix owner
         id: decision
         env:
           GH_TOKEN: ${{ github.token }}
           RETRY_FAILED: ${{ inputs.retry_failed || false }}
+          DOCS_ONLY: ${{ steps.docs.outputs.docs_only }}
         run: |
           set -euo pipefail
+          if [[ "${DOCS_ONLY}" == "true" ]]; then
+            echo "run_full_ci=false" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
           if [[ "${GITHUB_EVENT_NAME}" != "workflow_dispatch" ]]; then
             if [[ "${{ github.event_name == 'pull_request' && github.event.pull_request.draft }}" == "true" ]]; then
               echo "run_full_ci=false" >> "${GITHUB_OUTPUT}"
@@ -138,10 +180,11 @@ jobs:
             "${retry_args[@]}"
 
       - name: Test CI fallback decisions without project dependencies
+        if: steps.docs.outputs.docs_only != 'true'
         run: node --test tests/ci/runner_fallback.test.cjs
 
       - name: Set up pinned uv for draft feedback with bounded retry
-        if: github.event_name == 'pull_request' && github.event.pull_request.draft
+        if: github.event_name == 'pull_request' && github.event.pull_request.draft && steps.docs.outputs.docs_only != 'true'
         env:
           UV_VERSION: "0.11.21"
           UV_INSTALL_MAX_ATTEMPTS: "3"
@@ -150,17 +193,17 @@ jobs:
         run: bash scripts/dev/ci_install_uv_retry.sh "${UV_VERSION}"
 
       - name: Lint and run small CI-helper subset on drafts
-        if: github.event_name == 'pull_request' && github.event.pull_request.draft
+        if: github.event_name == 'pull_request' && github.event.pull_request.draft && steps.docs.outputs.docs_only != 'true'
         run: |
           set -euo pipefail
-          uvx --from ruff==0.16.7 ruff check .
-          uvx --from ruff==0.16.7 ruff format --check .
+          uvx --from ruff==0.17.0 ruff check .
+          uvx --from ruff==0.17.0 ruff format --check .
           PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run --no-project --with pytest==9.1.1 \
             python -m pytest tests/dev/test_ci_heavy_paths.py tests/ci/test_collect_pr_files.py \
             --noconftest -q -o addopts=''
 
       - name: Collect ready PR changed files
-        if: github.event_name == 'pull_request' && !github.event.pull_request.draft
+        if: github.event_name == 'pull_request' && steps.decision.outputs.run_full_ci == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -189,7 +232,7 @@ jobs:
               echo 'xdist_scratch_isolation=true'
             } >> "$GITHUB_OUTPUT"
           fi
-        if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+        if: steps.decision.outputs.run_full_ci == 'true'
 
       - name: Restore test durations for pytest-split balancing
         if: steps.decision.outputs.run_full_ci == 'true'
@@ -223,7 +266,7 @@ jobs:
 
       - name: Upload frozen test durations
         if: steps.decision.outputs.run_full_ci == 'true'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: test-duration-snapshot
           path: .test_durations
@@ -243,7 +286,7 @@ jobs:
 
       - name: Upload conservative test admission
         if: steps.decision.outputs.run_full_ci == 'true' && github.event_name == 'pull_request'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: conservative-test-admission
           path: output/ci/affected-selection.json
@@ -333,13 +376,13 @@ jobs:
     # Hosted first: opt in only with a successful bounded idle-capacity probe.
     # Every retry is hosted, including a queue-watchdog recovery.
     # Forks, bots, privileged events, and manual dispatches stay hosted.
-    runs-on: ${{ needs.self-hosted-admission.result == 'success' && needs.self-hosted-admission.outputs.self_hosted == 'true' && vars.ROBOT_SF_SELF_HOSTED_CI_ENABLED == 'true' && github.repository == 'll7/robot_sf_ll7' && github.actor == 'll7' && github.triggering_actor == 'll7' && (github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == 'll7/robot_sf_ll7')) && github.run_attempt == 1 && needs.runner-availability.outputs.fast_feedback == 'true' && 'robot-sf-ci-ephemeral' || 'ubuntu-latest' }}
+    runs-on: ${{ needs.self-hosted-admission.result == 'success' && needs.self-hosted-admission.outputs.self_hosted == 'true' && vars.ROBOT_SF_SELF_HOSTED_CI_ENABLED == 'true' && github.repository == 'll7/robot_sf_ll7' && github.actor == 'll7' && github.triggering_actor == 'll7' && (github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == 'll7/robot_sf_ll7' && github.event.pull_request.user.login == 'll7')) && github.run_attempt == 1 && needs.runner-availability.outputs.fast_feedback == 'true' && 'robot-sf-ci-ephemeral' || 'ubuntu-latest' }}
     permissions:
       contents: read
       actions: read
     timeout-minutes: 45
-    # Split complete admission across six runners and combine exact-head coverage.
-    # Uncertain dependencies intentionally select every slow test on pull requests.
+    # Split fast tests plus affected slow witnesses across six runners.
+    # Shared CI/collection changes and unmapped inputs retain complete admission.
     strategy:
       fail-fast: false
       matrix:
@@ -357,7 +400,7 @@ jobs:
       PYTEST_XDIST_DIST: worksteal
       PYTEST_SHARD_COUNT: 6
       PYTEST_SHARD_INDEX: ${{ matrix.shard }}
-      ROBOT_SF_SHARD_INCLUDE_SLOW: "1"
+      ROBOT_SF_SHARD_INCLUDE_SLOW: ${{ github.event_name == 'pull_request' && '0' || '1' }}
       # Reuse the setup decision only after default admission is installed.
       ROBOT_SF_AFFECTED_BASE_REF: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
       ROBOT_SF_AFFECTED_SELECTION_FILE: ${{ github.event_name == 'pull_request' && 'output/ci/affected-selection.json' || '' }}
@@ -381,7 +424,7 @@ jobs:
 
       - name: Download conservative test admission
         if: ${{ github.event_name == 'pull_request' }}
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: conservative-test-admission
           path: output/ci
@@ -425,7 +468,7 @@ jobs:
             pytest-${{ runner.os }}-
 
       - name: Download frozen test durations
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: test-duration-snapshot
           path: .
@@ -448,7 +491,7 @@ jobs:
       - name: Upload test durations
         if: always()
         continue-on-error: true
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: pytest-durations-${{ matrix.shard }}
           path: .test_durations
@@ -458,7 +501,7 @@ jobs:
       - name: Upload pytest lastfailed order snapshot
         if: always()
         continue-on-error: true
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: pytest-lastfailed-${{ matrix.shard }}
           path: .pytest_cache/v/cache/lastfailed
@@ -466,7 +509,7 @@ jobs:
           include-hidden-files: true
 
       - name: Upload coverage shard
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: coverage-shard-${{ matrix.shard }}
           path: output/coverage/.coverage.${{ matrix.shard }}
@@ -524,7 +567,7 @@ jobs:
         uses: ./.github/actions/setup-ci-python
 
       - name: Download coverage shards
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: coverage-shard-*
           path: output/coverage
@@ -575,7 +618,7 @@ jobs:
 
       - name: Upload changed-coverage proof
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: changed-coverage-proof
           path: |
@@ -596,7 +639,7 @@ jobs:
         uses: ./.github/actions/setup-ci-python
 
       - name: Download coverage shards
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: coverage-shard-*
           path: output/coverage
@@ -654,7 +697,7 @@ jobs:
 
       - name: Upload coverage reports
         if: ${{ failure() || github.ref == 'refs/heads/main' }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: coverage-reports
           path: |
@@ -726,7 +769,7 @@ jobs:
   smoke-artifacts:
     needs: [dispatch-ownership, self-hosted-admission, runner-availability]
     if: ${{ !cancelled() && needs.dispatch-ownership.result == 'success' && needs.dispatch-ownership.outputs.run_full_ci == 'true' }}
-    runs-on: ${{ needs.self-hosted-admission.result == 'success' && needs.self-hosted-admission.outputs.self_hosted == 'true' && vars.ROBOT_SF_SELF_HOSTED_CI_ENABLED == 'true' && github.repository == 'll7/robot_sf_ll7' && github.actor == 'll7' && github.triggering_actor == 'll7' && (github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == 'll7/robot_sf_ll7')) && github.run_attempt == 1 && needs.runner-availability.outputs.smoke_artifacts == 'true' && 'robot-sf-ci-ephemeral' || 'ubuntu-latest' }}
+    runs-on: ${{ needs.self-hosted-admission.result == 'success' && needs.self-hosted-admission.outputs.self_hosted == 'true' && vars.ROBOT_SF_SELF_HOSTED_CI_ENABLED == 'true' && github.repository == 'll7/robot_sf_ll7' && github.actor == 'll7' && github.triggering_actor == 'll7' && (github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == 'll7/robot_sf_ll7' && github.event.pull_request.user.login == 'll7')) && github.run_attempt == 1 && needs.runner-availability.outputs.smoke_artifacts == 'true' && 'robot-sf-ci-ephemeral' || 'ubuntu-latest' }}
     permissions:
       contents: read
     timeout-minutes: 30
@@ -747,7 +790,7 @@ jobs:
 
       - name: Upload map verification manifest
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: map-verification-manifest
           path: output/validation/map_verification.json
@@ -755,7 +798,7 @@ jobs:
 
       - name: Upload benchmark artifacts
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: benchmark-artifacts
           path: output/benchmarks/
@@ -763,7 +806,7 @@ jobs:
 
       - name: Upload recording artifacts
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: recording-artifacts
           path: output/recordings/
@@ -771,7 +814,7 @@ jobs:
 
       - name: Upload cold/warm perf smoke artifact
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: cold-warm-perf-smoke
           path: |
@@ -781,7 +824,7 @@ jobs:
 
       - name: Upload smoke artifact on failure
         if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ci-smoke-episodes
           path: output/benchmarks/ci_smoke/episodes.jsonl
@@ -888,7 +931,7 @@ jobs:
 
       - name: Upload reproducibility report
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: reproducibility-report
           path: output/benchmarks/reproducibility_check.json
@@ -926,7 +969,7 @@ jobs:
 
       - name: Upload reconciliation report
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: reproducibility-check-reconciliation
           path: output/validation/reproducibility_check_run_reconciliation.json
@@ -962,7 +1005,7 @@ jobs:
   wheel-smoke-install:
     needs: [dispatch-ownership, self-hosted-admission, runner-availability]
     if: ${{ !cancelled() && needs.dispatch-ownership.result == 'success' && needs.dispatch-ownership.outputs.run_full_ci == 'true' }}
-    runs-on: ${{ needs.self-hosted-admission.result == 'success' && needs.self-hosted-admission.outputs.self_hosted == 'true' && vars.ROBOT_SF_SELF_HOSTED_CI_ENABLED == 'true' && github.repository == 'll7/robot_sf_ll7' && github.actor == 'll7' && github.triggering_actor == 'll7' && (github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == 'll7/robot_sf_ll7')) && github.run_attempt == 1 && needs.runner-availability.outputs.wheel_smoke_install == 'true' && 'robot-sf-ci-ephemeral' || 'ubuntu-latest' }}
+    runs-on: ${{ needs.self-hosted-admission.result == 'success' && needs.self-hosted-admission.outputs.self_hosted == 'true' && vars.ROBOT_SF_SELF_HOSTED_CI_ENABLED == 'true' && github.repository == 'll7/robot_sf_ll7' && github.actor == 'll7' && github.triggering_actor == 'll7' && (github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == 'll7/robot_sf_ll7' && github.event.pull_request.user.login == 'll7')) && github.run_attempt == 1 && needs.runner-availability.outputs.wheel_smoke_install == 'true' && 'robot-sf-ci-ephemeral' || 'ubuntu-latest' }}
     permissions:
       contents: read
     # Leave smoke-test headroom after an observed ~18-minute setup (#8631).
@@ -989,7 +1032,7 @@ jobs:
 
       - name: Upload wheel smoke report
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: wheel-smoke-report
           path: output/validation/wheel_install_smoke_report.json
@@ -998,7 +1041,7 @@ jobs:
   examples-smoke:
     needs: [dispatch-ownership, self-hosted-admission, runner-availability]
     if: ${{ !cancelled() && needs.dispatch-ownership.result == 'success' && needs.dispatch-ownership.outputs.run_full_ci == 'true' && (github.event_name != 'pull_request' || needs.dispatch-ownership.outputs.examples_smoke == 'true') }}
-    runs-on: ${{ needs.self-hosted-admission.result == 'success' && needs.self-hosted-admission.outputs.self_hosted == 'true' && vars.ROBOT_SF_SELF_HOSTED_CI_ENABLED == 'true' && github.repository == 'll7/robot_sf_ll7' && github.actor == 'll7' && github.triggering_actor == 'll7' && (github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == 'll7/robot_sf_ll7')) && github.run_attempt == 1 && needs.runner-availability.outputs.examples_smoke == 'true' && 'robot-sf-ci-ephemeral' || 'ubuntu-latest' }}
+    runs-on: ${{ needs.self-hosted-admission.result == 'success' && needs.self-hosted-admission.outputs.self_hosted == 'true' && vars.ROBOT_SF_SELF_HOSTED_CI_ENABLED == 'true' && github.repository == 'll7/robot_sf_ll7' && github.actor == 'll7' && github.triggering_actor == 'll7' && (github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == 'll7/robot_sf_ll7' && github.event.pull_request.user.login == 'll7')) && github.run_attempt == 1 && needs.runner-availability.outputs.examples_smoke == 'true' && 'robot-sf-ci-ephemeral' || 'ubuntu-latest' }}
     permissions:
       contents: read
     timeout-minutes: 30
@@ -1061,7 +1104,7 @@ jobs:
   notebooks-smoke:
     needs: [dispatch-ownership, self-hosted-admission, runner-availability]
     if: ${{ !cancelled() && needs.dispatch-ownership.result == 'success' && needs.dispatch-ownership.outputs.run_full_ci == 'true' && (github.event_name != 'pull_request' || needs.dispatch-ownership.outputs.notebooks_smoke == 'true') }}
-    runs-on: ${{ needs.self-hosted-admission.result == 'success' && needs.self-hosted-admission.outputs.self_hosted == 'true' && vars.ROBOT_SF_SELF_HOSTED_CI_ENABLED == 'true' && github.repository == 'll7/robot_sf_ll7' && github.actor == 'll7' && github.triggering_actor == 'll7' && (github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == 'll7/robot_sf_ll7')) && github.run_attempt == 1 && needs.runner-availability.outputs.notebooks_smoke == 'true' && 'robot-sf-ci-ephemeral' || 'ubuntu-latest' }}
+    runs-on: ${{ needs.self-hosted-admission.result == 'success' && needs.self-hosted-admission.outputs.self_hosted == 'true' && vars.ROBOT_SF_SELF_HOSTED_CI_ENABLED == 'true' && github.repository == 'll7/robot_sf_ll7' && github.actor == 'll7' && github.triggering_actor == 'll7' && (github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == 'll7/robot_sf_ll7' && github.event.pull_request.user.login == 'll7')) && github.run_attempt == 1 && needs.runner-availability.outputs.notebooks_smoke == 'true' && 'robot-sf-ci-ephemeral' || 'ubuntu-latest' }}
     permissions:
       contents: read
     timeout-minutes: 30
@@ -1209,6 +1252,7 @@ jobs:
             -q
 
   ci:
+    # Draft feedback must not impersonate a ready PR's full-CI identity.
     name: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft && 'ci-draft' || 'ci' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -1261,17 +1305,24 @@ jobs:
           github.event_name == 'workflow_dispatch' }}
         run: echo "The dispatch gate observed a decisive exact-head CI run; no duplicate matrix launched."
 
+      - name: Record documentation-only result
+        if: >-
+          ${{ always() && needs.dispatch-ownership.result == 'success' &&
+          needs.dispatch-ownership.outputs.docs_only == 'true' }}
+        run: echo "Documentation-only changes; heavy CI jobs skipped and the aggregate check reports success."
+
       - name: Record draft feedback result
         if: >-
           ${{ always() && needs.dispatch-ownership.result == 'success' &&
           needs.dispatch-ownership.outputs.run_full_ci == 'false' &&
-          github.event_name == 'pull_request' }}
+          github.event_name == 'pull_request' &&
+          needs.dispatch-ownership.outputs.docs_only != 'true' }}
         run: echo "Draft lint and small helper tests passed; full CI starts on ready_for_review."
 
       - name: Download test-duration shards
         if: ${{ always() && needs.fast-feedback.result != 'skipped' && steps.checkout_ci_source.outcome == 'success' }}
         continue-on-error: true
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: pytest-durations-*
           path: .duration-artifacts

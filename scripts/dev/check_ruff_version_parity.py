@@ -118,9 +118,9 @@ def read_workflow_ruff_pins(workflows_dir: Path) -> list[tuple[str, str]]:
     """Return ``(location, raw_version)`` for every pinned Ruff CI launcher.
 
     Scans ``*.yml``/``*.yaml`` directly inside ``workflows_dir`` and records
-    each ``ruff==<version>`` pin on a line that also mentions ``uvx``. The
-    location is ``"<filename>:<line>"`` so mismatch reports name the stale
-    pin exactly.
+    each ``ruff==<version>`` pin in a logical line that mentions ``uvx``.
+    Shell backslash-newline continuations are joined before scanning. The
+    location is ``"<filename>:<line>"`` at the start of the logical line.
 
     Returns:
         Ordered ``(location, raw_version)`` pairs; empty when no launcher
@@ -132,11 +132,22 @@ def read_workflow_ruff_pins(workflows_dir: Path) -> list[tuple[str, str]]:
     for candidate in sorted(workflows_dir.iterdir()):
         if not candidate.is_file() or candidate.suffix not in {".yml", ".yaml"}:
             continue
-        for lineno, line in enumerate(candidate.read_text(encoding="utf-8").splitlines(), start=1):
+        continued = ""
+        start_line = 1
+        for lineno, physical in enumerate(
+            candidate.read_text(encoding="utf-8").splitlines(keepends=True), start=1
+        ):
+            if not continued:
+                start_line = lineno
+            if physical.endswith("\\\n"):
+                continued += physical[:-2]
+                continue
+            line = continued + physical
+            continued = ""
             if "uvx" not in line or "ruff" not in line:
                 continue
             for match in RUFF_WORKFLOW_PIN_PATTERN.finditer(line):
-                pins.append((f"{candidate.name}:{lineno}", match.group("version")))
+                pins.append((f"{candidate.name}:{start_line}", match.group("version")))
     return pins
 
 

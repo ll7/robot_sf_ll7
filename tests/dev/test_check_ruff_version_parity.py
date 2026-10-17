@@ -393,3 +393,34 @@ def test_main_detects_dev_only_bump(tmp_path: Path, capsys: pytest.CaptureFixtur
     assert exit_code != 0
     out = capsys.readouterr().out
     assert "ci.yml" in out
+
+
+def test_main_rejects_stale_continued_launcher(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A good launcher cannot conceal a stale pin on a shell continuation."""
+    import scripts.dev.check_ruff_version_parity as guard
+
+    pre_commit = tmp_path / "pre-commit.yaml"
+    pre_commit.write_text(
+        "repos:\n  - repo: https://github.com/astral-sh/ruff-pre-commit\n    rev: v0.17.0\n"
+    )
+    pyproject = tmp_path / "pyproject.toml"
+    pyproject.write_text(
+        '[tool.ruff]\nrequired-version = "==0.17.0"\n[dependency-groups]\ndev = ["ruff==0.17.0"]\n'
+    )
+    workflows = tmp_path / "workflows"
+    workflows.mkdir()
+    (workflows / "ci.yml").write_text(
+        "jobs:\n  lint:\n    steps:\n      - run: |\n"
+        "          uvx --from ruff==0.17.0 ruff check .\n"
+        "          uvx --from \\\n"
+        "            ruff==9.9.9 ruff format --check .\n"
+    )
+    monkeypatch.setattr(guard, "DEFAULT_WORKFLOWS_DIR", workflows, raising=False)
+
+    result = guard.main(["--pre-commit-config", str(pre_commit), "--pyproject", str(pyproject)])
+
+    assert result == 1
+    output = capsys.readouterr().out
+    assert "9.9.9" in output and "ci.yml:" in output

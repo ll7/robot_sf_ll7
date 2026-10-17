@@ -336,6 +336,7 @@ def _make_step_env(
     env.last_action = None
     env._action_latency_steps = 0
     env.reward_func = lambda _meta: 1.0
+    env._static_speed_penalty_enabled = False
     env._telemetry_session = None
     env.recording_enabled = False
     return env

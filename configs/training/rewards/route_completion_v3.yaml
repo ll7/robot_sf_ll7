@@ -13,3 +13,4 @@ reward_kwargs:
     timeout: -3.0
     stagnation: -1.2
     terminal_bonus: 3.0
+    static_speed: 0.0

@@ -42,7 +42,7 @@ So "what is the collision penalty?" has four common answers: −5 (v2/default), 
 ## Named weighted profiles
 
 These three profiles share one weighted-terms formula (`_reward_with_terms` in
-`robot_sf/gym_env/reward.py`). Each term is a bounded feature (e.g. progress in `[−1, 1]`,
+`robot_sf/gym_env/reward.py`). Each term is a feature (e.g. progress in `[−1, 1]`,
 collision in `{0, 1}`); the weight is multiplied by the feature and summed. A blank cell means the
 profile does not use that term (weight 0 / term absent).
 
@@ -58,6 +58,7 @@ profile does not use that term (weight 0 / term absent).
 | `timeout` | `{0, 1}` (timeout w/o success/collision) | — | −3.0 | — |
 | `stagnation` | `[0, 1]` | — | −1.2 | — |
 | `terminal_bonus` | `{0, 1}` (route complete, no collision) | 2.0 | 3.0 | 1.5 |
+| `static_speed` | `[0, abs(speed)]` (speed × static proximity below 1 m) | 0.0 | 0.0 | 0.0 |
 
 Per-term decomposition is written back into the step metadata as `reward_terms` and `reward_total`
 for logging. **Success is route completion only** (waypoint completion does not trigger the terminal

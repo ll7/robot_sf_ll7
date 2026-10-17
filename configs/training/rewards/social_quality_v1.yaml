@@ -11,6 +11,7 @@ reward_kwargs:
     comfort: -0.9
     smoothness: -0.2
     terminal_bonus: 1.5
+    static_speed: 0.0
 notes:
   - Social-quality-oriented reward profile with stronger safety shaping.
   - Success is route completion only (no waypoint success).

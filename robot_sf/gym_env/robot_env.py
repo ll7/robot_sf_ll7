@@ -39,11 +39,12 @@ from robot_sf.gym_env.env_util import (
 from robot_sf.gym_env.goal_progress import GoalProgressWindow
 from robot_sf.gym_env.observation_mode import ObservationMode
 from robot_sf.gym_env.reset_metadata import build_reset_metadata
-from robot_sf.gym_env.reward import route_completion_v2_reward
+from robot_sf.gym_env.reward import route_completion_v2_reward, uses_static_speed_penalty
 from robot_sf.gym_env.snqi_proxy import StepSNQIProxy
 from robot_sf.nav.map_config import ROBOT_GOAL_SAMPLING_LEGACY_V1
 from robot_sf.nav.obstacle import Obstacle
 from robot_sf.nav.occupancy_grid import OccupancyGrid
+from robot_sf.nav.spawn_clearance import robot_obstacle_clearance
 from robot_sf.prediction.goal_intention import (
     planner_goal_posterior_channel,
     planner_goal_posterior_channel_unavailable,
@@ -689,6 +690,7 @@ class RobotEnv(BaseEnv):
         self._frame_idx = 0
         self._telemetry_episode_id = -1
         self._snqi_proxy = StepSNQIProxy()
+        self._static_speed_penalty_enabled = uses_static_speed_penalty(self.reward_func)
         self._grid_obstacle_cache_key: _GridObstacleCacheKey | None = None
         self._grid_obstacle_cache_value: _GridObstacleCacheValue | None = None
         self._prime_snqi_proxy_state()
@@ -1126,6 +1128,15 @@ class RobotEnv(BaseEnv):
         reward_terms["rollover_proxy_penalty"] = penalty
         return reward + penalty
 
+    def _apply_static_speed_reward_metadata(self, reward_dict: dict[str, Any]) -> None:
+        """Supply physical speed and static clearance only for an opted-in reward."""
+        if self._static_speed_penalty_enabled:
+            robot = self.simulator.robots[0]
+            reward_dict["robot_speed"] = abs(float(robot.current_speed[0]))
+            reward_dict["static_obstacle_clearance"] = robot_obstacle_clearance(
+                self.map_def, self.simulator.robot_poses[0][0], float(robot.config.radius)
+            )
+
     def step(self, action) -> tuple[Any, float, bool, bool, dict[str, Any]]:
         """Execute one environment step.
 
@@ -1205,6 +1216,7 @@ class RobotEnv(BaseEnv):
         # Fetch metadata about the current state
         reward_dict = self.state.meta_dict()
         reward_dict.update(self._goal_progress_window.update(float(self.state.distance_to_goal)))
+        self._apply_static_speed_reward_metadata(reward_dict)
         reward_dict.update(
             self._snqi_proxy.compute_step_metrics(
                 self.simulator,

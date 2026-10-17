@@ -65,3 +65,50 @@ def test_unclassified_preflight_error_is_not_reported_as_preservation(tmp_path, 
     monkeypatch.setattr(current.subprocess, "run", refused)
     with pytest.raises(RuntimeError, match="unclassified"):
         current.preserve(work, tmp_path / "hub", None, "snapshot", "pilot")
+
+
+@pytest.mark.parametrize(
+    "failure,message",
+    [
+        ("state", "not committed"),
+        ("hub", "hub hash readback failed"),
+        ("wandb", "W&B hash readback failed"),
+    ],
+)
+def test_optimized_python_still_refuses_unverified_custody(tmp_path, monkeypatch, failure, message):
+    """Artifact admission must remain fail-closed when Python strips assertions."""
+    from pathlib import Path
+
+    namespace = {"__name__": "optimized_pilot_custody"}
+    source = Path(current.__file__).read_text()
+    exec(compile(source, current.__file__, "exec", optimize=1), namespace)
+    work, hub = tmp_path / "work", tmp_path / "hub"
+    work.mkdir()
+    (work / "checkpoint.zip").write_bytes(b"checkpoint")
+    downloaded = tmp_path / "downloaded"
+
+    def download(*, root):
+        downloaded.write_bytes(b"wrong" if failure == "wandb" else b"checkpoint")
+        return downloaded
+
+    remote = SimpleNamespace(
+        state="PENDING" if failure == "state" else "COMMITTED",
+        get_entry=lambda name: SimpleNamespace(download=download),
+    )
+    artifact = SimpleNamespace(name="pilot:v0", add_dir=lambda path: None, wait=lambda: None)
+
+    def log_artifact(art):
+        if failure == "hub":
+            (hub / "snapshot/checkpoint.zip").write_bytes(b"corrupted")
+        return art
+
+    namespace["wandb"] = SimpleNamespace(
+        Artifact=lambda *args, **kwargs: artifact,
+        Api=lambda: SimpleNamespace(artifact=lambda name: remote),
+    )
+    namespace["_quota_allows"] = lambda *args: True
+    with pytest.raises((ValueError, RuntimeError), match=message):
+        namespace["preserve"](
+            work, hub, SimpleNamespace(log_artifact=log_artifact), "snapshot", "pilot"
+        )
+    assert not (hub / "preservation-snapshot.json").exists()

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import os
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import gymnasium as gym
 
@@ -26,7 +26,9 @@ class EpisodeSeedReceiptEnv(gym.Wrapper):
         directory.mkdir(parents=True, exist_ok=True)
         self.receipt_path: Path = directory / f"worker-{worker_index}-pid-{os.getpid()}.jsonl"
 
-    def reset(self, *, seed=None, options=None):
+    def reset(
+        self, *, seed: int | None = None, options: dict[str, Any] | None = None
+    ) -> tuple[Any, dict[str, Any]]:
         """Write one receipt only after a successful, explicitly seeded reset.
 
         Returns:

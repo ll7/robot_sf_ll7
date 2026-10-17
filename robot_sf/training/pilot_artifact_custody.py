@@ -137,7 +137,8 @@ def preserve(work: Path, hub: Path, run: Any, tag: str, artifact_name: str) -> d
     art = run.log_artifact(art)
     art.wait()
     remote = wandb.Api().artifact("ll7/robot_sf/" + art.name)
-    assert remote.state == "COMMITTED"
+    if remote.state != "COMMITTED":
+        raise RuntimeError("W&B artifact is not committed")
     readback = work / "wandb" / "custody-readback" / tag
     for item in files + [
         {
@@ -145,9 +146,11 @@ def preserve(work: Path, hub: Path, run: Any, tag: str, artifact_name: str) -> d
             "sha256": sha(snapshot / "preservation-manifest.json"),
         }
     ]:
-        assert sha(snapshot / item["artifact"]) == item["sha256"], "hub hash readback failed"
+        if sha(snapshot / item["artifact"]) != item["sha256"]:
+            raise ValueError("hub hash readback failed")
         got = remote.get_entry(item["artifact"]).download(root=str(readback))
-        assert sha(got) == item["sha256"], "W&B hash readback failed"
+        if sha(got) != item["sha256"]:
+            raise ValueError("W&B hash readback failed")
     receipt = {
         "artifact": "ll7/robot_sf/" + art.name,
         "state": remote.state,

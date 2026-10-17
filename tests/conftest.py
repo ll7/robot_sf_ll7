@@ -441,6 +441,8 @@ _LEGACY_FAST_FILE_PREFIXES = (
     "test_types",
 )
 _LEGACY_FAST_FILES = {
+    # Call-scoped planner status contracts use deterministic synthetic observations.
+    "test_risk_dwa_mppi_hybrid.py",
     "tests/dev/test_common_setup_venv_profile.py",
     # Force validity reduction checks use small fixed NumPy arrays.
     "test_robot_force_presence.py",

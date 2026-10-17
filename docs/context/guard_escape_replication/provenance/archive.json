@@ -1,0 +1,11 @@
+{
+  "schema": "guard-escape-replication.archive.v1",
+  "files": 118,
+  "archive_name": "guard_escape_replication_full.tar.gz",
+  "archive_sha256": "d9b52f316dce86a57e98306596640da226d1556b60bd15ee348bb7671742c5e2",
+  "archive_size_bytes": 20426259,
+  "manifest_sha256": "f73ceb0f3d916da248b1639e3387a4fc458fd8ac66ce05775a7ff7f6254d3799",
+  "all_members_cold_readback_verified": true,
+  "full_run_preserved_outside_git": true,
+  "created_utc": "2026-10-16T13:01:00.311520+00:00"
+}

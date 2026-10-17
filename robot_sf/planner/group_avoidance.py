@@ -15,6 +15,7 @@ import numpy as np
 from shapely.geometry import Point, Polygon
 
 from robot_sf.common.math_utils import wrap_angle_pi
+from robot_sf.planner.footprint_contract import require_supported_env_footprint
 
 CLAIM_BOUNDARY = "diagnostic group-space avoidance only; not a collision-safety guarantee"
 SCHEMA_VERSION = "taga-like-group-avoidance.v1"
@@ -83,6 +84,7 @@ class TangentSubgoalGroupAvoidanceAdapter:
 
     def bind_env(self, env: Any) -> None:
         """Cache JSON-safe social-group geometry from the benchmark environment."""
+        require_supported_env_footprint(type(self).__name__, env)
 
         simulator = getattr(env, "simulator", None)
         self._group_specs = _group_specs_from_source(simulator)

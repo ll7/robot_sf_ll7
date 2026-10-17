@@ -9,6 +9,7 @@ from robot_sf.benchmark.algorithm_metadata import planner_contract_for_algorithm
 if TYPE_CHECKING:
     from robot_sf.planner.kinematics_model import KinematicsModel
 from robot_sf.errors import RobotSfError
+from robot_sf.planner.footprint_contract import require_supported_robot_footprint
 
 _DEFAULT_KINEMATICS = "differential_drive"
 
@@ -131,6 +132,7 @@ def validate_planner_contract(
     algo_config: dict[str, Any],
     observation_mode: str | None = None,
     observation_level: str | None = None,
+    robot_config: Any = None,
 ) -> dict[str, Any]:
     """Validate planner observation/action compatibility before benchmark execution.
 
@@ -142,6 +144,7 @@ def validate_planner_contract(
         observation mode, robot kinematics, or action contract.
     """
     algo_key = algo.strip().lower()
+    require_supported_robot_footprint(algo_key, robot_config)
     try:
         contract = planner_contract_for_algorithm(
             algo_key,

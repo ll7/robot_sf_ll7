@@ -214,6 +214,7 @@ from robot_sf.benchmark.utils import (
 from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.gym_env.reset_metadata import resolve_map_id
 from robot_sf.gym_env.unified_config import RobotSimulationConfig  # noqa: TC001
+from robot_sf.planner.footprint_contract import require_supported_robot_footprint
 from robot_sf.planner.safety_shield import shield_metrics_from_stats
 from robot_sf.robot.bicycle_drive import BicycleDriveSettings
 from robot_sf.robot.reverse_drive import bound_drive_settings, warn_unsupported_reverse
@@ -1841,6 +1842,7 @@ def _prepare_policy_and_observation_contract(  # noqa: PLR0913
         metadata, planner lifecycle hooks, the synthetic-actuation controller, and the
         active observation mode/level plus single-pedestrian intent/VRU metadata.
     """
+    require_supported_robot_footprint(algo, config.robot_config)
     learned_observation_contract = resolve_learned_checkpoint_observation_contract(
         algo,
         policy_cfg,

@@ -17,6 +17,7 @@ from robot_sf.planner.clearance_geometry import (
     pedestrian_clearance,
     validate_clearance_model,
 )
+from robot_sf.planner.footprint_contract import require_supported_env_footprint
 from robot_sf.planner.obstacle_features import (
     PREDICTIVE_OBSTACLE_FEATURE_SCHEMA,
     LocalObstacleFeatureExtractor,
@@ -287,6 +288,7 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
 
     def bind_env(self, env: Any) -> None:
         """Bind static map obstacle geometry from a live Robot SF environment."""
+        require_supported_env_footprint(type(self).__name__, env)
         simulator = getattr(env, "simulator", None)
         robots = getattr(simulator, "robots", None)
         settings = getattr(robots[0], "config", None) if robots else None

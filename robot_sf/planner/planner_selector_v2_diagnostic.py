@@ -9,6 +9,8 @@ from typing import Any
 
 import numpy as np
 
+from robot_sf.planner.footprint_contract import require_supported_env_footprint
+
 _REQUIRED_CANDIDATES = (
     "baseline",
     "topology_route",
@@ -163,6 +165,7 @@ class PlannerSelectorV2DiagnosticAdapter:
 
     def bind_env(self, env: object) -> None:
         """Propagate environment binding to child planners that need map geometry."""
+        require_supported_env_footprint(type(self).__name__, env)
         for adapter in self.candidate_adapters.values():
             bind = getattr(adapter, "bind_env", None)
             if callable(bind):

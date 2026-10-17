@@ -243,6 +243,7 @@ from robot_sf.planner.dwa import (  # noqa: F401 - compatibility re-export for t
     DWAPlannerAdapter,
     build_dwa_config,
 )
+from robot_sf.planner.footprint_contract import require_supported_robot_footprint
 from robot_sf.planner.gap_prediction import GapAwarePredictionAdapter  # noqa: F401
 from robot_sf.planner.grid_route import (  # noqa: F401
     GridRoutePlannerAdapter,
@@ -2237,6 +2238,8 @@ def _build_policy(  # noqa: C901
         during episode rollout.
     """
     algo_key = algo.lower().strip()
+    require_supported_robot_footprint(algo_key, kwargs.get("robot_config"))
+    require_supported_robot_footprint(algo_key, algo_config.get("robot_config"))
     if algo_key == "native_command":
         return build_native_command_policy(
             algo_key,
@@ -3148,6 +3151,7 @@ def _validate_per_scenario_compatibility(ctx: _BatchContext) -> None:
             validation_cfg = _apply_scenario_uncertainty_envelope_config(
                 validation_algo, validation_cfg, scenario
             )
+            require_supported_robot_footprint(validation_algo, scenario.get("robot_config"))
             validation_observation_contract = resolve_learned_checkpoint_observation_contract(
                 validation_algo,
                 validation_cfg,

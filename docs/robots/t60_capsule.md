@@ -73,3 +73,45 @@ heading-dependent contact and capsule identity. New regression witnesses can
 run against base main using its existing factories and fail on physical
 assertions or the missing validation, rather than missing imports. No frozen
 0.0.8 configuration, artifact, metric definition or scenario is changed.
+
+## Planner admission
+
+Every current capsule planner combination is refused. The map-runner checks
+resolved robot settings before checkpoint/observation loading, its public policy
+builder checks both supplied and embedded robot configs before dispatch, and
+adapter `bind_env` methods check both authored settings and the live robot plant.
+An unsupported combination raises `UnsupportedRobotFootprintError` naming the
+planner and the missing geometry/rollout contract; unknown planners fail closed.
+Grid/visibility global route attachment is also refused, including maps already
+carrying a planner. There is no automatic covering-disc substitution.
+
+| Planner family | Missing capsule/bicycle capability |
+| --- | --- |
+| Goal seeker, social force | Heading-dependent body clearance and verified bicycle planning |
+| ORCA/RVO2/HRVO; placeholder RVO | Circular velocity obstacles / holonomic commands do not establish capsule bicycle support |
+| Sampling, DWA/risk DWA, prediction, MPPI variants, safety barrier | Circular clearance and unverified capsule candidate/plant trajectories |
+| Hybrid rule / hybrid RL / guarded PPO; selector and group wrappers | Children and safety scorers lack the required body/motion contract |
+| SACADRL, SocNav/CrowdNav/GST bridges, SICNav, DR-MPC | No verified capsule/bicycle adapter contract |
+| Existing PPO/recurrent checkpoints | Disc observations/training and unvalidated body/dynamics transfer |
+| Classic grid and visibility global routes | No SE(2) capsule/bicycle feasibility guarantee |
+
+Native-command *benchmark* construction is refused too: it does not establish a
+capsule planning/metric contract. Manual plant diagnostics remain possible through
+`make_robot_env` and `PlannerActionAdapter`, which converts commands without
+claiming planner support. Explicit disc proxy diagnostics remain available under
+their existing command-projection contracts. Those contracts must not be described
+as full native bicycle planner support. Guards can be relaxed per planner only
+after footprint-aware clearance, executed candidate motion, observation/metric
+provenance and relevant failure witnesses are verified.
+
+```sh
+uv run pytest tests/planner/test_capsule_planner_contract.py \
+  tests/benchmark/test_planner_command_contract.py -q -n 0
+```
+
+The guard witnesses protect rejection before optional dependency/fallback loading,
+all direct binding methods, resolved episode settings and global route mutation.
+Existing compatibility tests only cover command/observation contracts. They do not
+admit an elongated body. Test spies target existing dispatch/loading methods;
+no test-only production seam is added. The explicit disc control still constructs
+and binds a real planner.

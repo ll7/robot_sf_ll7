@@ -6,7 +6,7 @@ Checks that the Ruff version is consistent across:
 1. The ``astral-sh/ruff-pre-commit`` ``rev:`` in ``.pre-commit-config.yaml``
 2. ``[tool.ruff]`` ``required-version`` in ``pyproject.toml``
 3. The ``ruff==`` pin in ``[dependency-groups].dev`` in ``pyproject.toml``
-4. Every ``uvx --from ruff==<version>`` launcher pin in ``.github/workflows/*.yml``
+4. Every step's ``run`` text mentioning Ruff in ``.github/workflows/*.yml``/``*.yaml``
 
 Axis 4 matters because the CI lint step launches Ruff through ``uvx --from
 ruff==<pin>`` (see ``.github/workflows/ci.yml``) while ``required-version``
@@ -36,11 +36,15 @@ DEFAULT_PYPROJECT = REPO_ROOT / "pyproject.toml"
 DEFAULT_WORKFLOWS_DIR = REPO_ROOT / ".github" / "workflows"
 RUFF_PRE_COMMIT_REPO = "https://github.com/astral-sh/ruff-pre-commit"
 RUFF_PIN_PATTERN = re.compile(r"^ruff\s*==\s*(?P<version>\S+)$")
-# Matches the pinned Ruff launcher used by CI lint steps, e.g.
-# ``uvx --from ruff==0.16.10 ruff check .``. Only parsed step commands
-# that mention ``uvx`` are considered; YAML comments and metadata do not
-# become an enforced axis.
-RUFF_WORKFLOW_PIN_PATTERN = re.compile(r"ruff\s*==\s*(?P<version>[^\s\"'`]+)")
+# Deliberately small, whole-line grammar, not a shell parser. Any Ruff mention
+# outside this grammar fails closed under every shell. Arguments are literal
+# words only: no quoting, expansion, command chaining, comments or redirection.
+# New supported forms require an explicit policy change with regression tests.
+RUFF_WORKFLOW_PIN_PATTERN = re.compile(
+    r"[ \t]*uvx[ \t]+--from[ \t]+ruff==(?P<version>[0-9]+\.[0-9]+\.[0-9]+)"
+    r"[ \t]+ruff[ \t]+(?:check|format)"
+    r"(?P<args>(?:[ \t]+[-a-zA-Z0-9_./=,\[\]]+)*)[ \t]*"
+)
 
 
 def normalize_version(raw: str) -> str:
@@ -114,20 +118,42 @@ def read_pyproject_dev_dep_pin(path: Path) -> str:
     raise ValueError(f"no exact ruff== pin found in [dependency-groups].dev in {path}")
 
 
+def _read_run_ruff_pins(run: str, location: str) -> list[tuple[str, str]]:
+    """Account for every Ruff mention before returning any pins from a step."""
+    pins: list[tuple[str, str]] = []
+    for line in run.replace("\\\n", "").splitlines():
+        if "ruff" not in line.lower():
+            continue
+        match = RUFF_WORKFLOW_PIN_PATTERN.fullmatch(line)
+        if match is None or "ruff" in match.group("args").lower():
+            raise ValueError(
+                f"{location}: unrecognised Ruff mention: {line.strip()!r}; "
+                "use a standalone pinned uvx --from ruff==X.Y.Z ruff "
+                "check|format launcher with literal arguments"
+            )
+        pins.append((location, match.group("version")))
+    return pins
+
+
 def read_workflow_ruff_pins(workflows_dir: Path) -> list[tuple[str, str]]:
-    """Return ``(location, raw_version)`` for every pinned Ruff CI launcher.
+    """Validate every Ruff mention and return recognised CI launcher pins.
 
     Loads ``*.yml``/``*.yaml`` directly inside ``workflows_dir`` and scans
     every step's parsed ``run`` string. YAML scalar folding/quoting happens
     before shell backslash-newline continuations are joined. Locations name
     the workflow, job and zero-based step index rather than physical YAML lines.
+    Each logical line mentioning ``ruff`` (case-insensitively, even in comments
+    or filenames) must fully match the pinned ``uvx --from ruff==X.Y.Z ruff
+    check|format`` launcher grammar. Other shells' continuation forms are
+    unrecognised and rejected, rather than silently skipped. YAML metadata
+    outside ``run`` is not scanned. There are no implicit allowlist exceptions.
 
     Returns:
         Ordered ``(location, raw_version)`` pairs; empty when no launcher
         pin exists (the caller treats that as fail-closed drift).
 
     Raises:
-        ValueError: If any workflow cannot be parsed as YAML.
+        ValueError: If YAML cannot be parsed or any Ruff mention is unrecognised.
     """
     pins: list[tuple[str, str]] = []
     if not workflows_dir.is_dir():
@@ -144,15 +170,8 @@ def read_workflow_ruff_pins(workflows_dir: Path) -> list[tuple[str, str]]:
                 run = step.get("run")
                 if not isinstance(run, str):
                     continue
-                command = run.replace("\\\n", "")
-                for line in command.splitlines():
-                    if "uvx" not in line or "ruff" not in line:
-                        continue
-                    location = f"{candidate.name}:jobs.{job_id}.steps[{step_index}].run"
-                    pins.extend(
-                        (location, match.group("version"))
-                        for match in RUFF_WORKFLOW_PIN_PATTERN.finditer(line)
-                    )
+                location = f"{candidate.name}:jobs.{job_id}.steps[{step_index}].run"
+                pins.extend(_read_run_ruff_pins(run, location))
     return pins
 
 
@@ -228,7 +247,8 @@ def main(argv: list[str] | None = None) -> int:
 
     Returns:
         Exit code 0 when all versions agree, 1 on mismatch (or 0 in advisory).
-        Unparseable workflows always fail, including in advisory mode.
+        Unparseable workflows and unrecognised Ruff mentions always fail,
+        including in advisory mode.
     """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -253,7 +273,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--advisory",
         action="store_true",
-        help="Report version drift without failing; unparseable workflows still fail.",
+        help="Report version drift without failing; invalid or unrecognised workflows still fail.",
     )
     args = parser.parse_args(argv)
 

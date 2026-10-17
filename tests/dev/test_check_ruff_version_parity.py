@@ -278,7 +278,7 @@ def test_read_workflow_ruff_pins_enumerates_pins(tmp_path: Path) -> None:
     (workflows / "notes.txt").write_text("uvx --from ruff==9.9.9\n", encoding="utf-8")
     (workflows / "plain.yml").write_text(
         "# a comment mentioning ruff==9.9.9 without any launcher keyword\n"
-        "jobs:\n  x:\n    steps:\n      - run: echo ruff==9.9.9\n",
+        "jobs:\n  x:\n    steps:\n      - run: echo unrelated\n",
         encoding="utf-8",
     )
 
@@ -303,7 +303,10 @@ def test_read_workflow_ruff_pins_at_head() -> None:
     pins = read_workflow_ruff_pins(DEFAULT_WORKFLOWS_DIR)
 
     assert pins, "expected at least one uvx ruff launcher pin in .github/workflows"
-    assert all(location.startswith("ci.yml:") for location, _ in pins)
+    assert {location.split(":")[0] for location, _ in pins} == {
+        "ci.yml",
+        "security-baseline.yml",
+    }
 
 
 def test_evaluate_fails_when_workflow_pin_stale() -> None:

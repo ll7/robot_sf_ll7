@@ -5,18 +5,21 @@ The packet does not run a simulator, sampler, search, replay, SLURM job,
 registered campaign, or result admission. It makes no benchmark, publication,
 empirical-evidence, or scientific-result claim.
 
-Source provenance has two explicit layers. Each `sha256` is immutable historical
-source identity resolved from `source.base_commit`. An optional
-`working_tree_sha256` records the current implementation bytes when a diagnostic
-feature branch intentionally differs before merge; omitting it retains the
-legacy exact working-tree binding. This split does not authorize execution or
-change the frozen planning boundary.
-The source-bound input roster also pins the sampler implementation, including
-the CMA-ES builder named by the search-family contract, and the benchmark
-runner that records the effective evaluation timestep in episode artifacts.
-The runner's working-tree hash was refreshed for the CI repair that tolerates
-unreadable MoviePy dotenv configuration during optional imports. Its immutable
-source hash and historical base commit continue to identify the original bytes.
+Source provenance is tied to `source.base_commit`. Each `sha256` must match
+that commit's immutable source bytes, and scenario semantics are read from the
+same snapshot. Missing commits, invalid hashes, path escapes and inconsistent
+historical semantics remain hard errors. Later edits or deletions in the current
+checkout appear in the validator's `source_staleness` list as informational
+`stale since <commit>` records; they do not require repinning the packet or imply
+that evidence was regenerated. Legacy `working_tree_sha256` fields remain
+readable and format-checked for compatibility, but do not establish provenance
+or suppress staleness.
+
+This applies only to the outcome-free, read-only planning audit. It grants no
+permission to run current code or admit results: `claim_eligible` and
+`campaign_execution_allowed` remain false. The immutable input roster still
+binds the sampler builder and the benchmark runner. Budget, seed, certification,
+replay, confirmation, lineage and result-admission checks are unchanged.
 
 ## Frozen contract
 

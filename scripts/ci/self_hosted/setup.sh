@@ -161,7 +161,7 @@ run_container() {
 }
 
 supervise() {
-  local name cpus memory workers
+  local name cpus memory workers container_exit
   name="$(slot_name "$1")"
   read -r cpus memory workers < <(slot_limits)
   while true; do
@@ -209,10 +209,14 @@ supervise() {
       continue
     fi
     unlock_disk_admission
-    # The API response goes straight to the waiting container's stdin. No
-    # token file, token-bearing Docker argument, or shell trace is created.
+    # An empty token response can leave attach blocked on a tokenless
+    # container, delaying detection of the failed API request indefinitely.
+    # Deliver to PID 1's stdin using exec and check the complete pipeline
+    # before waiting for container exit. The token remains a pipe:
+    # no token file, token-bearing Docker argument, or shell trace is created.
     if gh api -X POST "repos/$repo/actions/runners/registration-token" --jq .token |
-      docker attach --sig-proxy=false "$name"; then
+      docker exec --interactive "$name" bash -c 'cat > /proc/1/fd/0' &&
+      container_exit="$(docker wait "$name")" && [[ "$container_exit" == 0 ]]; then
       echo "Runner $name finished its job; replacing its container"
     else
       docker stop --time 5 "$name" >/dev/null 2>&1 || true

@@ -536,7 +536,7 @@ class EgoPedContinuousOccupancy(ContinuousOccupancy):
                 self.enemy_capsule.circle_gap(
                     self.get_enemy_pose(), self.get_agent_coords(), self.agent_radius
                 )
-                <= 0.0
+                <= _CAPSULE_CONTACT_EPS
             )
         if self.get_enemy_coords is None:
             return False

@@ -20,7 +20,7 @@ def _row(
     collision_count: float = 0.0,
     near_misses: float = 0.0,
     min_clearance: float = 1.0,
-    path_efficiency: float = 0.5,
+    path_efficiency: float | None = 0.5,
 ) -> dict[str, object]:
     return {
         "scenario_id": "classic_cross_trap_low",
@@ -100,4 +100,46 @@ def test_summarize_benchmark_rows_fails_without_native_rows(tmp_path) -> None:
             mean_jsonl=mean_jsonl,
             risk_jsonl=risk_jsonl,
             output_dir=tmp_path / "evidence",
+        )
+
+
+def test_null_path_efficiency_uses_success_only_mean(tmp_path) -> None:
+    """Failed episodes serialize null efficiency; the mean covers successes (issue #10022)."""
+    mean_jsonl = tmp_path / "mean.jsonl"
+    risk_jsonl = tmp_path / "risk.jsonl"
+    _write_jsonl(
+        mean_jsonl,
+        [
+            _row(risk_objective="mean", success=True, path_efficiency=0.8),
+            _row(risk_objective="mean", success=False, path_efficiency=None),
+        ],
+    )
+    _write_jsonl(risk_jsonl, [_row(risk_objective="cvar_lower", path_efficiency=0.7)])
+
+    summarize_benchmark_rows(
+        mean_jsonl=mean_jsonl,
+        risk_jsonl=risk_jsonl,
+        output_dir=tmp_path / "evidence",
+        write_comparison=True,
+    )
+
+    mean = json.loads((tmp_path / "evidence" / "qr_dqn_mean_manifest.json").read_text())
+    assert mean["metrics"]["mean_path_efficiency"] == pytest.approx(0.8)
+    assert mean["metrics"]["path_efficiency_sample_count"] == 1
+    assert mean["metrics"]["success_rate"] == pytest.approx(0.5)
+
+
+def test_all_null_path_efficiency_fails_closed(tmp_path) -> None:
+    """No successful episode means no defined efficiency mean (issue #10022)."""
+    mean_jsonl = tmp_path / "mean.jsonl"
+    risk_jsonl = tmp_path / "risk.jsonl"
+    _write_jsonl(mean_jsonl, [_row(success=False, path_efficiency=None)])
+    _write_jsonl(risk_jsonl, [_row(risk_objective="cvar_lower", path_efficiency=0.7)])
+
+    with pytest.raises(ValueError, match="no rows with a finite path_efficiency"):
+        summarize_benchmark_rows(
+            mean_jsonl=mean_jsonl,
+            risk_jsonl=risk_jsonl,
+            output_dir=tmp_path / "evidence",
+            write_comparison=False,
         )

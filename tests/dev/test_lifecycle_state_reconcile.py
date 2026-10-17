@@ -623,3 +623,145 @@ def test_newly_classified_qualifiers_are_not_ambiguous(label: str) -> None:
 def test_genuinely_unknown_labels_remain_ambiguous(label: str) -> None:
     """Classification must not become a wildcard."""
     assert reconcile._has_unknown_state_labels({label}) is True
+
+
+def test_collect_open_rows_completes_six_page_backlog_with_batched_running_evidence(
+    monkeypatch: Any,
+) -> None:
+    """A 6-page backlog with multiple running rows completes with one claim+PR snapshot (#10413)."""
+    import json as json_module
+
+    from scripts.dev import issue_claim
+
+    pages: dict[int, list[dict[str, Any]]] = {
+        page: [
+            {"number": page * 100 + index, "labels": [], "assignees": []} for index in range(100)
+        ]
+        for page in range(1, 6)
+    }
+    pages[6] = [
+        _raw_issue(number=7601, labels=["state:running"]),
+        _raw_issue(number=7602, labels=["state:running"]),
+        _raw_issue(number=7603, labels=["state:running"]),
+    ]
+
+    class _ApiResult:
+        def __init__(self, stdout: str) -> None:
+            self.returncode = 0
+            self.stdout = stdout
+            self.stderr = ""
+
+    def _fake_gh_api(path: str) -> _ApiResult:
+        page_num = int(path.rsplit("page=", 1)[1])
+        return _ApiResult(json_module.dumps(pages[page_num]))
+
+    monkeypatch.setattr(reconcile, "run_gh_api_or_raise", _fake_gh_api)
+    monkeypatch.setattr(
+        reconcile,
+        "parse_json",
+        lambda result, what: (json_module.loads(result.stdout), None),
+    )
+
+    commands: list[tuple[str, ...]] = []
+
+    def _fake_claim_run(command: list[str]) -> issue_claim.CommandResult:
+        commands.append(tuple(command))
+        if command[:3] == ["git", "ls-remote", "--heads"]:
+            return issue_claim.CommandResult(
+                command=tuple(command),
+                returncode=0,
+                stdout="abc123def456\trefs/heads/agent-claims/issue-7601\n",
+                stderr="",
+            )
+        if command[:3] == ["gh", "pr", "list"]:
+            return issue_claim.CommandResult(
+                command=tuple(command),
+                returncode=0,
+                stdout=json_module.dumps(
+                    [{"number": 7710, "title": "fix (#7602)", "body": "Closes #7602"}]
+                ),
+                stderr="",
+            )
+        raise AssertionError(f"unexpected subprocess command: {command}")
+
+    monkeypatch.setattr(issue_claim, "_run", _fake_claim_run)
+
+    rows, inventory = reconcile.collect_open_rows("ll7/robot_sf_ll7")
+
+    assert inventory["complete"] is True
+    assert inventory["pages_read"] == 6
+    assert len(commands) == 2
+    by_issue = {row["issue"]: row for row in rows}
+    assert by_issue[7601]["action"] == "no_action"
+    assert by_issue[7601]["reason_code"] == "consistent"
+    assert by_issue[7602]["action"] == "no_action"
+    assert by_issue[7602]["reason_code"] == "consistent"
+    assert by_issue[7603]["action"] == "remove_labels"
+    assert by_issue[7603]["reason_code"] == "stale_running_without_claim_or_pr"
+    assert by_issue[7603]["target_labels"] == ["state:running"]
+
+
+def test_collect_open_rows_batches_claim_and_pr_snapshots_and_defers_on_snapshot_failure(
+    monkeypatch: Any,
+) -> None:
+    """Running rows share one claim/PR snapshot and fail closed if the snapshot fails (#10413)."""
+    import json as json_module
+
+    from scripts.dev import issue_claim
+
+    page_rows = [
+        _raw_issue(number=7601, labels=["state:running"]),
+        _raw_issue(number=7602, labels=["state:running"]),
+    ]
+
+    class _ApiResult:
+        returncode = 0
+        stdout = json_module.dumps(page_rows)
+        stderr = ""
+
+    monkeypatch.setattr(reconcile, "run_gh_api_or_raise", lambda path: _ApiResult())
+    monkeypatch.setattr(
+        reconcile,
+        "parse_json",
+        lambda result, what: (json_module.loads(result.stdout), None),
+    )
+
+    commands: list[tuple[str, ...]] = []
+    fail_claim_snapshot = False
+
+    def _fake_claim_run(command: list[str]) -> issue_claim.CommandResult:
+        commands.append(tuple(command))
+        if command[:3] == ["git", "ls-remote", "--heads"]:
+            if fail_claim_snapshot:
+                return issue_claim.CommandResult(
+                    command=tuple(command),
+                    returncode=128,
+                    stdout="",
+                    stderr="fatal: remote transport unavailable",
+                )
+            return issue_claim.CommandResult(
+                command=tuple(command),
+                returncode=0,
+                stdout="",
+                stderr="",
+            )
+        if command[:3] == ["gh", "pr", "list"]:
+            return issue_claim.CommandResult(
+                command=tuple(command),
+                returncode=0,
+                stdout="[]",
+                stderr="",
+            )
+        raise AssertionError(f"unexpected subprocess command: {command}")
+
+    monkeypatch.setattr(issue_claim, "_run", _fake_claim_run)
+
+    rows, _ = reconcile.collect_open_rows("ll7/robot_sf_ll7", max_pages=1)
+    assert len(commands) == 2
+    assert all(row["action"] == "remove_labels" for row in rows)
+
+    commands.clear()
+    fail_claim_snapshot = True
+    deferred_rows, _ = reconcile.collect_open_rows("ll7/robot_sf_ll7", max_pages=1)
+    assert len(commands) == 2
+    assert all(row["action"] == "deferred" for row in deferred_rows)

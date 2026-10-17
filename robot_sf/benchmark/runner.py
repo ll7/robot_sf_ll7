@@ -25,7 +25,9 @@ import shlex
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
+import traceback
 import uuid
 from collections.abc import Mapping
 from concurrent.futures import ProcessPoolExecutor, as_completed
@@ -475,8 +477,11 @@ def _config_torch_worker(planner: Any) -> None:
         torch.backends.cudnn.benchmark = False
 
 
-def _planner_step_worker(conn: Any, planner: Any) -> None:
+def _planner_step_worker(conn: Any, planner: Any, stderr_fd: int | None = None) -> None:
     """Run planner steps in an isolated child process and relay live diagnostics."""
+    if stderr_fd is not None:
+        os.dup2(stderr_fd, 2)
+        sys.stderr = os.fdopen(os.dup(2), "w", buffering=1)
     try:
         _config_torch_worker(planner)
         ensure_load = getattr(planner, "_ensure_model_loaded", None)
@@ -484,6 +489,7 @@ def _planner_step_worker(conn: Any, planner: Any) -> None:
             ensure_load()
         conn.send(("init_ok", _planner_runtime_diagnostics(planner)))
     except Exception as exc:  # noqa: BLE001 - child worker must send structured init errors
+        traceback.print_exc()
         try:
             conn.send(("init_error", (type(exc).__name__, str(exc))))
         except (BrokenPipeError, EOFError, OSError):
@@ -506,6 +512,7 @@ def _planner_step_worker(conn: Any, planner: Any) -> None:
                 action = planner.step(payload)
                 conn.send(("ok", (action, _planner_runtime_diagnostics(planner))))
             except Exception as exc:  # pragma: no cover  # noqa: BLE001 - planner step isolation
+                traceback.print_exc()
                 conn.send(("error", (type(exc).__name__, str(exc))))
     finally:
         conn.close()
@@ -533,6 +540,8 @@ class _PlannerStepProcess:
         self._ctx = mp.get_context("fork")
         self._process: mp.Process | None = None
         self._conn: Any | None = None
+        self._stderr: Any | None = None
+        self.worker_events: list[dict[str, Any]] = []
         self._latest_foresight_diagnostics: dict[str, Any] | None = None
         self._latest_planner_diagnostics: dict[str, Any] | None = None
 
@@ -549,7 +558,7 @@ class _PlannerStepProcess:
         try:
             self._conn.send(("step", obs))
         except (BrokenPipeError, EOFError, OSError) as exc:
-            self.close()
+            self.close(kind="crash", phase="step", error=str(exc))
             raise RuntimeError("planner step worker was unavailable") from exc
 
         step_timeout_s = (
@@ -561,13 +570,13 @@ class _PlannerStepProcess:
         while True:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
-                self._terminate_worker()
+                self.close(kind="timeout", phase="step", timeout_s=step_timeout_s)
                 raise FuturesTimeoutError()
             if self._conn.poll(min(remaining, 0.01)):
                 try:
                     status, payload = self._conn.recv()
                 except EOFError as exc:
-                    self.close()
+                    self.close(kind="crash", phase="step", error=str(exc))
                     raise RuntimeError(
                         "planner step worker exited before returning an action"
                     ) from exc
@@ -577,14 +586,25 @@ class _PlannerStepProcess:
                     self._worker_needs_warmup = False
                     return action
                 error_type, message = payload
-                raise RuntimeError(f"Planner step failed in worker ({error_type}: {message})")
+                error = f"Planner step failed in worker ({error_type}: {message})"
+                self._capture_worker_event(
+                    self._process, kind="exception", phase="step", error=error
+                )
+                raise RuntimeError(error)
             if not self._process.is_alive():
                 self._process.join(timeout=0)
-                self.close()
+                self.close(kind="crash", phase="step")
                 raise RuntimeError("planner step worker exited without returning an action")
 
-    def close(self) -> None:
-        """Close the worker process and IPC handle."""
+    def close(
+        self,
+        *,
+        kind: str = "closed",
+        phase: str = "cleanup",
+        error: str | None = None,
+        timeout_s: float | None = None,
+    ) -> None:
+        """Reap the worker and retain a bounded stderr tail and exit status."""
         conn = self._conn
         process = self._process
         self._conn = None
@@ -592,15 +612,52 @@ class _PlannerStepProcess:
 
         if conn is not None:
             try:
-                if process is not None and process.is_alive():
+                if kind != "timeout" and process is not None and process.is_alive():
                     conn.send(("close", None))
             except (BrokenPipeError, EOFError, OSError):
                 pass
             conn.close()
         if process is not None:
-            process.join(timeout=0.1)
-            if process.is_alive():
+            if kind == "timeout":
                 self._terminate_process(process)
+            else:
+                process.join(timeout=0.1)
+                if process.is_alive():
+                    self._terminate_process(process)
+            self._capture_worker_event(
+                process, kind=kind, phase=phase, error=error, timeout_s=timeout_s
+            )
+            if self._stderr is not None:
+                self._stderr.close()
+                self._stderr = None
+
+    def _capture_worker_event(
+        self,
+        process: mp.Process,
+        *,
+        kind: str,
+        phase: str,
+        error: str | None = None,
+        timeout_s: float | None = None,
+    ) -> None:
+        """Snapshot the stderr tail without moving the child's shared file offset."""
+        stderr_tail = ""
+        if self._stderr is not None:
+            fd = self._stderr.fileno()
+            size = os.fstat(fd).st_size
+            stderr_tail = os.pread(fd, min(size, 8192), max(0, size - 8192)).decode(
+                "utf-8", errors="replace"
+            )
+        self.worker_events.append(
+            {
+                "kind": kind,
+                "phase": phase,
+                "exit_code": getattr(process, "exitcode", None),
+                "stderr_tail": stderr_tail,
+                "error": error,
+                "timeout_s": timeout_s,
+            }
+        )
 
     def _ensure_worker(self) -> None:
         """Start the persistent worker process if needed."""
@@ -608,8 +665,21 @@ class _PlannerStepProcess:
             return
         self.close()
         parent_conn, child_conn = self._ctx.Pipe(duplex=True)
-        process = self._ctx.Process(target=_planner_step_worker, args=(child_conn, self._planner))
-        process.start()
+        # A file avoids pipe-buffer deadlocks when native libraries write to fd 2.
+        self._stderr = tempfile.TemporaryFile(mode="w+b")
+        process = self._ctx.Process(
+            target=_planner_step_worker, args=(child_conn, self._planner, self._stderr.fileno())
+        )
+        started = False
+        try:
+            process.start()
+            started = True
+        finally:
+            if not started:
+                parent_conn.close()
+                child_conn.close()
+                self._stderr.close()
+                self._stderr = None
         child_conn.close()
         self._process = process
         self._conn = parent_conn
@@ -621,11 +691,16 @@ class _PlannerStepProcess:
             else:
                 status, payload = "timeout", None
         except (EOFError, OSError, ValueError) as exc:
-            self.close()
+            self.close(kind="crash", phase="initialization", error=str(exc))
             raise RuntimeError("planner step worker failed to start") from exc
 
         if status != "init_ok":
-            self.close()
+            self.close(
+                kind="timeout" if status == "timeout" else "exception",
+                phase="initialization",
+                error=str(payload),
+                timeout_s=30.0 if status == "timeout" else None,
+            )
             if status == "timeout":
                 raise RuntimeError("planner step worker initialization timed out")
             error_type, msg = payload
@@ -650,17 +725,6 @@ class _PlannerStepProcess:
             if isinstance(planner_diagnostics, Mapping):
                 self._latest_planner_diagnostics = dict(planner_diagnostics)
 
-    def _terminate_worker(self) -> None:
-        """Terminate the current worker after a timeout."""
-        process = self._process
-        conn = self._conn
-        self._process = None
-        self._conn = None
-        if conn is not None:
-            conn.close()
-        if process is not None:
-            self._terminate_process(process)
-
     @staticmethod
     def _terminate_process(process: mp.Process) -> None:
         """Terminate, then kill if necessary, and reap a worker process."""
@@ -669,7 +733,7 @@ class _PlannerStepProcess:
             process.join(timeout=0.1)
         if process.is_alive():
             process.kill()
-            process.join(timeout=0.1)
+        process.join(timeout=0.1)
 
 
 # ---------------------------------------------------------------------------
@@ -1650,6 +1714,9 @@ def _create_baseline_planner_policy(
         timeout_metadata["error"] = str(exc)
         metadata["status"] = "policy_step_isolation_unavailable"
         metadata["fallback_reason"] = "policy_step_isolation_unavailable"
+
+    if step_runner is not None:
+        timeout_metadata["worker_events"] = getattr(step_runner, "worker_events", [])
 
     policy_fn = _build_baseline_policy_fn(
         algo=algo,

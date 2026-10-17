@@ -28,3 +28,23 @@ host verification. No legacy report is upgraded implicitly. The repair changes
 provenance and verdict validity only; it does not establish determinism, rerun
 the #5498 matrix, or make a benchmark, dissertation, safety, or sim-to-real
 claim.
+
+Failed native repeats also retain diagnostic evidence (#10222). Executed targets
+with an unrunnable or process-isolation disposition keep `repeats: []` and a
+separate `repeat_diagnostics` entry for every attempted repeat. Each entry has a
+zero-based `repeat_index`, complete `algorithm_metadata`, and `worker_events`.
+Events record `kind` (`crash`, `timeout`, `exception`, or normal `closed`), `phase`,
+`exit_code`, `stderr_tail` (the final 8192 bytes, decoded with replacement), an
+optional error, and the applied timeout in seconds. A timeout records the exit
+code after termination, separately from its timeout kind. A live worker's caught
+exception can have a null exit code; cleanup subsequently records its actual
+exit code. Child Python tracebacks and native writes to stderr are captured.
+
+The target cache, host result and verifier retain these diagnostics. They are
+excluded from trajectory fingerprints and cannot turn a fallback into native
+evidence. The required offline-PPO assertion prints the retained result on
+failure, and the hosted proof runs in 20 fresh pytest processes. Existing
+initialization, warmup, step timeout and retry budgets are unchanged; no new
+retry is justified without a captured failure demonstrating a transient cause.
+Runtime diagnostics can contain environment-specific paths and should be
+reviewed before public publication.

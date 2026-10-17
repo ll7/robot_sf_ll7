@@ -1,0 +1,25 @@
+scenario,seed,arm,outcome,classification
+francis2023_accompanying_peer,1002,hybrid_v4_default,timeout,inherited actor-free route-completion timeout; root cause unproven
+francis2023_accompanying_peer,1002,hybrid_v4_predictive_braking,timeout,inherited actor-free route-completion timeout; root cause unproven
+francis2023_down_path,1002,hybrid_v4_default,timeout,inherited actor-free route-completion timeout; root cause unproven
+francis2023_down_path,1002,hybrid_v4_predictive_braking,timeout,inherited actor-free route-completion timeout; root cause unproven
+francis2023_entering_room,1002,hybrid_v4_default,timeout,inherited actor-free route-completion timeout; root cause unproven
+francis2023_entering_room,1002,hybrid_v4_predictive_braking,timeout,inherited actor-free route-completion timeout; root cause unproven
+francis2023_following_human,1002,hybrid_v4_default,timeout,inherited actor-free route-completion timeout; root cause unproven
+francis2023_following_human,1002,hybrid_v4_predictive_braking,timeout,inherited actor-free route-completion timeout; root cause unproven
+francis2023_frontal_approach,1002,hybrid_v4_default,timeout,inherited actor-free route-completion timeout; root cause unproven
+francis2023_frontal_approach,1002,hybrid_v4_predictive_braking,timeout,inherited actor-free route-completion timeout; root cause unproven
+francis2023_leading_human,1002,hybrid_v4_default,timeout,inherited actor-free route-completion timeout; root cause unproven
+francis2023_leading_human,1002,hybrid_v4_predictive_braking,timeout,inherited actor-free route-completion timeout; root cause unproven
+francis2023_narrow_doorway,1001,hybrid_v4_default,timeout,inherited actor-free route-completion timeout; root cause unproven
+francis2023_narrow_doorway,1001,hybrid_v4_predictive_braking,timeout,inherited actor-free route-completion timeout; root cause unproven
+francis2023_narrow_doorway,1002,hybrid_v4_default,timeout,inherited actor-free route-completion timeout; root cause unproven
+francis2023_narrow_doorway,1002,hybrid_v4_predictive_braking,timeout,inherited actor-free route-completion timeout; root cause unproven
+francis2023_parallel_traffic,1002,hybrid_v4_default,timeout,inherited actor-free route-completion timeout; root cause unproven
+francis2023_parallel_traffic,1002,hybrid_v4_predictive_braking,timeout,inherited actor-free route-completion timeout; root cause unproven
+francis2023_pedestrian_obstruction,1002,hybrid_v4_default,timeout,inherited actor-free route-completion timeout; root cause unproven
+francis2023_pedestrian_obstruction,1002,hybrid_v4_predictive_braking,timeout,inherited actor-free route-completion timeout; root cause unproven
+francis2023_pedestrian_overtaking,1002,hybrid_v4_default,timeout,inherited actor-free route-completion timeout; root cause unproven
+francis2023_pedestrian_overtaking,1002,hybrid_v4_predictive_braking,timeout,inherited actor-free route-completion timeout; root cause unproven
+francis2023_robot_overtaking,1002,hybrid_v4_default,timeout,inherited actor-free route-completion timeout; root cause unproven
+francis2023_robot_overtaking,1002,hybrid_v4_predictive_braking,timeout,inherited actor-free route-completion timeout; root cause unproven

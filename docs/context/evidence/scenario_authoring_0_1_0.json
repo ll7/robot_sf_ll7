@@ -1,0 +1,602 @@
+{
+  "classification": "diagnostic-only",
+  "mode": "authoring",
+  "robot_action": [
+    0,
+    0
+  ],
+  "execution_revision": "c6388c4dbbf9cb679f8516153914b183be3c62b4",
+  "loader_sha256": "448a3f2cd49ee431550bf48318f82b19c74df3ed007c5bcc0bb3b1d3e8768ee7",
+  "probe_sha256": "ebfc42eb6fe312f76912504609bc488f16f3f9683c37ca547a958b26d6df60d8",
+  "tracked_changes": [],
+  "comparison": "Input matrices on one runtime; base-loader speed rows require a separate base checkout.",
+  "rows": [
+    {
+      "scenario": "classic_realworld_double_bottleneck_high",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "seed": 1001,
+      "tier": "native",
+      "matrix_sha256": "af4e9a7a22f9d5f373eb4a3323984e0de6d79edd4263f1c023e9efddff2fd25f",
+      "runtime_inputs": [
+        {
+          "role": "map_file",
+          "path": "maps/successor_svg_maps/issue_9762_classic_realworld_bottleneck_goal_zone_entry_v2.svg",
+          "sha256": "4de3404105d3cb5748992e0eeff2bf8478100db51eb47ee6938f0e1249fae6e4"
+        }
+      ],
+      "steps": 700,
+      "pedestrians": 8,
+      "route_pedestrians": 0,
+      "caps_mean_mps": 0.9099999999999999,
+      "caps_min_mps": 0.9099999999999999,
+      "caps_max_mps": 0.9099999999999999,
+      "trajectory_sha256": "2fc0a8ef8983f8927ef2d20170e4c163c8ab09958602c31c9d00a8bd326e2adb",
+      "inside_obstacle_ped_steps": 1400,
+      "last_10s_stalls": 3,
+      "crossings": {
+        "20": 2,
+        "40": 4
+      }
+    },
+    {
+      "scenario": "classic_realworld_double_bottleneck_high",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_authoring_0_1_0_v1.yaml",
+      "seed": 1001,
+      "tier": "native",
+      "matrix_sha256": "09637dd52c35a85e728bb76d9f5ea547ebfe5aa141fa5e04b6b2338505915692",
+      "runtime_inputs": [
+        {
+          "role": "map_file",
+          "path": "maps/successor_svg_maps/issue_9762_classic_realworld_bottleneck_goal_zone_entry_v2.svg",
+          "sha256": "4de3404105d3cb5748992e0eeff2bf8478100db51eb47ee6938f0e1249fae6e4"
+        }
+      ],
+      "steps": 700,
+      "pedestrians": 31,
+      "route_pedestrians": 23,
+      "caps_mean_mps": 0.7170967741935484,
+      "caps_min_mps": 0.6499999999999999,
+      "caps_max_mps": 0.9099999999999999,
+      "trajectory_sha256": "6e112bbefb111ea31ebc7038c97bc0f2122605342f91bab6258e8e8615ec989f",
+      "inside_obstacle_ped_steps": 0,
+      "last_10s_stalls": 3,
+      "crossings": {
+        "20": 17,
+        "40": 21
+      }
+    },
+    {
+      "scenario": "classic_station_platform_medium",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "seed": 1001,
+      "tier": "native",
+      "matrix_sha256": "af4e9a7a22f9d5f373eb4a3323984e0de6d79edd4263f1c023e9efddff2fd25f",
+      "runtime_inputs": [
+        {
+          "role": "map_file",
+          "path": "maps/successor_svg_maps/issue_10063_classic_station_platform_safe_spawn_v1.svg",
+          "sha256": "39017d6623ca72ec8020f76025d09cd1135cc8d6868d93a58575e265375845d4"
+        }
+      ],
+      "steps": 650,
+      "pedestrians": 27,
+      "route_pedestrians": 23,
+      "caps_mean_mps": 0.6499999999999999,
+      "caps_min_mps": 0.6499999999999999,
+      "caps_max_mps": 0.65,
+      "trajectory_sha256": "bb4023a8ef41a46f497af94f2314ccaf0d0dbcc0a6eb8d81e1d5ff41aa130efa",
+      "inside_obstacle_ped_steps": 0,
+      "last_10s_stalls": 1,
+      "p3_waypoint_index": 1,
+      "p3_pause_steps": 0,
+      "p3_final_xy": [
+        60.41782215318067,
+        5.885888966878694
+      ]
+    },
+    {
+      "scenario": "classic_station_platform_medium",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_authoring_0_1_0_v1.yaml",
+      "seed": 1001,
+      "tier": "native",
+      "matrix_sha256": "09637dd52c35a85e728bb76d9f5ea547ebfe5aa141fa5e04b6b2338505915692",
+      "runtime_inputs": [
+        {
+          "role": "map_file",
+          "path": "maps/successor_svg_maps/issue_10063_classic_station_platform_safe_spawn_v1.svg",
+          "sha256": "39017d6623ca72ec8020f76025d09cd1135cc8d6868d93a58575e265375845d4"
+        }
+      ],
+      "steps": 650,
+      "pedestrians": 27,
+      "route_pedestrians": 23,
+      "caps_mean_mps": 0.6499999999999999,
+      "caps_min_mps": 0.6499999999999999,
+      "caps_max_mps": 0.65,
+      "trajectory_sha256": "08458ac811a825bc31baa556b90a23bf1de03dc73f3500188da77d73c6c8cf09",
+      "inside_obstacle_ped_steps": 0,
+      "last_10s_stalls": 0,
+      "p3_waypoint_index": 2,
+      "p3_pause_steps": 51,
+      "p3_final_xy": [
+        44.60627376017808,
+        4.311852525712639
+      ]
+    },
+    {
+      "scenario": "classic_realworld_double_bottleneck_high",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "seed": 1002,
+      "tier": "native",
+      "matrix_sha256": "af4e9a7a22f9d5f373eb4a3323984e0de6d79edd4263f1c023e9efddff2fd25f",
+      "runtime_inputs": [
+        {
+          "role": "map_file",
+          "path": "maps/successor_svg_maps/issue_9762_classic_realworld_bottleneck_goal_zone_entry_v2.svg",
+          "sha256": "4de3404105d3cb5748992e0eeff2bf8478100db51eb47ee6938f0e1249fae6e4"
+        }
+      ],
+      "steps": 700,
+      "pedestrians": 8,
+      "route_pedestrians": 0,
+      "caps_mean_mps": 0.9099999999999999,
+      "caps_min_mps": 0.9099999999999999,
+      "caps_max_mps": 0.9099999999999999,
+      "trajectory_sha256": "2fc0a8ef8983f8927ef2d20170e4c163c8ab09958602c31c9d00a8bd326e2adb",
+      "inside_obstacle_ped_steps": 1400,
+      "last_10s_stalls": 3,
+      "crossings": {
+        "20": 2,
+        "40": 4
+      }
+    },
+    {
+      "scenario": "classic_realworld_double_bottleneck_high",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_authoring_0_1_0_v1.yaml",
+      "seed": 1002,
+      "tier": "native",
+      "matrix_sha256": "09637dd52c35a85e728bb76d9f5ea547ebfe5aa141fa5e04b6b2338505915692",
+      "runtime_inputs": [
+        {
+          "role": "map_file",
+          "path": "maps/successor_svg_maps/issue_9762_classic_realworld_bottleneck_goal_zone_entry_v2.svg",
+          "sha256": "4de3404105d3cb5748992e0eeff2bf8478100db51eb47ee6938f0e1249fae6e4"
+        }
+      ],
+      "steps": 700,
+      "pedestrians": 31,
+      "route_pedestrians": 23,
+      "caps_mean_mps": 0.7170967741935484,
+      "caps_min_mps": 0.6499999999999999,
+      "caps_max_mps": 0.9099999999999999,
+      "trajectory_sha256": "cc2bea060e7d2db59781e9c9b9273017d24c0deada49c95b817ed61aa27fbfeb",
+      "inside_obstacle_ped_steps": 0,
+      "last_10s_stalls": 4,
+      "crossings": {
+        "20": 17,
+        "40": 20
+      }
+    },
+    {
+      "scenario": "classic_station_platform_medium",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "seed": 1002,
+      "tier": "native",
+      "matrix_sha256": "af4e9a7a22f9d5f373eb4a3323984e0de6d79edd4263f1c023e9efddff2fd25f",
+      "runtime_inputs": [
+        {
+          "role": "map_file",
+          "path": "maps/successor_svg_maps/issue_10063_classic_station_platform_safe_spawn_v1.svg",
+          "sha256": "39017d6623ca72ec8020f76025d09cd1135cc8d6868d93a58575e265375845d4"
+        }
+      ],
+      "steps": 650,
+      "pedestrians": 27,
+      "route_pedestrians": 23,
+      "caps_mean_mps": 0.6499999999999999,
+      "caps_min_mps": 0.65,
+      "caps_max_mps": 0.65,
+      "trajectory_sha256": "7cc6c6447db8fc7dae70c6b6b8d7ae33082c009fe47222f9457ddb6e0347af9d",
+      "inside_obstacle_ped_steps": 0,
+      "last_10s_stalls": 1,
+      "p3_waypoint_index": 1,
+      "p3_pause_steps": 0,
+      "p3_final_xy": [
+        60.35922883369953,
+        5.834940851999974
+      ]
+    },
+    {
+      "scenario": "classic_station_platform_medium",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_authoring_0_1_0_v1.yaml",
+      "seed": 1002,
+      "tier": "native",
+      "matrix_sha256": "09637dd52c35a85e728bb76d9f5ea547ebfe5aa141fa5e04b6b2338505915692",
+      "runtime_inputs": [
+        {
+          "role": "map_file",
+          "path": "maps/successor_svg_maps/issue_10063_classic_station_platform_safe_spawn_v1.svg",
+          "sha256": "39017d6623ca72ec8020f76025d09cd1135cc8d6868d93a58575e265375845d4"
+        }
+      ],
+      "steps": 650,
+      "pedestrians": 27,
+      "route_pedestrians": 23,
+      "caps_mean_mps": 0.6499999999999999,
+      "caps_min_mps": 0.65,
+      "caps_max_mps": 0.65,
+      "trajectory_sha256": "177cc53d7b0f12373979943eb3b3dbdb0ab05f796c5df5ac8aadddb95507591d",
+      "inside_obstacle_ped_steps": 0,
+      "last_10s_stalls": 0,
+      "p3_waypoint_index": 3,
+      "p3_pause_steps": 51,
+      "p3_final_xy": [
+        43.49522433027271,
+        4.28842250513235
+      ]
+    },
+    {
+      "scenario": "classic_realworld_double_bottleneck_high",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "seed": 1003,
+      "tier": "native",
+      "matrix_sha256": "af4e9a7a22f9d5f373eb4a3323984e0de6d79edd4263f1c023e9efddff2fd25f",
+      "runtime_inputs": [
+        {
+          "role": "map_file",
+          "path": "maps/successor_svg_maps/issue_9762_classic_realworld_bottleneck_goal_zone_entry_v2.svg",
+          "sha256": "4de3404105d3cb5748992e0eeff2bf8478100db51eb47ee6938f0e1249fae6e4"
+        }
+      ],
+      "steps": 700,
+      "pedestrians": 8,
+      "route_pedestrians": 0,
+      "caps_mean_mps": 0.9099999999999999,
+      "caps_min_mps": 0.9099999999999999,
+      "caps_max_mps": 0.9099999999999999,
+      "trajectory_sha256": "2fc0a8ef8983f8927ef2d20170e4c163c8ab09958602c31c9d00a8bd326e2adb",
+      "inside_obstacle_ped_steps": 1400,
+      "last_10s_stalls": 3,
+      "crossings": {
+        "20": 2,
+        "40": 4
+      }
+    },
+    {
+      "scenario": "classic_realworld_double_bottleneck_high",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_authoring_0_1_0_v1.yaml",
+      "seed": 1003,
+      "tier": "native",
+      "matrix_sha256": "09637dd52c35a85e728bb76d9f5ea547ebfe5aa141fa5e04b6b2338505915692",
+      "runtime_inputs": [
+        {
+          "role": "map_file",
+          "path": "maps/successor_svg_maps/issue_9762_classic_realworld_bottleneck_goal_zone_entry_v2.svg",
+          "sha256": "4de3404105d3cb5748992e0eeff2bf8478100db51eb47ee6938f0e1249fae6e4"
+        }
+      ],
+      "steps": 700,
+      "pedestrians": 31,
+      "route_pedestrians": 23,
+      "caps_mean_mps": 0.7170967741935484,
+      "caps_min_mps": 0.6499999999999999,
+      "caps_max_mps": 0.9099999999999999,
+      "trajectory_sha256": "2b25e490eec0cf91238a12eb701fb447088b0c2fbd93c93a0b0ed32909becc00",
+      "inside_obstacle_ped_steps": 0,
+      "last_10s_stalls": 5,
+      "crossings": {
+        "20": 17,
+        "40": 24
+      }
+    },
+    {
+      "scenario": "classic_station_platform_medium",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "seed": 1003,
+      "tier": "native",
+      "matrix_sha256": "af4e9a7a22f9d5f373eb4a3323984e0de6d79edd4263f1c023e9efddff2fd25f",
+      "runtime_inputs": [
+        {
+          "role": "map_file",
+          "path": "maps/successor_svg_maps/issue_10063_classic_station_platform_safe_spawn_v1.svg",
+          "sha256": "39017d6623ca72ec8020f76025d09cd1135cc8d6868d93a58575e265375845d4"
+        }
+      ],
+      "steps": 650,
+      "pedestrians": 27,
+      "route_pedestrians": 23,
+      "caps_mean_mps": 0.6499999999999998,
+      "caps_min_mps": 0.6499999999999999,
+      "caps_max_mps": 0.65,
+      "trajectory_sha256": "55dbdec9ce7b967dd6a795ff42705e0bfaa87cbf17d4f85526239c5d165451dd",
+      "inside_obstacle_ped_steps": 0,
+      "last_10s_stalls": 1,
+      "p3_waypoint_index": 1,
+      "p3_pause_steps": 0,
+      "p3_final_xy": [
+        60.38936406965926,
+        5.834577097043052
+      ]
+    },
+    {
+      "scenario": "classic_station_platform_medium",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_authoring_0_1_0_v1.yaml",
+      "seed": 1003,
+      "tier": "native",
+      "matrix_sha256": "09637dd52c35a85e728bb76d9f5ea547ebfe5aa141fa5e04b6b2338505915692",
+      "runtime_inputs": [
+        {
+          "role": "map_file",
+          "path": "maps/successor_svg_maps/issue_10063_classic_station_platform_safe_spawn_v1.svg",
+          "sha256": "39017d6623ca72ec8020f76025d09cd1135cc8d6868d93a58575e265375845d4"
+        }
+      ],
+      "steps": 650,
+      "pedestrians": 27,
+      "route_pedestrians": 23,
+      "caps_mean_mps": 0.6499999999999998,
+      "caps_min_mps": 0.6499999999999999,
+      "caps_max_mps": 0.65,
+      "trajectory_sha256": "5e00dbd4b837a92280439cd5b1fb290a833b3f3d7a8b5ad12ef899770e16196d",
+      "inside_obstacle_ped_steps": 0,
+      "last_10s_stalls": 0,
+      "p3_waypoint_index": 3,
+      "p3_pause_steps": 51,
+      "p3_final_xy": [
+        43.63681807662059,
+        4.265918543757212
+      ]
+    },
+    {
+      "scenario": "classic_realworld_double_bottleneck_high",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "seed": 1004,
+      "tier": "native",
+      "matrix_sha256": "af4e9a7a22f9d5f373eb4a3323984e0de6d79edd4263f1c023e9efddff2fd25f",
+      "runtime_inputs": [
+        {
+          "role": "map_file",
+          "path": "maps/successor_svg_maps/issue_9762_classic_realworld_bottleneck_goal_zone_entry_v2.svg",
+          "sha256": "4de3404105d3cb5748992e0eeff2bf8478100db51eb47ee6938f0e1249fae6e4"
+        }
+      ],
+      "steps": 700,
+      "pedestrians": 8,
+      "route_pedestrians": 0,
+      "caps_mean_mps": 0.9099999999999999,
+      "caps_min_mps": 0.9099999999999999,
+      "caps_max_mps": 0.9099999999999999,
+      "trajectory_sha256": "2fc0a8ef8983f8927ef2d20170e4c163c8ab09958602c31c9d00a8bd326e2adb",
+      "inside_obstacle_ped_steps": 1400,
+      "last_10s_stalls": 3,
+      "crossings": {
+        "20": 2,
+        "40": 4
+      }
+    },
+    {
+      "scenario": "classic_realworld_double_bottleneck_high",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_authoring_0_1_0_v1.yaml",
+      "seed": 1004,
+      "tier": "native",
+      "matrix_sha256": "09637dd52c35a85e728bb76d9f5ea547ebfe5aa141fa5e04b6b2338505915692",
+      "runtime_inputs": [
+        {
+          "role": "map_file",
+          "path": "maps/successor_svg_maps/issue_9762_classic_realworld_bottleneck_goal_zone_entry_v2.svg",
+          "sha256": "4de3404105d3cb5748992e0eeff2bf8478100db51eb47ee6938f0e1249fae6e4"
+        }
+      ],
+      "steps": 700,
+      "pedestrians": 31,
+      "route_pedestrians": 23,
+      "caps_mean_mps": 0.7170967741935484,
+      "caps_min_mps": 0.6499999999999999,
+      "caps_max_mps": 0.9099999999999999,
+      "trajectory_sha256": "aeb0356008d7f466e30c1a17f2e3de45e607248b06ef86f229268c5bd2ea0432",
+      "inside_obstacle_ped_steps": 0,
+      "last_10s_stalls": 6,
+      "crossings": {
+        "20": 16,
+        "40": 15
+      }
+    },
+    {
+      "scenario": "classic_station_platform_medium",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "seed": 1004,
+      "tier": "native",
+      "matrix_sha256": "af4e9a7a22f9d5f373eb4a3323984e0de6d79edd4263f1c023e9efddff2fd25f",
+      "runtime_inputs": [
+        {
+          "role": "map_file",
+          "path": "maps/successor_svg_maps/issue_10063_classic_station_platform_safe_spawn_v1.svg",
+          "sha256": "39017d6623ca72ec8020f76025d09cd1135cc8d6868d93a58575e265375845d4"
+        }
+      ],
+      "steps": 650,
+      "pedestrians": 27,
+      "route_pedestrians": 23,
+      "caps_mean_mps": 0.6499999999999999,
+      "caps_min_mps": 0.6499999999999999,
+      "caps_max_mps": 0.65,
+      "trajectory_sha256": "69fee326cd387a03024ccc12031bcc609c935accb5b58451d587a802ffa149ab",
+      "inside_obstacle_ped_steps": 0,
+      "last_10s_stalls": 1,
+      "p3_waypoint_index": 1,
+      "p3_pause_steps": 0,
+      "p3_final_xy": [
+        60.39122871398677,
+        5.836131677456761
+      ]
+    },
+    {
+      "scenario": "classic_station_platform_medium",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_authoring_0_1_0_v1.yaml",
+      "seed": 1004,
+      "tier": "native",
+      "matrix_sha256": "09637dd52c35a85e728bb76d9f5ea547ebfe5aa141fa5e04b6b2338505915692",
+      "runtime_inputs": [
+        {
+          "role": "map_file",
+          "path": "maps/successor_svg_maps/issue_10063_classic_station_platform_safe_spawn_v1.svg",
+          "sha256": "39017d6623ca72ec8020f76025d09cd1135cc8d6868d93a58575e265375845d4"
+        }
+      ],
+      "steps": 650,
+      "pedestrians": 27,
+      "route_pedestrians": 23,
+      "caps_mean_mps": 0.6499999999999999,
+      "caps_min_mps": 0.6499999999999999,
+      "caps_max_mps": 0.65,
+      "trajectory_sha256": "4639a1848cabd7431868a8b8a0d4b3c9961153094b357d16b234375c52debef6",
+      "inside_obstacle_ped_steps": 0,
+      "last_10s_stalls": 0,
+      "p3_waypoint_index": 3,
+      "p3_pause_steps": 51,
+      "p3_final_xy": [
+        42.86238868325361,
+        4.339216726517058
+      ]
+    },
+    {
+      "scenario": "classic_realworld_double_bottleneck_high",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "seed": 1005,
+      "tier": "native",
+      "matrix_sha256": "af4e9a7a22f9d5f373eb4a3323984e0de6d79edd4263f1c023e9efddff2fd25f",
+      "runtime_inputs": [
+        {
+          "role": "map_file",
+          "path": "maps/successor_svg_maps/issue_9762_classic_realworld_bottleneck_goal_zone_entry_v2.svg",
+          "sha256": "4de3404105d3cb5748992e0eeff2bf8478100db51eb47ee6938f0e1249fae6e4"
+        }
+      ],
+      "steps": 700,
+      "pedestrians": 8,
+      "route_pedestrians": 0,
+      "caps_mean_mps": 0.9099999999999999,
+      "caps_min_mps": 0.9099999999999999,
+      "caps_max_mps": 0.9099999999999999,
+      "trajectory_sha256": "2fc0a8ef8983f8927ef2d20170e4c163c8ab09958602c31c9d00a8bd326e2adb",
+      "inside_obstacle_ped_steps": 1400,
+      "last_10s_stalls": 3,
+      "crossings": {
+        "20": 2,
+        "40": 4
+      }
+    },
+    {
+      "scenario": "classic_realworld_double_bottleneck_high",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_authoring_0_1_0_v1.yaml",
+      "seed": 1005,
+      "tier": "native",
+      "matrix_sha256": "09637dd52c35a85e728bb76d9f5ea547ebfe5aa141fa5e04b6b2338505915692",
+      "runtime_inputs": [
+        {
+          "role": "map_file",
+          "path": "maps/successor_svg_maps/issue_9762_classic_realworld_bottleneck_goal_zone_entry_v2.svg",
+          "sha256": "4de3404105d3cb5748992e0eeff2bf8478100db51eb47ee6938f0e1249fae6e4"
+        }
+      ],
+      "steps": 700,
+      "pedestrians": 31,
+      "route_pedestrians": 23,
+      "caps_mean_mps": 0.7170967741935484,
+      "caps_min_mps": 0.6499999999999999,
+      "caps_max_mps": 0.9099999999999999,
+      "trajectory_sha256": "990937facc7717135a2fe46bc8ac60ea1cec0da1d71cc9519cf01a06eedda2dd",
+      "inside_obstacle_ped_steps": 0,
+      "last_10s_stalls": 2,
+      "crossings": {
+        "20": 18,
+        "40": 25
+      }
+    },
+    {
+      "scenario": "classic_station_platform_medium",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "seed": 1005,
+      "tier": "native",
+      "matrix_sha256": "af4e9a7a22f9d5f373eb4a3323984e0de6d79edd4263f1c023e9efddff2fd25f",
+      "runtime_inputs": [
+        {
+          "role": "map_file",
+          "path": "maps/successor_svg_maps/issue_10063_classic_station_platform_safe_spawn_v1.svg",
+          "sha256": "39017d6623ca72ec8020f76025d09cd1135cc8d6868d93a58575e265375845d4"
+        }
+      ],
+      "steps": 650,
+      "pedestrians": 27,
+      "route_pedestrians": 23,
+      "caps_mean_mps": 0.6499999999999999,
+      "caps_min_mps": 0.6499999999999999,
+      "caps_max_mps": 0.65,
+      "trajectory_sha256": "5e2849f0f2d88849d583b87bc638f662e347ea628ebcec1f2042f37b61bd169a",
+      "inside_obstacle_ped_steps": 0,
+      "last_10s_stalls": 1,
+      "p3_waypoint_index": 1,
+      "p3_pause_steps": 0,
+      "p3_final_xy": [
+        60.41321827001492,
+        5.891669526786428
+      ]
+    },
+    {
+      "scenario": "classic_station_platform_medium",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_authoring_0_1_0_v1.yaml",
+      "seed": 1005,
+      "tier": "native",
+      "matrix_sha256": "09637dd52c35a85e728bb76d9f5ea547ebfe5aa141fa5e04b6b2338505915692",
+      "runtime_inputs": [
+        {
+          "role": "map_file",
+          "path": "maps/successor_svg_maps/issue_10063_classic_station_platform_safe_spawn_v1.svg",
+          "sha256": "39017d6623ca72ec8020f76025d09cd1135cc8d6868d93a58575e265375845d4"
+        }
+      ],
+      "steps": 650,
+      "pedestrians": 27,
+      "route_pedestrians": 23,
+      "caps_mean_mps": 0.6499999999999999,
+      "caps_min_mps": 0.6499999999999999,
+      "caps_max_mps": 0.65,
+      "trajectory_sha256": "557893ffa4fced7191a5d874fc15d8efd945ab0aeac8bfdfa818c8366be57b38",
+      "inside_obstacle_ped_steps": 0,
+      "last_10s_stalls": 0,
+      "p3_waypoint_index": 3,
+      "p3_pause_steps": 51,
+      "p3_final_xy": [
+        43.91977813255616,
+        4.274496701360408
+      ]
+    },
+    {
+      "scenario": "classic_realworld_double_bottleneck_high",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_authoring_0_1_0_v1.yaml",
+      "seed": 1001,
+      "tier": "typical",
+      "matrix_sha256": "09637dd52c35a85e728bb76d9f5ea547ebfe5aa141fa5e04b6b2338505915692",
+      "runtime_inputs": [
+        {
+          "role": "map_file",
+          "path": "maps/successor_svg_maps/issue_9762_classic_realworld_bottleneck_goal_zone_entry_v2.svg",
+          "sha256": "4de3404105d3cb5748992e0eeff2bf8478100db51eb47ee6938f0e1249fae6e4"
+        }
+      ],
+      "steps": 700,
+      "pedestrians": 31,
+      "route_pedestrians": 23,
+      "caps_mean_mps": 1.3240003092029626,
+      "caps_min_mps": 0.9381499445509134,
+      "caps_max_mps": 1.7236656133708235,
+      "trajectory_sha256": "f5b79ba7bd1494c6a2341aca59cbaa35954fe3a96a8311b628f1e893187ff74f",
+      "inside_obstacle_ped_steps": 0,
+      "last_10s_stalls": 3,
+      "crossings": {
+        "20": 38,
+        "40": 41
+      }
+    }
+  ]
+}

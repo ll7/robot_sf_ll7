@@ -1,0 +1,32 @@
+# Restart the bounded development comparison using the seed pool already on main.
+# Reward/plant follows the fixed arm of PR #10247; no static-clearance fix is claimed.
+base_config: dev_delta_recovery_15m.yaml
+policy_id: ppo_train010_fixed_5m_20261011
+total_timesteps: 5000000
+num_envs: 20
+worker_mode: subproc
+ppo_hyperparams:
+  n_steps: 256
+env_factory_kwargs:
+  reward_kwargs:
+    weights:
+      progress: 1.0
+      living: -0.015
+      collision: -15.0
+      near_miss: -1.5
+      ttc_risk: 0.0
+      comfort: -0.5
+      smoothness: -0.18
+      timeout: -6.5
+      stagnation: -0.8
+      terminal_bonus: 20.0
+evaluation:
+  step_schedule:
+    - every_steps: 1000000
+tracking:
+  wandb:
+    enabled: true
+    project: robot_sf
+    group: train010-development-20261011
+    name: train010-ppo-fixed
+    job_type: development-policy-training

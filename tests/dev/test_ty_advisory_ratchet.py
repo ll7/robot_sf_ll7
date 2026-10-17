@@ -22,10 +22,12 @@ import sys
 from pathlib import Path
 
 import pytest
+import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "scripts" / "dev" / "ty_advisory_ratchet.py"
 BASELINE = ROOT / "scripts" / "validation" / "ty_advisory_baseline.json"
+WORKFLOW = ROOT / ".github" / "workflows" / "ty-advisory-ratchet.yml"
 # Deterministic, host-independent raw-findings fixture reconstructed from the
 # committed baseline. The baseline-reproduction test parses THIS file, never a
 # live ty run, so reproduction holds on every clean worktree (issue #5070).
@@ -172,6 +174,354 @@ def test_ratchet_ignores_optional_import_findings_in_gate() -> None:
 # --------------------------------------------------------------------------- #
 # aggregate
 # --------------------------------------------------------------------------- #
+
+
+def _exception_baseline() -> dict:
+    """An approved two-finding allowance, without any ordinary scripts budget."""
+    return {
+        "schema_version": tyratchet.SCHEMA_VERSION,
+        "modules": {"scripts": {"general": 2, "total": 2}},
+        "exceptions": {
+            "scripts/evidence.py": {
+                "invalid-argument-type": {
+                    "count": 2,
+                    "existing_count": 0,
+                    "reason": "Evidence-bound; fix when evidence is regenerated (#10306).",
+                }
+            }
+        },
+    }
+
+
+def test_narrow_exception_accepts_only_approved_count() -> None:
+    """Exact approved findings pass without altering the ordinary module budget."""
+    findings = [_finding("scripts/evidence.py", line=i + 1) for i in range(2)]
+    failures, _ = tyratchet.check_against_baseline(findings, _exception_baseline())
+    assert failures == []
+
+
+@pytest.mark.parametrize(
+    ("path", "rule"),
+    [
+        ("scripts/evidence_other.py", "invalid-argument-type"),
+        ("scripts/evidence.py/other.py", "invalid-argument-type"),
+        ("scripts/evidence.py", "invalid-return-type"),
+    ],
+)
+def test_unused_exception_cannot_cover_another_path_or_rule(path: str, rule: str) -> None:
+    """An unused allowance must not become a module-wide drift budget."""
+    failures, _ = tyratchet.check_against_baseline(
+        [_finding(path, check_name=rule)], _exception_baseline()
+    )
+    assert any("clean module regressed" in failure for failure in failures)
+
+
+def test_narrow_exception_cap_survives_other_finding_reduction() -> None:
+    """An extra same-rule finding fails even if ordinary findings decrease."""
+    baseline = _exception_baseline()
+    baseline["modules"]["scripts"]["general"] = 3
+    findings = [_finding("scripts/evidence.py", line=i + 1) for i in range(3)]
+    failures, _ = tyratchet.check_against_baseline(findings, baseline)
+    assert any("exception cap" in failure for failure in failures)
+
+
+def test_preexisting_findings_do_not_consume_additional_allowance() -> None:
+    """A preexisting match cannot spend the allowance reserved for additional findings."""
+    baseline = _exception_baseline()
+    allowance = baseline["exceptions"]["scripts/evidence.py"]["invalid-argument-type"]
+    allowance.update(count=1, existing_count=1)
+    baseline["modules"]["scripts"]["general"] = 3
+    findings = [_finding("scripts/evidence.py"), _finding("scripts/a.py"), _finding("scripts/b.py")]
+    failures, _ = tyratchet.check_against_baseline(findings, baseline)
+    assert any("increased from 2 to 3" in failure for failure in failures)
+
+
+@pytest.mark.parametrize("path", ["scripts/", "scripts/*.py", "../evidence.py", "/evidence.py"])
+def test_malformed_or_prefix_exception_fails_closed(path: str) -> None:
+    """Exception keys must be exact repository-relative Python file paths."""
+    baseline = _exception_baseline()
+    baseline["exceptions"][path] = baseline["exceptions"].pop("scripts/evidence.py")
+    failures, _ = tyratchet.check_against_baseline([], baseline)
+    assert any("invalid narrow exception" in failure for failure in failures)
+
+
+def test_exception_fixture_roundtrip_preserves_exact_matches() -> None:
+    """Fixture synthesis includes the approved exact paths and passes the real gate."""
+    baseline = _exception_baseline()
+    fixture = tyratchet.materialize_findings_from_baseline(baseline)
+    assert {finding["location"]["path"] for finding in fixture} == {"scripts/evidence.py"}
+    assert tyratchet.aggregate(fixture)["general_total"] == 2
+    assert tyratchet.check_against_baseline(fixture, baseline)[0] == []
+
+
+def test_baseline_refresh_preserves_and_validates_narrow_exceptions(tmp_path, monkeypatch) -> None:
+    """Refresh must not erase restrictions or silently keep an expired allowance."""
+    baseline = tmp_path / "baseline.json"
+    report = tmp_path / "report.json"
+    baseline.write_text(json.dumps(_exception_baseline()))
+    report.write_text(json.dumps([_finding("scripts/evidence.py", line=i + 1) for i in range(2)]))
+    monkeypatch.setattr(tyratchet, "_detect_ty_version", lambda _root: "ty 0.0.58")
+    args = [
+        "--root",
+        str(tmp_path),
+        "--write-baseline",
+        "--baseline",
+        str(baseline),
+        "--ty-output",
+        str(report),
+    ]
+    assert tyratchet.main(args) == 0
+    assert json.loads(baseline.read_text())["exceptions"] == _exception_baseline()["exceptions"]
+    approved_bytes = baseline.read_bytes()
+    report.write_text(json.dumps([_finding("scripts/other.py")]))
+    assert tyratchet.main(args) == 1
+    assert baseline.read_bytes() == approved_bytes
+
+
+@pytest.mark.parametrize("with_exceptions", [True, False])
+@pytest.mark.parametrize(
+    "path", ["scripts/unapproved_refresh_probe.py", "new_clean_module/probe.py"]
+)
+def test_baseline_refresh_refuses_unrelated_growth_without_writing(
+    tmp_path, monkeypatch, capsys, path: str, with_exceptions: bool
+) -> None:
+    """Retained approved matches cannot hide growth in old or previously clean modules."""
+    baseline = tmp_path / "baseline.json"
+    report = tmp_path / "report.json"
+    if with_exceptions:
+        baseline.write_bytes(BASELINE.read_bytes())
+        findings = json.loads(FIXTURE.read_text())
+    else:
+        baseline.write_text(
+            json.dumps(
+                {
+                    "schema_version": tyratchet.SCHEMA_VERSION,
+                    "modules": {"scripts": {"general": 1, "total": 1}},
+                }
+            )
+        )
+        findings = [_finding("scripts/existing.py")]
+    previous_bytes = baseline.read_bytes()
+    findings.append(_finding(path, check_name="invalid-return-type"))
+    report.write_text(json.dumps(findings))
+    monkeypatch.setattr(tyratchet, "_detect_ty_version", lambda _root: "ty 0.0.58")
+
+    assert (
+        tyratchet.main(
+            [
+                "--root",
+                str(tmp_path),
+                "--write-baseline",
+                "--baseline",
+                str(baseline),
+                "--ty-output",
+                str(report),
+            ]
+        )
+        == 1
+    )
+    assert baseline.read_bytes() == previous_bytes
+    assert "total general findings increased" in capsys.readouterr().err
+
+
+def test_baseline_refresh_allows_decrease_and_preserves_exact_exceptions(
+    tmp_path, monkeypatch
+) -> None:
+    """Removing an ordinary finding can lower the budget without changing approved keys."""
+    previous = _exception_baseline()
+    previous["modules"]["scripts"].update(general=3, total=3)
+    baseline = tmp_path / "baseline.json"
+    report = tmp_path / "report.json"
+    baseline.write_text(json.dumps(previous))
+    report.write_text(json.dumps([_finding("scripts/evidence.py", line=i + 1) for i in range(2)]))
+    monkeypatch.setattr(tyratchet, "_detect_ty_version", lambda _root: "ty 0.0.58")
+
+    assert (
+        tyratchet.main(
+            [
+                "--root",
+                str(tmp_path),
+                "--write-baseline",
+                "--baseline",
+                str(baseline),
+                "--ty-output",
+                str(report),
+            ]
+        )
+        == 0
+    )
+    refreshed = json.loads(baseline.read_text())
+    assert refreshed["summary"]["general_findings"] == 2
+    assert refreshed["summary"]["total_findings"] == 2
+    assert refreshed["modules"]["scripts"]["general"] == 2
+    assert refreshed["exceptions"] == previous["exceptions"]
+
+
+def _refresh_case_with_recorded_counts(with_exceptions: bool) -> tuple[dict, list[dict]]:
+    """A hand-counted baseline with two ordinary findings and one excluded import."""
+    ordinary = _finding("scripts/ordinary.py")
+    optional = _finding(
+        "scripts/optional.py",
+        check_name="unresolved-import",
+        description="unresolved-import: Cannot resolve imported module `refresh_probe`",
+    )
+    findings = [
+        ordinary,
+        _finding("scripts/assignment.py", check_name="invalid-assignment"),
+        optional,
+    ]
+    previous = {
+        "schema_version": tyratchet.SCHEMA_VERSION,
+        "summary": {
+            "general_findings": 2,
+            "optional_import_findings_excluded": 1,
+            "total_findings": 3,
+            "module_count": 1,
+        },
+        "modules": {"scripts": {"general": 2, "optional_import_excluded": 1, "total": 3}},
+        "rules": {"invalid-argument-type": 1, "invalid-assignment": 1, "unresolved-import": 1},
+    }
+    if with_exceptions:
+        findings.extend(_finding("scripts/evidence.py", line=i + 1) for i in range(2))
+        previous["exceptions"] = _exception_baseline()["exceptions"]
+        previous["summary"].update(general_findings=4, total_findings=5)
+        previous["modules"]["scripts"].update(general=4, total=5)
+        previous["rules"]["invalid-argument-type"] = 3
+    return previous, findings
+
+
+@pytest.mark.parametrize("with_exceptions", [True, False])
+@pytest.mark.parametrize(
+    ("growth", "diagnostics"),
+    [
+        (
+            "excluded-and-total",
+            ("summary.optional_import_findings_excluded", "summary.total_findings"),
+        ),
+        ("excluded-offset-general", ("summary.optional_import_findings_excluded",)),
+        (
+            "clean-module-excluded",
+            ("modules.clean_optional.optional_import_excluded", "summary.module_count"),
+        ),
+        ("module-total", ("modules.scripts.total",)),
+        ("new-general-rule", ("rules.invalid-return-type",)),
+        ("existing-general-rule", ("rules.invalid-argument-type",)),
+        ("new-excluded-rule", ("rules.unresolved-import",)),
+    ],
+)
+def test_baseline_refresh_refuses_recorded_count_growth_without_writing(
+    tmp_path, monkeypatch, capsys, growth: str, diagnostics: tuple[str, ...], with_exceptions: bool
+) -> None:
+    """Every stored count is downward-only, even when other buckets decrease."""
+    previous, findings = _refresh_case_with_recorded_counts(with_exceptions)
+    ordinary, assignment, optional = findings[:3]
+
+    if growth == "excluded-and-total":
+        findings.append({**optional, "fingerprint": "extra-optional"})
+    elif growth == "excluded-offset-general":
+        findings.remove(ordinary)
+        findings.append({**optional, "fingerprint": "replacement-optional"})
+    elif growth == "clean-module-excluded":
+        optional["location"]["path"] = "clean_optional/probe.py"
+    elif growth == "module-total":
+        previous["modules"]["other"] = {
+            "general": 0,
+            "optional_import_excluded": 1,
+            "total": 1,
+        }
+        previous["summary"].update(
+            optional_import_findings_excluded=2,
+            total_findings=previous["summary"]["total_findings"] + 1,
+            module_count=2,
+        )
+        previous["rules"]["unresolved-import"] = 2
+        findings.append({**optional, "fingerprint": "moved-optional"})
+    elif growth == "new-general-rule":
+        ordinary["check_name"] = "invalid-return-type"
+    elif growth == "existing-general-rule":
+        assignment["check_name"] = "invalid-argument-type"
+    else:
+        # The previously general deprecated finding is now an excluded import.
+        previous["summary"]["general_findings"] += 1
+        previous["summary"]["optional_import_findings_excluded"] = 0
+        previous["modules"]["scripts"]["general"] += 1
+        previous["modules"]["scripts"]["optional_import_excluded"] = 0
+        previous["rules"]["deprecated"] = 1
+        previous["rules"].pop("unresolved-import")
+
+    baseline = tmp_path / "baseline.json"
+    report = tmp_path / "report.json"
+    baseline.write_text(json.dumps(previous))
+    before = baseline.read_bytes()
+    report.write_text(json.dumps(findings))
+    monkeypatch.setattr(tyratchet, "_detect_ty_version", lambda _root: "ty 0.0.58")
+    args = [
+        "--root",
+        str(tmp_path),
+        "--write-baseline",
+        "--baseline",
+        str(baseline),
+        "--ty-output",
+        str(report),
+    ]
+
+    assert tyratchet.main(args) == 1
+    assert baseline.read_bytes() == before
+    stderr = capsys.readouterr().err
+    for diagnostic in diagnostics:
+        assert diagnostic in stderr
+
+
+@pytest.mark.parametrize("with_exceptions", [True, False])
+@pytest.mark.parametrize("decrease", ["general", "excluded", "module"])
+def test_baseline_refresh_allows_recorded_count_decreases(
+    tmp_path, monkeypatch, decrease: str, with_exceptions: bool
+) -> None:
+    """Lower buckets, rules and module counts remain writable with exact caps intact."""
+    previous, findings = _refresh_case_with_recorded_counts(with_exceptions)
+    if decrease == "general":
+        findings.pop(0)
+        expected_general, expected_excluded = (3 if with_exceptions else 1), 1
+    elif decrease == "excluded":
+        findings.pop(2)
+        expected_general, expected_excluded = (4 if with_exceptions else 2), 0
+    else:
+        previous["modules"]["other"] = {
+            "general": 1,
+            "optional_import_excluded": 0,
+            "total": 1,
+        }
+        previous["summary"]["general_findings"] += 1
+        previous["summary"]["total_findings"] += 1
+        previous["summary"]["module_count"] = 2
+        previous["rules"]["invalid-key"] = 1
+        expected_general, expected_excluded = (4 if with_exceptions else 2), 1
+    baseline = tmp_path / "baseline.json"
+    report = tmp_path / "report.json"
+    baseline.write_text(json.dumps(previous))
+    report.write_text(json.dumps(findings))
+    monkeypatch.setattr(tyratchet, "_detect_ty_version", lambda _root: "ty 0.0.58")
+    args = [
+        "--root",
+        str(tmp_path),
+        "--write-baseline",
+        "--baseline",
+        str(baseline),
+        "--ty-output",
+        str(report),
+    ]
+
+    assert tyratchet.main(args) == 0
+    refreshed = json.loads(baseline.read_text())
+    assert refreshed["summary"] == {
+        "general_findings": expected_general,
+        "optional_import_findings_excluded": expected_excluded,
+        "total_findings": expected_general + expected_excluded,
+        "module_count": 1,
+    }
+    assert refreshed.get("exceptions") == previous.get("exceptions")
+    for rule, count in refreshed["rules"].items():
+        assert count <= previous["rules"].get(rule, 0)
 
 
 def test_aggregate_splits_optional_and_general_buckets() -> None:
@@ -477,6 +827,39 @@ def test_live_ty_advisory_scan() -> None:
 def test_ratchet_helper_is_registered_in_repo() -> None:
     """The ratchet helper exists at the documented path."""
     assert SCRIPT.exists(), f"ty ratchet helper missing at {SCRIPT}"
+
+
+def test_ty_advisory_workflow_checks_pr_merge_ref_and_is_gating() -> None:
+    """The hosted ratchet must evaluate the PR merge tree and fail on drift."""
+    workflow = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+    trigger = workflow.get("on") or workflow[True]
+    assert "paths" not in trigger["pull_request"], (
+        "the ratchet must not be skipped by path filters; dependency/config "
+        "changes can alter the merged-tree ty count"
+    )
+
+    steps = workflow["jobs"]["ty-advisory-ratchet"]["steps"]
+    checkout = next(step for step in steps if step.get("name") == "Checkout")
+    assert checkout["with"]["ref"] == (
+        "${{ github.event_name == 'pull_request' && github.ref || github.sha }}"
+    )
+
+    ratchet = next(step for step in steps if step.get("id") == "ty_ratchet")
+    assert "continue-on-error" not in ratchet
+    assert ratchet["shell"] == "bash", "tee must not mask the ratchet's exit status"
+
+    setup = next(step for step in steps if step.get("uses") == "./.github/actions/setup-ci-python")
+    assert setup["with"]["sync-args"] == "--all-extras --frozen", (
+        "the ratchet must use the same dependency profile as the committed baseline"
+    )
+
+
+def test_ty_advisory_workflow_job_cannot_skip_pull_requests() -> None:
+    """Every PR, including drafts, must run the merged-tree ratchet job."""
+    workflow = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+    job = workflow["jobs"]["ty-advisory-ratchet"]
+    assert "if" not in job, "a job-level condition must not skip the ratchet on PR events"
+    assert "continue-on-error" not in job, "job-level advisory masking must not hide drift"
 
 
 def test_aggregate_tolerates_null_location() -> None:

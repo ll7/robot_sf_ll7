@@ -1,0 +1,12 @@
+# Paired with dev_train010_fixed_5m.yaml: living/collision/near-miss weights differ.
+base_config: dev_train010_fixed_5m.yaml
+policy_id: ppo_train010_safety_5m_20261011
+env_factory_kwargs:
+  reward_kwargs:
+    weights:
+      living: -0.02
+      collision: -25.0
+      near_miss: -2.0
+tracking:
+  wandb:
+    name: train010-ppo-safety

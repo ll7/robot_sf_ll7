@@ -105,13 +105,14 @@ class _ObstacleClearance:
         if payload is None:
             return
         grid, meta = payload
-        if grid.ndim < 3:
+        if grid.ndim < 3 or grid.size == 0:
             return
         channel = adapter._grid_channel_index(meta, "obstacles")
-        if channel < 0:
-            channel = adapter._grid_channel_index(meta, "combined")
         if channel < 0 or channel >= grid.shape[0]:
-            return
+            raise ValueError(
+                "A valid static obstacle channel is required for sampler clearance "
+                f"on a nonempty grid (index {channel}, channels {grid.shape[0]})"
+            )
         resolution = _positive(meta.get("resolution"))
         if resolution is None:
             return
@@ -569,7 +570,8 @@ def plan_bounded_v2(adapter: Any, observation: dict) -> tuple[float, float]:  # 
     half_sweep = sweep / 2 if sweep > 0 else 1.0
     v_nominal = min(v_cap, distance)
     speed0 = float(adapter._as_1d_float(robot_state.get("speed", [0.0]), pad=1)[0])
-    speed0 = min(max(speed0, 0.0), v_cap) if np.isfinite(speed0) else 0.0
+    # Command preferences do not bound the robot's measured motion.
+    speed0 = speed0 if np.isfinite(speed0) else 0.0
     angular_speed0 = float(
         adapter._as_1d_float(robot_state.get("angular_velocity", [0.0]), pad=1)[0]
     )
@@ -577,8 +579,9 @@ def plan_bounded_v2(adapter: Any, observation: dict) -> tuple[float, float]:  # 
     settings = getattr(adapter, "_sampling_drive_settings", None)
     horizon_s = float(config.sampling_horizon_s)
     if braking:
-        # Long enough to cover a stop from the drive maximum.
-        horizon_s = max(horizon_s, v_cap / decel + 2.0 * dt)
+        # Cover both commanded motion and the signed motion already underway.
+        stopping_time = speed0 / decel if speed0 >= 0.0 else -speed0 / accel
+        horizon_s = max(horizon_s, max(v_cap / decel, stopping_time) + 2.0 * dt)
     drive = (
         float(config.angular_gain),
         float(config.max_angular_speed),
@@ -699,7 +702,7 @@ def _all_blocked_command(  # noqa: PLR0913
         "penalty": 1.0,
         "all_blocked": True,
     }
-    if speed0 > _STOPPED_SPEED:
+    if abs(speed0) > _STOPPED_SPEED:
         decision["reason"] = "brake_straight"
         adapter._last_sampling_v2 = decision
         return 0.0, 0.0

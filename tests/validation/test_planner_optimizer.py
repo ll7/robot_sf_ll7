@@ -192,8 +192,8 @@ def test_config_uses_fixed_disjoint_train_and_heldout_scenario_seed_identities()
         {"scenario_id": "classic_cross_trap_high", "seed": 102},
     ]
     assert heldout == [
-        {"scenario_id": "classic_head_on_corridor_low", "seed": 111},
-        {"scenario_id": "classic_head_on_corridor_low", "seed": 112},
+        {"scenario_id": "classic_head_on_corridor_low", "seed": 1031},
+        {"scenario_id": "classic_head_on_corridor_low", "seed": 1032},
     ]
     train_ids = {(row["scenario_id"], row["seed"]) for row in train}
     heldout_ids = {(row["scenario_id"], row["seed"]) for row in heldout}

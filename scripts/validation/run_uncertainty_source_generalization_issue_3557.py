@@ -215,7 +215,7 @@ def main(argv: list[str] | None = None) -> int:
     seeds, params = (
         load_config(args.config)
         if args.config is not None
-        else (list(range(101, 113)), EpisodeParams())
+        else (list(range(1101, 1113)), EpisodeParams())
     )
     if args.seeds is not None:
         seeds = args.seeds

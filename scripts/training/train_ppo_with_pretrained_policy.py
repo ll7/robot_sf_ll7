@@ -692,7 +692,7 @@ def load_ppo_finetuning_config(config_path: Path) -> PPOFineTuningConfig:
         run_id=raw["run_id"],
         pretrained_policy_id=raw["pretrained_policy_id"],
         total_timesteps=raw.get("total_timesteps", 100000),
-        random_seeds=tuple(raw.get("random_seeds", [42])),
+        random_seeds=tuple(raw.get("random_seeds", [100042])),
         learning_rate=raw.get("learning_rate", 0.0001),
         snqi_weights_path=_resolve_optional_path("snqi_weights"),
         snqi_baseline_path=_resolve_optional_path("snqi_baseline"),

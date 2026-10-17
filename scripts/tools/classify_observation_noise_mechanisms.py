@@ -204,7 +204,7 @@ def _generate_markdown(
             "",
             "## Caveats",
             "",
-            "- Single deterministic fixture (seed=111), single scenario family.",
+            "- Single deterministic fixture (seed=1101), single scenario family.",
             "- Action proxies are from the stored trace, not re-executed; "
             "command -> trajectory conclusions require live replay.",
             "- Mechanism labels are rule-based heuristics, not causal proof.",

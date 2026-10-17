@@ -30,7 +30,7 @@ TRACE_RUNNER = Path("scripts/validation/run_policy_search_step_diagnostics.py")
 ISSUE_2756_FIXTURE_SCENARIO = "issue_2756_occluded_emergence"
 ISSUE_2756_FIXTURE_FAMILY = "occluded_emergence"
 ISSUE_2756_FIXTURE_LABEL = "deterministic_occluded_emergence"
-ISSUE_2756_FIXTURE_SEED = 111
+ISSUE_2756_FIXTURE_SEED = 1101
 REQUIRED_CONDITIONS = (
     "noop",
     "low_noise",

@@ -223,7 +223,7 @@ def materialize_slice_funnel(*, manifest: dict[str, Any], row: SweepRow, work_di
         "stages": {
             stage_label: {
                 "scenario_matrix": row.source_surface,
-                "seed_list": [int(manifest.get("seed", 111))],
+                "seed_list": [int(manifest.get("seed", 1101))],
                 "benchmark_profile": "experimental",
                 "horizon": int(manifest.get("horizon", 160)),
                 "dt": 0.1,
@@ -277,7 +277,7 @@ def command_for_row(
         "--scenario-name",
         row.scenario_name,
         "--seed",
-        str(int(manifest.get("seed", 111))),
+        str(int(manifest.get("seed", 1101))),
         "--horizon",
         str(int(manifest.get("horizon", 160))),
         "--max-hypotheses",

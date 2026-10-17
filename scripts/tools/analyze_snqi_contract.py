@@ -70,7 +70,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--weights", type=Path, default=None)
     parser.add_argument("--baseline", type=Path, default=None)
-    parser.add_argument("--seed", type=int, default=123)
+    parser.add_argument("--seed", type=int, default=1113)
     parser.add_argument("--trials", type=int, default=3000)
     parser.add_argument("--rank-warn-threshold", type=float, default=0.5)
     parser.add_argument("--rank-fail-threshold", type=float, default=0.3)

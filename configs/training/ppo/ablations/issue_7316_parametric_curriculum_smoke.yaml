@@ -1,5 +1,5 @@
 schema_version: parametric_curriculum_diagnostic.v1
-seed: 7316
+seed: 107316
 train_sample_count: 6
 evaluation_sample_count: 4
 parameter_space:

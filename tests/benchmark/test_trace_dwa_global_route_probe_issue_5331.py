@@ -117,7 +117,7 @@ def test_run_trace_uses_current_map_runner_contract(
 
     assert len(calls) == 2
     for scenarios, out_path, kwargs in calls:
-        assert scenarios[0]["seeds"] in ([131], [161])
+        assert scenarios[0]["seeds"] in ([1121], [161])
         assert out_path.suffix == ".jsonl"
         assert kwargs["schema_path"] == trace.SCHEMA_PATH
         assert kwargs["scenario_path"] == trace.DEFAULT_MATRIX

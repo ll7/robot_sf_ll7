@@ -5,7 +5,7 @@ trace_metric_keys: [clearance_m, near_field_exposure_s]
 planners:
   - key: social_force
     algo: social_force
-seeds: [111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140]
+seeds: [1101, 1102, 1103, 1104, 1105, 1106, 1107, 1108, 1109, 1110, 1111, 1112, 1113, 1114, 1115, 1116, 1117, 1118, 1119, 1120, 1121, 1122, 1123, 1124, 1125, 1126, 1127, 1128, 1129, 1130]
 response_law_fractions: [0.0, 0.1, 0.25, 0.5]
 scenario_matrix: configs/scenarios/classic_interactions_francis2023.yaml
 scenario_matrix_derivation:

@@ -52,7 +52,7 @@ def test_issue_2011_sweep_manifest_materializes_diagnostic_configs(tmp_path: Pat
         "classic_cross_trap_high",
         "francis2023_intersection_wait",
     ]
-    assert low_update["seed_policy"] == {"mode": "fixed-list", "seeds": [111]}
+    assert low_update["seed_policy"] == {"mode": "fixed-list", "seeds": [1101]}
     assert [planner["key"] for planner in low_update["planners"]] == ["goal", "social_force"]
 
 

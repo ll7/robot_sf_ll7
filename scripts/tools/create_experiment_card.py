@@ -138,7 +138,7 @@ def _template_benchmark_analysis(experiment_id: str, output_root: Path) -> Templ
             "  --candidate-config TODO \\\n"
             "  --baseline-config TODO \\\n"
             "  --scenario-set TODO \\\n"
-            "  --seeds 111 112 113 \\\n"
+            "  --seeds 1101 1102 1103 \\\n"
             "  --output-root " + output_path + "\n"
             "# Then: uv run python scripts/tools/analyze_benchmark_comparison.py --input "
             + output_path
@@ -208,7 +208,7 @@ def _template_planner_ablation(experiment_id: str, output_root: Path) -> Templat
             "  --planner-config TODO \\\n"
             "  --baseline-config TODO \\\n"
             "  --scenario-set TODO \\\n"
-            "  --seeds 111 112 113 \\\n"
+            "  --seeds 1101 1102 1103 \\\n"
             "  --output-root " + output_path + "\n"
             "# Then: uv run python scripts/tools/render_planner_comparison.py --input "
             + output_path

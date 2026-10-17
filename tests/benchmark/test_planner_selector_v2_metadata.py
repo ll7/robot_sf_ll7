@@ -85,7 +85,7 @@ def test_planner_selector_v2_registry_config_declares_no_leakage_sources() -> No
     selector = merged["selector"]
     assert "classic_realworld_double_bottleneck_high" in selector["topology_scenarios"]
     assert "francis2023_join_group" in selector["seed_sensitive_scenarios"]
-    assert selector["hard_seed_values"][0] == 116
+    assert selector["hard_seed_values"][0] == 1036
     assert selector["evidence_sources"] == [
         "docs/context/issue_1608_seed_sensitivity_analysis.md",
         "docs/context/issue_1692_topology_hypothesis_probe.md",

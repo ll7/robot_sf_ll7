@@ -403,7 +403,7 @@ def main() -> None:
         scenarios,
         [str(item) for item in scenario_filter] if isinstance(scenario_filter, list) else None,
     )
-    seed_list = [int(seed) for seed in stage.get("seed_list", [111])]
+    seed_list = [int(seed) for seed in stage.get("seed_list", [1101])]
     horizon = int(stage.get("horizon", 500))
     dt = float(stage.get("dt", 0.1))
 

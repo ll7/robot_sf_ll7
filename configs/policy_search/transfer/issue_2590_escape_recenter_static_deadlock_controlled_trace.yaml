@@ -4,7 +4,7 @@ stage_order:
 stages:
   full_matrix:
     scenario_matrix: configs/scenarios/sets/issue_2590_escape_recenter_static_deadlock_controlled_trace.yaml
-    seed_list: [111, 112, 113]
+    seed_list: [1031, 1032, 1033]
     benchmark_profile: experimental
     horizon: 120
     dt: 0.1

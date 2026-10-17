@@ -21,7 +21,7 @@ def test_issue_3266_smoke_config_stays_small_and_non_paper_facing() -> None:
     assert config["seed_policy"] == {
         "mode": "fixed-list",
         "seeds": [219],
-        "seed_sets_path": "configs/benchmarks/seed_sets_v1.yaml",
+        "seed_sets_path": "configs/benchmarks/dev_seed_sets.yaml",
     }
     assert [planner["key"] for planner in config["planners"]] == ["goal", "ppo"]
 

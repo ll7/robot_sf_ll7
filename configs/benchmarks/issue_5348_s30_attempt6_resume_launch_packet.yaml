@@ -36,7 +36,7 @@ campaign:
   attempt: 6
   config: configs/benchmarks/paper_experiment_matrix_v1_h600_hybrid_vs_orca_s30.yaml
   config_sha256: 82eee7a1dca241df9bec65e18072f2dd3c46c86489b3b55816d2504af88896b6
-  seed_set: paper_eval_s30
+  seed_set: dev_eval_s30
   horizon: 600
   arm_isolation: subprocess
   episodes_per_arm: 1440

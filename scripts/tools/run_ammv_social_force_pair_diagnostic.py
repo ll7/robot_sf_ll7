@@ -296,7 +296,7 @@ def _redacted_benchmark_command(
     scenario_config: Path,
     output_label: str,
     ammv_config: Path | None = None,
-    base_seed: int = 111,
+    base_seed: int = 1101,
     horizon: int = 100,
 ) -> str:
     command = (
@@ -418,7 +418,7 @@ def main() -> int:
             ]
         ),
     )
-    parser.add_argument("--base-seed", type=int, default=111)
+    parser.add_argument("--base-seed", type=int, default=1101)
     parser.add_argument("--horizon", type=int, default=100)
     parser.add_argument(
         "--schema-version", default="issue_2168_ammv_social_force_pair_diagnostic.v1"

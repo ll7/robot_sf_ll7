@@ -1,0 +1,2163 @@
+{
+  "configs/adversarial/crossing_ttc_space.yaml": {
+    "sha256": "e90353f9653173cc351117bfc874c1e7d5933d32f1f892f1b264d8148c767f34",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/adversarial/issue_1500_adversarial_comparison_manifest.v1.yaml": {
+    "sha256": "82383724e2477c3e9c2664aeaeaa85f9ae435f4404b386156cbca1b55d97c571",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/adversarial/issue_4360_dispatchable_repro_seeds.yaml": {
+    "sha256": "576be3f8ed1f96e7da089c605728ffd2b64ba339128ec1a09ed507dc5f3bb178",
+    "reason": "Registered historical hash: docs/context/evidence/issue_7893_matched_compute_production_canary/input_digests.json, docs/context/evidence/issue_7893_matched_compute_production_canary/receipt.json"
+  },
+  "configs/adversarial/issue_5303_search_promotion_contract.yaml": {
+    "sha256": "1b6ce7fd00bbe07eb896ecb54e053fca89715bed25107f49736a586d574bf8b6",
+    "reason": "frozen preregistration or historical release replay; changing seed identities invalidates evidence"
+  },
+  "configs/adversarial/issue_5303_search_promotion_contract_v2.yaml": {
+    "sha256": "77cfb164e879d641f2081d2654d038e7a31362239aaf2d63e258206433492fa7",
+    "reason": "frozen preregistration or historical release replay; changing seed identities invalidates evidence"
+  },
+  "configs/adversarial/issue_6921_crossing_ttc_space.yaml": {
+    "sha256": "6c6525b3d9e6d60d31803114635cd113ca1cb20794c369934266bdab6257157e",
+    "reason": "Registered historical hash: docs/context/evidence/issue_7893_matched_compute_production_canary/input_digests.json, docs/context/evidence/issue_7893_matched_compute_production_canary/receipt.json"
+  },
+  "configs/adversarial/issue_6921_matched_compute_packet.yaml": {
+    "sha256": "4527f00dc700409bf9d9f9c0c2a1d0958903693368afd789793415726057b2f3",
+    "reason": "Registered historical hash: docs/context/evidence/issue_7893_matched_compute_production_canary/README.md, docs/context/evidence/issue_7893_matched_compute_production_canary/input_digests.json, docs/context/evidence/issue_7893_matched_compute_production_canary/receipt.json"
+  },
+  "configs/adversarial_routes/default.yaml": {
+    "sha256": "d2e88b5f6daf265bd76e21b2c3bb538656baf5f8d22e82de319f4058759fdc69",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/algos/guarded_ppo_camera_ready.yaml": {
+    "sha256": "d2b61082f11574b2f03c50a110cf5f945b908053df65968399a5c863e69ee854",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/algos/guarded_ppo_camera_ready_cpu.yaml": {
+    "sha256": "69f273f311590009a344f3a88592cb19f54524d252f469ab5fc66f7cf2c9e772",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/algos/guarded_ppo_relaxed_v2.yaml": {
+    "sha256": "666eda5a47de6e452eba9b2f3cb15bda16fc97abcd7137434661a87ac9ff85d8",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/algos/guarded_ppo_release_v0_0_8.yaml": {
+    "sha256": "330982edb9a5dd4cbaf192232418f7d35171a410e582c4c3d76ca2fb4362464c",
+    "reason": "frozen/versioned release or sealed-job input"
+  },
+  "configs/algos/hybrid_rule_v3_teb_like_rollout.yaml": {
+    "sha256": "daa1f670b377e62128c5292e09412781dba9d17699b92100c7771ff5d255e374",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/algos/hybrid_rule_v4_clearance_braking.yaml": {
+    "sha256": "5dbc4f17a1ca8b44c2f78dc4e5c83e94a60615ebd7e97892109124323bc9c4ab",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/algos/issue707_orca_tuned.yaml": {
+    "sha256": "47774774e20614d5fcb65576dcf7762f252ecc851c2c294c8e8aa488e390d634",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/algos/orca_prior_guarded_ppo_v1.yaml": {
+    "sha256": "90ddd7ac5ea1d02afc9093cfecdcadb06c9060dcfccaff649220c916002a4148",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/algos/orca_release_v0_0_8.yaml": {
+    "sha256": "5840b9e47088a3da14d684091ad0880a6480340fd274fbf88d3ab5b9a1bda5e4",
+    "reason": "frozen/versioned release or sealed-job input"
+  },
+  "configs/algos/prediction_mpc_cv.yaml": {
+    "sha256": "28179ace1b1eca4738117c7741694421286537c13c856b0dbb7af115294d7c40",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/algos/prediction_mpc_cv_cbf_collision_cone.yaml": {
+    "sha256": "ad8322165f496a9d62aed529db0fba45690f052b2609cc2c5c6364dc6071e46d",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/algos/prediction_planner_camera_ready.yaml": {
+    "sha256": "a5f3775110b7c1351e183016afe8a17348a66d35088eeb6ff55a182dc924a481",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/algos/prediction_planner_release_v0_0_8.yaml": {
+    "sha256": "aad5e0bdb3c41273eff8000465399da31949514077e4c98fc22289015888545c",
+    "reason": "frozen/versioned release or sealed-job input"
+  },
+  "configs/algos/predictive_mppi_camera_ready.yaml": {
+    "sha256": "5213a9e44c74cb79f78466d414645f6ca233d761e8fa5b77e5cfc3161ed94adb",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/algos/predictive_mppi_release_v0_0_8.yaml": {
+    "sha256": "79f13475d9d66f0754c11038f6d52a15b3420965b6f639de7f000c5190ba820b",
+    "reason": "frozen/versioned release or sealed-job input"
+  },
+  "configs/algos/risk_dwa_camera_ready.yaml": {
+    "sha256": "1351439539ed02334891f6a1ef6ac652745791b1b830a5f8616850fbd5ccb37c",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/algos/risk_dwa_release_v0_0_8.yaml": {
+    "sha256": "27d0b269e5a65572bdf2f5af069a5e0037eb0728d501ea12438597404e7e1527",
+    "reason": "frozen/versioned release or sealed-job input"
+  },
+  "configs/algos/social_force_release_v0_0_8.yaml": {
+    "sha256": "9a7015a5f66b5d9ddb5d96c706d33ac8fe027bc0aee256e9ab87d2e89804f773",
+    "reason": "frozen/versioned release or sealed-job input"
+  },
+  "configs/algos/social_force_resolution_independent_v2.yaml": {
+    "sha256": "4d32a90dd58c3e0273c175ee03d4de018e0d370e8a3892230942d21ca4a5a81d",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/algos/social_force_resolution_independent_v2_kernel_wrapped_v2.yaml": {
+    "sha256": "43e1e61d6fc50b22a95bbb698d612a63cf229052c043c1d2347c2d7271567c35",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/algos/social_force_terminal_goal_v1.yaml": {
+    "sha256": "bcd785fff7753dd31bcb899b1bab0cfec8d0c706b053ff28cd2988ca58761afb",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/algos/socnav_release_v0_0_8.yaml": {
+    "sha256": "277c57a45caf213fdc4fb2abdb996062669f9ba05fb4e8adf3e47f90f0429b50",
+    "reason": "frozen/versioned release or sealed-job input"
+  },
+  "configs/algos/socnav_sampling_bounded_v2.yaml": {
+    "sha256": "9c52dc30d3894220caabaf1ac80d01561d6c1318d56c50e5ad7fa27d9c7999b3",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/algos/socnav_sampling_release_v0_0_8.yaml": {
+    "sha256": "375df080cae0a1317d43bd2239cf078ecc9c5bc69b10d9973bbe153cb4d1d1a6",
+    "reason": "frozen/versioned release or sealed-job input"
+  },
+  "configs/analysis/case_workbench.v1.yaml": {
+    "sha256": "08be52f02a1c8c83955efdd58a1bdcdd321f06727eef803cacded39a106418c0",
+    "reason": "historical analysis/evidence identities, not executable development seed input"
+  },
+  "configs/analysis/ch7_evidence_package.v1.yaml": {
+    "sha256": "05c8d92bca0e9100299b1f3cc09c7d75007723cb0d95f220eec956b94e0e347e",
+    "reason": "historical analysis/evidence identities, not executable development seed input"
+  },
+  "configs/analysis/ch7_evidence_package.v2.yaml": {
+    "sha256": "cf2efcaef4edcd537587d0402f7319370cee095d397683a6c00ee2d594c92b08",
+    "reason": "historical analysis/evidence identities, not executable development seed input"
+  },
+  "configs/analysis/ch7_worked_example_portfolio.v1.yaml": {
+    "sha256": "2fe0723bbb67eb18d25944b6933575b7c7b5a31836062c0bd56540fe4e3923ec",
+    "reason": "historical analysis/evidence identities, not executable development seed input"
+  },
+  "configs/analysis/ch7_worked_example_portfolio.v2.yaml": {
+    "sha256": "ebf2e943b6cea7e647f71171c08e904edf19b818cd2e1853ee5409a80d74f010",
+    "reason": "historical analysis/evidence identities, not executable development seed input"
+  },
+  "configs/analysis/issue_4013_model_based_planning_comparison.yaml": {
+    "sha256": "05c2da730fb6eb2f9470ceb8df2804f622b12c3acfe31cddba10de91ca556474",
+    "reason": "historical analysis/evidence identities, not executable development seed input"
+  },
+  "configs/analysis/issue_4016_distributional_rl_risk_comparison.yaml": {
+    "sha256": "a66d60d5cb650f1dd9d24b8163d1acb9afff761ced1a9c5bf474b275e6e91b82",
+    "reason": "historical analysis/evidence identities, not executable development seed input"
+  },
+  "configs/analysis/issue_4206_policy_structure_mechanism_crosscut.yaml": {
+    "sha256": "b32bc51f6c5aa2437090408235981df7fea3f7170422c921961552ab30efaff5",
+    "reason": "historical analysis/evidence identities, not executable development seed input"
+  },
+  "configs/analysis/issue_4239_h600_snqi_weight_set_ranking.yaml": {
+    "sha256": "ceaadfd8ff15cfcf11596e3034b5de0ffd3fd7e452c4531c692a90111ffddaaf",
+    "reason": "historical analysis/evidence identities, not executable development seed input"
+  },
+  "configs/analysis/issue_5142_snqi_admissible_weight_family.yaml": {
+    "sha256": "c635f4445531c6f18bb79a1c7819e9d9b0ed1a54ca5dfdfa6dc6538d2107d007",
+    "reason": "historical analysis/evidence identities, not executable development seed input"
+  },
+  "configs/analysis/issue_5302_oracle_gap_packet.yaml": {
+    "sha256": "233587b7baef428a12b25b7733887fa09c6842df5e12e1b782f04c09755b9762",
+    "reason": "historical analysis/evidence identities, not executable development seed input"
+  },
+  "configs/analysis/issue_5445_matched_calibration.yaml": {
+    "sha256": "ded93e0f9fa49b319155c835f81f9edf0ccfa8edc40531d274aeeb9d721f269a",
+    "reason": "historical analysis/evidence identities, not executable development seed input"
+  },
+  "configs/analysis/issue_5446_seed_flip_inversion_thresholds.yaml": {
+    "sha256": "a9007823f3e3d12be10308055652c012f5045d07d261a8b8a8d48be7b8758238",
+    "reason": "historical analysis/evidence identities, not executable development seed input"
+  },
+  "configs/analysis/issue_5447_ch7_case_capsules.yaml": {
+    "sha256": "1c29426e06ea18601c07003f67acec64f5e2cc004f7404cb52340f1b995c77d0",
+    "reason": "historical analysis/evidence identities, not executable development seed input"
+  },
+  "configs/analysis/issue_5579_mpc_tuning_sensitivity.yaml": {
+    "sha256": "ceca5c8d28b2cba13869c73dc2cae22bed95b329c28bc6e25f2ff44dd99ab513",
+    "reason": "historical analysis/evidence identities, not executable development seed input"
+  },
+  "configs/analysis/issue_5579_mpc_tuning_sensitivity_v2.yaml": {
+    "sha256": "dfbb3f1b71c53c3c1018ca688d9efbaa2d7681dfe9e2f10e6894520011814033",
+    "reason": "historical analysis/evidence identities, not executable development seed input"
+  },
+  "configs/analysis/issue_5591_hybrid_ablation_roster.yaml": {
+    "sha256": "7e341a998392d540fd6214e40515d86b7ed4c760c86c8467a4d38c52618fac52",
+    "reason": "historical analysis/evidence identities, not executable development seed input"
+  },
+  "configs/analysis/issue_5600_persistence_gate.yaml": {
+    "sha256": "25fd37b51b93a48efba5d3df11fc9e9dc69547ea9b9cc957a68ab364d9c66cf6",
+    "reason": "historical analysis/evidence identities, not executable development seed input"
+  },
+  "configs/analysis/issue_5601_portfolio_selection.yaml": {
+    "sha256": "e079da04add5da85355a9d16075c42fd815ec40073afdbde1aca44538d1a8c5d",
+    "reason": "historical analysis/evidence identities, not executable development seed input"
+  },
+  "configs/analysis/issue_6768_risk_ranker_generator_comparison.yaml": {
+    "sha256": "6b51dfb6a8fbe70b979861eba3f906df59712bf5e953d3dc6db725da49e32bd8",
+    "reason": "historical analysis/evidence identities, not executable development seed input"
+  },
+  "configs/analysis/issue_8566_source_bound_uncertainty_component_contrasts.yaml": {
+    "sha256": "35a943944181040bc6acc54fca5bb72e75f89904daaebd88e14584343847609b",
+    "reason": "historical analysis/evidence identities, not executable development seed input"
+  },
+  "configs/analysis/issue_8849_risk_calibration_preflight.yaml": {
+    "sha256": "f06b9feb2075b661f75b256858f5f51eaf58038164fc360054c734b184bea9fb",
+    "reason": "historical analysis/evidence identities, not executable development seed input"
+  },
+  "configs/baselines/ppo_15m_grid_socnav.yaml": {
+    "sha256": "644b57e451cfc42b6ab5cf56ef6ec20fd6290a3bb9bae1be113a1aa6afb792ca",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/baselines/ppo_issue_791_eval_aligned_large_capacity.yaml": {
+    "sha256": "109c0ae61d4bf40a6ce74c69982d71a68b6437e0aaf00b97a2e11761fd4c2e3f",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/baselines/ppo_issue_791_eval_aligned_large_capacity_cpu.yaml": {
+    "sha256": "51ccfbf4400a306b355e2c3f0f46eda3489d5ce3bc85beaa023a6a1da9c9fb41",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/baselines/ppo_issue_791_eval_aligned_large_capacity_portable.yaml": {
+    "sha256": "fcc4a4d7a5c0e8497da4a40a4ad0abf04662be72f144656fb03fdfa9820541c2",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/baselines/ppo_release_robot_0_0_8_cpu.yaml": {
+    "sha256": "a5a25bcbba51215acfc808e6cd707c146df5333073d477908e32dff5289b194a",
+    "reason": "frozen/versioned release or sealed-job input"
+  },
+  "configs/benchmarks/alyassi_comparability_map_v1.yaml": {
+    "sha256": "3848bb8f2a15f7966e2203db6d05cd9353a7a3c577d3f69780d5bf9661ae8af1",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/benchmarks/alyassi_comparability_map_v2.yaml": {
+    "sha256": "f8f4c54953c699e19dd67105f7289c86ac1a6a59e01fac317dc3760cb7a1c8e5",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/benchmarks/camera_ready_all_planners_strict_socnav.yaml": {
+    "sha256": "e3b584266319a64573fc36c719f420d2c4268df728200334337e52bbef7e60a4",
+    "reason": "Declared companion of preserved historical contract configs/benchmarks/issue_3810_long_horizon_snqi_launch_packet.yaml"
+  },
+  "configs/benchmarks/doorway_butterfly_trace_reexport.yaml": {
+    "sha256": "527c2c6f262cf5011cab381b6ffd4248da5e86f34bb090687ba989d86c360844",
+    "reason": "frozen preregistration or historical release replay; changing seed identities invalidates evidence"
+  },
+  "configs/benchmarks/horizon_schedules/release_0_0_8_authored_v1.yaml": {
+    "sha256": "032bbf8ad354ea9394492659aa50188e2bc40078930975ef30cd3ba77208675e",
+    "reason": "frozen/versioned release or sealed-job input"
+  },
+  "configs/benchmarks/horizon_schedules/three_width_doorway_release_0_0_8_authored_v1.yaml": {
+    "sha256": "e420f41636e59dd1169bf2da048c482ec78ba9ccf8ec5dc2721534c61c8191c9",
+    "reason": "frozen/versioned release or sealed-job input"
+  },
+  "configs/benchmarks/issue_1344_paired_nominal_v1_primary.yaml": {
+    "sha256": "059de1ff221de657601495abea008665be0a077d728ec9f96d6a66dca51f2105",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/benchmarks/issue_1344_paired_stress_primary.yaml": {
+    "sha256": "0666df22d7651ca0c8066c484da76129d292a419b6ebe35ec9a8e3e5707f603a",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/benchmarks/issue_1454_s10_scenario_horizons_h500_broader_baselines.yaml": {
+    "sha256": "bd95dcd47d2e7addb2bb906046b9cb7b9e6df88ee64af147e29acb51adbb4c70",
+    "reason": "Declared input dependency of preserved historical source configs/benchmarks/issue_1454_s10_scenario_horizons_h500_candidates.yaml"
+  },
+  "configs/benchmarks/issue_1454_s10_scenario_horizons_h500_candidates.yaml": {
+    "sha256": "63314360ebcc146e93ed59ee3a528d7834a5ac1d22d6f0269cbb3b2cd8fd53a9",
+    "reason": "Registered historical hash: configs/benchmarks/s20_s30_seed_budget_issue_1554_launch_packet.yaml"
+  },
+  "configs/benchmarks/issue_1556_amv_actuation_stress_slice_v0.yaml": {
+    "sha256": "93c69971b54d5a2b2993c17e69dc63d87bb9d385fdda91ca4a1ac21f921235b7",
+    "reason": "Registered historical hash: docs/context/evidence/issue_2011_amv_actuation_sensitivity_pilot_2026-06-01/resolved_sweep_manifest.json"
+  },
+  "configs/benchmarks/issue_2128_heldout_family_transfer_partitions.yaml": {
+    "sha256": "7a95760b2760c7d0ef1df70af935da48fc72acc376ea46256cbe5328f6950fe5",
+    "reason": "Declared companion of preserved historical contract configs/analysis/issue_5302_oracle_gap_packet.yaml"
+  },
+  "configs/benchmarks/issue_2128_heldout_family_transfer_pilot.yaml": {
+    "sha256": "2d850628dc26ecdd1a6db45808f1610e886387b7806dbb50c43a30b035d04edf",
+    "reason": "Declared companion of preserved historical contract configs/benchmarks/issue_2128_heldout_family_transfer_partitions.yaml"
+  },
+  "configs/benchmarks/issue_2452_mechanism_aware_local_nav_suites_v0.yaml": {
+    "sha256": "98fe384e915ee0337fb78efede6d3f645903e03cd60efd9e82e27e8a58f8169d",
+    "reason": "Declared companion of preserved historical contract configs/research/issue_4205_static_constriction_codesign_loop_v1.yaml"
+  },
+  "configs/benchmarks/issue_3059_research_engine_suite_v0.yaml": {
+    "sha256": "007fb04f8f6553d735b3b44226e54baf7498105a414991e2ea904e62ed8ca90a",
+    "reason": "Declared companion of preserved historical contract configs/analysis/issue_5302_oracle_gap_packet.yaml"
+  },
+  "configs/benchmarks/issue_3465_topology_gate_paired.yaml": {
+    "sha256": "20c4692953f607498c5df4242bdba74a95c1500e41266581194556f3b083848e",
+    "reason": "Frozen topology-gate paired preregistration"
+  },
+  "configs/benchmarks/issue_3501_safety_wrapper_factorial_preregistration_cpu_smoke.yaml": {
+    "sha256": "8e34d5fa4d3c55e0e4b2bbf367dbf24cf8de4e4ab2203b9e054d1521c7219f16",
+    "reason": "Frozen paired-preregistration CPU smoke identity"
+  },
+  "configs/benchmarks/issue_3810_long_horizon_snqi_launch_packet.yaml": {
+    "sha256": "e687a72ecc76fd4d6a4b127d2675bb721810f177b59115634e2059b6b7594ae9",
+    "reason": "Historical launch packet bound to retained jobs and immutable seed schedule"
+  },
+  "configs/benchmarks/issue_4205_static_constriction_codesign_loop_v1.yaml": {
+    "sha256": "2290900a8cafefd8c137ca51012b9ae73b2ee6ff36aa0b598994dff7afe8b86b",
+    "reason": "Frozen codesign preregistration and historical CPU smoke evidence"
+  },
+  "configs/benchmarks/issue_4206_trace_capable_h600_rerun_preregistration.yaml": {
+    "sha256": "a395fae462d098a647decf7bd0810082da077398cddd117e2b6ee30d7124a5a1",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/benchmarks/issue_4207_certification_transfer_probe.yaml": {
+    "sha256": "55c2c48447f38063058a05f0630b77e1b97cb57d51572b4b33129e6133003c53",
+    "reason": "Registered historical hash: docs/context/evidence/issue_4207_certification_transfer_probe_2026-07/metadata.json, docs/context/evidence/issue_4207_certification_transfer_probe_2026-07/summary.json"
+  },
+  "configs/benchmarks/issue_4207_interacting_physics_probe.yaml": {
+    "sha256": "dce652d9e68d922917de2f5b960c8222eea9fdc4dd827318863b85025b9238b5",
+    "reason": "Registered historical hash: docs/context/evidence/issue_4207_interacting_physics_2026-07/metadata.json, docs/context/evidence/issue_4207_interacting_physics_2026-07/summary.json"
+  },
+  "configs/benchmarks/issue_4207_interacting_smoke_probe.yaml": {
+    "sha256": "95fe4ce1ecbfe7340912351e5dc58cd3a19af5a48af8c9b986940853847cfe47",
+    "reason": "Registered historical hash: docs/context/evidence/issue_4207_interacting_smoke_2026-07/metadata.json, docs/context/evidence/issue_4207_interacting_smoke_2026-07/summary.json"
+  },
+  "configs/benchmarks/issue_4830_safety_wrapper_factorial_v1.yaml": {
+    "sha256": "1f4c958c5c1d97f37127f1925041cec3ca0ff0267233c6bc572e7302592011d6",
+    "reason": "Registered historical hash: configs/benchmarks/issue_6971_safety_wrapper_paired_preregistration.yaml, docs/context/evidence/issue_8567_native_counterfactual_fields_2026-09-08/receipt.json, robot_sf/benchmark/issue_6971_safety_wrapper_preregistration.py"
+  },
+  "configs/benchmarks/issue_5409_horizon_ablation_h500.yaml": {
+    "sha256": "2452f04b200bc48c55f12afbea39e91ed3cb3b8f52e2a94f364a1bd77b86a11b",
+    "reason": "Registered historical hash: configs/benchmarks/issue_5409_horizon_ablation_launch_packet.yaml"
+  },
+  "configs/benchmarks/issue_5409_horizon_ablation_h600.yaml": {
+    "sha256": "0dafdf16fa80d1c5fed3b62dee08d4a23e508dabe8cfc39633ec5a2716f35675",
+    "reason": "Registered historical hash: configs/benchmarks/issue_5409_horizon_ablation_launch_packet.yaml"
+  },
+  "configs/benchmarks/issue_5409_horizon_ablation_launch_packet.yaml": {
+    "sha256": "72c6a637f63ebf96602168283b1c0b809ddaea128e9c2fcbfc5145fc594e480a",
+    "reason": "Historical packet digest registered in urgent preflight registry"
+  },
+  "configs/benchmarks/issue_5416_sipp_four_geometry_preregistration.yaml": {
+    "sha256": "0899e774da82d48a9054513d5b194c6cb2838a7124f004f89516daf1d0646d85",
+    "reason": "frozen preregistration or historical release replay; changing seed identities invalidates evidence"
+  },
+  "configs/benchmarks/issue_5578_robot_speed_tier_preregistration.yaml": {
+    "sha256": "e769185c2ecfa9d7d4fc05b50ba75f6143afdae435720ac8f553b4155726144d",
+    "reason": "frozen preregistration or historical release replay; changing seed identities invalidates evidence"
+  },
+  "configs/benchmarks/issue_5591_hybrid_ablation_runner.yaml": {
+    "sha256": "8218138bc495366957bdfc75ab54c26803e6011cb309497dc72f7e8fe9369236",
+    "reason": "Declared companion of preserved historical contract configs/analysis/issue_5591_hybrid_ablation_roster.yaml"
+  },
+  "configs/benchmarks/issue_5592_cross_matrix_preregistration.yaml": {
+    "sha256": "915dd5ef3551e89c23c14cb784f4ca5b77e61eb4b9b9dd65a4facbe5a2a5020d",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/benchmarks/issue_5756_trace90_goal.yaml": {
+    "sha256": "68a1ab34a693de92d195e28b7539ddc291e27d17f0fed80a40750b108651a034",
+    "reason": "Registered historical hash: robot_sf/benchmark/camera_ready/_historical_horizons.py"
+  },
+  "configs/benchmarks/issue_5756_trace90_ppo.yaml": {
+    "sha256": "466dbae50b811e9993dce9a2fa0ec67f64f50d82de3c316e2cad6d043767926e",
+    "reason": "Registered historical hash: robot_sf/benchmark/camera_ready/_historical_horizons.py"
+  },
+  "configs/benchmarks/issue_5756_trace90_ppo_canary.yaml": {
+    "sha256": "4f65904020b4468a8e34bb24fb07aad4e61317345a052ce9a69b98cc969920f6",
+    "reason": "Registered historical hash: robot_sf/benchmark/camera_ready/_historical_horizons.py"
+  },
+  "configs/benchmarks/issue_6095_nominal_discriminability_v1.yaml": {
+    "sha256": "3bf27cc362055e6874125f93b793c70f099ce6049641b60c1cb69974b3a55df7",
+    "reason": "Registered historical hash: docs/context/evidence/issue_6095_s10_discriminability_2026-07-22/README.md, docs/context/evidence/issue_6095_s10_discriminability_2026-07-22/nominal/preflight/preview_scenarios.json, docs/context/evidence/issue_6095_s10_discriminability_2026-07-22/nominal/preflight/validate_config.json"
+  },
+  "configs/benchmarks/issue_6095_stress_discriminability_v1.yaml": {
+    "sha256": "e8f8b56097964568da4784054d23e1c590c14d32634c8ec6d465f735d1208dc6",
+    "reason": "Registered historical hash: docs/context/evidence/issue_6095_s10_discriminability_2026-07-22/README.md, docs/context/evidence/issue_6095_s10_discriminability_2026-07-22/stress/preflight/preview_scenarios.json, docs/context/evidence/issue_6095_s10_discriminability_2026-07-22/stress/preflight/validate_config.json"
+  },
+  "configs/benchmarks/issue_6464_brne_corridor_diagnostic.yaml": {
+    "sha256": "ea23800a353fd5e42662a46c612c216aff35d6208ebbb7fa974aa4aa9889bcc1",
+    "reason": "Registered historical hash: docs/context/evidence/issue_7032_mechanism_boundary_atlas/atlas.v1.json, docs/context/evidence/issue_7032_mechanism_boundary_atlas/atlas_input.v1.json"
+  },
+  "configs/benchmarks/issue_6474_social_compliance_nominal_campaign.yaml": {
+    "sha256": "fed85cef7ac43817d0aa47a3ac10f9e7f4b50b4be6410e796fdf3d837e69811e",
+    "reason": "frozen preregistration or historical release replay; changing seed identities invalidates evidence"
+  },
+  "configs/benchmarks/issue_6481_social_compliance_preflight_smoke.yaml": {
+    "sha256": "8d70611f7ef8630ec4ac5b63fac784022f6841097c554f55d2ee310e83a40c3f",
+    "reason": "Registered historical hash: docs/context/evidence/issue_6481_social_compliance_preflight_receipt.json"
+  },
+  "configs/benchmarks/issue_6561_pedestrian_speed_protocol.yaml": {
+    "sha256": "e844126371c2ba017b13c3a570b79d63eee93c87b943f27298f281287533df29",
+    "reason": "frozen preregistration or historical release replay; changing seed identities invalidates evidence"
+  },
+  "configs/benchmarks/issue_6642_radius_sweep_arm_0p5m.yaml": {
+    "sha256": "bbf309868951cff5f4bb299acbcc3b01f2e37bd54ef72fb138e5b7d99073883f",
+    "reason": "immutable radius-sweep campaign contract"
+  },
+  "configs/benchmarks/issue_6642_radius_sweep_arm_0p8m.yaml": {
+    "sha256": "ac4006522e77a02306cb34064bc11a151e56fcd2f1f9409bcdb50440c436dda3",
+    "reason": "immutable radius-sweep campaign contract"
+  },
+  "configs/benchmarks/issue_6642_radius_sweep_arm_1p0m.yaml": {
+    "sha256": "b4855e6ec51729a35ee87af487ad8c3154ccb32a0691b0e1f9d92d5186321a5b",
+    "reason": "immutable radius-sweep campaign contract"
+  },
+  "configs/benchmarks/issue_6642_radius_sweep_manifest_v1.yaml": {
+    "sha256": "44a2ee100e0660ac128f5e84a5f6328d2acdef057c0d8c280cfceabcf09d40d4",
+    "reason": "immutable radius-sweep campaign contract"
+  },
+  "configs/benchmarks/issue_6644_narrow_doorway_geometry_family_v1.yaml": {
+    "sha256": "5cce80b4983ec73f8bd74f9c4f0e5468d1c361da03d7483193d3a32ccec241bb",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/benchmarks/issue_6942_orca_adapter_hedge_preregistration.yaml": {
+    "sha256": "a4fbc455ed73ea0bf9a2ad3d3c84ad92317053df430489e5abdf8816440671be",
+    "reason": "frozen preregistration or historical release replay; changing seed identities invalidates evidence"
+  },
+  "configs/benchmarks/issue_6971_safety_wrapper_paired_preregistration.yaml": {
+    "sha256": "42d04db0da0e35f1aca9e98c00239936b765f9b94f6928098a72d2e50da5379c",
+    "reason": "Registered historical hash: docs/context/evidence/issue_8567_native_counterfactual_fields_2026-09-08/receipt.json"
+  },
+  "configs/benchmarks/issue_7198_radius_sweep_admission_v1.yaml": {
+    "sha256": "3224cca9d1c9923701722f48a9769fb37b33b96a07b7bdbf29b3ed706556b9ab",
+    "reason": "frozen preregistration or historical release replay; changing seed identities invalidates evidence"
+  },
+  "configs/benchmarks/issue_7849_ppo_rppo_evaluation_seeds_v1.yaml": {
+    "sha256": "3657c20ca5120a4d54ec65989d5b9f91a1a64d348ea6aed479d4f0115fc79482",
+    "reason": "Registered historical hash: configs/training/comparison_matrix/issue_7849_ppo_rppo_gpu_admission_v2.yaml, configs/training/comparison_matrix/issue_7849_ppo_rppo_source_inventory_v2.yaml"
+  },
+  "configs/benchmarks/issue_9348_three_width_doorway_v1.yaml": {
+    "sha256": "de828b9132fff186a537dff2427681c9117f149fc8f9aab1156a754abd25b906",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/benchmarks/issue_9431_trace_worked_examples_v007.yaml": {
+    "sha256": "9d0ddf20842e1d959a1f7428a4efb998ccab48e33d992b51bceeabb5781d90b5",
+    "reason": "frozen preregistration or historical release replay; changing seed identities invalidates evidence"
+  },
+  "configs/benchmarks/issue_9666_force_validation.yaml": {
+    "sha256": "a5e629e326da5a26ddf06af20d79ea30ec1e10ff7f9d3d75af53515d58b71c93",
+    "reason": "Registered historical hash: docs/context/evidence/issue_9666_force_custody.json, docs/context/evidence/issue_9666_force_validation.md"
+  },
+  "configs/benchmarks/issue_9671_trace_doorway_v007.yaml": {
+    "sha256": "bae73148b125af5652726a12dced5d64a3e108e9783894293da2d44e7f513fb0",
+    "reason": "frozen preregistration or historical release replay; changing seed identities invalidates evidence"
+  },
+  "configs/benchmarks/issue_9671_trace_headon_group_v007.yaml": {
+    "sha256": "fe3ee17279a74b1ef541f68f746bc265e7b32bb29a711e862081f9f5ee1e277e",
+    "reason": "frozen preregistration or historical release replay; changing seed identities invalidates evidence"
+  },
+  "configs/benchmarks/odd_contracts/low_speed_public_space_v1.yaml": {
+    "sha256": "2feb44976466a8f26ec7405d0f7472ace4166b57a2c2f7b274a05a700f9a3ce7",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/benchmarks/paired_effect_native_smoke_v1.yaml": {
+    "sha256": "1795c5528d9a41afc76abad59d7d99abe40d3bf3cc6163fc7e07770ff4ea684b",
+    "reason": "Registered historical hash: docs/context/evidence/issue_8567_native_counterfactual_fields_2026-09-08/receipt.json"
+  },
+  "configs/benchmarks/paper_experiment_matrix_7planners_v1.yaml": {
+    "sha256": "43eec70a34366239d18e2b5e3cb92f8deb5031990acb8ae1f7981b3aa3fed2f7",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/benchmarks/paper_experiment_matrix_all_planners_v1.yaml": {
+    "sha256": "43319acd6b426d9b34de316487a6c1eb3ce3ea9b9c93fd07b6435a0dbc3a4057",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/benchmarks/paper_experiment_matrix_v1.yaml": {
+    "sha256": "0ad4d441edf57a93c02cfad5e49e466c943a55d34a48b1eb9682920d724454ee",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/benchmarks/paper_experiment_matrix_v1_h600_hybrid_roster.yaml": {
+    "sha256": "d4425b0e381160bc750c5341a7d4ed475eb9a202dd78aaaca7ae876343292132",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/benchmarks/paper_experiment_matrix_v1_h600_hybrid_vs_orca_s30.yaml": {
+    "sha256": "82eee7a1dca241df9bec65e18072f2dd3c46c86489b3b55816d2504af88896b6",
+    "reason": "Registered historical hash: configs/benchmarks/issue_5348_s30_attempt6_resume_launch_packet.yaml, configs/benchmarks/splits/paper_experiment_matrix_v1_h600_hybrid_vs_orca_s30/paper_experiment_matrix_v1_h600_hybrid_vs_orca_s30__arm_hybrid_rule_v3_fast_progress_static_escape.yaml, configs/benchmarks/splits/paper_experiment_matrix_v1_h600_hybrid_vs_orca_s30/paper_experiment_matrix_v1_h600_hybrid_vs_orca_s30__arm_hybrid_rule_v3_fast_progress_static_escape_continuous.yaml"
+  },
+  "configs/benchmarks/paper_experiment_matrix_v1_h600_trace_capable_rerun.yaml": {
+    "sha256": "280bff07464103b4a2448702c5eaca036f8a01f320639df521d2350f0e6287c4",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/benchmarks/paper_experiment_matrix_v1_hybrid_portfolio_compare.yaml": {
+    "sha256": "5c78b8750f6d0c3ca87391d63bf798f173f04ac74d96fac9e9c70a6c67afdca0",
+    "reason": "Declared companion of preserved historical contract configs/benchmarks/issue_5591_hybrid_ablation_runner.yaml"
+  },
+  "configs/benchmarks/paper_experiment_matrix_v1_issue_791_horizon600_probe.yaml": {
+    "reason": "Historical H600 scientific-surface comparator for the registered hybrid-roster campaign; preserve original cohort and calibration identity.",
+    "sha256": "f30ef29a5c0da104b490325547205198b1600cc99d720bc3ca9fe8817779a762"
+  },
+  "configs/benchmarks/paper_experiment_matrix_v1_release_smoke.yaml": {
+    "sha256": "60620b8f28ceb65b6468b343ab1988f87b1187c86ad534bdf2513d48d008ba5e",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/benchmarks/paper_experiment_matrix_v1_scenario_horizons_h500_s20.yaml": {
+    "sha256": "249968670830c3b710e1407aecb2256d140cd1ba76294766421447bd89357f15",
+    "reason": "Registered historical hash: configs/benchmarks/headline_ci_rank_stability_issue_3216_launch_packet.yaml, configs/benchmarks/splits/paper_experiment_matrix_v1_scenario_horizons_h500_s20/paper_experiment_matrix_v1_scenario_horizons_h500_s20__arm_goal.yaml, configs/benchmarks/splits/paper_experiment_matrix_v1_scenario_horizons_h500_s20/paper_experiment_matrix_v1_scenario_horizons_h500_s20__arm_hybrid_rule_v3_fast_progress_static_escape.yaml"
+  },
+  "configs/benchmarks/paper_experiment_matrix_v2_h600_hybrid_stress_smoke.yaml": {
+    "sha256": "c088e62e7fb7758dc2670d81600d54c7de903ebf2d6e9310cf6e672c53400184",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_2026_08.yaml": {
+    "sha256": "aa3057faeeefbd2ced41e3e093da32d1705270330cb1c124bc0b3558f8f88afd",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml": {
+    "sha256": "5d805909643f1b6c5e919a891657ec86e6800f2ab602b7cfd70f1af1aec94462",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate.yaml": {
+    "sha256": "02f7d0828f77345d5a5ca2550a381611c06ebe93037c6d4a90bb0b23107144a5",
+    "reason": "frozen/versioned release or sealed-job input"
+  },
+  "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate_authored.yaml": {
+    "sha256": "de627db9f2999b17ed56378b9d793ee13a4b1bc15d1eb442513360d45f6d76d5",
+    "reason": "frozen/versioned release or sealed-job input"
+  },
+  "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_extended.yaml": {
+    "sha256": "143ab63a235f40326c93c93044fba95e808388751f04d8ca979b89d1142ca465",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_extended_post1.yaml": {
+    "sha256": "c43d7bc24a182dcc56082f4da11d76e09a66d8b1cc0d0dc84b29536726022701",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_runtime_smoke.yaml": {
+    "sha256": "c3671790d0beb12511223efa86e2cf26245692566b2c849dba956b6e36bdf64a",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_3.yaml": {
+    "sha256": "fbd900243f5a004cc07f7d10c672126f46ec583eb6f108ec7a0e8fce9daa7ad4",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_4.yaml": {
+    "sha256": "698b4bc44455a3fd4485b5b25b0bca16e47ca7d6ceaf62fd918aaba05df177d4",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_5.yaml": {
+    "sha256": "a546df04e8f69896f001792d22931c184dd54d440f2828898049e57bdf92419b",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_6.yaml": {
+    "sha256": "6471bc36db5806badd527701ca30b2f63f425dd3830d6b2b86cfa00ade1f5c46",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_three_width_doorway_v1.yaml": {
+    "sha256": "9e815e03f5280c5b8366d7179a4f93d61acc914505f1379660c6467849a26e7c",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_three_width_doorway_v2.yaml": {
+    "sha256": "e3a26ccfb9df1cea343fba9f83aba1e9505494cbead7121132922bffb5c75039",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/benchmarks/predictive_hard_seeds_v1.yaml": {
+    "sha256": "535dfc5e2382a75140e128c98a32d898ab6655ab2925c45b565512924ca5c575",
+    "reason": "Transitive declared dependency of preserved historical predictive-v2 contract; original source bytes retained."
+  },
+  "configs/benchmarks/predictive_sweep_planner_grid_v1.yaml": {
+    "sha256": "0cd1998d4471e0f637ba7d9b16ec4a271ce7afb588d59879469182fd91504c2f",
+    "reason": "Transitive declared dependency of preserved historical predictive-v2 contract; original source bytes retained."
+  },
+  "configs/benchmarks/releases/benchmark_data_release_s30_h600.template.yaml": {
+    "sha256": "957fd00493ed5f6e525591805484255d42c729517548c975cb4372fb0f364d21",
+    "reason": "frozen/versioned release or sealed-job input"
+  },
+  "configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml": {
+    "sha256": "6b2fd25d185e01c28a9883ccec6b3716ee996a052b44dd89cc89c16f6c80a182",
+    "reason": "frozen/versioned release or sealed-job input"
+  },
+  "configs/benchmarks/releases/benchmark_v0_1_publication_prerequisites.yaml": {
+    "sha256": "81e9e119338086320eee96fa83cabaa837923a967e6a8c9b3d03d4b4a506e824",
+    "reason": "frozen/versioned release or sealed-job input"
+  },
+  "configs/benchmarks/releases/benchmark_v0_1_release_suites.yaml": {
+    "sha256": "5e81e33164798ca45a384f5546347eb9cb8d46b5f09b1e09993c8b88499d1b8d",
+    "reason": "frozen/versioned release or sealed-job input"
+  },
+  "configs/benchmarks/releases/hierarchical_paired_release_analysis_issue_5351.yaml": {
+    "sha256": "273e851639c4a59ec175e23f9746338260ec5d67500f08642520dfc7b815853b",
+    "reason": "frozen/versioned release or sealed-job input"
+  },
+  "configs/benchmarks/releases/issue_7086_trace_dossier_diagnostic_v0_1.yaml": {
+    "sha256": "1472cc5d38cfa947f07c3a092e6792909731ee4cec64a936f384b58cdefd42f1",
+    "reason": "frozen/versioned release or sealed-job input"
+  },
+  "configs/benchmarks/releases/issue_9860_corrected_diagnostic_v1.yaml": {
+    "sha256": "9b4020d6fed428c8c1045a45e20e97eef1e8f51a497f5e8323ea25590dca9516",
+    "reason": "frozen/versioned release or sealed-job input"
+  },
+  "configs/benchmarks/releases/issue_9860_unsafe_probe_diagnostic_v1.yaml": {
+    "sha256": "c031a3dc3933f6562a74a731eed4ede31ed860af861981c504483ceec3fc58ed",
+    "reason": "frozen/versioned release or sealed-job input"
+  },
+  "configs/benchmarks/releases/paper_experiment_matrix_7planners_v1_release_v0_0_2_scoped.yaml": {
+    "sha256": "4023114499a446c75ac794934dac20c8f627af4a325373ad1dc2fc8567186105",
+    "reason": "frozen/versioned release or sealed-job input"
+  },
+  "configs/benchmarks/releases/paper_experiment_matrix_all_planners_v1_release_v0_0_2.yaml": {
+    "sha256": "91697df4ec10dc5d61e8b0a6e2a267f44f220505375a5180c35729f685eb48b5",
+    "reason": "frozen/versioned release or sealed-job input"
+  },
+  "configs/benchmarks/releases/paper_experiment_matrix_v1_release_smoke_v0_1.yaml": {
+    "sha256": "ea0896e209828efd0edf3e8e50c8a7295594b393cb498f6e96cb23bb82a71701",
+    "reason": "frozen/versioned release or sealed-job input"
+  },
+  "configs/benchmarks/releases/paper_experiment_matrix_v1_release_v0_1.yaml": {
+    "sha256": "e6c43c10b3f1e17bc4bc6b6983f50983dc8dca00114ac46d551cc95be84b1c93",
+    "reason": "frozen/versioned release or sealed-job input"
+  },
+  "configs/benchmarks/releases/paper_experiment_matrix_v1_release_v0_1_suite_policy.yaml": {
+    "sha256": "b5eb0a0cd6e07c7ef285781adcda207457e423f3bfb381cc78cd313c62dd6395",
+    "reason": "frozen/versioned release or sealed-job input"
+  },
+  "configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_hybrid_stress_smoke_v0_1.yaml": {
+    "sha256": "02ddb15b0fb542bf4ab2a1acc25988cb1b2b3d4cf22736e6cce32cd735a714c8",
+    "reason": "frozen/versioned release or sealed-job input"
+  },
+  "configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_release_v0_0_3.yaml": {
+    "sha256": "6b5df4170a2fa83a6a97666a269d81364b0e4bcc60977e08472e46378f34d304",
+    "reason": "frozen/versioned release or sealed-job input"
+  },
+  "configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_release_v0_0_3_post1.yaml": {
+    "sha256": "fe6e696606956570b40150bfa46b73e83df7ef4b7e15187149b011fb7e2f351a",
+    "reason": "frozen/versioned release or sealed-job input"
+  },
+  "configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_2.yaml": {
+    "sha256": "09b385898729a4f6fa2585501b748cb8884ca5bd6ab9119e53f67c57953b61ab",
+    "reason": "frozen/versioned release or sealed-job input"
+  },
+  "configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_3.yaml": {
+    "sha256": "d6f3047adaacfb8cad2cc12430ee5ce7331f11b0777ac522209fd1e5af019241",
+    "reason": "frozen/versioned release or sealed-job input"
+  },
+  "configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_4.yaml": {
+    "sha256": "aded0ca71e40bdc8f7193282bb8d28420a9b627f93d47a43034703a45d613197",
+    "reason": "frozen/versioned release or sealed-job input"
+  },
+  "configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_5.yaml": {
+    "sha256": "59fb1604b523b3a96f2e404b3e7e8774a69424770cc78305229fe456f59840f6",
+    "reason": "frozen/versioned release or sealed-job input"
+  },
+  "configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_6.yaml": {
+    "sha256": "a3a626ce801ac5d24c26d8945c0cb5f655ce1508c319579301652040f8f35160",
+    "reason": "frozen/versioned release or sealed-job input"
+  },
+  "configs/benchmarks/releases/release_0_0_5_preflight_checklist.yaml": {
+    "sha256": "02cbbc2569ab30ce24708b742b66b0034c85036ddd37a914a48cec8a7abaff4d",
+    "reason": "frozen/versioned release or sealed-job input"
+  },
+  "configs/benchmarks/releases/release_0_0_5_surface_preflight_checklist.yaml": {
+    "sha256": "73602a89e0e749fab751f7c5bbb9a5b94e847124d3df6476c42b88efac33684d",
+    "reason": "frozen/versioned release or sealed-job input"
+  },
+  "configs/benchmarks/releases/release_july_2026_preflight_issue_3081.yaml": {
+    "sha256": "2fd9f170d18c87bb531478f16a2d680b16cb1dcc6281ec8cb2ed744f3d9d5fd0",
+    "reason": "frozen/versioned release or sealed-job input"
+  },
+  "configs/benchmarks/releases/three_width_doorway_release_0_0_8_v1.template.yaml": {
+    "sha256": "b11e74821ff83ed714687902532b10644b6f1f5abba13b3046a116201d7d057a",
+    "reason": "frozen/versioned release or sealed-job input"
+  },
+  "configs/benchmarks/releases/three_width_doorway_release_0_0_8_v1.yaml": {
+    "sha256": "1d71f06d1203d287d5955004db87a481918758f9c23af756ca7bfea7958700e9",
+    "reason": "frozen/versioned release or sealed-job input"
+  },
+  "configs/benchmarks/route_clearance_certifications_v1.yaml": {
+    "sha256": "8923d0560d17e92133e74792931539bd9a650629ae94d57798adb809046c567a",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/benchmarks/seed_sets_0_0_8.yaml": {
+    "sha256": "a8803bade9f39d504d508ba530208ca66acc343376304afd586b82d3308ce706",
+    "reason": "frozen/versioned release or sealed-job input",
+    "annotation": "# seed-holdout: setup-only (immutable artifact hash identity; never dispatched)"
+  },
+  "configs/benchmarks/snqi_v2/calibration.dev1001_1002_scheduled_acquisition.yaml": {
+    "sha256": "fe55f5efb6fd885ae86fc978dffc01afd5928fba75128442a6dcd88ae9e94ff3",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/benchmarks/snqi_v2/family.v2.0.yaml": {
+    "sha256": "6ba0e5f4c1e1d5530e4ae773e22f811e2af9ee39f975c4e42554ca167ea09942",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/benchmarks/splits/paper_experiment_matrix_v1_h600_hybrid_vs_orca_s30/paper_experiment_matrix_v1_h600_hybrid_vs_orca_s30__arm_hybrid_rule_v3_fast_progress_static_escape.yaml": {
+    "sha256": "8b3d3da8c3ac774b119ce4a579f2eb73a8e2fc4d522629100e659dc4798d5b4f",
+    "reason": "Registered historical hash: configs/benchmarks/splits/paper_experiment_matrix_v1_h600_hybrid_vs_orca_s30/split_manifest.json"
+  },
+  "configs/benchmarks/splits/paper_experiment_matrix_v1_h600_hybrid_vs_orca_s30/paper_experiment_matrix_v1_h600_hybrid_vs_orca_s30__arm_hybrid_rule_v3_fast_progress_static_escape_continuous.yaml": {
+    "sha256": "ecf439f3148a30bb1e1d22005d09de36dbc1cf042fe01c51490bbcab167fe883",
+    "reason": "Registered historical hash: configs/benchmarks/splits/paper_experiment_matrix_v1_h600_hybrid_vs_orca_s30/split_manifest.json"
+  },
+  "configs/benchmarks/splits/paper_experiment_matrix_v1_h600_hybrid_vs_orca_s30/paper_experiment_matrix_v1_h600_hybrid_vs_orca_s30__arm_orca.yaml": {
+    "sha256": "c89cebd1885ffc2cd065df3866c475a7515f56720100a9d63d9cb4525f2fd246",
+    "reason": "Registered historical hash: configs/benchmarks/splits/paper_experiment_matrix_v1_h600_hybrid_vs_orca_s30/split_manifest.json"
+  },
+  "configs/benchmarks/splits/paper_experiment_matrix_v1_h600_hybrid_vs_orca_s30/paper_experiment_matrix_v1_h600_hybrid_vs_orca_s30__arm_ppo.yaml": {
+    "sha256": "ad6b7ad3239325984d7b9cd880e9164688e30c368cf9faa98f9c91202c8b6667",
+    "reason": "Registered historical hash: configs/benchmarks/splits/paper_experiment_matrix_v1_h600_hybrid_vs_orca_s30/split_manifest.json"
+  },
+  "configs/benchmarks/splits/paper_experiment_matrix_v1_h600_hybrid_vs_orca_s30/paper_experiment_matrix_v1_h600_hybrid_vs_orca_s30__arm_scenario_adaptive_hybrid_orca_v1.yaml": {
+    "sha256": "bdb366962fc181cadecc123e1e6f89dc974b5ae5912ee12f168970642e2801dd",
+    "reason": "Registered historical hash: configs/benchmarks/splits/paper_experiment_matrix_v1_h600_hybrid_vs_orca_s30/split_manifest.json"
+  },
+  "configs/benchmarks/splits/paper_experiment_matrix_v1_h600_hybrid_vs_orca_s30/paper_experiment_matrix_v1_h600_hybrid_vs_orca_s30__arm_scenario_adaptive_hybrid_orca_v2_collision_guard.yaml": {
+    "sha256": "6e522e1004956a4e1cf659d5dc2a71d3fea3d33e9c036a5b94312d0d88a5a691",
+    "reason": "Registered historical hash: configs/benchmarks/splits/paper_experiment_matrix_v1_h600_hybrid_vs_orca_s30/split_manifest.json"
+  },
+  "configs/benchmarks/splits/paper_experiment_matrix_v1_scenario_horizons_h500_s20/paper_experiment_matrix_v1_scenario_horizons_h500_s20__arm_goal.yaml": {
+    "sha256": "51b9511c6e8ddf082e449621965a5056bd24672b1f2f7ceb1cfa7e62f32b4cb1",
+    "reason": "Registered historical hash: configs/benchmarks/splits/paper_experiment_matrix_v1_scenario_horizons_h500_s20/split_manifest.json, docs/context/evidence/issue_5273_s20_launch_packet.json"
+  },
+  "configs/benchmarks/splits/paper_experiment_matrix_v1_scenario_horizons_h500_s20/paper_experiment_matrix_v1_scenario_horizons_h500_s20__arm_hybrid_rule_v3_fast_progress_static_escape.yaml": {
+    "sha256": "d46b1c807db82f9ddb6c2ac8d0b68d47b4ba90accae4917ad9babfd56cf282cf",
+    "reason": "Registered historical hash: configs/benchmarks/splits/paper_experiment_matrix_v1_scenario_horizons_h500_s20/split_manifest.json, docs/context/evidence/issue_5273_s20_launch_packet.json"
+  },
+  "configs/benchmarks/splits/paper_experiment_matrix_v1_scenario_horizons_h500_s20/paper_experiment_matrix_v1_scenario_horizons_h500_s20__arm_orca.yaml": {
+    "sha256": "1704afa991595958bb538dd354487e9ba25d72adfbc69d0e06e42a12ac2e6960",
+    "reason": "Registered historical hash: configs/benchmarks/splits/paper_experiment_matrix_v1_scenario_horizons_h500_s20/split_manifest.json, docs/context/evidence/issue_5273_s20_launch_packet.json"
+  },
+  "configs/benchmarks/splits/paper_experiment_matrix_v1_scenario_horizons_h500_s20/paper_experiment_matrix_v1_scenario_horizons_h500_s20__arm_ppo.yaml": {
+    "sha256": "f9871fdb72c94bdd8214ae7a969e512d3119169533fab1534f7503c35b2ebb54",
+    "reason": "Registered historical hash: configs/benchmarks/splits/paper_experiment_matrix_v1_scenario_horizons_h500_s20/split_manifest.json, docs/context/evidence/issue_5273_s20_launch_packet.json"
+  },
+  "configs/benchmarks/splits/paper_experiment_matrix_v1_scenario_horizons_h500_s20/paper_experiment_matrix_v1_scenario_horizons_h500_s20__arm_prediction_planner.yaml": {
+    "sha256": "e44f6a630b5de980ee8926c53c6977e8c3b6db17c5930a6cf78f6867b4289332",
+    "reason": "Registered historical hash: configs/benchmarks/splits/paper_experiment_matrix_v1_scenario_horizons_h500_s20/split_manifest.json, docs/context/evidence/issue_5273_s20_launch_packet.json"
+  },
+  "configs/benchmarks/splits/paper_experiment_matrix_v1_scenario_horizons_h500_s20/paper_experiment_matrix_v1_scenario_horizons_h500_s20__arm_sacadrl.yaml": {
+    "sha256": "08277e417679e0a5bedcb3d4e695c11fa97275a3bbdb0e64e4a3fafb750ea53d",
+    "reason": "Registered historical hash: configs/benchmarks/splits/paper_experiment_matrix_v1_scenario_horizons_h500_s20/split_manifest.json, docs/context/evidence/issue_5273_s20_launch_packet.json"
+  },
+  "configs/benchmarks/splits/paper_experiment_matrix_v1_scenario_horizons_h500_s20/paper_experiment_matrix_v1_scenario_horizons_h500_s20__arm_scenario_adaptive_hybrid_orca_v1.yaml": {
+    "sha256": "048dd88b6b5782b845166a369b85ef22bea46b47b1935b64b16a574c23eeceda",
+    "reason": "Registered historical hash: configs/benchmarks/splits/paper_experiment_matrix_v1_scenario_horizons_h500_s20/split_manifest.json, docs/context/evidence/issue_5273_s20_launch_packet.json"
+  },
+  "configs/benchmarks/splits/paper_experiment_matrix_v1_scenario_horizons_h500_s20/paper_experiment_matrix_v1_scenario_horizons_h500_s20__arm_social_force.yaml": {
+    "sha256": "beb0fb13f1d7bf54c2649ce8c13b386169c22cb8a04e998f46eb2a0848b04dcd",
+    "reason": "Registered historical hash: configs/benchmarks/splits/paper_experiment_matrix_v1_scenario_horizons_h500_s20/split_manifest.json, docs/context/evidence/issue_5273_s20_launch_packet.json"
+  },
+  "configs/benchmarks/splits/paper_experiment_matrix_v1_scenario_horizons_h500_s20/paper_experiment_matrix_v1_scenario_horizons_h500_s20__arm_socnav_sampling.yaml": {
+    "sha256": "34fc1151809bb04982f6886ab360ab580d77d71b2c89254c49fa1df4fc27be84",
+    "reason": "Registered historical hash: configs/benchmarks/splits/paper_experiment_matrix_v1_scenario_horizons_h500_s20/split_manifest.json, docs/context/evidence/issue_5273_s20_launch_packet.json"
+  },
+  "configs/benchmarks/splits/paper_experiment_matrix_v2_h600_s30_extended/paper_experiment_matrix_v2_h600_s30_extended__arm_goal.yaml": {
+    "sha256": "144978a02ffcf1e1d014054e1d15ec6200f41164913988a66116afb386394efb",
+    "reason": "Registered historical hash: configs/benchmarks/splits/paper_experiment_matrix_v2_h600_s30_extended/split_manifest.json"
+  },
+  "configs/benchmarks/splits/paper_experiment_matrix_v2_h600_s30_extended/paper_experiment_matrix_v2_h600_s30_extended__arm_guarded_ppo.yaml": {
+    "sha256": "fa005ecb7bafe9480c6bc2ee376876d6bd3facdbb42605326ffd15dd9ff3fccc",
+    "reason": "Registered historical hash: configs/benchmarks/splits/paper_experiment_matrix_v2_h600_s30_extended/split_manifest.json"
+  },
+  "configs/benchmarks/splits/paper_experiment_matrix_v2_h600_s30_extended/paper_experiment_matrix_v2_h600_s30_extended__arm_hybrid_rule_v3_fast_progress_static_escape.yaml": {
+    "sha256": "d50ca61ea00fa6c3ebd15feb67319b0af2e49214931f6fce91d6393732acf8dc",
+    "reason": "Registered historical hash: configs/benchmarks/splits/paper_experiment_matrix_v2_h600_s30_extended/split_manifest.json"
+  },
+  "configs/benchmarks/splits/paper_experiment_matrix_v2_h600_s30_extended/paper_experiment_matrix_v2_h600_s30_extended__arm_hybrid_rule_v3_fast_progress_static_escape_continuous.yaml": {
+    "sha256": "5ad6f65a018f7b13014962d2e8476fb7e711452776223e1519038226878a80ed",
+    "reason": "Registered historical hash: configs/benchmarks/splits/paper_experiment_matrix_v2_h600_s30_extended/split_manifest.json"
+  },
+  "configs/benchmarks/splits/paper_experiment_matrix_v2_h600_s30_extended/paper_experiment_matrix_v2_h600_s30_extended__arm_orca.yaml": {
+    "sha256": "20b74c376eef8ffa8dbcda5c0ff436e6d47d2df80803a9ad904c93ddb5ec362e",
+    "reason": "Registered historical hash: configs/benchmarks/splits/paper_experiment_matrix_v2_h600_s30_extended/split_manifest.json"
+  },
+  "configs/benchmarks/splits/paper_experiment_matrix_v2_h600_s30_extended/paper_experiment_matrix_v2_h600_s30_extended__arm_ppo.yaml": {
+    "sha256": "792f6793d47bfcf7658a700545e6e8f572b52ba0add306cce2841fdac78b7270",
+    "reason": "Registered historical hash: configs/benchmarks/splits/paper_experiment_matrix_v2_h600_s30_extended/split_manifest.json"
+  },
+  "configs/benchmarks/splits/paper_experiment_matrix_v2_h600_s30_extended/paper_experiment_matrix_v2_h600_s30_extended__arm_prediction_planner.yaml": {
+    "sha256": "8fc9ea75eae0ab585a65012775bf245c2cb6deefed6ffc0089532fd257533889",
+    "reason": "Registered historical hash: configs/benchmarks/splits/paper_experiment_matrix_v2_h600_s30_extended/split_manifest.json"
+  },
+  "configs/benchmarks/splits/paper_experiment_matrix_v2_h600_s30_extended/paper_experiment_matrix_v2_h600_s30_extended__arm_predictive_mppi.yaml": {
+    "sha256": "b7554d416e3996471166c5917996f0323c064cc7d0eca7a7f96c9445a9d6cba9",
+    "reason": "Registered historical hash: configs/benchmarks/splits/paper_experiment_matrix_v2_h600_s30_extended/split_manifest.json"
+  },
+  "configs/benchmarks/splits/paper_experiment_matrix_v2_h600_s30_extended/paper_experiment_matrix_v2_h600_s30_extended__arm_risk_dwa.yaml": {
+    "sha256": "a6b08b94e66880c3e9ba66e0869fc807c9e7bb20d9595c0b57e4a81c9154012a",
+    "reason": "Registered historical hash: configs/benchmarks/splits/paper_experiment_matrix_v2_h600_s30_extended/split_manifest.json"
+  },
+  "configs/benchmarks/splits/paper_experiment_matrix_v2_h600_s30_extended/paper_experiment_matrix_v2_h600_s30_extended__arm_sacadrl.yaml": {
+    "sha256": "100247e93b2f61e5d5440010fbc7f7978db6b05555710417a12d93424ab3c8e7",
+    "reason": "Registered historical hash: configs/benchmarks/splits/paper_experiment_matrix_v2_h600_s30_extended/split_manifest.json"
+  },
+  "configs/benchmarks/splits/paper_experiment_matrix_v2_h600_s30_extended/paper_experiment_matrix_v2_h600_s30_extended__arm_scenario_adaptive_hybrid_orca_v1.yaml": {
+    "sha256": "b865b71862fe28a1042aaead10a9c949c5c3ec8a6a8c8f8611b6d51b2fa6da41",
+    "reason": "Registered historical hash: configs/benchmarks/splits/paper_experiment_matrix_v2_h600_s30_extended/split_manifest.json"
+  },
+  "configs/benchmarks/splits/paper_experiment_matrix_v2_h600_s30_extended/paper_experiment_matrix_v2_h600_s30_extended__arm_scenario_adaptive_hybrid_orca_v2_collision_guard.yaml": {
+    "sha256": "56bcb65071c507f82697528533ad26f144c78d404c453bc09a62e6fdef52f7ee",
+    "reason": "Registered historical hash: configs/benchmarks/splits/paper_experiment_matrix_v2_h600_s30_extended/split_manifest.json"
+  },
+  "configs/benchmarks/splits/paper_experiment_matrix_v2_h600_s30_extended/paper_experiment_matrix_v2_h600_s30_extended__arm_social_force.yaml": {
+    "sha256": "27f5fe3ac0abecfa3b7b93c31b963f2cc63f5d9a31c02ffbf8e151216b5b41c6",
+    "reason": "Registered historical hash: configs/benchmarks/splits/paper_experiment_matrix_v2_h600_s30_extended/split_manifest.json"
+  },
+  "configs/benchmarks/splits/paper_experiment_matrix_v2_h600_s30_extended/paper_experiment_matrix_v2_h600_s30_extended__arm_socnav_sampling.yaml": {
+    "sha256": "c97d5ccf2e5c4359e415bdc27962218495f7c5a3eae6471b6131f4c61fb7a0ea",
+    "reason": "Registered historical hash: configs/benchmarks/splits/paper_experiment_matrix_v2_h600_s30_extended/split_manifest.json"
+  },
+  "configs/policy_search/ablation_manifests/issue_2104_component_ablation_pilot.yaml": {
+    "sha256": "15e2f13cb0596da3991fd5eb934d70b6072e0c6d47c24194e72ae90eec7305d1",
+    "reason": "Recorded historical campaign/contract input identified in review d3; preserve original source identities and completed evidence."
+  },
+  "configs/policy_search/ablation_manifests/issue_2170_one_factor_hybrid_component_manifest.yaml": {
+    "sha256": "abad4861c3bcf2cd1e8b673a5673f76bdafe0eaa2046a4740a50d367106bf976",
+    "reason": "Recorded historical campaign/contract input identified in review d3; preserve original source identities and completed evidence."
+  },
+  "configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape.yaml": {
+    "sha256": "cf2e6844b3c8e8315c31e6cf115f66ea2c7051526ff2e1f9cfe3a1c5a3f23cc4",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape_continuous.yaml": {
+    "sha256": "3952b569bb8b5dbb2f4f895b393532b5fc58db2954282af7c68c894e04da4507",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape_continuous_s30_h600_release.yaml": {
+    "sha256": "8ed0a4048cba78f70abf37effaf8b93fe7cbb9de25897d4f65008adcb6e91ecd",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape_s30_h600_release.yaml": {
+    "sha256": "905ec25e24b3d5cedee1508ac6ad20a09f913d368c99d4329c839bc359640935",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/policy_search/candidates/hybrid_rule_v4_fast_progress_static_escape_continuous_s30_h600_release.yaml": {
+    "sha256": "d4fbb7a9186b8950249cc2b4a24aec49dc49f0bb0829cce89b8ebab8508045e3",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/policy_search/candidates/hybrid_rule_v4_fast_progress_static_escape_continuous_s30_h600_release_0_0_8_frozen.yaml": {
+    "sha256": "044931a38f31a7b7c01ba8a750a1d34a79a58200309806e538761a94eff94888",
+    "reason": "frozen/versioned release or sealed-job input"
+  },
+  "configs/policy_search/candidates/hybrid_rule_v4_fast_progress_static_escape_s30_h600_release.yaml": {
+    "sha256": "0a4bc7115294c71094d42b799d1d56c8ddb4884aca69e3cea3a63f26f521ba5d",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/policy_search/candidates/hybrid_rule_v4_fast_progress_static_escape_s30_h600_release_0_0_8_frozen.yaml": {
+    "sha256": "1329d3934decb0bf50a803071af69b99e3f12e534083fc3d82e20d4706c76811",
+    "reason": "frozen/versioned release or sealed-job input"
+  },
+  "configs/policy_search/candidates/orca_prior_guarded_ppo_v1.yaml": {
+    "sha256": "b35d81f45442ac5589317c287c10746ab6c1c6696eaf5f427f3df4c560a8c9ee",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v1.yaml": {
+    "sha256": "3129fed61da9b5edf571a76c4024ce18a1cc2b7e1ee2c026e45605531f1a3541",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_bottleneck_yield_s30_h600_release.yaml": {
+    "sha256": "895cd46ff26c0b03fd51d5e5fb6e77f16ad2c6f6cd1fcead7089c8dda8c7966d",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4_s30_h600_release.yaml": {
+    "sha256": "fee4b1af18a57c08b60a886c16de8e57b29438cbb412cbb33bb1d09dd08b55c5",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4_s30_h600_release_0_0_8_frozen.yaml": {
+    "sha256": "28aafe6352543e4c4d24a146bd3ba7260105362052505af9308f6d45d9d94458",
+    "reason": "frozen/versioned release or sealed-job input"
+  },
+  "configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard.yaml": {
+    "sha256": "d7cb7eef4d3a02a06bb283f870e1279152058c9b91dd3774d029f1a37f0c2afe",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard_s30_h600_release.yaml": {
+    "sha256": "90bc08cffe40e7f5b38c371db7c2a22790970c6817792dc7865686686c0a7dc3",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard_v4_s30_h600_release.yaml": {
+    "sha256": "d03fb2593ad7fa891692f869ddb37feb29c6d4c0ac09018a2c6d3679d8fec758",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard_v4_s30_h600_release_0_0_8_frozen.yaml": {
+    "sha256": "54435e7fd39e592d4684fe40f804ab1c080f39925dceb0781dd68c1ce172ef94",
+    "reason": "frozen/versioned release or sealed-job input"
+  },
+  "configs/policy_search/release_0_0_8_placeholders/hybrid_rule_v4_fast_progress_static_escape.unfrozen.yaml": {
+    "sha256": "6c60719a8b59a4eef1651dc94779cffa754c392dcf8641de31f96b9a7f675694",
+    "reason": "frozen/versioned release or sealed-job input"
+  },
+  "configs/policy_search/release_0_0_8_placeholders/hybrid_rule_v4_fast_progress_static_escape_continuous.unfrozen.yaml": {
+    "sha256": "4812a9cecf2a75c9d4b82ad9cf377f4e9406aa09dcd15897caa43932309d2887",
+    "reason": "frozen/versioned release or sealed-job input"
+  },
+  "configs/policy_search/release_0_0_8_placeholders/scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4.unfrozen.yaml": {
+    "sha256": "bfee5ca060ca8c00e5d84b46c1b7b183e66eb9f372a84486042d0d0b21e7d2ef",
+    "reason": "frozen/versioned release or sealed-job input"
+  },
+  "configs/policy_search/release_0_0_8_placeholders/scenario_adaptive_hybrid_orca_v2_collision_guard_v4.unfrozen.yaml": {
+    "sha256": "7c5b4b1a51f7622368cd35926f2452cde0bdc6bac43b0c0d0bde1b45069acb65",
+    "reason": "frozen/versioned release or sealed-job input"
+  },
+  "configs/policy_search/topology_reselection_cross_slice_issue_2716.yaml": {
+    "sha256": "591f7642a370597084b439acdd39f402d1f3a301000c29a144ccf7ebd82e30f9",
+    "reason": "Registered historical hash: docs/context/evidence/issue_2724_adversarial_candidate/candidate.json, docs/context/evidence/issue_2788_negative_result_scenario_candidates/candidate_nr001_doorway.json, docs/context/evidence/issue_2788_negative_result_scenario_candidates/candidate_nr001_t_intersection.json"
+  },
+  "configs/releases/release_0_0_2_checksum_manifest.yaml": {
+    "sha256": "7139c7f1e937b72511695105216487c7caebad4a44e02d5a11fbad351f1df46e",
+    "reason": "frozen/versioned release or sealed-job input"
+  },
+  "configs/releases/release_0_0_5_checksum_manifest.yaml": {
+    "sha256": "13df47b3b7092a6efb47942c97fe362c38428e9604d21740fbcb5d7526ade741",
+    "reason": "frozen/versioned release or sealed-job input"
+  },
+  "configs/releases/release_0_0_5_preparation.yaml": {
+    "sha256": "87363cff9d4ff1162853fa69628258b68f3b56ab4a49a828f1698133f0ec371b",
+    "reason": "frozen/versioned release or sealed-job input"
+  },
+  "configs/releases/release_0_0_5_surface_disposition.yaml": {
+    "sha256": "1c1dff3ee16ef1d3c4d7f623cd176569615e24b15e54413787ba72552f33194c",
+    "reason": "frozen/versioned release or sealed-job input"
+  },
+  "configs/releases/release_0_0_6_preparation.yaml": {
+    "sha256": "8be0f496882301b9cdb5c8e51cb719ed0714a57de4c4241525ddbe977ec47827",
+    "reason": "frozen/versioned release or sealed-job input"
+  },
+  "configs/research/fidelity_sensitivity_v1.yaml": {
+    "sha256": "bf8bc5da6d09ad096579123327864db34f5dc85e4ce2966a52d94612bdfb7cfa",
+    "reason": "Declared input dependency of preserved historical source scripts/benchmark/run_fidelity_sensitivity_campaign.py"
+  },
+  "configs/research/forecast_baseline_comparison_issue_2915.yaml": {
+    "sha256": "605404730fc7c46ebbd8234148c29153c11e6c0f4506316ae9c52e4629d1e80f",
+    "reason": "Recorded forecast trace selector preserves source identities"
+  },
+  "configs/research/forecast_risk_coupling_issue_2916.yaml": {
+    "sha256": "355aaff806d0b5e52fe8ad0aa0c4104bbb5a2e912dd5d18c54a9f4af2df002eb",
+    "reason": "Recorded risk-coupling trace selector preserves source identities"
+  },
+  "configs/research/issue_3207_fidelity_sensitivity_full_fixed_scope.yaml": {
+    "sha256": "37dd6342e028e9716959b9932f889fd4f8125941db3421089bcbbcbf691f54fb",
+    "reason": "Authorized historical campaign freezes original axes and seed identity"
+  },
+  "configs/research/issue_4205_static_constriction_codesign_loop_v1.yaml": {
+    "sha256": "02c1e81f70748f353b16ed7ca046d42194d65d1d6b0c10a5bab8f40410b29a3c",
+    "reason": "Frozen codesign research declaration with recorded evidence"
+  },
+  "configs/research/prediction_mpc_factorial_v1.yaml": {
+    "sha256": "0e93669079fd13f2dcdaa187e4baa86ab2992bbc5f59c2c0c74060119b26d248",
+    "reason": "Registered historical hash: docs/context/evidence/issue_5355_prediction_mpc_factorial_preregistration/preregistration_config_registry.json"
+  },
+  "configs/research/robot_speed_band_v1.yaml": {
+    "sha256": "b90bed156c5cb3041511c9340f6aa3410201bff9b149c837a340a06b85e7078a",
+    "reason": "Declared companion of preserved historical contract configs/benchmarks/issue_5578_robot_speed_tier_preregistration.yaml"
+  },
+  "configs/research/safety_wrapper_ablation_v1.yaml": {
+    "sha256": "635262978e20bf1427b4545dff7d1e6e9f315b2d19cc5b0c9b38cdb90836fef3",
+    "reason": "Registered historical hash: configs/benchmarks/issue_6971_safety_wrapper_paired_preregistration.yaml, docs/context/evidence/issue_8567_native_counterfactual_fields_2026-09-08/receipt.json, robot_sf/benchmark/issue_6971_safety_wrapper_preregistration.py"
+  },
+  "configs/scenarios/archetypes/classic_bottleneck.yaml": {
+    "sha256": "74882625aaa863ef6e9d4e9a57f7709e00c57d483344f91025ce79c8b91017ac",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/scenarios/archetypes/classic_cross_trap.yaml": {
+    "sha256": "2a49503a93741009dc2a1462b7641c77ec1128420cacd8861cf64b0e44a6d060",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/scenarios/archetypes/classic_crossing.yaml": {
+    "sha256": "b1b0aaf551d7e5e58c47ccc9ce188a5275e1dce687bbfe6e4de97e04cfff326c",
+    "reason": "Declared companion of historical resolved-config oracle configs/scenarios/sets/classic_crossing_subset.yaml"
+  },
+  "configs/scenarios/archetypes/classic_doorway.yaml": {
+    "sha256": "2b68b827ba83bbe56e7ddfe3e34cb642ee67202097c970cb7eadc466cc7ff7b0",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/scenarios/archetypes/classic_group_crossing.yaml": {
+    "sha256": "370cd23bad5e4e5644c60ebb7bf9b4c3554bc3bbc15f380f7517a13cdcd154f8",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/scenarios/archetypes/classic_head_on_corridor.yaml": {
+    "sha256": "e70c3b18e085f09b1d08f80ae747e8a9967e247a9161ab88a9d145cd14fefca8",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/scenarios/archetypes/classic_merging.yaml": {
+    "sha256": "eb1c80372a6c0d96fdfe36d5523980bb5461475abbca8db0d7f8a04b0cfd9023",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/scenarios/archetypes/classic_overtaking.yaml": {
+    "sha256": "fdd789f19e833039cee0bd4f5fceeb2f273dedb9925c58f41b26246cdfee9f74",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/scenarios/archetypes/classic_realworld_bottleneck.yaml": {
+    "sha256": "b6210d3a11fd2270ae1e8729b1d4e5b9045cc5e036249f822f4b34ea445fee34",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/scenarios/archetypes/classic_station_platform.yaml": {
+    "sha256": "7f093fdb6406f4043e07b4a8d4113defd4cb17ec4bc793bf3583f12960b77228",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/scenarios/archetypes/classic_t_intersection.yaml": {
+    "sha256": "97d7f9a95c57ac58814df6271d518aec84d4233fb027c1ca397250b06b0fecde",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/scenarios/archetypes/classic_urban_crossing.yaml": {
+    "sha256": "ea65d720fd8765bb725fedba0f50ccc9bbd1e609aa24a80c8ad9711666550161",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/scenarios/archetypes/issue_596_dynamic.yaml": {
+    "sha256": "59d49cef23b58fb040dbc5a7e4dd230b19b2e9f0ec1ac3bcaa7e958aa50c35c7",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/scenarios/archetypes/issue_596_frame_consistency.yaml": {
+    "sha256": "a62f3f2fe934b1db7292b7bde8f99de48a2a9d633f8014f76e7550a0e7375da5",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/scenarios/archetypes/issue_596_robustness.yaml": {
+    "sha256": "67263401d630e2f265918a8b7da3dd673c4a32e5318dbd4881bfd73bf305a840",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/scenarios/archetypes/issue_596_static_obstacles.yaml": {
+    "sha256": "439f649de47c4d0f6b744632ba0c453f9ce4a5f3fd8d07c0c8916a74e6ca70b3",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/scenarios/archetypes/issue_596_topology.yaml": {
+    "sha256": "a5884e7f0367de7c153529ffa245908832c05500472c24737fb4050dd69f54db",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/scenarios/classic_interactions.yaml": {
+    "sha256": "5fd4d57c29e4a895e6a85889567c91f24ca7f16f02fafa2373bdf4cb9171bdc5",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/scenarios/classic_interactions_francis2023.yaml": {
+    "sha256": "d9e148e4b544b4c7e2b6ba98e599aef47046d114e0e25645f021946674cb9dc5",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/scenarios/classic_interactions_francis2023_goal_zone_entry_kernel_wrapped_v2.yaml": {
+    "sha256": "214d0ce7830ab263a73d94525e7530cc015a7a2e87dd0cbc28680acdde1e4719",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/scenarios/classic_interactions_francis2023_goal_zone_entry_route_width_v4.yaml": {
+    "sha256": "8a8aa9adb2b098f039a3e92a4849e16eb8d3665e928211f08e0c689584c9f389",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v1.yaml": {
+    "sha256": "03fc83302f707dd1b27c0fa81c4e45e36e8354a4413171d09365926f62bb5c2c",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v2.yaml": {
+    "sha256": "288167cafd18c6ec2c3835fe794ede9a4a1aeb9416ae17a129a64da0ac830419",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v3.yaml": {
+    "sha256": "e2a3dd66c02f05ed3b82c0960fecd31ac62f6ed47bc60f9ef254002c07130162",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml": {
+    "sha256": "af4e9a7a22f9d5f373eb4a3323984e0de6d79edd4263f1c023e9efddff2fd25f",
+    "reason": "frozen/versioned release or sealed-job input"
+  },
+  "configs/scenarios/contracts/station_platform_candidate_pack_issue736_contracts.yaml": {
+    "sha256": "de78e540dac67b962ba472ee1211d4eff3954d98c7f4a4900a8cc19a7c843f98",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/scenarios/francis2023.yaml": {
+    "sha256": "f60ccf7235d1c965e2d1989ae157024734366d0ed6f4db5acdc83127f0325f56",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/scenarios/francis2023_narrow_doorway_three_width_release_0_0_8_v1.yaml": {
+    "sha256": "9de1d058c6a9145f76c84be63787d5c704be1db288b47fd9c1d31f3f56367778",
+    "reason": "frozen/versioned release or sealed-job input"
+  },
+  "configs/scenarios/issue_9860_corrected_diagnostic_v1.yaml": {
+    "sha256": "89e38c84af12a467599f0b76a60e5f80f7f5946b5438116378cfc4b2dee414ad",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/scenarios/nominal_v1.yaml": {
+    "sha256": "cc3555543e7ca905cb13f8576094ef6098fea88193657f4cadf03f8c46289423",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/scenarios/release_0_0_8_endpoint_dispositions.yaml": {
+    "sha256": "8e28e07b3c2cca8a822025200fdc5c9e113e2e1131dbd7380ee0b2a87944959c",
+    "reason": "frozen/versioned release or sealed-job input"
+  },
+  "configs/scenarios/route_overrides/issue_1878/classic_head_on_corridor_low_guided_1502.yaml": {
+    "sha256": "adaa945cc76f7637605e4f8cb4435561312a0f241e467e2ca37a6dfc3922d621",
+    "reason": "Registered historical hash: docs/context/evidence/issue_1878_head_on_replay_2026-05-31/head_on_replay_determinism_summary.json"
+  },
+  "configs/scenarios/route_overrides/issue_596/empty_goal_east.yaml": {
+    "sha256": "f9cba83fd5109b36f9b9ad76ddc38a3bc338ee068bc2e4c623f9bc8891263156",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/scenarios/route_overrides/issue_596/empty_goal_north.yaml": {
+    "sha256": "353861928dcb4579df96bd34628996fe44f88e6a24fbcc38c8f6bf3b8801e92a",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/scenarios/route_overrides/issue_596/empty_goal_northeast.yaml": {
+    "sha256": "e443ce0d3aeb9b1f36cbdcc28179e43f9edd48315228f574ce601f99b03072e4",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/scenarios/route_overrides/issue_596/empty_goal_northwest.yaml": {
+    "sha256": "92e56523c0f7848c3384e48fd9452103e15589c8b2e830f50f53ad484ee9d8b6",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/scenarios/route_overrides/issue_596/empty_goal_south.yaml": {
+    "sha256": "42ee73b701cda02a136f54b7f7cddb188b0d4b66938a0d2605f591cd26a3f624",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/scenarios/route_overrides/issue_596/empty_goal_southeast.yaml": {
+    "sha256": "24d3671c2236c0cca5277d83c45eb0de2e1f9755470fe03c8dadbffbc6ec8347",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/scenarios/route_overrides/issue_596/empty_goal_southwest.yaml": {
+    "sha256": "803587359cdf3480f6037ae05a25f97298fe80327a15a7c872a036757b8a18ea",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/scenarios/route_overrides/issue_596/empty_goal_west.yaml": {
+    "sha256": "d0b1ea5ee001e7406863cbefdda048c8c7dd3d0d42d5778f3b7bfec948d2b114",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/scenarios/route_overrides/issue_596/goal_behind_robot.yaml": {
+    "sha256": "6f616c0e72eff1856449b2f656311985066b55b5e83e2501b48c4658a3dc0e8d",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/scenarios/route_overrides/issue_596/small_angle_precision.yaml": {
+    "sha256": "0e067fda50aa6eee37e07e45ea3c1134556e516daf3700afe22dcdd76f86cc1f",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/scenarios/sets/atomic_navigation_minimal_full_v1.yaml": {
+    "sha256": "adbc3a62e4d821d8dcea77f28d76d683f685e78aaaac8263f818ee3014b58c0e",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/scenarios/sets/classic_cross_trap_subset.yaml": {
+    "sha256": "fc5c2ccec86d2bf8eac069f04fb24ecb742705844adc11b59d34c0faad685726",
+    "reason": "Historical resolved-config oracle tests/integration/_baseline_issue_6683_resolved.json"
+  },
+  "configs/scenarios/sets/classic_crossing_subset.yaml": {
+    "sha256": "a5baf5cd4b6aebd333a30f76e319646dd3f3451406db1678ef55d5ea3b972db6",
+    "reason": "Historical resolved-config oracle tests/training/_baseline_issue_7325_resolved.json"
+  },
+  "configs/scenarios/sets/issue_1878_head_on_replay.yaml": {
+    "sha256": "e3a9e15cb3fc8c41fb7a33c14161e26e29bd2c80937cde9f7ded22e9e40ee9be",
+    "reason": "Registered historical hash: docs/context/evidence/issue_1878_head_on_replay_2026-05-31/head_on_replay_determinism_summary.json"
+  },
+  "configs/scenarios/sets/issue_2544_static_deadlock_smoke.yaml": {
+    "sha256": "f1ed96a44fae2c9f41389881835e366acaf9141db14c8c218e19c464cee1fa03",
+    "reason": "Declared companion of preserved historical contract configs/research/issue_4205_static_constriction_codesign_loop_v1.yaml"
+  },
+  "configs/scenarios/sets/issue_2588_static_deadlock_controlled_trace.yaml": {
+    "sha256": "d0f165d139e4d512bd0c49601b388a35bc01fa272fe6b95b6f6644867faf028d",
+    "reason": "Declared companion of preserved historical contract configs/benchmarks/issue_4205_static_constriction_codesign_loop_v1.yaml"
+  },
+  "configs/scenarios/sets/issue_5592_atomic_topology_second_matrix.yaml": {
+    "sha256": "6172370196b54fb5dcd2b9cab8954b86b3231560520f16a1eab036b3ee803f07",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/scenarios/sets/issue_805_teb_topology_slice.yaml": {
+    "sha256": "1764d70a92e41bcfeb1f622bec2ed6ee0e7656355dc94132eb8fd561156f7d78",
+    "reason": "Declared companion of historical resolved-config oracle configs/scenarios/sets/ppo_all_available_training_v1.yaml"
+  },
+  "configs/scenarios/sets/paper_matrix_v2_h600_hybrid_stress_smoke.yaml": {
+    "sha256": "61e6211c8b529ee5d3fdcfc8bd31d07054ee0af6db1c7e9fe137f6d628fff5f9",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/scenarios/sets/ppo_all_available_training_v1.yaml": {
+    "sha256": "4aacdc2fef506560dcfd72dae1f6d53140beae42c22ef169b19caf56e6da426e",
+    "reason": "Declared companion of historical resolved-config oracle configs/training/ppo/ablations/expert_ppo_issue_791_all_scenarios_10m_env22_large_capacity_base.yaml"
+  },
+  "configs/scenarios/sets/ppo_all_available_training_v1_h500_schedule.yaml": {
+    "sha256": "1c295b6bdbfa0a37eccdc925c5dc57080c46f09687628501a76d82c461b2465d",
+    "reason": "Historical resolved-config oracle tests/integration/_baseline_issue_6683_resolved.json"
+  },
+  "configs/scenarios/sets/ppo_all_available_training_v1_horizon500.yaml": {
+    "sha256": "9e21713882ae738e97f3fcfd761ab268eed8b627bd96544f9392ad52ac9d6d85",
+    "reason": "Declared companion of historical resolved-config oracle configs/training/ppo/ablations/expert_ppo_issue_791_best_ckpt_all_scenarios_horizon500_20m_env22.yaml"
+  },
+  "configs/scenarios/sets/ppo_full_maintained_eval_v1.yaml": {
+    "sha256": "91a0f9fb70673e9bd965b344bd306926b60417df848e91b9995ecc167382581d",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/scenarios/sets/ppo_full_maintained_eval_v1_horizon100.yaml": {
+    "sha256": "84bbb7e639ae928328e96b8f03b4a17f3a6d24ca4850751e897070d3615479c5",
+    "reason": "Declared companion of historical resolved-config oracle configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_horizon100.yaml"
+  },
+  "configs/scenarios/sets/safety_barrier_static_slice_v1.yaml": {
+    "sha256": "b5b4f379c1e1130278b490a0c838cbe592c7bca130252689f3245e2d576c9bcc",
+    "reason": "Declared companion of historical resolved-config oracle configs/scenarios/sets/ppo_all_available_training_v1.yaml"
+  },
+  "configs/scenarios/sets/station_platform_candidate_pack_issue736.yaml": {
+    "sha256": "3c9d786f1f775420640f4b4e4d1346f94ec203ed5b98c9a0a8a4a253561ec64e",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/scenarios/sets/verified_simple_subset_v1.yaml": {
+    "sha256": "fa8b6ddefdfdc3d56259ccc706a661645e260e055634087b2efcb847982874c7",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/scenarios/single/francis2023_accompanying_peer.yaml": {
+    "sha256": "c5c1dc3d171e0defdce2916dc28213bf16220e98dd31657f7fab1e79cfcad4f9",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/scenarios/single/francis2023_blind_corner.yaml": {
+    "sha256": "5c5426d31859cdf69692b85fdade92c58e4379bd9d93963743d932d044c6f6fb",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/scenarios/single/francis2023_blind_corner_goal_zone_entry_v1.yaml": {
+    "sha256": "ae61216593770397fc74a2cb28c7ba0d1005e13e1e59449309155ce9fab331ca",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/scenarios/single/francis2023_blind_corner_release_0_0_8_v1.yaml": {
+    "sha256": "a08ca72f273ebd7532d9a22f1650112133c20606d5a7bc9f31535563b8ce7785",
+    "reason": "frozen/versioned release or sealed-job input"
+  },
+  "configs/scenarios/single/francis2023_circular_crossing.yaml": {
+    "sha256": "58a627b73ed74510f339a9cc8a3614701a4c5d94e237b3f8554fbdab7fd52967",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/scenarios/single/francis2023_crowd_navigation.yaml": {
+    "sha256": "84fcb9fb8b640f8340488b2baddc259778c7df3f0b3b8f1b182a9680b8167cef",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/scenarios/single/francis2023_down_path.yaml": {
+    "sha256": "0aa47e6267475b391c80a7bf0afe0efcc02b128149cb2b9646238eabc5a8db6d",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/scenarios/single/francis2023_entering_elevator.yaml": {
+    "sha256": "d9b2abd060b66eaff0ac4f84a5309b03700f7cc6850a9b3338298354fa3b82fe",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/scenarios/single/francis2023_entering_room.yaml": {
+    "sha256": "23d3a835d031007891b6ef71bca8262dbfc8ca7bfca49b8dff3343e12968da7a",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/scenarios/single/francis2023_exiting_elevator.yaml": {
+    "sha256": "d4b59fcc296e09352f5166fda1c03aea21caebcd78644539f738c50fe4e30a68",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/scenarios/single/francis2023_exiting_room.yaml": {
+    "sha256": "0871fd8c769b342cd7f923c90d652ff96b9afa2c64fb6955f601689f35c6bfe6",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/scenarios/single/francis2023_following_human.yaml": {
+    "sha256": "82aa88231fcbd1775703950f0a3d64f205235bab1ab9bfea0e170fb8e5616655",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/scenarios/single/francis2023_frontal_approach.yaml": {
+    "sha256": "d2d5680764c487969d4c3a623b6ace3dd69918185d77004a0c3a4e76432cb5b0",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/scenarios/single/francis2023_intersection_no_gesture.yaml": {
+    "sha256": "3e01b2173d2c5f567328af422c647fe931561ca0c1d7712a141cf0fdbbb7b4d7",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/scenarios/single/francis2023_intersection_proceed.yaml": {
+    "sha256": "a9a4ec7c49d1121a319a3c7c85936d1caec30de181a2f785d6860a8e2615df7b",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/scenarios/single/francis2023_intersection_wait.yaml": {
+    "sha256": "608fc06727c57731febd214a9c84a3839b799701f53eaaf3d6cd9e329648ba75",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/scenarios/single/francis2023_join_group.yaml": {
+    "sha256": "1d22521f506f016cff9d7dc2c7df8b65a3da54215d2077ce8320d5bc24df4420",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/scenarios/single/francis2023_leading_human.yaml": {
+    "sha256": "a30b54b4677086968d10742edba95db4f1ba7157e39329c5244b562f0658d7b8",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/scenarios/single/francis2023_leave_group.yaml": {
+    "sha256": "b01d37201e350bf98151efc8a96c38f6c9a3e9ab97f174b9875041a07b47f4fe",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/scenarios/single/francis2023_narrow_doorway.yaml": {
+    "sha256": "d7b52f76128f366a74801c2441cb47e3f4af588c64566fb044eb3e2c54e43671",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/scenarios/single/francis2023_narrow_hallway.yaml": {
+    "sha256": "94662d62415766f229b8b80d09d3eea59d71977add85bd58728be47f6939f984",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/scenarios/single/francis2023_parallel_traffic.yaml": {
+    "sha256": "51ab362a25e38ad20726ff50208d5fbe5e01331cbd55c5889591df40c8f9a387",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/scenarios/single/francis2023_pedestrian_obstruction.yaml": {
+    "sha256": "b76535a0060a6c4ebd9dfa4170b61621c0459fce7d0228c734c08a04059847be",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/scenarios/single/francis2023_pedestrian_overtaking.yaml": {
+    "sha256": "f009319422d3602d918a1677d9c7efaa1377036650e6c472175d1ad271e4e0d5",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/scenarios/single/francis2023_perpendicular_traffic.yaml": {
+    "sha256": "cd9dab418641d5a1dc5e0755ab405ed15f8d3e1a0858a0729c3317026f63aa8f",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/scenarios/single/francis2023_robot_crowding.yaml": {
+    "sha256": "a6da0946bbdae3d5818efb15d7148d313252e8ff477f1bbeaa88097520223de7",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/scenarios/single/francis2023_robot_overtaking.yaml": {
+    "sha256": "92f6dadfa4ce7aba13d6f0506e6d4d189fedc2c9fb2ba8a6cde07bd12f8b17dc",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/scenarios/single/issue_4207_interacting_smoke.yaml": {
+    "sha256": "af4da04c9f90bdd625a45480b1088da58e05a0e72fac6016e6f6f35794c7f817",
+    "reason": "Declared input dependency of preserved historical source configs/benchmarks/issue_4207_interacting_smoke_probe.yaml"
+  },
+  "configs/scenarios/templates/crossing_ttc.yaml": {
+    "sha256": "4718aa6ee78d8013f251e20f1c78173ac4052a79e63ec80e19dd2347866b4d8f",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/training/benchmark_orca_classic_analysis_base.yaml": {
+    "sha256": "46281ad326d1ead5f5510e2993f846354d2cd81356f5ce999a308e67ece4a9e4",
+    "reason": "Declared companion of historical resolved-config oracle configs/training/benchmark_orca_classic_crossing_subset.yaml"
+  },
+  "configs/training/benchmark_orca_classic_cross_trap_subset.yaml": {
+    "sha256": "b7b8c3da8e703821c3af87e92bb23293ee6998a8fb512c86d6d2454edabe7dee",
+    "reason": "Historical resolved-config oracle tests/integration/_baseline_issue_6904_resolved.json"
+  },
+  "configs/training/benchmark_orca_classic_crossing_subset.yaml": {
+    "sha256": "5dbfb22ad72aa9e4dd674c06e6cb74ce4d4bce41816239f8b12b202060c8df43",
+    "reason": "Historical resolved-config oracle tests/integration/_baseline_issue_6904_resolved.json"
+  },
+  "configs/training/comparison_matrix/issue_4244_seven_arm_preregistration.yaml": {
+    "sha256": "650698cce72da270d8b7872b891ae5cb69f8b5eeaa6f677e6bfc915085c31a1e",
+    "reason": "Declared input dependency of preserved historical source configs/training/comparison_matrix/issue_7846_ppo_rppo_contract_v1.yaml"
+  },
+  "configs/training/comparison_matrix/issue_7846_ppo_rppo_contract_v1.yaml": {
+    "sha256": "a35aaf4ad03e1333fd0f2b1284432cdc9e18c9c7213bfd355d0a410f063da9fa",
+    "reason": "Registered historical hash: configs/training/comparison_matrix/issue_7849_ppo_rppo_gpu_admission_v1.yaml, configs/training/comparison_matrix/issue_7849_ppo_rppo_gpu_admission_v2.yaml, configs/training/comparison_matrix/issue_7849_ppo_rppo_source_inventory_v1.yaml"
+  },
+  "configs/training/comparison_matrix/issue_7849_ppo_rppo_gpu_admission_v1.yaml": {
+    "sha256": "bb4c47efe9fde41fad8c1d9ee9aead9d922eb6e4f0c92599ed656380ddcc7cae",
+    "reason": "Historical source-bound GPU admission packet and immutable source inventory"
+  },
+  "configs/training/comparison_matrix/issue_7849_ppo_rppo_gpu_admission_v2.yaml": {
+    "sha256": "883029d9470161df81ac6f0133d4174c1cecb2c607ce5b774731f378c219678e",
+    "reason": "Historical source-bound GPU admission packet and immutable source inventory"
+  },
+  "configs/training/diffusion_policy/issue_4010_smoke.yaml": {
+    "sha256": "dbb18a79e396525a2b31fb44104280474ddef08059358a8418d3dd478fa4358f",
+    "reason": "Declared input dependency of preserved historical source configs/training/comparison_matrix/issue_4244_seven_arm_preregistration.yaml"
+  },
+  "configs/training/distributional_rl/qr_dqn_issue_4016_smoke.yaml": {
+    "sha256": "d073e7d897a65e86bd1e251c4e3c19e2b5c253f35f2e1075a64bba385a9d2eef",
+    "reason": "Declared input dependency of preserved historical source configs/training/comparison_matrix/issue_4244_seven_arm_preregistration.yaml"
+  },
+  "configs/training/lidar/lidar_ppo_mlp_smoke_issue_1662.yaml": {
+    "sha256": "7549e31390de2fb7bface468c6bb7b3d1c1b5c1e7fe260cd91771f96cdf94575",
+    "reason": "Historical pre-change resolved-config oracle tests/integration/_baseline_issue_6904_resolved.json"
+  },
+  "configs/training/offline_online_rl/issue_4245_finetune_smoke.yaml": {
+    "sha256": "823ada15b8d9ed3f6e5f02ff47bbd19c842ef0d0e1bf6876b7c0f43d56aa134d",
+    "reason": "Registered historical hash: docs/context/evidence/issue_4245_offline_pretrain_finetune_smoke/finetune_manifest_summary.json"
+  },
+  "configs/training/offline_online_rl/issue_4245_pretrain_smoke.yaml": {
+    "sha256": "b70fb36b37b80604d410dbf37e253227034a14ed1e4529426ab8d73d236be5d8",
+    "reason": "Registered historical hash: docs/context/evidence/issue_4245_offline_pretrain_finetune_smoke/pretrain_manifest_summary.json"
+  },
+  "configs/training/orca_residual/issue_6951_arm_a_progress_weighted_bc.yaml": {
+    "sha256": "f3ea13574cc6a232dd20a7dbe882d40847a58fdbcd7ee452833b27b9fd419672",
+    "reason": "Registered historical hash: docs/context/evidence/issue_7032_mechanism_boundary_atlas/atlas.v1.json, docs/context/evidence/issue_7032_mechanism_boundary_atlas/atlas_input.v1.json"
+  },
+  "configs/training/orca_residual/issue_6951_arm_b_progress_weighted_bc.yaml": {
+    "sha256": "675caa9a547b027b866e7ff297137c578b7ae574a5e3ff7e9779eff384ff5e73",
+    "reason": "Registered historical hash: docs/context/evidence/issue_7032_mechanism_boundary_atlas/atlas.v1.json, docs/context/evidence/issue_7032_mechanism_boundary_atlas/atlas_input.v1.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_1024_reward_curriculum_all_available_h500_schedule_12m_base.yaml": {
+    "sha256": "3cb0efa1a97b0750c6047c82ec4e5b01a16d4474d020aae02a0ff91b9d87e605",
+    "reason": "Declared companion of historical resolved-config oracle configs/training/ppo/ablations/expert_ppo_issue_1024_reward_curriculum_all_available_h500_schedule_12m_env30_l40s.yaml"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_1024_reward_curriculum_all_available_h500_schedule_12m_env22.yaml": {
+    "sha256": "20b15478c7045e66f041e886c8c7b18a8dac3139ebef0a064253f9f2b4c77834",
+    "reason": "Historical resolved-config oracle tests/integration/_baseline_issue_6484_issue_1024_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_1024_reward_curriculum_all_available_h500_schedule_12m_env30_l40s.yaml": {
+    "sha256": "75890d766c85dc9c1ef83e21bccbf2a202525767fa48b24468ed655f781850f6",
+    "reason": "Historical resolved-config oracle tests/integration/_baseline_issue_6484_issue_1024_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_2557_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_base.yaml": {
+    "sha256": "5f982c6e85dbc67d8eb6bbf22d1ce4ef7bb447ceb925c80b2c942f5b9dd063ee",
+    "reason": "Declared companion of historical resolved-config oracle configs/training/ppo/ablations/expert_ppo_issue_2557_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed524_fixed.yaml"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_2557_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed501_fixed.yaml": {
+    "sha256": "800b96063f3b9da1437e8d5585b80f55c8c236403efea9c0321989bdfa1e9707",
+    "reason": "Historical pre-change resolved-config oracle tests/integration/_baseline_issue_2557_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_2557_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed502_fixed.yaml": {
+    "sha256": "c2e1295f1bc72e244736fb3132e5d19f5a63173e37e7db78d807e407e8ba6db5",
+    "reason": "Historical pre-change resolved-config oracle tests/integration/_baseline_issue_2557_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_2557_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed503_fixed.yaml": {
+    "sha256": "ab71b5b6370c51bd8ca787e492522dcee593b9b069810e927d08c77f17d84d23",
+    "reason": "Historical pre-change resolved-config oracle tests/integration/_baseline_issue_2557_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_2557_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed504_fixed.yaml": {
+    "sha256": "598038ba120fb67d6db97412d796128ce0711710e14c956013bedd4144787592",
+    "reason": "Historical pre-change resolved-config oracle tests/integration/_baseline_issue_2557_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_2557_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed505_fixed.yaml": {
+    "sha256": "2837efd08ee5672610806b44f0d44c61a7a862840117903c821c6020bf78adf4",
+    "reason": "Historical pre-change resolved-config oracle tests/integration/_baseline_issue_2557_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_2557_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed506_fixed.yaml": {
+    "sha256": "038282dac7aa26f257cbd197f817034bc50438fee3fa19b2ae7dbf71a08f6212",
+    "reason": "Historical pre-change resolved-config oracle tests/integration/_baseline_issue_2557_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_2557_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed507_fixed.yaml": {
+    "sha256": "e61c2e318811cf83963acf6706753215e52246f8ae99c9197180747d905448d8",
+    "reason": "Historical pre-change resolved-config oracle tests/integration/_baseline_issue_2557_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_2557_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed508_fixed.yaml": {
+    "sha256": "be825828bce66d67487a6848de410112f3eb50de63433b747835254ddf70f13a",
+    "reason": "Historical pre-change resolved-config oracle tests/integration/_baseline_issue_2557_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_2557_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed509_fixed.yaml": {
+    "sha256": "52b4a460fd3d678cc3cc31d877e5856f6f52dc2444fd5410715c29bde4de0afc",
+    "reason": "Historical pre-change resolved-config oracle tests/integration/_baseline_issue_2557_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_2557_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed510_fixed.yaml": {
+    "sha256": "966cace99402084cc7382cb34898383e84db071e8c80957ba9b46656eb2e5e61",
+    "reason": "Historical pre-change resolved-config oracle tests/integration/_baseline_issue_2557_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_2557_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed511_fixed.yaml": {
+    "sha256": "7b0008725c59129e848b2d2cc88ecc0eac455a1030f52b9f0992034cfc81f713",
+    "reason": "Historical pre-change resolved-config oracle tests/integration/_baseline_issue_2557_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_2557_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed512_fixed.yaml": {
+    "sha256": "3c339c4edd94668e82175972255f32a548910c5988158453bdfbc42cdc7d2efa",
+    "reason": "Historical pre-change resolved-config oracle tests/integration/_baseline_issue_2557_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_2557_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed513_fixed.yaml": {
+    "sha256": "64428a9c7057753f95868bc13998907475c32e0add0eac5a35a08f85c1975dfb",
+    "reason": "Historical pre-change resolved-config oracle tests/integration/_baseline_issue_2557_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_2557_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed514_fixed.yaml": {
+    "sha256": "caea12176fa64ace9d00603d16dff1ee49dccf4f6d2ccaa954ccb5484fb9b2e8",
+    "reason": "Historical pre-change resolved-config oracle tests/integration/_baseline_issue_2557_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_2557_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed515_fixed.yaml": {
+    "sha256": "ab1ca0569eaf036a7ccb15b42274934269a1f4e6edc976658349b74b01439fc5",
+    "reason": "Historical pre-change resolved-config oracle tests/integration/_baseline_issue_2557_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_2557_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed516_fixed.yaml": {
+    "sha256": "dbf2c21acb2a7f256f2a77818cda3357d73793e7749393c588142bb97000eea1",
+    "reason": "Historical pre-change resolved-config oracle tests/integration/_baseline_issue_2557_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_2557_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed517_fixed.yaml": {
+    "sha256": "61b5d9c4d6ce3be6c03eadf10e0003807d1f886eea6e436396f7bfd6f4808079",
+    "reason": "Historical pre-change resolved-config oracle tests/integration/_baseline_issue_2557_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_2557_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed518_fixed.yaml": {
+    "sha256": "f9d217a02ceae0e959c5e8fefcdca6dc877b441a11a0a374545c777c9c14c457",
+    "reason": "Historical pre-change resolved-config oracle tests/integration/_baseline_issue_2557_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_2557_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed519_fixed.yaml": {
+    "sha256": "58b37e1e85ffa3ae71d99c8bac66b82f402b2ea64434a1f6216b1f05e22a6ae8",
+    "reason": "Historical pre-change resolved-config oracle tests/integration/_baseline_issue_2557_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_2557_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed520_fixed.yaml": {
+    "sha256": "58aa6808153e34d37e1bac6e67973354fe7c3834c58af693b75c04aec07f9256",
+    "reason": "Historical pre-change resolved-config oracle tests/integration/_baseline_issue_2557_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_2557_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed521_fixed.yaml": {
+    "sha256": "657f46caba99dad0ca82977f027496a36bc9b6cd3da097072879c9aa3d883510",
+    "reason": "Historical pre-change resolved-config oracle tests/integration/_baseline_issue_2557_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_2557_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed522_fixed.yaml": {
+    "sha256": "21c27df4174abd37576ea7561624479f30d85c079e5f5490378a7420289f989c",
+    "reason": "Historical pre-change resolved-config oracle tests/integration/_baseline_issue_2557_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_2557_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed523_fixed.yaml": {
+    "sha256": "9ffd9610259d9fc384e87d69e842f81ed7cc9de5ddff22797d62c2b219c38ee2",
+    "reason": "Historical pre-change resolved-config oracle tests/integration/_baseline_issue_2557_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_2557_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed524_fixed.yaml": {
+    "sha256": "5181cf345f4da7073bbda6cc5afc2eec7084073866a3244799976c73c95e358d",
+    "reason": "Historical pre-change resolved-config oracle tests/integration/_baseline_issue_2557_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_739_base.yaml": {
+    "sha256": "a1bb65da7e3be6e4056549649f990ea5996b154dbee4abb09b2d14ee4c26bb5d",
+    "reason": "Declared dependency of historical resolved oracle configs/training/ppo/expert_ppo_issue_739_12m_baseline_retrain.yaml"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_739_stage1_baseline.yaml": {
+    "sha256": "0b20b5c075cda23b8e9dfd1bd922414c65821926798e0f66d295248f96c6daaf",
+    "reason": "Historical resolved-config oracle tests/integration/_baseline_issue_6682_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_739_stage1_obs_grid_goal.yaml": {
+    "sha256": "9357def93cd6d5372cfaf6c9ab7af451eef8353fc9568dcb9c7eecab40dfaaab",
+    "reason": "Historical resolved-config oracle tests/integration/_baseline_issue_6682_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_739_stage1_obs_selective.yaml": {
+    "sha256": "1097820d16b7da036883c99bceddc4e912d0f16ef3aff16fde3616aa255378b9",
+    "reason": "Historical resolved-config oracle tests/integration/_baseline_issue_6682_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_739_stage1_reward_core.yaml": {
+    "sha256": "856b36903583568b80863d2dcad712680efcec15e352aa03879d36a1b4c7cbe7",
+    "reason": "Historical resolved-config oracle tests/integration/_baseline_issue_6682_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_739_stage1_reward_tuned.yaml": {
+    "sha256": "a8b086c73bf7449979ad057ca71eb8ef0376cc692dd03c9364c1e9fd3fe80186",
+    "reason": "Historical resolved-config oracle tests/integration/_baseline_issue_6682_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_739_stage2_opt_scale.yaml": {
+    "sha256": "8d48d23d585c90b81a4e12611ce57628e5da93a901f917efada76ec076b96880",
+    "reason": "Historical resolved-config oracle tests/integration/_baseline_issue_6682_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_739_stage2_sampling.yaml": {
+    "sha256": "04d565cc95289dd2361175ba25d618408e2fb627f3b107b3c7d57b937dea03bb",
+    "reason": "Historical resolved-config oracle tests/integration/_baseline_issue_6682_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_791_all_scenarios_10m_env22_large_capacity.yaml": {
+    "sha256": "fb2cec6de811e7355c87c41c0c715299a3a1a9b2bc0187d3c4cdecdaa1f9e7a4",
+    "reason": "Historical pre-change resolved-config oracle tests/integration/_baseline_issue_791_seed_replicas_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_791_all_scenarios_10m_env22_large_capacity_base.yaml": {
+    "sha256": "3654d70eb9fd80cbbf57b63f7fdfbb4c363fac992d532028c3b0de0c1b3a892f",
+    "reason": "Declared companion of historical resolved-config oracle configs/training/ppo/ablations/expert_ppo_issue_791_all_scenarios_10m_env22_large_capacity_seed231.yaml"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_791_all_scenarios_10m_env22_large_capacity_seed1337.yaml": {
+    "sha256": "9a7b12a53b27c0df853e5c81903dd3e4c623f5b14e4ca8f3742d1031d89e8973",
+    "reason": "Historical pre-change resolved-config oracle tests/integration/_baseline_issue_791_seed_replicas_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_791_all_scenarios_10m_env22_large_capacity_seed231.yaml": {
+    "sha256": "9940fb7b39ec327ae3f95a1bdfe8682f2784ca24e11def46a810637fb6dcf3ea",
+    "reason": "Historical pre-change resolved-config oracle tests/integration/_baseline_issue_791_seed_replicas_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_791_asymmetric_critic_followup_32k.yaml": {
+    "sha256": "815a84b9832cec63fe18fc161f3a57100aea6f7d71c863ed0703b55c32c5b9f9",
+    "reason": "Historical resolved-config oracle tests/integration/_baseline_issue_6484_followup_32k_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_791_asymmetric_critic_promotion_10m_env22.yaml": {
+    "sha256": "83f71abe2927c2e0c28a57a8af2a71c25aeb3950092202fc4f42d2d490216a65",
+    "reason": "Historical resolved-config oracle tests/integration/_baseline_issue_6484_asymmetric_critic_10m_env22_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_791_asymmetric_critic_promotion_10m_env22_base.yaml": {
+    "sha256": "eb8db3e10030146e9e1a3e2b56e73244692b735057898270ff8f6734b1e3db0d",
+    "reason": "Declared companion of historical resolved-config oracle configs/training/ppo/ablations/expert_ppo_issue_791_asymmetric_critic_promotion_10m_env22_eval_aligned.yaml"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_791_asymmetric_critic_promotion_10m_env22_eval_aligned.yaml": {
+    "sha256": "5716d8328be5cfaea766fe0150eec943a5b9efb937bc65671a3f97b5cab03298",
+    "reason": "Historical resolved-config oracle tests/integration/_baseline_issue_6484_asymmetric_critic_10m_env22_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_791_asymmetric_critic_promotion_128k.yaml": {
+    "sha256": "d2b781445394f5bd5827bf24b7e2bfad5e43e834f5bc8122f647fceb63c5b4fe",
+    "reason": "Historical resolved-config oracle tests/integration/_baseline_issue_6484_asymmetric_critic_promotion_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_791_asymmetric_critic_promotion_1m_env22.yaml": {
+    "sha256": "1b0d2a81b2e89295155d276dd0e92da0a508a6a22797201d227d97c0b0af4fcb",
+    "reason": "Historical resolved-config oracle tests/integration/_baseline_issue_6484_asymmetric_critic_env22_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_791_asymmetric_critic_promotion_256k.yaml": {
+    "sha256": "59dfd37498d557c17e3d2d193c0646565fef7fe4e1dbcbc7b32cc476b834d58f",
+    "reason": "Historical resolved-config oracle tests/integration/_baseline_issue_6484_asymmetric_critic_promotion_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_791_asymmetric_critic_promotion_3m_env22.yaml": {
+    "sha256": "4fd82109993b47d5bdee8c91766a851e5d09216c068972de13edec73a66de0a9",
+    "reason": "Historical resolved-config oracle tests/integration/_baseline_issue_6484_asymmetric_critic_env22_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_791_asymmetric_critic_promotion_base.yaml": {
+    "sha256": "0519b5c901ed196d98e6c6a6b60c1928c617dc0b94f5a658c319150112a6ca5e",
+    "reason": "Historical resolved-config oracle tests/integration/_baseline_issue_8698_promotion_shared_base_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_791_asymmetric_critic_stage1.yaml": {
+    "sha256": "246d36c39ba40b5cbea529d931086bb50eb786490fd08fe92a6f8b67b74c9a9c",
+    "reason": "Historical resolved-config oracle tests/integration/_baseline_issue_6484_stage1_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_791_asymmetric_critic_stage1_gpu_foresight_smoke.yaml": {
+    "sha256": "5b018f42937da6fe59121b6fb64d9880e28d2f032b8d2ffe767a531cfe8ff80a",
+    "reason": "Historical resolved-config oracle tests/integration/_baseline_issue_6484_stage1_gpu_smoke_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_791_attention_head_followup_32k.yaml": {
+    "sha256": "53b03bd8eb068cf75d6af7a16dbfa38612a9c3852395784ec753cf0131e6057e",
+    "reason": "Historical resolved-config oracle tests/integration/_baseline_issue_6484_followup_32k_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_791_attention_head_promotion_10m_env22.yaml": {
+    "sha256": "74a131cea5805dddf49853aef2220c297810cac99d2a463787d676a42aa87efe",
+    "reason": "Historical resolved-config oracle tests/integration/_baseline_issue_6484_attention_head_promotion_10m_env22_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_791_attention_head_promotion_10m_env22_base.yaml": {
+    "sha256": "b279987362afc171de41f9393354d75c6214700a0e449eccdb6e6ca614dde0b8",
+    "reason": "Declared companion of historical resolved-config oracle configs/training/ppo/ablations/expert_ppo_issue_791_attention_head_promotion_10m_env22_eval_aligned.yaml"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_791_attention_head_promotion_10m_env22_eval_aligned.yaml": {
+    "sha256": "ec550825c1eca98949c444d22f3e17b3190a77f7d0d5c51a4803cae405a8dda0",
+    "reason": "Historical resolved-config oracle tests/integration/_baseline_issue_6484_attention_head_promotion_10m_env22_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_791_attention_head_promotion_128k.yaml": {
+    "sha256": "d4f0320de4c709888b917d92ffa3106226f9986e41b8cfa9f257d58c151b6fda",
+    "reason": "Historical resolved-config oracle tests/integration/_baseline_issue_6484_attention_head_promotion_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_791_attention_head_promotion_1m_env22.yaml": {
+    "sha256": "dc6d5d7de94e522828ae10a75a27ea542ec57b0ecd29ceb39d215c788cdf545c",
+    "reason": "Historical resolved-config oracle tests/integration/_baseline_issue_6484_attention_head_promotion_env22_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_791_attention_head_promotion_256k.yaml": {
+    "sha256": "fb12cfcdec9c58a4b4c14df282be671385e42494c975b6ffb44d21b8742435d7",
+    "reason": "Historical resolved-config oracle tests/integration/_baseline_issue_6484_attention_head_promotion_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_791_attention_head_promotion_3m_env22.yaml": {
+    "sha256": "c2a20e4a1de06f7a67fccbfba82bea4b260352a3c15b88793f72fab78e0fe8d5",
+    "reason": "Historical resolved-config oracle tests/integration/_baseline_issue_6484_attention_head_promotion_env22_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_791_attention_head_promotion_base.yaml": {
+    "sha256": "2e0f006ca8a01ac2148b12312fbfbdd006e4130807eb02c7262948c884a9e960",
+    "reason": "Historical resolved-config oracle tests/integration/_baseline_issue_8698_promotion_shared_base_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_791_attention_head_promotion_env22_base.yaml": {
+    "sha256": "986f918f16a7867ca653b5815649a2bf19d8450df8cd86464907550c33c2b009",
+    "reason": "Historical resolved-config oracle tests/integration/_baseline_issue_8698_promotion_shared_base_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_791_attention_head_stage1.yaml": {
+    "sha256": "8126cc61843a7fcc6dccf4cbdc78123dbd947fe0866933235e785d80e81e3135",
+    "reason": "Historical resolved-config oracle tests/integration/_baseline_issue_6484_stage1_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_791_baseline_promotion_10m_env22_eval_aligned.yaml": {
+    "sha256": "539b57d33a1aa513e33251a1a07910ed85a47d04659b9cc0b2d63ec3a1397328",
+    "reason": "Historical resolved-config oracle tests/integration/_baseline_issue_6484_baseline_10m_env22_eval_aligned_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_791_baseline_promotion_10m_env22_eval_aligned_base.yaml": {
+    "sha256": "ad52cbfd33bc3b673157d08d3b389595ac584b9235de20f543eb203ea46132b4",
+    "reason": "Declared companion of historical resolved-config oracle configs/training/ppo/ablations/expert_ppo_issue_791_baseline_promotion_10m_env22_eval_aligned_large_capacity.yaml"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_791_baseline_promotion_10m_env22_eval_aligned_large_capacity.yaml": {
+    "sha256": "6ba931db93533275b23116d877b2cd63595cd30f8d7864dbd6aec296e16e7897",
+    "reason": "Historical resolved-config oracle tests/integration/_baseline_issue_6484_baseline_10m_env22_eval_aligned_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_791_baseline_promotion_128k.yaml": {
+    "sha256": "f6dbf8eceeec490105cc23bbcf7415dace6383b5394d9aa78f7f39ecaa241121",
+    "reason": "Historical resolved-config oracle tests/integration/_baseline_issue_6484_baseline_promotion_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_791_baseline_promotion_1m_env22.yaml": {
+    "sha256": "257a6461743718be76123ab8597b22c4a8f61f496ae60ec17ad3ce8bf1b1ee08",
+    "reason": "Historical resolved-config oracle tests/integration/_baseline_issue_6484_baseline_promotion_env22_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_791_baseline_promotion_1m_env22_resume_best.yaml": {
+    "sha256": "20009718c9f2b8964c27fb2d7d72a730246be7db22a228567d0baacac9462a18",
+    "reason": "Historical resolved-config oracle tests/integration/_baseline_issue_6484_baseline_resume_best_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_791_baseline_promotion_256k.yaml": {
+    "sha256": "be15c655760fddc647c0b6b18e62510e06d47982799dadc9bc0235989b36b9e8",
+    "reason": "Historical resolved-config oracle tests/integration/_baseline_issue_6484_baseline_promotion_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_791_baseline_promotion_3m_env22.yaml": {
+    "sha256": "6ff8a6fb1e65a8e45f37c4152fcee615b01aac2353abc5f65834401aced41121",
+    "reason": "Historical resolved-config oracle tests/integration/_baseline_issue_6484_baseline_promotion_env22_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_791_baseline_promotion_base.yaml": {
+    "sha256": "8dacb124f9780d1359cc9c0bba5aa8577e7614f48bd7accc54e3bf19fc155bd2",
+    "reason": "Historical resolved-config oracle tests/integration/_baseline_issue_8698_promotion_shared_base_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_791_baseline_promotion_env22_base.yaml": {
+    "sha256": "ea6638ebd0bcf3b3290ed457dad1117d8d379bee32b8f1da430d6eddf3c0a89f",
+    "reason": "Historical resolved-config oracle tests/integration/_baseline_issue_8698_promotion_shared_base_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_791_best_ckpt_all_scenarios_horizon500_20m_env22.yaml": {
+    "sha256": "6037d30e8fc5c5fa2a5d0b68ed0178488c5f38d2ab9ca22626462b69ad9e7aaa",
+    "reason": "Historical resolved-config oracle tests/integration/_baseline_issue_791_seed_replicas_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_791_followup_32k_base.yaml": {
+    "sha256": "8ce1145067a3e3c9d65a8615d819a90415279fa6a38859af364b1a7ddb59f1d7",
+    "reason": "Declared companion of historical resolved-config oracle configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_followup_32k.yaml"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_791_promotion_shared_base.yaml": {
+    "sha256": "82479bcc98ae247b10de02d5b20b80c3b31ba7772da6659c6fe9bfc03db21136",
+    "reason": "Declared companion of historical resolved-config oracle configs/training/ppo/ablations/expert_ppo_issue_791_baseline_promotion_env22_base.yaml"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_followup_32k.yaml": {
+    "sha256": "7843dcb55f170592342f7a3a5eb593c95c2a11a74307fa55dd580e427cdb6172",
+    "reason": "Historical resolved-config oracle tests/integration/_baseline_issue_6484_followup_32k_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_followup_32k_v2.yaml": {
+    "sha256": "e687506ba5b186625736d290c352f76f3f5558ef5aa77d7a986aa9884c8c5eab",
+    "reason": "Historical resolved-config oracle tests/integration/_baseline_issue_6484_reward_curriculum_v2_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22.yaml": {
+    "sha256": "e475c3e2c18dd97c8506bb718340e048d8d37982b75d762536930cc399850a2b",
+    "reason": "Historical resolved-config oracle tests/integration/_baseline_issue_6484_reward_curriculum_10m_env22_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_base.yaml": {
+    "sha256": "01348efde5c9b7d9b627c32accad67cf60c57511d7826ce112205d6fffc05b6d",
+    "reason": "Declared companion of historical resolved-config oracle configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_reward_strong.yaml"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned.yaml": {
+    "sha256": "bb81a27901e1a905151a0b55e3000f1762303fb9faa29bf57f703077f226829a",
+    "reason": "Historical resolved-config oracle tests/integration/_baseline_issue_6484_reward_curriculum_10m_env22_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity.yaml": {
+    "sha256": "e4851c198911645d54d703628adf887f340c6eda945f470cb07e295a59d42b1f",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_base.yaml": {
+    "sha256": "76a6f8251e7ea6c61f326db88443d08e71751206f94393894b68c6655f2b799c",
+    "reason": "transitive frozen/versioned release dependency"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_nsteps4096.yaml": {
+    "sha256": "375c12727371bc93874543b3aa5a6a7fb94317ce7c6642256aaa968afd550eda",
+    "reason": "Historical resolved-config oracle tests/integration/_baseline_issue_6484_eval_nsteps4096_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed1337.yaml": {
+    "sha256": "bc2e6e4446f98ca34d30bfbf69393a4db25b1e4f596e3c41b39e13543513cdae",
+    "reason": "Historical pre-change resolved-config oracle tests/integration/_baseline_issue_791_seed_replicas_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed1337_fixed.yaml": {
+    "sha256": "0b228855e35ecfafb00dd137e7e1924497947381e9d17300b6b52ead84f4bc04",
+    "reason": "Historical pre-change resolved-config oracle tests/integration/_baseline_issue_791_seed_replicas_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed231.yaml": {
+    "sha256": "c923f4f5f17be65d8257380f732ec3aaf6b333f7edeca8748f2bf164ef5149b2",
+    "reason": "Historical pre-change resolved-config oracle tests/integration/_baseline_issue_791_seed_replicas_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed231_fixed.yaml": {
+    "sha256": "397689b448b1f9862d721b17e12a19ea026c704f305553702895a60cc011a8de",
+    "reason": "Historical pre-change resolved-config oracle tests/integration/_baseline_issue_791_seed_replicas_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_no_foresight.yaml": {
+    "sha256": "4588e531669e2de3d4c2141059f048389d39f6ae4318f691e0a629991d907e4b",
+    "reason": "Historical resolved-config oracle tests/integration/_baseline_issue_6484_eval_reward_variants_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_nsteps4096.yaml": {
+    "sha256": "87527a90ecd92928ce2fb41c99f1b47f9205bf8a60f88246251c6af3e2193143",
+    "reason": "Historical resolved-config oracle tests/integration/_baseline_issue_6484_eval_nsteps4096_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_nsteps4096_base.yaml": {
+    "sha256": "bce94f87c967f41503c7c72be2acb79d0feb37cddedf418a157cd26217779b58",
+    "reason": "Declared companion of historical resolved-config oracle configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_nsteps4096.yaml"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_reward_strong.yaml": {
+    "sha256": "ef81217e6283a50bfc89bd4a9801606c6e62cb4035b536a57d3e52ed429bf5d1",
+    "reason": "Historical resolved-config oracle tests/integration/_baseline_issue_6484_eval_reward_variants_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_horizon100.yaml": {
+    "sha256": "ad3f0c4d9750428a8f1b9f3fbda9e3a6a93d3165d22daf5411b5ea4c1ce65d30",
+    "reason": "Historical pre-change resolved-config oracle tests/integration/_baseline_issue_6484_horizon100_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_resume_base.yaml": {
+    "sha256": "b94845d791e2525eb286dcd987d9f7534e55ae71719166a6e5c241b24b80e1ae",
+    "reason": "Historical resolved-config oracle tests/integration/_baseline_issue_8698_promotion_shared_base_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_resume_best.yaml": {
+    "sha256": "58aec2a06eb32fc6f73c03b942cdbb217e03c8cca9d8998fd1b1608ff5368441",
+    "reason": "Historical resolved-config oracle tests/integration/_baseline_issue_6484_resume_promotion_10m_env22_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_resume_exploration_boost.yaml": {
+    "sha256": "d060f5c5bf8126a754a604236d8422be8e1bbfc3ee27f94bed81851b2a7f7c54",
+    "reason": "Historical resolved-config oracle tests/integration/_baseline_issue_6484_resume_promotion_10m_env22_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_128k.yaml": {
+    "sha256": "57a2644e7bb3cdfe80d3f2cf56791af72d1ea9a28f1ab357fe974c47b1e3eda1",
+    "reason": "Historical resolved-config oracle tests/integration/_baseline_issue_6484_reward_curriculum_promotion_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_128k_v2.yaml": {
+    "sha256": "9ab133da6667ab3fe6de0c0fe7103270c2bd60632c60f538835c0a1ed3e29c0e",
+    "reason": "Historical resolved-config oracle tests/integration/_baseline_issue_6484_reward_curriculum_v2_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_256k.yaml": {
+    "sha256": "6496c77567c6e01a4e74a07e5e4837492face4c9c4995efb592a9aa95fed61f6",
+    "reason": "Historical resolved-config oracle tests/integration/_baseline_issue_6484_reward_curriculum_promotion_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_3m_env22_eval_aligned_base.yaml": {
+    "sha256": "4f897408dfcf9067a6219d6770989cc118497dd0d01f7b8a4e170216969a5859",
+    "reason": "Declared companion of historical resolved-config oracle configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_3m_env22_eval_aligned_seed992.yaml"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_3m_env22_eval_aligned_seed1337.yaml": {
+    "sha256": "4664a4e0a4cb86b9868023c2763f325d859b8f9a5f7a99d2dfe9975446847e7b",
+    "reason": "Historical pre-change resolved-config oracle tests/integration/_baseline_issue_791_seed_replicas_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_3m_env22_eval_aligned_seed231.yaml": {
+    "sha256": "26b6e249d39aaec502f71a3a6be5b249c1febb529aa3e67edd299f737c6facf8",
+    "reason": "Historical pre-change resolved-config oracle tests/integration/_baseline_issue_791_seed_replicas_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_3m_env22_eval_aligned_seed992.yaml": {
+    "sha256": "2bd76005970308581cd799e281df035ad010a34097b61e322b2022b02861dee3",
+    "reason": "Historical pre-change resolved-config oracle tests/integration/_baseline_issue_791_seed_replicas_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_base.yaml": {
+    "sha256": "07de7f419044ab36ce9699c20a54963a2c238c2824b2c342d96cb07e7e6ff326",
+    "reason": "Historical resolved-config oracle tests/integration/_baseline_issue_8698_promotion_shared_base_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_stage1.yaml": {
+    "sha256": "0ca0a5592bed86c1103982089babc3f6625198749fe1f78a1360437de572a314",
+    "reason": "Historical resolved-config oracle tests/integration/_baseline_issue_6484_stage1_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_v2_base.yaml": {
+    "sha256": "a4c06a618a14a1fd01a4aeed2faac99ddc9a5a1d7775ded1595cff872082c94a",
+    "reason": "Historical resolved-config oracle tests/integration/_baseline_issue_8698_promotion_shared_base_resolved.json"
+  },
+  "configs/training/ppo/ablations/expert_ppo_issue_791_stage1_base.yaml": {
+    "sha256": "92f1c8e234993684cf84257c818871822fb86cbdc66d2a6113728fb48de5dc3a",
+    "reason": "Historical resolved-config oracle tests/integration/_baseline_issue_8698_promotion_shared_base_resolved.json"
+  },
+  "configs/training/ppo/ablations/issue_4018_density_curriculum_smoke.yaml": {
+    "sha256": "8e5513a3ae0d5cf8479cddbd975fc6c6ffc29eedccbe417522df899d69c5576c",
+    "reason": "Historical resolved-config oracle tests/integration/_baseline_issue_4018_smoke_resolved.json"
+  },
+  "configs/training/ppo/ablations/issue_4018_fixed_density_smoke.yaml": {
+    "sha256": "cc6ed287aada33bbc6f9797003ab3d0678311c242d9b0824b5a771d79e9dd088",
+    "reason": "Historical resolved-config oracle tests/integration/_baseline_issue_4018_smoke_resolved.json"
+  },
+  "configs/training/ppo/ablations/issue_4018_smoke_base.yaml": {
+    "sha256": "5ca21ef1e39a8fec179dd28824e749eefa209d36287a0536395ac026f3ee8a00",
+    "reason": "Declared companion of historical resolved-config oracle configs/training/ppo/ablations/issue_4018_fixed_density_smoke.yaml"
+  },
+  "configs/training/ppo/ablations/single_factor/asymmetric_critic_only_10m_env22_seed123.yaml": {
+    "sha256": "d213cf07578b23f2e4f6e2d7b392b36b90d0b667915bbec456244de438fbfd5a",
+    "reason": "Historical pre-change resolved-config oracle tests/integration/_baseline_issue_6679_resolved.json"
+  },
+  "configs/training/ppo/ablations/single_factor/asymmetric_critic_only_10m_env22_seed1337.yaml": {
+    "sha256": "b01927a86df8b26e71a70b304dd52f99118a0e25c0d100cfe946dcc5884e94e4",
+    "reason": "Historical pre-change resolved-config oracle tests/integration/_baseline_issue_6679_resolved.json"
+  },
+  "configs/training/ppo/ablations/single_factor/asymmetric_critic_only_10m_env22_seed231.yaml": {
+    "sha256": "892c8e5af4ef500c0d03dd21cc7f27ef42af5c6aae0ec83772f8030f69a2cf24",
+    "reason": "Historical pre-change resolved-config oracle tests/integration/_baseline_issue_6679_resolved.json"
+  },
+  "configs/training/ppo/ablations/single_factor/asymmetric_critic_only_1m_env22_seed123.yaml": {
+    "sha256": "4847f02b6a5625286a11dc4440a122f69d77b5c9a48624021eeff319cd49447e",
+    "reason": "Historical pre-change resolved-config oracle tests/integration/_baseline_issue_6679_resolved.json"
+  },
+  "configs/training/ppo/ablations/single_factor/asymmetric_critic_only_1m_env22_seed1337.yaml": {
+    "sha256": "525622fb8bb63e9418a8d0dfa6f2cf945581fd5f8ba3db824b2ac45b7e8e9c3b",
+    "reason": "Historical pre-change resolved-config oracle tests/integration/_baseline_issue_6679_resolved.json"
+  },
+  "configs/training/ppo/ablations/single_factor/asymmetric_critic_only_1m_env22_seed231.yaml": {
+    "sha256": "f366f02304d34662ff21056d056c27607bfab0857702220bc730a9fd89c21641",
+    "reason": "Historical pre-change resolved-config oracle tests/integration/_baseline_issue_6679_resolved.json"
+  },
+  "configs/training/ppo/ablations/single_factor/asymmetric_critic_only_base.yaml": {
+    "sha256": "5a0e400d1c9c7f31288fa6d11d680950178f71989a610724539d9914d333c325",
+    "reason": "Declared companion of historical resolved-config oracle configs/training/ppo/ablations/single_factor/asymmetric_critic_only_1m_env22_seed231.yaml"
+  },
+  "configs/training/ppo/ablations/single_factor/attention_only_10m_env22_seed123.yaml": {
+    "sha256": "854afb5511e3f7019535bda08cc99ffd0fd6a65ad8db3ca223e31d9ee7755def",
+    "reason": "Historical pre-change resolved-config oracle tests/integration/_baseline_issue_6679_resolved.json"
+  },
+  "configs/training/ppo/ablations/single_factor/attention_only_10m_env22_seed1337.yaml": {
+    "sha256": "abe9a4249906f0264113d7d6b36e9e166f776d0c8d749c94db6adb4896719fa6",
+    "reason": "Historical pre-change resolved-config oracle tests/integration/_baseline_issue_6679_resolved.json"
+  },
+  "configs/training/ppo/ablations/single_factor/attention_only_10m_env22_seed231.yaml": {
+    "sha256": "c6188fc09446f3a668377d67a224f30cc08f8314d213bbd4c50a66018263da10",
+    "reason": "Historical pre-change resolved-config oracle tests/integration/_baseline_issue_6679_resolved.json"
+  },
+  "configs/training/ppo/ablations/single_factor/attention_only_1m_env22_seed123.yaml": {
+    "sha256": "7dba313cb956dbdd7268240c69ce18b0e572e94b495eed217eb6d8685abce8d7",
+    "reason": "Historical pre-change resolved-config oracle tests/integration/_baseline_issue_6679_resolved.json"
+  },
+  "configs/training/ppo/ablations/single_factor/attention_only_1m_env22_seed1337.yaml": {
+    "sha256": "199dd2d23a3d5c5c4369be689d7af8817ab445207d5b346848223c492372e927",
+    "reason": "Historical pre-change resolved-config oracle tests/integration/_baseline_issue_6679_resolved.json"
+  },
+  "configs/training/ppo/ablations/single_factor/attention_only_1m_env22_seed231.yaml": {
+    "sha256": "6b01b01445cc743d90360d6ff882d3d885422cfaaa5762879d7bd6c4d969d2fe",
+    "reason": "Historical pre-change resolved-config oracle tests/integration/_baseline_issue_6679_resolved.json"
+  },
+  "configs/training/ppo/ablations/single_factor/attention_only_base.yaml": {
+    "sha256": "4d2d368c47b87a4b04c7552b071470baf3443564a28e009952adac43bc922ae0",
+    "reason": "Declared companion of historical resolved-config oracle configs/training/ppo/ablations/single_factor/attention_only_1m_env22_seed231.yaml"
+  },
+  "configs/training/ppo/ablations/single_factor/reward_curriculum_only_10m_env22_seed123.yaml": {
+    "sha256": "babae6ce0fb21db8258e9663c3e8822b9fb12cc2208b240d439b8537f51de3a8",
+    "reason": "Historical pre-change resolved-config oracle tests/integration/_baseline_issue_6679_resolved.json"
+  },
+  "configs/training/ppo/ablations/single_factor/reward_curriculum_only_10m_env22_seed1337.yaml": {
+    "sha256": "da658a4e25dfbd9af9e86edf9b8b06ee2d4f0d2f8cbca0820684ad10ecfa8e28",
+    "reason": "Historical pre-change resolved-config oracle tests/integration/_baseline_issue_6679_resolved.json"
+  },
+  "configs/training/ppo/ablations/single_factor/reward_curriculum_only_10m_env22_seed231.yaml": {
+    "sha256": "74cd802bc764486d5bf0b84ee8f364a2e8470ddc52965c081fa4b9c2d2102b6b",
+    "reason": "Historical pre-change resolved-config oracle tests/integration/_baseline_issue_6679_resolved.json"
+  },
+  "configs/training/ppo/ablations/single_factor/reward_curriculum_only_1m_env22_seed123.yaml": {
+    "sha256": "07142e72de95739aa5168fb10db57fae6b93ab066da8c9b72211a676f06f0b9f",
+    "reason": "Historical pre-change resolved-config oracle tests/integration/_baseline_issue_6679_resolved.json"
+  },
+  "configs/training/ppo/ablations/single_factor/reward_curriculum_only_1m_env22_seed1337.yaml": {
+    "sha256": "d0ff3e67ce8e51ae3f348d15ecb8702e7ed89d92fb7d24bef8e0683eb3ee1869",
+    "reason": "Historical pre-change resolved-config oracle tests/integration/_baseline_issue_6679_resolved.json"
+  },
+  "configs/training/ppo/ablations/single_factor/reward_curriculum_only_1m_env22_seed231.yaml": {
+    "sha256": "f1dfd06cc8f5ef2c5eab3885e190218b5adec48fb6e923152bade47e7c09583b",
+    "reason": "Historical pre-change resolved-config oracle tests/integration/_baseline_issue_6679_resolved.json"
+  },
+  "configs/training/ppo/ablations/single_factor/reward_curriculum_only_base.yaml": {
+    "sha256": "9cf7ba92189ab9732f8605c1edb68c19562efd79b3abd1b6b78adf6a14a855b6",
+    "reason": "Declared companion of historical resolved-config oracle configs/training/ppo/ablations/single_factor/reward_curriculum_only_1m_env22_seed231.yaml"
+  },
+  "configs/training/ppo/expert_ppo_issue_576_br06_base.yaml": {
+    "sha256": "5d1a65b83f8fd183c76ed0587bb4c3a921bbe09a6ba9cc736bfc660c93b09fdc",
+    "reason": "Declared companion of historical resolved-config oracle configs/training/ppo/expert_ppo_issue_576_br06_predictive_sub_base.yaml"
+  },
+  "configs/training/ppo/expert_ppo_issue_576_br06_predictive_sub_base.yaml": {
+    "sha256": "1be194491803c57ff030c175239c655131c289e584a3265f1c1d1812f3696a68",
+    "reason": "Declared companion of historical resolved-config oracle configs/training/ppo/expert_ppo_issue_708_br06_v11_predictive_foresight_success_priority_from_scratch.yaml"
+  },
+  "configs/training/ppo/expert_ppo_issue_576_br06_v10_predictive_foresight_success_priority_policy_analysis_select.yaml": {
+    "sha256": "7a86fb56e1a4d52eae65f103daf6959d70c458731f6b72785d9e0a3f83dc8507",
+    "reason": "Historical resolved-config oracle tests/integration/test_train_expert_ppo.py#_ISSUE_576_BR06_PRECHANGE_BASELINE_B64"
+  },
+  "configs/training/ppo/expert_ppo_issue_576_br06_v2_15m_all_maps.yaml": {
+    "sha256": "2a31de3e9992ee4698d0f09b276e4d3e7eb37cf344bfdb0ec79f5e6898ac95cf",
+    "reason": "Historical pre-change resolved-config oracle tests/integration/test_train_expert_ppo.py#_ISSUE_576_BR06_PRECHANGE_BASELINE_B64"
+  },
+  "configs/training/ppo/expert_ppo_issue_576_br06_v2_15m_all_maps_randomized.yaml": {
+    "sha256": "82be025c43e35c4dfb4d104c58181d71596f2d493d7a250d36534bfdbb5257dc",
+    "reason": "Historical pre-change resolved-config oracle tests/integration/test_train_expert_ppo.py#_ISSUE_576_BR06_PRECHANGE_BASELINE_B64"
+  },
+  "configs/training/ppo/expert_ppo_issue_576_br06_v2_sanity_500k_all_maps.yaml": {
+    "sha256": "c07bff3c2f865b5c8d74da69c0547788d67b295c3c09e806820cf60b5a607593",
+    "reason": "Historical pre-change resolved-config oracle tests/integration/test_train_expert_ppo.py#_ISSUE_576_BR06_PRECHANGE_BASELINE_B64"
+  },
+  "configs/training/ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml": {
+    "sha256": "90c29865a801c642253bb85b2eee225e61ae26d90979c362fabf431a08cea4d7",
+    "reason": "Registered historical hash: configs/training/ppo_curriculum_issue_3068_launch_packet.yaml, configs/training/shielded_ppo_issue_1396_launch_packet.yaml, tests/training/test_shielded_ppo_launch_packet.py"
+  },
+  "configs/training/ppo/expert_ppo_issue_576_br06_v4_overnight_safety_warmstart.yaml": {
+    "sha256": "cfe647330e08e57c36843869a6cf3fe26d12b36230c71da591e0584dcbbc8f30",
+    "reason": "Historical pre-change resolved-config oracle tests/integration/test_train_expert_ppo.py#_ISSUE_576_BR06_PRECHANGE_BASELINE_B64"
+  },
+  "configs/training/ppo/expert_ppo_issue_576_br06_v4_validation_120k.yaml": {
+    "sha256": "3fe2038c2fdb7f18db587c6a9830b029a0e7516118412291c0275ee1cf9111fa",
+    "reason": "Historical pre-change resolved-config oracle tests/integration/test_train_expert_ppo.py#_ISSUE_576_BR06_PRECHANGE_BASELINE_B64"
+  },
+  "configs/training/ppo/expert_ppo_issue_576_br06_v5_predictive_foresight.yaml": {
+    "sha256": "de1700a08555b9cffad5333c2bcd0cf56f5a55adcf1e812e55d1e9813364255f",
+    "reason": "Historical resolved-config oracle tests/integration/test_train_expert_ppo.py#_ISSUE_576_BR06_PRECHANGE_BASELINE_B64"
+  },
+  "configs/training/ppo/expert_ppo_issue_576_br06_v6_predictive_foresight_success_aligned.yaml": {
+    "sha256": "beac75ac9040797effbdb96fe0bf89032b12fb8846aa44f30ee18d3411f76c12",
+    "reason": "Historical resolved-config oracle tests/integration/test_train_expert_ppo.py#_ISSUE_576_BR06_PRECHANGE_BASELINE_B64"
+  },
+  "configs/training/ppo/expert_ppo_issue_576_br06_v6_predictive_foresight_success_aligned_auto_envs.yaml": {
+    "sha256": "ad208252c4309011bcb6aa40219e576470f1284819fd3ea0f106ad44079e8c58",
+    "reason": "Historical resolved-config oracle tests/integration/test_train_expert_ppo.py#_ISSUE_576_BR06_PRECHANGE_BASELINE_B64"
+  },
+  "configs/training/ppo/expert_ppo_issue_576_br06_v7_predictive_foresight_xl_ego_success_aligned.yaml": {
+    "sha256": "a4774860787cff1faea302a8279036f496c93bba17f81ece5c433462c149b2e2",
+    "reason": "Historical resolved-config oracle tests/integration/test_train_expert_ppo.py#_ISSUE_576_BR06_PRECHANGE_BASELINE_B64"
+  },
+  "configs/training/ppo/expert_ppo_issue_576_br06_v7_predictive_foresight_xl_ego_success_aligned_auto_envs.yaml": {
+    "sha256": "cbcd98a7b16761dcefd441aa3fdd58b9828be2c9b427b95ac61ce6f39dcf6265",
+    "reason": "Historical resolved-config oracle tests/integration/test_train_expert_ppo.py#_ISSUE_576_BR06_PRECHANGE_BASELINE_B64"
+  },
+  "configs/training/ppo/expert_ppo_issue_576_br06_v8_predictive_foresight_success_priority.yaml": {
+    "sha256": "c91ff18f6cde3f58ef645da7af341aa11a60f8222260351338742fc522ecf471",
+    "reason": "Historical resolved-config oracle tests/integration/test_train_expert_ppo.py#_ISSUE_576_BR06_PRECHANGE_BASELINE_B64"
+  },
+  "configs/training/ppo/expert_ppo_issue_576_br06_v9_predictive_foresight_xl_ego_success_priority.yaml": {
+    "sha256": "e66494253417260c1f44d17ac53fe80c124677150c140e75a1359eb18512a507",
+    "reason": "Historical resolved-config oracle tests/integration/test_train_expert_ppo.py#_ISSUE_576_BR06_PRECHANGE_BASELINE_B64"
+  },
+  "configs/training/ppo/expert_ppo_issue_576_br06_v9_predictive_foresight_xl_ego_success_priority_auto_envs.yaml": {
+    "sha256": "25f748e059e2c81a2efcaf2dbda65e6e7a86ed5366d6be965bb7dba430b18cec",
+    "reason": "Historical resolved-config oracle tests/integration/test_train_expert_ppo.py#_ISSUE_576_BR06_PRECHANGE_BASELINE_B64"
+  },
+  "configs/training/ppo/expert_ppo_issue_708_br06_v11_predictive_foresight_success_priority_from_scratch.yaml": {
+    "sha256": "5cc98430897f547967d129a73e12c2c9b85635a843aff05f5fba295c492afbb7",
+    "reason": "Historical resolved-config oracle tests/integration/test_train_expert_ppo.py#_ISSUE_576_BR06_PRECHANGE_BASELINE_B64"
+  },
+  "configs/training/ppo/expert_ppo_issue_739_12m_baseline_retrain.yaml": {
+    "sha256": "5ccd73c09cffa91f5cf92ecd855257f6f779b5f2964a85527b6eb5622e09269f",
+    "reason": "Historical pre-change resolved-config oracle tests/integration/_baseline_issue_6682_resolved.json"
+  },
+  "configs/training/ppo/feature_extractor_candidates_12m_issue193.yaml": {
+    "sha256": "990f90f451b893abe4217d656149982dfae49d25d14f372e5775fa47aea0bda9",
+    "reason": "Historical pre-change resolved-config oracle tests/integration/_baseline_issue_6683_resolved.json"
+  },
+  "configs/training/ppo/feature_extractor_sweep_base.yaml": {
+    "sha256": "18922c8ee3e877a9835205312e0d21d7af1a86dd661126910ae9acc6b230bb27",
+    "reason": "Historical pre-change resolved-config oracle tests/integration/_baseline_issue_6683_resolved.json"
+  },
+  "configs/training/ppo/issue_4014_ppo_lstm_recurrent_smoke.yaml": {
+    "sha256": "0849adda83d502be6f65ad92a0937f972d8cb421a8f966064b4e53271d566581",
+    "reason": "Historical resolved-config oracle tests/integration/_baseline_issue_6484_recurrent_ppo_lstm_resolved.json"
+  },
+  "configs/training/ppo/issue_4014_ppo_mamba_smoke.yaml": {
+    "sha256": "2875c2fd1ad963c799edd0dc60cfa69ee3bcd4e7271a20a5bf60e70f33473dec",
+    "reason": "Historical resolved-config oracle tests/integration/_baseline_issue_4014_ppo_smoke_resolved.json"
+  },
+  "configs/training/ppo/issue_4014_ppo_mamba_smoke_matched.yaml": {
+    "sha256": "f48dd46a1c2e1a6134d576831c888efb0a44a33518743d5c4b09f2deba7e9692",
+    "reason": "Historical resolved-config oracle tests/integration/_baseline_issue_4014_ppo_smoke_resolved.json"
+  },
+  "configs/training/ppo/issue_4014_ppo_smoke_base.yaml": {
+    "sha256": "3806fb3a3afc1a08abeeac309cc47e47e62bc13cc52193c38f5e7d72ca4106d2",
+    "reason": "Declared companion of historical resolved-config oracle configs/training/ppo/issue_4014_ppo_smoke_matched.yaml"
+  },
+  "configs/training/ppo/issue_4014_ppo_smoke_matched.yaml": {
+    "sha256": "117185e82ef2665d437b981c96a0de3eefd0ae4a145622669e21939276994715",
+    "reason": "Historical resolved-config oracle tests/integration/_baseline_issue_4014_ppo_smoke_resolved.json"
+  },
+  "configs/training/ppo/issue_4014_recurrent_ppo_lstm_base.yaml": {
+    "sha256": "13af335cb6f21adc054ec417afc20d94901809bbb1b35911f4e51d24124bd510",
+    "reason": "Declared companion of historical resolved-config oracle configs/training/ppo/issue_4014_recurrent_ppo_lstm_smoke_matched.yaml"
+  },
+  "configs/training/ppo/issue_4014_recurrent_ppo_lstm_smoke_matched.yaml": {
+    "sha256": "040834e4eaef43efc6cd26a6d35c85e7a3f0c27d58a8f1f59ad31d0433200ec8",
+    "reason": "Historical resolved-config oracle tests/integration/_baseline_issue_6484_recurrent_ppo_lstm_resolved.json"
+  },
+  "configs/training/ppo/issue_4017_constrained_rl_smoke_base.yaml": {
+    "sha256": "b9de951fe4bbd0f1c358d6b2a4b30204639e8997eab26508383e624e321337a6",
+    "reason": "Declared companion of historical resolved-config oracle configs/training/ppo/issue_4017_unconstrained_smoke.yaml"
+  },
+  "configs/training/ppo/issue_4017_constrained_smoke.yaml": {
+    "sha256": "e5ac02ecd2d4cdeaf2c8a052f7879c737c716c196252bdefa4fb1f2a4d84954e",
+    "reason": "Historical resolved-config oracle tests/training/_baseline_issue_4017_constrained_rl_resolved.json"
+  },
+  "configs/training/ppo/issue_4017_unconstrained_smoke.yaml": {
+    "sha256": "16c22c0ef97674aae71157e552042371f889d8389ce3b6e55d17828b86aca9e1",
+    "reason": "Historical resolved-config oracle tests/training/_baseline_issue_4017_constrained_rl_resolved.json"
+  },
+  "configs/training/ppo/issue_7849_ppo_full_v1.yaml": {
+    "sha256": "9f74f7a99830c6ba9c576bb0d78db60a17d69a9fc2d861f35dbde1d7fa6dca2e",
+    "reason": "Registered historical hash: configs/training/comparison_matrix/issue_7849_ppo_rppo_gpu_admission_v1.yaml, configs/training/comparison_matrix/issue_7849_ppo_rppo_source_inventory_v1.yaml"
+  },
+  "configs/training/ppo/issue_7849_ppo_full_v2.yaml": {
+    "sha256": "f83d66ded3a22b2f5e7c2fa8fe894b663769e49586ca42d47cd8f41abfb74103",
+    "reason": "Registered historical hash: configs/training/comparison_matrix/issue_7849_ppo_rppo_gpu_admission_v2.yaml, configs/training/comparison_matrix/issue_7849_ppo_rppo_source_inventory_v2.yaml"
+  },
+  "configs/training/ppo/issue_7849_ppo_gate1_canary_v1.yaml": {
+    "sha256": "e27c5ee24c066e56aa787fa278e08a8befaf4f941b5876e794d6f30b010c50fa",
+    "reason": "Registered historical hash: configs/training/comparison_matrix/issue_7849_ppo_rppo_gpu_admission_v1.yaml, configs/training/comparison_matrix/issue_7849_ppo_rppo_source_inventory_v1.yaml"
+  },
+  "configs/training/ppo/issue_7849_ppo_gate1_canary_v2.yaml": {
+    "sha256": "a151561ed17afa59ec870e687a6015aad8718a8847aba33f99aacbd0bd659f24",
+    "reason": "Registered historical hash: configs/training/comparison_matrix/issue_7849_ppo_rppo_gpu_admission_v2.yaml, configs/training/comparison_matrix/issue_7849_ppo_rppo_source_inventory_v2.yaml"
+  },
+  "configs/training/ppo/issue_7849_recurrent_ppo_full_v1.yaml": {
+    "sha256": "2602223fd6e08c84ab50e92af1b54662d68a06f7427753773846c5cd5c6aa5d8",
+    "reason": "Registered historical hash: configs/training/comparison_matrix/issue_7849_ppo_rppo_gpu_admission_v1.yaml, configs/training/comparison_matrix/issue_7849_ppo_rppo_source_inventory_v1.yaml"
+  },
+  "configs/training/ppo/issue_7849_recurrent_ppo_full_v2.yaml": {
+    "sha256": "7d1de6452d47a88b2b40fec39ced8017cee37fb23bb17138c87b2cef9d4ca865",
+    "reason": "Registered historical hash: configs/training/comparison_matrix/issue_7849_ppo_rppo_gpu_admission_v2.yaml, configs/training/comparison_matrix/issue_7849_ppo_rppo_source_inventory_v2.yaml"
+  },
+  "configs/training/ppo/issue_7849_recurrent_ppo_gate1_canary_v1.yaml": {
+    "sha256": "0ff090b58a0db47c31446200ff724f932e2c3a78c9167b772d6b3d8f62714f90",
+    "reason": "Registered historical hash: configs/training/comparison_matrix/issue_7849_ppo_rppo_gpu_admission_v1.yaml, configs/training/comparison_matrix/issue_7849_ppo_rppo_source_inventory_v1.yaml"
+  },
+  "configs/training/ppo/issue_7849_recurrent_ppo_gate1_canary_v2.yaml": {
+    "sha256": "0ebb99246b388575887f7ac0479d089778e69b1d5872b55a51cf2b9bb19a5f0d",
+    "reason": "Registered historical hash: configs/training/comparison_matrix/issue_7849_ppo_rppo_gpu_admission_v2.yaml, configs/training/comparison_matrix/issue_7849_ppo_rppo_source_inventory_v2.yaml"
+  },
+  "configs/training/ppo_curriculum_issue_3068_launch_packet.yaml": {
+    "reason": "Historical issue-3068 source-bound launch packet and checksum keys; preserve original registered inputs and digests.",
+    "sha256": "9853eeb2b7ce7c288d0ec80bcad8d6a28154256e8b10d5614a41d2e1aaf4ac68"
+  },
+  "configs/training/ppo_imitation/bc_pretrain_issue_1496_comparison.yaml": {
+    "sha256": "7a866235acdf36a628c4327964edb6f8749756ba2d0851848fb3d2c46540b06d",
+    "reason": "Declared companion of preserved historical contract configs/training/ppo_imitation/oracle_imitation_comparison_issue_1496.yaml"
+  },
+  "configs/training/ppo_imitation/expert_ppo.yaml": {
+    "sha256": "086aad00ee3a6f731aba1e6978fa7f30461f5999e3130d55a485e02737155b28",
+    "reason": "Historical pre-change resolved-config oracle tests/integration/_baseline_issue_6904_resolved.json"
+  },
+  "configs/training/ppo_imitation/expert_ppo_issue_403_grid.yaml": {
+    "sha256": "9b1bb11fae34a57897841b106b3aa3bb7be4d30d76ae5f292103fe1387f97db3",
+    "reason": "Historical pre-change resolved-config oracle tests/integration/_baseline_issue_6904_resolved.json"
+  },
+  "configs/training/ppo_imitation/expert_ppo_issue_403_grid_base.yaml": {
+    "sha256": "0d74831e29d4b8a40dc0592b226df8f1584f68c2acc3a8cdd5f0a17fd54fe6c9",
+    "reason": "Declared companion of historical resolved-config oracle configs/training/ppo_imitation/expert_ppo_issue_403_grid_radius_0_6.yaml"
+  },
+  "configs/training/ppo_imitation/expert_ppo_issue_403_grid_diffdrive.yaml": {
+    "sha256": "a38f3e0a4ae7852c730c37aea29edf1cdbfb33c2a457a06d745c66ca98bbcd41",
+    "reason": "Historical pre-change resolved-config oracle tests/integration/_baseline_issue_6904_resolved.json"
+  },
+  "configs/training/ppo_imitation/expert_ppo_issue_403_grid_diffdrive_reverse.yaml": {
+    "sha256": "1483c82274fad823e15e29597a7ce153ecd4eeee40bfc6c7d61adaf7c7cc862f",
+    "reason": "Historical pre-change resolved-config oracle tests/integration/_baseline_issue_6904_resolved.json"
+  },
+  "configs/training/ppo_imitation/expert_ppo_issue_403_grid_diffdrive_reverse_no_holdout_15m.yaml": {
+    "sha256": "a3c270428daacd0b0843f9b79a7137ad53c57ba068cdab27799f440712a8648b",
+    "reason": "Historical pre-change resolved-config oracle tests/integration/_baseline_issue_6904_resolved.json"
+  },
+  "configs/training/ppo_imitation/expert_ppo_issue_403_grid_diffdrive_reverse_no_holdout_15m_random.yaml": {
+    "sha256": "de412f4228a36c4d996770a88370584ff93cfa9175b05356c3dddb4a35742490",
+    "reason": "Historical resolved-config oracle tests/integration/_baseline_issue_6904_resolved.json"
+  },
+  "configs/training/ppo_imitation/expert_ppo_issue_403_grid_radius_0_6.yaml": {
+    "sha256": "5c3964d89259a03634ac13c658c54c92129daa735b9cef316bf58e6a0b11797c",
+    "reason": "Historical pre-change resolved-config oracle tests/integration/_baseline_issue_6904_resolved.json"
+  },
+  "configs/training/ppo_imitation/oracle_dataset_issue_1397_launch_packet.yaml": {
+    "sha256": "7c159de422b231e9816ea8f230e6e8a9d7b30a1decfc8be572a22eb4ccc2a0bc",
+    "reason": "Historical dataset split contract with generating commit and recorded dry-run artifact"
+  },
+  "configs/training/ppo_imitation/oracle_dataset_issue_6127_balanced_launch_packet.yaml": {
+    "sha256": "e94840abaffaec0f48a1c8338b809874b89364bd55eb7519b949da8c4c30592a",
+    "reason": "Historical dataset episode identity contract with retained yield/decision manifests"
+  },
+  "configs/training/ppo_imitation/oracle_imitation_comparison_issue_1496.yaml": {
+    "sha256": "04f67da622338259f32b620b892e6da47f83f4d0fff832067ec869ade6766371",
+    "reason": "Frozen matched-arm comparison consumes historical dataset split contract"
+  },
+  "configs/training/ppo_imitation/ppo_finetune_issue_1496_comparison.yaml": {
+    "sha256": "a63d95a54211c75c0312604586250be269d2c6dc7d5e0d487c3db61df9e9206f",
+    "reason": "Declared companion of preserved historical contract configs/training/ppo_imitation/oracle_imitation_comparison_issue_1496.yaml"
+  },
+  "configs/training/predictive/predictive_br07_same_seed_issue_1427.yaml": {
+    "sha256": "688a81ebd3664846e12b2ba34f2ca13c5c629609fb29861f7691c9172b3b93ff",
+    "reason": "Recorded historical campaign/contract input identified in review d3; preserve original source identities and completed evidence."
+  },
+  "configs/training/predictive/predictive_ego_features_contract_v1.yaml": {
+    "reason": "Historical issue-1490 same-seed decision contract; preserve recorded negative-campaign provenance and source paths.",
+    "sha256": "3c5fd0b06e49bc6937380b15267997f97f6657ca284e22225a2d468dd4f32bde"
+  },
+  "configs/training/predictive/predictive_ego_features_same_seed_issue_1504.yaml": {
+    "sha256": "b60f181731a287ae514f3f7da3df09f50fa6df2177d2055c13189828469dd39d",
+    "reason": "Recorded historical campaign/contract input identified in review d3; preserve original source identities and completed evidence."
+  },
+  "configs/training/predictive/predictive_ego_obstacle_features_same_seed_issue_1504.yaml": {
+    "sha256": "2cf4baba04bcbdfccd96b7c0121ac9b564c80643cd432b9c21e41a3df3e45c92",
+    "reason": "Recorded historical campaign/contract input identified in review d3; preserve original source identities and completed evidence."
+  },
+  "configs/training/predictive/predictive_obstacle_features_same_seed_issue_1427.yaml": {
+    "sha256": "56b592f0f80c5a2462d9be931ef8991eb24c65ee004776ae7a18ef949bda999e",
+    "reason": "Recorded historical campaign/contract input identified in review d3; preserve original source identities and completed evidence."
+  },
+  "configs/training/predictive/predictive_optimization_smoke_issue_7254.yaml": {
+    "sha256": "c9d124c935cbc8f0e444ec1e45ffbd6724d787a84883dad641716194064a1942",
+    "reason": "Registered historical hash: docs/context/evidence/issue_7254_predictive_optimization_smoke_2026-08-17/README.md, docs/context/evidence/issue_7254_predictive_optimization_smoke_2026-08-17/summary.json"
+  },
+  "configs/training/predictive/predictive_retraining_readiness_issue_3214.yaml": {
+    "reason": "Historical issue-3214 negative-result decision packet; preserve original source references and blocked readiness contract.",
+    "sha256": "45580cf0608693d55dc230027a888a32086f850d55693481b76dc917d990eda6"
+  },
+  "configs/training/predictive/predictive_same_seed_issue_1427_base_seed_manifest.yaml": {
+    "sha256": "ca06af9baf5522dde99c2da26cb2a06e8341c97417a3923994d3b6491239953a",
+    "reason": "Recorded historical campaign/contract input identified in review d3; preserve original source identities and completed evidence."
+  },
+  "scripts/benchmark/run_brne_corridor_diagnostic_issue_6464.py": {
+    "sha256": "eb4f1fdf9e98dfad8bd0d00c9cf3ce33046b8b72cbcdfd7037010bb437ee55c1",
+    "reason": "Frozen corridor diagnostic seed contract and retained atlas inputs"
+  },
+  "scripts/benchmark/run_fidelity_sensitivity_campaign.py": {
+    "sha256": "e817adcb72e7032a43c47d2fda0d67ba5387afa3e79d546d95c4ea7553dc60e3",
+    "reason": "Registered historical hash: docs/context/evidence/issue_10007_fxm/fxm2_paired_metrics.json"
+  },
+  "scripts/classic_benchmark_full.py": {
+    "sha256": "ece2ad76ddc8a5ff3d2b6dfb48e36ded5b2a794eb581510dcaf9644d36fe8c4e",
+    "reason": "Declared companion of preserved historical contract configs/algos/prediction_planner_camera_ready.yaml"
+  },
+  "scripts/tools/compare_adversarial_samplers.py": {
+    "sha256": "8f58214272181655c2630a46d12e264d5c15bef30faff0fcf3a6404eeb0bb2a5",
+    "reason": "Registered historical hash: configs/adversarial/issue_5303_search_promotion_contract.yaml, configs/adversarial/issue_5303_search_promotion_contract_v2.yaml, configs/adversarial/issue_8891_temporal_robustness_packet.yaml"
+  },
+  "scripts/tools/generate_adversarial_routes.py": {
+    "sha256": "6d8e16bd6e6bbe230be990e67c488214acf1d84f995f9d873eeaadd9df527357",
+    "reason": "Registered historical hash: docs/context/evidence/issue_1500_adversarial_manifest/config_checksums.md"
+  },
+  "scripts/tools/generate_occluded_emergence_variants.py": {
+    "sha256": "5bc9dc4c957cc22cca47598ecf35c8daff4f9ce5d56bbc8a77b39800a343cac3",
+    "reason": "Generator of committed historical trace fixtures and their recorded source metadata"
+  },
+  "scripts/training/optuna_feature_extractor.py": {
+    "sha256": "a7af34a7f39209dc4c804f359ca3d42781439c026558ee6e5ef6b9af0cfcfa40",
+    "reason": "Declared dependency of historical resolved oracle configs/training/ppo/feature_extractor_sweep_base.yaml"
+  },
+  "scripts/validation/check_issue_4205_static_constriction_codesign_loop.py": {
+    "sha256": "0a30caddc71d1246dad201c0688d6e7d8b2342b6aa3d173a901039b19be73c47",
+    "reason": "Historical codesign evidence identity consumer"
+  },
+  "scripts/validation/check_issue_5409_horizon_ablation_launch_packet.py": {
+    "sha256": "be537be01e3eb044ca14bcbd1a3c1fa97cb1e3a22565fa6c7e371a7d4552722f",
+    "reason": "Frozen horizon-ablation packet seed contract consumer"
+  },
+  "scripts/validation/run_issue_9735_fault_injection.py": {
+    "sha256": "80c267edfe642fc193552092ec2adc6d66727c5e9d617ecdd24dce78fec5ebc4",
+    "reason": "Registered historical hash: docs/context/evidence/issue_9735_vv5_fault_injection.json, docs/context/evidence/issue_9735_vv5_fault_injection.md"
+  }
+}

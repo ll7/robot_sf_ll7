@@ -56,7 +56,7 @@ control_deadlines_ms:
   - 50
 
 # Seeds per cell
-seeds: [42, 111, 987]
+seeds: [42, 1101, 987]
 
 # Fixed episode parameters
 horizon: 60

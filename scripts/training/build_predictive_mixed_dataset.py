@@ -23,7 +23,7 @@ from robot_sf.training.predictive_supervision import (
 )
 
 DEFAULT_HARDCASE_REPEAT = 2
-DEFAULT_SHUFFLE_SEED = 42
+DEFAULT_SHUFFLE_SEED = 100042
 DEFAULT_WEIGHTING_PROFILE_ID = "cli_hardcase_repeat_v1"
 
 

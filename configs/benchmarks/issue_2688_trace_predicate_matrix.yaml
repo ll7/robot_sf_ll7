@@ -50,7 +50,7 @@ matrix:
     - social_force
     - hybrid_rule_base
     - dwa
-  seeds: [111, 222, 333]
+  seeds: [1101, 222, 333]
   horizon: 500
   inclusion_rule: >
     A trace is included in the rate denominator only if its scenario_family, planner_id, and seed

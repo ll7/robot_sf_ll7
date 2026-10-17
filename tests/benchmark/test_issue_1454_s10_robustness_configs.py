@@ -79,11 +79,11 @@ def test_issue_1454_stage_a_fixed_h100_s10_contract() -> None:
     assert cfg.horizon == 100
     assert cfg.scenario_horizons_path is None
     assert cfg.seed_policy.mode == "seed-set"
-    assert cfg.seed_policy.seed_set == "paper_eval_s10"
+    assert cfg.seed_policy.seed_set == "dev_eval_s10"
     assert cfg.stop_on_failure is False
     assert cfg.export_publication_bundle is False
     assert cfg.paper_interpretation_profile == "issue-1454-s10-fixed-h100-broader-robustness"
-    assert _resolved_seed_inventory(STAGE_A) == S10_SEEDS
+    assert _resolved_seed_inventory(STAGE_A) == list(range(1101, 1111))
 
 
 def test_issue_1454_stage_b_scenario_horizon_s10_contract() -> None:

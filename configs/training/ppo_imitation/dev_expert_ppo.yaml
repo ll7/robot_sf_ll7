@@ -1,0 +1,38 @@
+# Active training-only successor; historical expert_ppo.yaml remains immutable.
+# Default expert PPO training configuration generated for imitation workflows.
+# This file captures deterministic seeds, scenario configuration, and
+# convergence expectations so the expert pipeline can run reproducibly.
+policy_id: ppo_expert_reference
+scenario_config: ../../scenarios/classic_interactions.yaml
+seeds:
+  - 101043
+  - 100231
+  - 100777
+  - 100992
+total_timesteps: 100000
+convergence:
+  success_rate: 0.9
+  collision_rate: 0.05
+  plateau_window: 2000
+evaluation:
+  evaluation_episodes: 5
+  hold_out_scenarios:
+    - classic_cross_trap_medium
+    - classic_bottleneck_high
+  step_schedule:
+    - every_steps: 20000
+# Optional canonical SNQI inputs used for eval metric logging.
+# snqi_weights: ../../model/snqi_canonical_weights_v1.json
+# snqi_baseline: ../../output/benchmarks/classic_social_navigation/baseline_stats.json
+env_factory_kwargs:
+  reward_name: route_completion_v2
+  reward_kwargs:
+    weights:
+      progress: 2.5
+      living: -0.01
+      collision: -5.0
+      near_miss: -0.8
+      ttc_risk: -0.6
+      comfort: -0.4
+      smoothness: -0.15
+      terminal_bonus: 2.0

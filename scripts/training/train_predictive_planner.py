@@ -134,7 +134,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--lr", type=float, default=3e-4)
     parser.add_argument("--weight-decay", type=float, default=1e-5)
     parser.add_argument("--val-split", type=float, default=0.2)
-    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--seed", type=int, default=100042)
     parser.add_argument(
         "--num-workers",
         type=int,

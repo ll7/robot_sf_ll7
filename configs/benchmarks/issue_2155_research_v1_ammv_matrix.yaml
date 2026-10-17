@@ -22,7 +22,7 @@
 #   predictive_v2 - predictive planner v2 variants
 #
 # Seed policy:
-#   paper_eval_s5: 5 seeds (111..115) from seed_sets_v1.yaml for compact
+#   dev_eval_s5: 5 seeds (111..115) from dev_seed_sets.yaml for compact
 #   seed-sensitivity coverage while staying small enough for local runs.
 #
 # Artifact policy:
@@ -56,8 +56,8 @@ amv_profile:
 
 seed_policy:
   mode: seed-set
-  seed_set: paper_eval_s5
-  seed_sets_path: configs/benchmarks/seed_sets_v1.yaml
+  seed_set: dev_eval_s5
+  seed_sets_path: configs/benchmarks/dev_seed_sets.yaml
 
 # No SNQI baseline or weights: research-v1 evidence does not require SNQI
 # calibration.  SNQI is still available for diagnostic use when enabled.
@@ -72,7 +72,7 @@ resume: true
 stop_on_failure: false
 bootstrap_samples: 300
 bootstrap_confidence: 0.95
-bootstrap_seed: 123
+bootstrap_seed: 1113
 
 kinematics_matrix:
   - differential_drive

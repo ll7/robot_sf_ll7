@@ -1141,3 +1141,28 @@ def test_pipeline_uses_committed_base_seed_manifest_without_generating(
     )
     assert base_dataset_manifest["extra"]["seed_manifest"] == str(base_manifest)
     assert base_dataset_manifest["extra"]["seed_manifest_generated"] is False
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "predictive_br07_same_seed_issue_1427.yaml",
+        "predictive_obstacle_features_same_seed_issue_1427.yaml",
+        "predictive_ego_features_same_seed_issue_1504.yaml",
+        "predictive_ego_obstacle_features_same_seed_issue_1504.yaml",
+    ],
+)
+def test_archived_training_cli_uses_development_successor(monkeypatch, name):
+    """Executable training must resolve a separate recipe with training-only identities."""
+    root = Path(__file__).resolve().parents[2]
+    original = root / "configs/training/predictive" / name
+    monkeypatch.setattr("sys.argv", ["pipeline", "--config", str(original)])
+    config_path = pipeline._parse_args().config
+    assert config_path == original.with_name("dev_" + name)
+    config = yaml.safe_load(config_path.read_text())
+    assert 100000 <= config["training"]["seed"] <= 199999
+    assert 100000 <= config["mixing"]["shuffle_seed"] <= 199999
+    manifest = config_path.parent / config["base_collection"]["seed_manifest"]
+    assert manifest.name.startswith("dev_")
+    values = yaml.safe_load(manifest.read_text()).values()
+    assert all(100000 <= seed <= 199999 for seeds in values for seed in seeds)

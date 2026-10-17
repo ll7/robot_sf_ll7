@@ -243,7 +243,7 @@ def _materialize_smoke_dataset_if_missing(config: Any) -> None:
         dataset_id="issue_4012_smoke",
         episode_id="issue_4012_smoke_train_0",
         scenario_id="issue_4012_smoke",
-        seed=int(config.seed or 4012),
+        seed=int(config.seed or 104012),
         source_policy_id="zero_action_smoke_fixture",
         split=str(offline.dataset_split),
         observations=tuple(observations),

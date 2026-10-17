@@ -183,8 +183,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--seed",
         type=int,
-        default=123,
-        help="Optuna sampler seed (default: 123).",
+        default=101043,
+        help="Optuna sampler seed (default: 101043).",
     )
     parser.add_argument(
         "--disable-wandb",
@@ -431,7 +431,7 @@ def _build_trial_config(  # noqa: PLR0913
 
         config.randomize_seeds = False
         if not config.seeds:
-            config.seeds = ensure_seed_tuple([0, 1, 2])
+            config.seeds = ensure_seed_tuple([100000, 100001, 100002])
     tracking = dict(config.tracking or {})
     wandb_cfg_raw = tracking.get("wandb")
     wandb_cfg = dict(wandb_cfg_raw) if isinstance(wandb_cfg_raw, dict) else {}

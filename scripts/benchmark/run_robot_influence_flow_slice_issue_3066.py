@@ -103,7 +103,7 @@ NAV_METRIC_KEYS = (
 
 DEFAULT_SCHEMA = "robot_sf/benchmark/schemas/episode.schema.v1.json"
 DEFAULT_POLICIES = ("social_force", "orca")
-DEFAULT_SEEDS = (111, 112, 113)
+DEFAULT_SEEDS = (1101, 1102, 1103)
 # Corridor + crossing subset of the issue_3059 suite (map-based scenarios).
 DEFAULT_SCENARIOS: tuple[dict[str, Any], ...] = (
     {

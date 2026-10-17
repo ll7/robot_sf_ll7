@@ -32,4 +32,4 @@ suites:
   heldout:
     scenario_matrix: configs/scenarios/archetypes/classic_head_on_corridor.yaml
     scenario_filter: [classic_head_on_corridor_low]
-    seeds: [111, 112]
+    seeds: [1031, 1032]

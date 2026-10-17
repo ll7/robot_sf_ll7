@@ -20,7 +20,7 @@ belief_modes:
 
 # 12-seed matrix; seed perturbs the crosser's start phase and speed. Seed count is justified as a
 # bounded diagnostic matrix, not a paper-grade seed-sufficiency budget (see evidence note).
-seeds: [101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112]
+seeds: [101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 1101, 1102]
 
 params:
   max_steps: 120

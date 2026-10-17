@@ -5,6 +5,6 @@ policy_output_id: bc_policy_v1
 bc_epochs: 10
 batch_size: 32
 learning_rate: 0.0003
-random_seeds: [42, 43, 44]
+random_seeds: [100042, 100043, 100044]
 # Use accelerators when available; set to "cpu" for deterministic/resource-constrained runs.
 device: auto

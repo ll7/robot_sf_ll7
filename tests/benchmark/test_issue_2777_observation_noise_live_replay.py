@@ -155,7 +155,7 @@ def test_issue_3320_matrix_satisfies_occluded_emergence_contract() -> None:
     assert contract["satisfied"] is True
     assert contract["blocker"] is None
     assert contract["matched_scenario"]["name"] == "issue_2756_occluded_emergence"
-    assert contract["matched_scenario"]["seeds"] == [111]
+    assert contract["matched_scenario"]["seeds"] == [1101]
     assert contract["matched_scenario"]["first_visible_step"] == 5
     assert contract["matched_scenario"]["delay_steps"] == 2
     assert contract["matched_scenario"]["delay_only_expected_first_observed_step"] == 7
@@ -177,7 +177,7 @@ def test_issue_3323_matrix_adds_near_field_route_and_preserves_fixture_contract(
 
     assert contract["satisfied"] is True
     assert contract["matched_scenario"]["name"] == "issue_2756_occluded_emergence"
-    assert contract["matched_scenario"]["seeds"] == [111]
+    assert contract["matched_scenario"]["seeds"] == [1101]
     assert contract["matched_scenario"]["first_visible_step"] == 5
     assert contract["matched_scenario"]["delay_only_expected_first_observed_step"] == 7
     assert route_override.exists()
@@ -218,7 +218,7 @@ def test_mismatched_occluded_emergence_contract_fails_closed(tmp_path: Path) -> 
         "      first_visible_step: 4\n"
         "      delay_steps: 2\n"
         "      delay_only_expected_first_observed_step: 6\n"
-        "  seeds: [111]\n",
+        "  seeds: [1101]\n",
         encoding="utf-8",
     )
     matrix = tmp_path / "matrix.yaml"
@@ -427,7 +427,7 @@ def _write_trace(
     command: list[float],
     observed_count: int,
     closest: float,
-    seed: int = 111,
+    seed: int = 1101,
     false_positive_count: int = 0,
 ) -> None:
     payload = {
@@ -468,7 +468,7 @@ def _write_observed_count_trace(path: Path, counts: list[int], closest: float = 
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = {
         "scenario_id": "issue_2756_occluded_emergence",
-        "seed": 111,
+        "seed": 1101,
         "progress_summary": {
             "closest_robot_ped_distance": closest,
         },
@@ -498,7 +498,7 @@ def _write_grid_trace(
         "candidate": "risk_surface_dwa_v0",
         "stage": "issue_2777_live_replay",
         "scenario_id": "issue_2756_occluded_emergence",
-        "seed": 111,
+        "seed": 1101,
         "algo": "risk_surface_dwa",
         "progress_summary": {
             "net_goal_progress": 1.0,
@@ -635,7 +635,7 @@ def test_issue_3328_behavior_probe_guardrails_require_near_field_fixture(
         "satisfied": True,
         "matched_scenario": {
             "name": "issue_2756_occluded_emergence",
-            "seeds": [111],
+            "seeds": [1101],
         },
     }
     _write_observed_count_trace(
@@ -694,7 +694,7 @@ def test_issue_3330_seed_amplitude_grid_reuses_near_field_fixture_guardrails(
         "satisfied": True,
         "matched_scenario": {
             "name": "issue_2756_occluded_emergence",
-            "seeds": [111],
+            "seeds": [1101],
         },
     }
     _write_observed_count_trace(

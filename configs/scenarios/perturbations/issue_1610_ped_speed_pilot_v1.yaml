@@ -11,7 +11,7 @@ description: >-
   while adding single-pedestrian speed offsets as the only new perturbation family.
 scenario_config: ../classic_interactions_francis2023.yaml
 seed_controls:
-  baseline_seeds: [112, 113, 115, 116, 240, 241, 242, 258, 259, 260]
+  baseline_seeds: [1102, 1103, 1105, 1106, 240, 241, 242, 258, 259, 260]
   replay_seed_policy: explicit
   source: docs/context/evidence/issue_1608_seed_sensitivity_2026-05-30/scenario_seed_sensitivity.csv
 validity:
@@ -28,12 +28,12 @@ variants:
   - variant_id: francis2023_join_group_noop
     scenario_id: francis2023_join_group
     family: noop
-    seeds: [112, 113, 115, 116]
+    seeds: [1102, 1103, 1105, 1106]
     rationale: Baseline row for a Francis social-interaction scenario flagged by issue #1608.
   - variant_id: francis2023_join_group_speed_h3_p025
     scenario_id: francis2023_join_group
     family: single_pedestrian_speed_offset
-    seeds: [112, 113, 115, 116]
+    seeds: [1102, 1103, 1105, 1106]
     rationale: >-
       Speeds up the joining pedestrian to test whether local planners are sensitive to approach
       velocity in the join-group interaction without changing the map or robot route.
@@ -82,12 +82,12 @@ variants:
   - variant_id: classic_head_on_corridor_low_noop
     scenario_id: classic_head_on_corridor_low
     family: noop
-    seeds: [111, 112, 116, 117]
+    seeds: [1101, 1102, 1106, 1107]
     rationale: Baseline row for the corridor route-based scenario used in #1939 trace analysis.
   - variant_id: classic_head_on_corridor_low_speed_all_p025
     scenario_id: classic_head_on_corridor_low
     family: single_pedestrian_speed_offset
-    seeds: [111, 112, 116, 117]
+    seeds: [1101, 1102, 1106, 1107]
     rationale: >-
       Fail-closed probe proving that route-only classic pedestrians are not silently treated as
       single-pedestrian speed targets.

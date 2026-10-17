@@ -452,7 +452,7 @@ def validate_five_planner_smoke(*, packet_path: Path, output_dir: Path) -> dict[
             packet_path=packet_path,
             native_config_path=config_path,
             scenario_id="classic_head_on_corridor_low",
-            seed=111,
+            seed=1101,
             horizon=500,
             dt=0.1,
             workers=1,

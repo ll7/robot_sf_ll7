@@ -3859,7 +3859,10 @@ def _setup_and_run_step_loop(args: _StepLoopSetupArgs) -> _EpisodeStepLoopResult
             # Opt-in doorway custody: restore and verify the paired reset before the
             # first planner command. Ordinary benchmark episodes never enter this path.
             args.algo_meta["doorway_pair_receipt"] = dict(args.pair_reset_hook(env, obs))
-        if args.scenario.get("reference_population_capture_version") == "v1":
+        if (
+            args.scenario is not None
+            and args.scenario.get("reference_population_capture_version") == "v1"
+        ):
             # Capture density-spawned pedestrians without changing scenario
             # identity or forcing a population. The oracle gate reads this
             # versioned runtime metadata after the reset is final.

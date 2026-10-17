@@ -1,0 +1,3 @@
+{"preserved_base_paths": 13165, "diagnostic_additions": 157, "verified_git_objects": 14, "verified_source_files": 42, "runtime_diff_bytes": 0}
+Negative control object: rejected (Archived object SHA256 mismatch)
+Negative control diff: rejected (Archived public-base diff disagrees with reconstructed trees)

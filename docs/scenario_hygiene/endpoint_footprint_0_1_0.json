@@ -1,0 +1,328 @@
+{
+  "legacy_count": 53,
+  "footprint_count": 65,
+  "additional_count": 12,
+  "per_scenario": {
+    "classic_station_platform_medium": 1,
+    "classic_head_on_corridor_low": 1,
+    "classic_head_on_corridor_medium": 1,
+    "francis2023_frontal_approach": 1,
+    "francis2023_pedestrian_obstruction": 1,
+    "francis2023_robot_overtaking": 1,
+    "francis2023_parallel_traffic": 6
+  },
+  "additional": [
+    {
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "scenario": "classic_station_platform_medium",
+      "zone": "goal[0]",
+      "actor_kind": "single",
+      "actor": "p1",
+      "distance_m": 1.0,
+      "geometry_sha256": "fdba9086285f7ff4fbb592036fa93ffb9af185a9c58cdc329c2a839985ea2fd8",
+      "evidence": {
+        "zone_wkt": "POLYGON ((77 21, 81 21, 81 24, 77 24, 77 21))",
+        "actor_wkt": "LINESTRING (9 22, 24 22, 24 18.5, 38 22, 76 22)",
+        "ped_radius_m": 0.4,
+        "points": [
+          [
+            9.0,
+            22.0
+          ],
+          [
+            24.0,
+            22.0
+          ],
+          [
+            24.0,
+            18.5
+          ],
+          [
+            38.0,
+            22.0
+          ],
+          [
+            76.0,
+            22.0
+          ]
+        ],
+        "role": null,
+        "robot_radius_m": 1.0,
+        "endpoint_policy": "robot_pedestrian_radii_v2"
+      }
+    },
+    {
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "scenario": "classic_head_on_corridor_low",
+      "zone": "goal[0]",
+      "actor_kind": "ped_spawn",
+      "actor": "0",
+      "distance_m": 1.2740210000000012,
+      "geometry_sha256": "ce8bdb4bdfebcf22140de044816aa2686b15c7df4f3dab23b68f91ed80c2331e",
+      "evidence": {
+        "zone_wkt": "POLYGON ((17.109221 33.043137, 21.109221 33.043137, 21.109221 37.043137, 17.109221 37.043137, 17.109221 33.043137))",
+        "actor_wkt": "POLYGON ((11.8352 33.008156, 15.8352 33.008156, 15.8352 37.008156, 11.8352 37.008156, 11.8352 33.008156))",
+        "ped_radius_m": 0.4,
+        "density": 0.02,
+        "population_size": null,
+        "robot_radius_m": 1.0,
+        "endpoint_policy": "robot_pedestrian_radii_v2"
+      }
+    },
+    {
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "scenario": "classic_head_on_corridor_medium",
+      "zone": "goal[0]",
+      "actor_kind": "ped_spawn",
+      "actor": "0",
+      "distance_m": 1.2740210000000012,
+      "geometry_sha256": "6f1e4100aa729ab7f1cd84be49e71aa77dcd840cede9132401860110b981de82",
+      "evidence": {
+        "zone_wkt": "POLYGON ((17.109221 33.043137, 21.109221 33.043137, 21.109221 37.043137, 17.109221 37.043137, 17.109221 33.043137))",
+        "actor_wkt": "POLYGON ((11.8352 33.008156, 15.8352 33.008156, 15.8352 37.008156, 11.8352 37.008156, 11.8352 33.008156))",
+        "ped_radius_m": 0.4,
+        "density": 0.05,
+        "population_size": null,
+        "robot_radius_m": 1.0,
+        "endpoint_policy": "robot_pedestrian_radii_v2"
+      }
+    },
+    {
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "scenario": "francis2023_frontal_approach",
+      "zone": "goal[0]",
+      "actor_kind": "single",
+      "actor": "h1",
+      "distance_m": 1.0,
+      "geometry_sha256": "28063dcf993c4f3907fed443b122279fe28bdcd477861611ced60733efdca32d",
+      "evidence": {
+        "zone_wkt": "POLYGON ((36 4, 38 4, 38 6, 36 6, 36 4))",
+        "actor_wkt": "LINESTRING (35 5, 5 5)",
+        "ped_radius_m": 0.4,
+        "points": [
+          [
+            35.0,
+            5.0
+          ],
+          [
+            5.0,
+            5.0
+          ]
+        ],
+        "role": null,
+        "robot_radius_m": 1.0,
+        "endpoint_policy": "robot_pedestrian_radii_v2"
+      }
+    },
+    {
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "scenario": "francis2023_pedestrian_obstruction",
+      "zone": "goal[0]",
+      "actor_kind": "single",
+      "actor": "h1",
+      "distance_m": 1.0,
+      "geometry_sha256": "495b0ab1f1e27431afa7ad3921ee6c3396ea5b97e71572d9cbcf4f09cff665a6",
+      "evidence": {
+        "zone_wkt": "POLYGON ((36 4, 38 4, 38 6, 36 6, 36 4))",
+        "actor_wkt": "LINESTRING (22 5, 35 5)",
+        "ped_radius_m": 0.4,
+        "points": [
+          [
+            22.0,
+            5.0
+          ],
+          [
+            35.0,
+            5.0
+          ]
+        ],
+        "role": null,
+        "robot_radius_m": 1.0,
+        "endpoint_policy": "robot_pedestrian_radii_v2"
+      }
+    },
+    {
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "scenario": "francis2023_robot_overtaking",
+      "zone": "goal[0]",
+      "actor_kind": "single",
+      "actor": "h1",
+      "distance_m": 1.0,
+      "geometry_sha256": "42e531b4515d4e521fd17d01b325e1162188031741fc1e81150498f48f0d8ee1",
+      "evidence": {
+        "zone_wkt": "POLYGON ((36 4, 38 4, 38 6, 36 6, 36 4))",
+        "actor_wkt": "LINESTRING (10 4, 35 4)",
+        "ped_radius_m": 0.4,
+        "points": [
+          [
+            10.0,
+            4.0
+          ],
+          [
+            35.0,
+            4.0
+          ]
+        ],
+        "role": null,
+        "robot_radius_m": 1.0,
+        "endpoint_policy": "robot_pedestrian_radii_v2"
+      }
+    },
+    {
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "scenario": "francis2023_parallel_traffic",
+      "zone": "spawn[0]",
+      "actor_kind": "crowd_route",
+      "actor": "0",
+      "distance_m": 0.5,
+      "geometry_sha256": "a1e549ea70fec63ff8c9dc969924c3d59fa6e56a4bc37d7922ed6c404b2650e5",
+      "evidence": {
+        "zone_wkt": "POLYGON ((3 4, 5 4, 5 6, 3 6, 3 4))",
+        "actor_wkt": "POLYGON ((3 0.5, 3 3.5, 37 3.5, 37 0.5, 3 0.5))",
+        "ped_radius_m": 0.4,
+        "points": [
+          [
+            4.5,
+            2.0
+          ],
+          [
+            35.5,
+            2.0
+          ]
+        ],
+        "sidewalk_width": 3.0,
+        "density": 0.04,
+        "population_size": null,
+        "robot_radius_m": 1.0,
+        "endpoint_policy": "robot_pedestrian_radii_v2"
+      }
+    },
+    {
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "scenario": "francis2023_parallel_traffic",
+      "zone": "spawn[0]",
+      "actor_kind": "crowd_route",
+      "actor": "1",
+      "distance_m": 0.5,
+      "geometry_sha256": "69d2004a0ef7f1f2d7aed8b1908b0af0b65963d4ff37f84bf1ec975e49dd31af",
+      "evidence": {
+        "zone_wkt": "POLYGON ((3 4, 5 4, 5 6, 3 6, 3 4))",
+        "actor_wkt": "POLYGON ((3 6.5, 3 9.5, 37 9.5, 37 6.5, 3 6.5))",
+        "ped_radius_m": 0.4,
+        "points": [
+          [
+            4.5,
+            8.0
+          ],
+          [
+            35.5,
+            8.0
+          ]
+        ],
+        "sidewalk_width": 3.0,
+        "density": 0.04,
+        "population_size": null,
+        "robot_radius_m": 1.0,
+        "endpoint_policy": "robot_pedestrian_radii_v2"
+      }
+    },
+    {
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "scenario": "francis2023_parallel_traffic",
+      "zone": "spawn[0]",
+      "actor_kind": "ped_spawn",
+      "actor": "0",
+      "distance_m": 1.0,
+      "geometry_sha256": "5385695a853e57b53c5712f51a934f3e11e935336dd9021e597d18d328ca9da6",
+      "evidence": {
+        "zone_wkt": "POLYGON ((3 4, 5 4, 5 6, 3 6, 3 4))",
+        "actor_wkt": "POLYGON ((2 1, 4 1, 4 3, 2 3, 2 1))",
+        "ped_radius_m": 0.4,
+        "density": 0.04,
+        "population_size": null,
+        "robot_radius_m": 1.0,
+        "endpoint_policy": "robot_pedestrian_radii_v2"
+      }
+    },
+    {
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "scenario": "francis2023_parallel_traffic",
+      "zone": "spawn[0]",
+      "actor_kind": "ped_spawn",
+      "actor": "1",
+      "distance_m": 1.0,
+      "geometry_sha256": "fee33108aed357fd4544051242140de21a0252e2db4586acc33c14d2859abdd4",
+      "evidence": {
+        "zone_wkt": "POLYGON ((3 4, 5 4, 5 6, 3 6, 3 4))",
+        "actor_wkt": "POLYGON ((2 7, 4 7, 4 9, 2 9, 2 7))",
+        "ped_radius_m": 0.4,
+        "density": 0.04,
+        "population_size": null,
+        "robot_radius_m": 1.0,
+        "endpoint_policy": "robot_pedestrian_radii_v2"
+      }
+    },
+    {
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "scenario": "francis2023_parallel_traffic",
+      "zone": "goal[0]",
+      "actor_kind": "crowd_route",
+      "actor": "0",
+      "distance_m": 0.5,
+      "geometry_sha256": "0328e79df94ac08cba31d1439aa56dac2644ef18f8b3c21eeb393114eb8a4c64",
+      "evidence": {
+        "zone_wkt": "POLYGON ((36 4, 38 4, 38 6, 36 6, 36 4))",
+        "actor_wkt": "POLYGON ((3 0.5, 3 3.5, 37 3.5, 37 0.5, 3 0.5))",
+        "ped_radius_m": 0.4,
+        "points": [
+          [
+            4.5,
+            2.0
+          ],
+          [
+            35.5,
+            2.0
+          ]
+        ],
+        "sidewalk_width": 3.0,
+        "density": 0.04,
+        "population_size": null,
+        "robot_radius_m": 1.0,
+        "endpoint_policy": "robot_pedestrian_radii_v2"
+      }
+    },
+    {
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "scenario": "francis2023_parallel_traffic",
+      "zone": "goal[0]",
+      "actor_kind": "crowd_route",
+      "actor": "1",
+      "distance_m": 0.5,
+      "geometry_sha256": "b59d304e23bea9ca88e26c692aa2ce0875be4a3fce28494992f500df5746beb1",
+      "evidence": {
+        "zone_wkt": "POLYGON ((36 4, 38 4, 38 6, 36 6, 36 4))",
+        "actor_wkt": "POLYGON ((3 6.5, 3 9.5, 37 9.5, 37 6.5, 3 6.5))",
+        "ped_radius_m": 0.4,
+        "points": [
+          [
+            4.5,
+            8.0
+          ],
+          [
+            35.5,
+            8.0
+          ]
+        ],
+        "sidewalk_width": 3.0,
+        "density": 0.04,
+        "population_size": null,
+        "robot_radius_m": 1.0,
+        "endpoint_policy": "robot_pedestrian_radii_v2"
+      }
+    }
+  ],
+  "base_sha": "53f8f2666e98d00b70a8ef5376790be474a743aa",
+  "evidence_status": "diagnostic-only",
+  "endpoint_policy": "robot_pedestrian_radii_v2",
+  "disposition": "retained risks; no new waiver or benchmark clearance admitted"
+}

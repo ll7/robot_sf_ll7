@@ -1,0 +1,437 @@
+{
+  "source_path": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+  "rows": [
+    {
+      "scenario": "classic_bottleneck_low",
+      "robot_radius_m": 1.0,
+      "physical_speed_cap_m_s": 2.0,
+      "ped_speed_multiplier": 1.3,
+      "desired_speed_mean": null,
+      "authored_actor_speeds_m_s": []
+    },
+    {
+      "scenario": "classic_bottleneck_medium",
+      "robot_radius_m": 1.0,
+      "physical_speed_cap_m_s": 2.0,
+      "ped_speed_multiplier": 1.3,
+      "desired_speed_mean": null,
+      "authored_actor_speeds_m_s": []
+    },
+    {
+      "scenario": "classic_bottleneck_high",
+      "robot_radius_m": 1.0,
+      "physical_speed_cap_m_s": 2.0,
+      "ped_speed_multiplier": 1.3,
+      "desired_speed_mean": null,
+      "authored_actor_speeds_m_s": []
+    },
+    {
+      "scenario": "classic_realworld_double_bottleneck_high",
+      "robot_radius_m": 1.0,
+      "physical_speed_cap_m_s": 2.0,
+      "ped_speed_multiplier": 1.3,
+      "desired_speed_mean": null,
+      "authored_actor_speeds_m_s": [
+        [
+          "l1",
+          0.7
+        ],
+        [
+          "l2",
+          0.7
+        ],
+        [
+          "l3",
+          0.7
+        ],
+        [
+          "l4",
+          0.7
+        ],
+        [
+          "r1",
+          0.7
+        ],
+        [
+          "r2",
+          0.7
+        ],
+        [
+          "r3",
+          0.7
+        ],
+        [
+          "r4",
+          0.7
+        ]
+      ]
+    },
+    {
+      "scenario": "classic_station_platform_medium",
+      "robot_radius_m": 1.0,
+      "physical_speed_cap_m_s": 2.0,
+      "ped_speed_multiplier": 1.3,
+      "desired_speed_mean": null,
+      "authored_actor_speeds_m_s": []
+    },
+    {
+      "scenario": "classic_cross_trap_low",
+      "robot_radius_m": 1.0,
+      "physical_speed_cap_m_s": 2.0,
+      "ped_speed_multiplier": 1.3,
+      "desired_speed_mean": null,
+      "authored_actor_speeds_m_s": []
+    },
+    {
+      "scenario": "classic_cross_trap_medium",
+      "robot_radius_m": 1.0,
+      "physical_speed_cap_m_s": 2.0,
+      "ped_speed_multiplier": 1.3,
+      "desired_speed_mean": null,
+      "authored_actor_speeds_m_s": []
+    },
+    {
+      "scenario": "classic_cross_trap_high",
+      "robot_radius_m": 1.0,
+      "physical_speed_cap_m_s": 2.0,
+      "ped_speed_multiplier": 1.3,
+      "desired_speed_mean": null,
+      "authored_actor_speeds_m_s": []
+    },
+    {
+      "scenario": "classic_doorway_low",
+      "robot_radius_m": 1.0,
+      "physical_speed_cap_m_s": 2.0,
+      "ped_speed_multiplier": 1.3,
+      "desired_speed_mean": null,
+      "authored_actor_speeds_m_s": []
+    },
+    {
+      "scenario": "classic_doorway_medium",
+      "robot_radius_m": 1.0,
+      "physical_speed_cap_m_s": 2.0,
+      "ped_speed_multiplier": 1.3,
+      "desired_speed_mean": null,
+      "authored_actor_speeds_m_s": []
+    },
+    {
+      "scenario": "classic_doorway_high",
+      "robot_radius_m": 1.0,
+      "physical_speed_cap_m_s": 2.0,
+      "ped_speed_multiplier": 1.3,
+      "desired_speed_mean": null,
+      "authored_actor_speeds_m_s": []
+    },
+    {
+      "scenario": "classic_group_crossing_low",
+      "robot_radius_m": 1.0,
+      "physical_speed_cap_m_s": 2.0,
+      "ped_speed_multiplier": 1.3,
+      "desired_speed_mean": null,
+      "authored_actor_speeds_m_s": []
+    },
+    {
+      "scenario": "classic_group_crossing_medium",
+      "robot_radius_m": 1.0,
+      "physical_speed_cap_m_s": 2.0,
+      "ped_speed_multiplier": 1.3,
+      "desired_speed_mean": null,
+      "authored_actor_speeds_m_s": []
+    },
+    {
+      "scenario": "classic_group_crossing_high",
+      "robot_radius_m": 1.0,
+      "physical_speed_cap_m_s": 2.0,
+      "ped_speed_multiplier": 1.3,
+      "desired_speed_mean": null,
+      "authored_actor_speeds_m_s": []
+    },
+    {
+      "scenario": "classic_head_on_corridor_low",
+      "robot_radius_m": 1.0,
+      "physical_speed_cap_m_s": 2.0,
+      "ped_speed_multiplier": 1.3,
+      "desired_speed_mean": null,
+      "authored_actor_speeds_m_s": []
+    },
+    {
+      "scenario": "classic_head_on_corridor_medium",
+      "robot_radius_m": 1.0,
+      "physical_speed_cap_m_s": 2.0,
+      "ped_speed_multiplier": 1.3,
+      "desired_speed_mean": null,
+      "authored_actor_speeds_m_s": []
+    },
+    {
+      "scenario": "classic_merging_low",
+      "robot_radius_m": 1.0,
+      "physical_speed_cap_m_s": 2.0,
+      "ped_speed_multiplier": 1.3,
+      "desired_speed_mean": null,
+      "authored_actor_speeds_m_s": []
+    },
+    {
+      "scenario": "classic_merging_medium",
+      "robot_radius_m": 1.0,
+      "physical_speed_cap_m_s": 2.0,
+      "ped_speed_multiplier": 1.3,
+      "desired_speed_mean": null,
+      "authored_actor_speeds_m_s": []
+    },
+    {
+      "scenario": "classic_overtaking_low",
+      "robot_radius_m": 1.0,
+      "physical_speed_cap_m_s": 2.0,
+      "ped_speed_multiplier": 1.3,
+      "desired_speed_mean": null,
+      "authored_actor_speeds_m_s": []
+    },
+    {
+      "scenario": "classic_overtaking_medium",
+      "robot_radius_m": 1.0,
+      "physical_speed_cap_m_s": 2.0,
+      "ped_speed_multiplier": 1.3,
+      "desired_speed_mean": null,
+      "authored_actor_speeds_m_s": []
+    },
+    {
+      "scenario": "classic_t_intersection_low",
+      "robot_radius_m": 1.0,
+      "physical_speed_cap_m_s": 2.0,
+      "ped_speed_multiplier": 1.3,
+      "desired_speed_mean": null,
+      "authored_actor_speeds_m_s": []
+    },
+    {
+      "scenario": "classic_t_intersection_medium",
+      "robot_radius_m": 1.0,
+      "physical_speed_cap_m_s": 2.0,
+      "ped_speed_multiplier": 1.3,
+      "desired_speed_mean": null,
+      "authored_actor_speeds_m_s": []
+    },
+    {
+      "scenario": "classic_urban_crossing_medium",
+      "robot_radius_m": 1.0,
+      "physical_speed_cap_m_s": 2.0,
+      "ped_speed_multiplier": 1.3,
+      "desired_speed_mean": null,
+      "authored_actor_speeds_m_s": []
+    },
+    {
+      "scenario": "francis2023_frontal_approach",
+      "robot_radius_m": 1.0,
+      "physical_speed_cap_m_s": 2.0,
+      "ped_speed_multiplier": 1.3,
+      "desired_speed_mean": null,
+      "authored_actor_speeds_m_s": []
+    },
+    {
+      "scenario": "francis2023_pedestrian_obstruction",
+      "robot_radius_m": 1.0,
+      "physical_speed_cap_m_s": 2.0,
+      "ped_speed_multiplier": 1.3,
+      "desired_speed_mean": null,
+      "authored_actor_speeds_m_s": [
+        [
+          "h1",
+          0.3
+        ]
+      ]
+    },
+    {
+      "scenario": "francis2023_pedestrian_overtaking",
+      "robot_radius_m": 1.0,
+      "physical_speed_cap_m_s": 0.7,
+      "ped_speed_multiplier": 1.3,
+      "desired_speed_mean": null,
+      "authored_actor_speeds_m_s": [
+        [
+          "h1",
+          0.8
+        ]
+      ]
+    },
+    {
+      "scenario": "francis2023_robot_overtaking",
+      "robot_radius_m": 1.0,
+      "physical_speed_cap_m_s": 2.0,
+      "ped_speed_multiplier": 1.3,
+      "desired_speed_mean": null,
+      "authored_actor_speeds_m_s": [
+        [
+          "h1",
+          0.3
+        ]
+      ]
+    },
+    {
+      "scenario": "francis2023_down_path",
+      "robot_radius_m": 1.0,
+      "physical_speed_cap_m_s": 2.0,
+      "ped_speed_multiplier": 1.3,
+      "desired_speed_mean": null,
+      "authored_actor_speeds_m_s": []
+    },
+    {
+      "scenario": "francis2023_intersection_no_gesture",
+      "robot_radius_m": 1.0,
+      "physical_speed_cap_m_s": 2.0,
+      "ped_speed_multiplier": 1.3,
+      "desired_speed_mean": null,
+      "authored_actor_speeds_m_s": []
+    },
+    {
+      "scenario": "francis2023_blind_corner",
+      "robot_radius_m": 1.0,
+      "physical_speed_cap_m_s": 2.0,
+      "ped_speed_multiplier": 1.3,
+      "desired_speed_mean": null,
+      "authored_actor_speeds_m_s": []
+    },
+    {
+      "scenario": "francis2023_narrow_hallway",
+      "robot_radius_m": 1.0,
+      "physical_speed_cap_m_s": 2.0,
+      "ped_speed_multiplier": 1.3,
+      "desired_speed_mean": null,
+      "authored_actor_speeds_m_s": []
+    },
+    {
+      "scenario": "francis2023_narrow_doorway",
+      "robot_radius_m": 1.0,
+      "physical_speed_cap_m_s": 2.0,
+      "ped_speed_multiplier": 1.3,
+      "desired_speed_mean": null,
+      "authored_actor_speeds_m_s": []
+    },
+    {
+      "scenario": "francis2023_entering_room",
+      "robot_radius_m": 1.0,
+      "physical_speed_cap_m_s": 2.0,
+      "ped_speed_multiplier": 1.3,
+      "desired_speed_mean": null,
+      "authored_actor_speeds_m_s": []
+    },
+    {
+      "scenario": "francis2023_exiting_room",
+      "robot_radius_m": 1.0,
+      "physical_speed_cap_m_s": 2.0,
+      "ped_speed_multiplier": 1.3,
+      "desired_speed_mean": null,
+      "authored_actor_speeds_m_s": []
+    },
+    {
+      "scenario": "francis2023_entering_elevator",
+      "robot_radius_m": 1.0,
+      "physical_speed_cap_m_s": 2.0,
+      "ped_speed_multiplier": 1.3,
+      "desired_speed_mean": null,
+      "authored_actor_speeds_m_s": []
+    },
+    {
+      "scenario": "francis2023_exiting_elevator",
+      "robot_radius_m": 1.0,
+      "physical_speed_cap_m_s": 2.0,
+      "ped_speed_multiplier": 1.3,
+      "desired_speed_mean": null,
+      "authored_actor_speeds_m_s": []
+    },
+    {
+      "scenario": "francis2023_intersection_wait",
+      "robot_radius_m": 1.0,
+      "physical_speed_cap_m_s": 2.0,
+      "ped_speed_multiplier": 1.3,
+      "desired_speed_mean": null,
+      "authored_actor_speeds_m_s": []
+    },
+    {
+      "scenario": "francis2023_intersection_proceed",
+      "robot_radius_m": 1.0,
+      "physical_speed_cap_m_s": 2.0,
+      "ped_speed_multiplier": 1.3,
+      "desired_speed_mean": null,
+      "authored_actor_speeds_m_s": []
+    },
+    {
+      "scenario": "francis2023_following_human",
+      "robot_radius_m": 1.0,
+      "physical_speed_cap_m_s": 2.0,
+      "ped_speed_multiplier": 1.3,
+      "desired_speed_mean": null,
+      "authored_actor_speeds_m_s": []
+    },
+    {
+      "scenario": "francis2023_leading_human",
+      "robot_radius_m": 1.0,
+      "physical_speed_cap_m_s": 2.0,
+      "ped_speed_multiplier": 1.3,
+      "desired_speed_mean": null,
+      "authored_actor_speeds_m_s": []
+    },
+    {
+      "scenario": "francis2023_accompanying_peer",
+      "robot_radius_m": 1.0,
+      "physical_speed_cap_m_s": 2.0,
+      "ped_speed_multiplier": 1.3,
+      "desired_speed_mean": null,
+      "authored_actor_speeds_m_s": []
+    },
+    {
+      "scenario": "francis2023_join_group",
+      "robot_radius_m": 1.0,
+      "physical_speed_cap_m_s": 2.0,
+      "ped_speed_multiplier": 1.3,
+      "desired_speed_mean": null,
+      "authored_actor_speeds_m_s": []
+    },
+    {
+      "scenario": "francis2023_leave_group",
+      "robot_radius_m": 1.0,
+      "physical_speed_cap_m_s": 2.0,
+      "ped_speed_multiplier": 1.3,
+      "desired_speed_mean": null,
+      "authored_actor_speeds_m_s": []
+    },
+    {
+      "scenario": "francis2023_crowd_navigation",
+      "robot_radius_m": 1.0,
+      "physical_speed_cap_m_s": 2.0,
+      "ped_speed_multiplier": 1.3,
+      "desired_speed_mean": null,
+      "authored_actor_speeds_m_s": []
+    },
+    {
+      "scenario": "francis2023_parallel_traffic",
+      "robot_radius_m": 1.0,
+      "physical_speed_cap_m_s": 2.0,
+      "ped_speed_multiplier": 1.3,
+      "desired_speed_mean": null,
+      "authored_actor_speeds_m_s": []
+    },
+    {
+      "scenario": "francis2023_perpendicular_traffic",
+      "robot_radius_m": 1.0,
+      "physical_speed_cap_m_s": 2.0,
+      "ped_speed_multiplier": 1.3,
+      "desired_speed_mean": null,
+      "authored_actor_speeds_m_s": []
+    },
+    {
+      "scenario": "francis2023_circular_crossing",
+      "robot_radius_m": 1.0,
+      "physical_speed_cap_m_s": 2.0,
+      "ped_speed_multiplier": 1.3,
+      "desired_speed_mean": null,
+      "authored_actor_speeds_m_s": []
+    },
+    {
+      "scenario": "francis2023_robot_crowding",
+      "robot_radius_m": 1.0,
+      "physical_speed_cap_m_s": 2.0,
+      "ped_speed_multiplier": 1.3,
+      "desired_speed_mean": null,
+      "authored_actor_speeds_m_s": []
+    }
+  ]
+}

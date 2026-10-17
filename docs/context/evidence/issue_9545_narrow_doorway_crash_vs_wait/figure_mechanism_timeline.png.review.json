@@ -1,0 +1,11 @@
+{
+  "artifact_path": "docs/context/evidence/issue_9545_narrow_doorway_crash_vs_wait/figure_mechanism_timeline.png",
+  "artifact_sha256": "5746e23a3511968faf2a9126d62e6a09733a3f9b8f4b43a8f784b248eee96459",
+  "claim_boundary": "diagnostic-only evidence for issue #9545; not benchmark evidence and not admitted to the dissertation",
+  "dissertation_admission_status": "not_admitted",
+  "domain_approval_status": "not_granted",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "review_status": "needs_independent_review",
+  "schema_version": "evidence-review-marker.v1"
+}

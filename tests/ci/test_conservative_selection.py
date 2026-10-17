@@ -56,4 +56,9 @@ def test_uncertain_changes_include_every_test(tmp_path, changed):
         "tests/test_unrelated.py",
         "fast-pysf/tests/test_force.py",
     }
-    assert expected <= set(affected_tests(tmp_path, {changed}))
+    mapped = {
+        "notebooks/01_run_first_episode.ipynb": {"tests/test_pin.py"},
+        "robot_sf/pinned.py": {"tests/test_pin.py"},
+        "fast-pysf/pysocialforce/forces.py": {"tests/test_pin.py", "fast-pysf/tests/test_force.py"},
+    }
+    assert set(affected_tests(tmp_path, {changed})) == mapped.get(changed, expected)

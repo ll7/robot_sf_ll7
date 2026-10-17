@@ -6,6 +6,7 @@ from dataclasses import asdict, replace
 
 import pytest
 from pysocialforce.config import (
+    BODY_EDGE_EXPONENTIAL_V3,
     LEGACY_SHIFTED_GRADIENT_V1,
     SOCIAL_FORCE_KERNEL_WRAPPED_V2,
     SURFACE_DISTANCE_UNIT_NORMAL_V2,
@@ -46,7 +47,7 @@ def test_env_settings_post_init():
 
 def test_kernel_selector_preserves_legacy_simulation_and_environment_hashes():
     """The absent selector stays out of legacy hashes while explicit v2 remains identity-bearing."""
-    legacy = SimulationSettings()
+    legacy = SimulationSettings(obstacle_force_law=LEGACY_SHIFTED_GRADIENT_V1)
     assert legacy.social_force_kernel_resolution_mode == "defaulted_missing"
     assert "social_force_kernel_version" not in asdict(legacy)
     legacy_settings_payload = asdict(legacy)
@@ -63,13 +64,16 @@ def test_kernel_selector_preserves_legacy_simulation_and_environment_hashes():
         "3862ea280966a4e790715babbb7567cbf121031eb38374b08264e4f4d3626be0"
     )
 
-    legacy_env = EnvSettings()
+    legacy_env = EnvSettings(sim_config=legacy)
     legacy_env_payload = _hash_payload_without_default_goal_policy(asdict(legacy_env))
     legacy_env_json = json.dumps(legacy_env_payload, sort_keys=True, default=str)
     expected_legacy_env_hash = hashlib.blake2b(legacy_env_json.encode(), digest_size=8).hexdigest()
     assert _stable_config_hash(legacy_env) == expected_legacy_env_hash
 
-    wrapped = SimulationSettings(social_force_kernel_version=SOCIAL_FORCE_KERNEL_WRAPPED_V2)
+    wrapped = SimulationSettings(
+        obstacle_force_law=LEGACY_SHIFTED_GRADIENT_V1,
+        social_force_kernel_version=SOCIAL_FORCE_KERNEL_WRAPPED_V2,
+    )
     assert wrapped.social_force_kernel_resolution_mode == "explicit"
     assert wrapped.social_force_kernel_version == SOCIAL_FORCE_KERNEL_WRAPPED_V2
     wrapped_env = EnvSettings(sim_config=wrapped)
@@ -117,6 +121,20 @@ def test_kernel_selector_preserves_legacy_simulation_and_environment_hashes():
     resolved_payload = get_resolved_config_dict(EnvSettings(sim_config=wrapped))
     assert resolved_payload["sim_config"]["social_force_kernel_version"] == (
         SOCIAL_FORCE_KERNEL_WRAPPED_V2
+    )
+
+
+def test_explicit_body_edge_has_distinct_simulation_identity():
+    """Opting into the corrected law retains its independently pinned identity."""
+    payload = asdict(SimulationSettings(obstacle_force_law=BODY_EDGE_EXPONENTIAL_V3))
+    assert payload["obstacle_force_law"] == BODY_EDGE_EXPONENTIAL_V3
+    payload.pop("pedestrian_seed")
+    payload.pop("groups")
+    payload.pop("robot_goal_sampling_policy")
+    serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
+    # The opt-in identity must not alter the explicit-legacy assertion above.
+    assert hashlib.sha256(serialized.encode()).hexdigest() == (
+        "db40e197057cfe057ed28cbb0a89502cd715d0f9a307605749a2738cb3b2c71d"
     )
 
 
@@ -191,8 +209,8 @@ def test_sampler_capture_enabled_requires_a_boolean() -> None:
         SimulationSettings(sampler_capture_enabled=1)  # type: ignore[arg-type]
 
 
-def test_obstacle_force_law_defaults_to_legacy_and_accepts_corrected_opt_in() -> None:
-    """Simulation settings resolve historical inputs and expose the explicit opt-in law."""
+def test_obstacle_force_law_defaults_to_legacy_and_accepts_explicit_selectors() -> None:
+    """Simulation settings preserve legacy by default and allow explicit corrected laws."""
     assert SimulationSettings().obstacle_force_law == LEGACY_SHIFTED_GRADIENT_V1
     assert SimulationSettings().obstacle_force_law_resolution_mode == "defaulted_missing"
     assert SimulationSettings(obstacle_force_law=None).obstacle_force_law == (  # type: ignore[arg-type]
@@ -202,6 +220,9 @@ def test_obstacle_force_law_defaults_to_legacy_and_accepts_corrected_opt_in() ->
         SimulationSettings(obstacle_force_law=None).obstacle_force_law_resolution_mode
         == "defaulted_missing"
     )
+    historical = SimulationSettings(obstacle_force_law="")
+    assert historical.obstacle_force_law == LEGACY_SHIFTED_GRADIENT_V1
+    assert historical.obstacle_force_law_resolution_mode == "historical_unversioned"
     corrected = SimulationSettings(obstacle_force_law=SURFACE_DISTANCE_UNIT_NORMAL_V2)
     assert corrected.obstacle_force_law_version == SURFACE_DISTANCE_UNIT_NORMAL_V2
     assert corrected.obstacle_force_law_resolution_mode == "explicit"

@@ -497,6 +497,8 @@ class RouteNavigator:
     goal_zone: Rect | None = None
     route_spawn_id: int | None = None
     route_goal_id: int | None = None
+    require_final_waypoint: bool = False
+    """Require ordered route progress before completion (pedestrian routes)."""
 
     def __post_init__(self) -> None:
         """Validate the versioned success policy and any initial goal binding."""
@@ -546,6 +548,8 @@ class RouteNavigator:
         Returns:
             bool: ``True`` when the configured completion predicate is satisfied.
         """
+        if self.require_final_waypoint and self.waypoint_id < len(self.waypoints) - 1:
+            return False
         if self.uses_goal_zone_completion:
             if not self.waypoints or self.goal_zone is None:
                 return False

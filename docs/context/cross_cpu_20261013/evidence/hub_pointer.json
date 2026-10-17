@@ -1,0 +1,35 @@
+{
+  "schema": "cross_cpu_hub_pointer.v1",
+  "classification": "diagnostic-only",
+  "host": "imech192",
+  "backend": "external_data_hub",
+  "retrieval_key": "benchmark-results/robot_sf_ll7/cross_cpu_20261013/run-1d1b1b1007",
+  "absolute_path": "/home/luttkule/external_data_hub/benchmark-results/robot_sf_ll7/cross_cpu_20261013/run-1d1b1b1007",
+  "manifest": "SHA256SUMS",
+  "manifest_sha256": "6b47862515b8a9086f8bc2bf7c3124931067980a1c81386b08db8313308a4e0c",
+  "source_main": "e251a2f94e9478ab7fd5252e88d0296666876ab1",
+  "acquisition_producer": "83b16e720e348ed794062b35dfd0772ad8d5763a",
+  "study_episodes": 12000,
+  "dev_seeds": "1001-1030",
+  "readback": {
+    "second_host": {
+      "verified": true,
+      "manifest_sha256": "6b47862515b8a9086f8bc2bf7c3124931067980a1c81386b08db8313308a4e0c",
+      "files_verified": 1266,
+      "bytes_verified": 2307078952,
+      "verified_at_unix": 1791884412,
+      "retrieved_path": "/home/luttkule/lanes/xcpu/retrieved"
+    },
+    "hub": {
+      "verified": true,
+      "manifest_sha256": "6b47862515b8a9086f8bc2bf7c3124931067980a1c81386b08db8313308a4e0c",
+      "files_verified": 1266,
+      "bytes_verified": 2307078952,
+      "verified_at_unix": 1791884413,
+      "retrieved_path": "/home/luttkule/external_data_hub/benchmark-results/robot_sf_ll7/cross_cpu_20261013/run-1d1b1b1007"
+    }
+  },
+  "retrieve": "rsync -a imech192:/home/luttkule/external_data_hub/benchmark-results/robot_sf_ll7/cross_cpu_20261013/run-1d1b1b1007/ ./cross_cpu_evidence/",
+  "verify": "cd cross_cpu_evidence && sha256sum -c SHA256SUMS.sha256 && sha256sum -c SHA256SUMS",
+  "cpu_hours": 40.420833333333334
+}

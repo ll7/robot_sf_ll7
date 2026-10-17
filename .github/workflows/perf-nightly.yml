@@ -46,7 +46,7 @@ jobs:
 
       - name: Upload xdist race validation artifacts
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: xdist-race-validation
           path: output/validation/xdist-race/
@@ -71,7 +71,7 @@ jobs:
 
       - name: Upload xdist worker-memory diagnostic
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: xdist-worker-memory-diagnostic
           path: output/validation/xdist-memory/
@@ -110,7 +110,7 @@ jobs:
 
       - name: Upload nightly perf artifacts
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: nightly-perf-artifacts
           path: output/benchmarks/perf/

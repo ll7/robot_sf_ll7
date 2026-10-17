@@ -147,7 +147,9 @@ def test_issue_9533_campaign_configs_freeze_paired_dev_eval_design() -> None:
     """The matched arm, scenario, and trace design must be identical across seed sets."""
     benchmark_root = Path(__file__).parents[2] / "configs" / "benchmarks"
     dev = yaml.safe_load(
-        (benchmark_root / "issue_9533_guarded_ppo_progress_escape.yaml").read_text(encoding="utf-8")
+        (benchmark_root / "issue_9533_guarded_ppo_progress_escape_dev_v2.yaml").read_text(
+            encoding="utf-8"
+        )
     )
     evaluation = yaml.safe_load(
         (benchmark_root / "issue_9533_guarded_ppo_progress_escape_eval.yaml").read_text(
@@ -217,7 +219,7 @@ def test_issue_9533_campaign_configs_freeze_paired_dev_eval_design() -> None:
     assert matched_cpu_ppo["device"] == "cpu"
     # Reject every paper evaluation identity, not only one cohort size.
     assert "paper_eval_" not in (
-        benchmark_root / "issue_9533_guarded_ppo_progress_escape.yaml"
+        benchmark_root / "issue_9533_guarded_ppo_progress_escape_dev_v2.yaml"
     ).read_text(encoding="utf-8")
 
 

@@ -1124,3 +1124,12 @@ def test_degraded_substring_booleans_are_markers(key, value):
 )
 def test_typed_degraded_reasons_and_statuses_fail_closed(key, value, expected):
     assert runtime_fallback_or_degraded_marker({key: value}) == expected
+
+
+@pytest.mark.parametrize("receipt", [None, [], "not-a-receipt"])
+def test_runtime_fallback_marker_rejects_nonmapping_diagnostic_receipt(receipt) -> None:
+    """Malformed receipt containers cannot disappear as neutral nested metadata."""
+    assert runtime_fallback_or_degraded_marker({"diagnostic_receipt": receipt}) == (
+        "diagnostic_receipt",
+        "invalid",
+    )

@@ -1,0 +1,7 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/confinement_dev_trace_20261018/unconditional_release_comparison.csv",
+  "artifact_sha256": "5e1600c69baa934b332a3e6f16dca69cd19e36a53e0dae87b35b4f2a8b26a95c",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW"
+}

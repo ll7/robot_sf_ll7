@@ -798,11 +798,13 @@ def test_policy_pending_package_count_counts_rows_not_failure_messages() -> None
     selected_rows = [row for row in inventory["packages"] if row.get("selected_profiles")]
     expected = selected_policy_pending_package_count(selected_rows)
 
-    # 124 = 119 baseline + 5 net-new rows from dependabot bumps 2f393da1d (tqdm
+    # 125 = 119 baseline + 5 net-new rows from dependabot bumps 2f393da1d (tqdm
     # 4.70.1), 51e189474 (wandb 0.30.0 plus 6 transitive otel/googleapis rows,
     # minus dropped sentry-sdk), ca470a58d (optuna-dashboard 0.21.0). Licenses
-    # verified unchanged/new-permissive via PyPI metadata (issue #9341).
-    assert expected == 124
+    # verified unchanged/new-permissive via PyPI metadata (issue #9341), plus
+    # Click 8.5.0 replacing the exact 8.3.1 external disposition. The new
+    # Click version remains review-required; no policy approval is inferred.
+    assert expected == 125
     assert inventory["summary"]["policy_pending_package_count"] == expected
     assert inventory["summary"]["policy_pending_package_count"] != 155
 
@@ -828,10 +830,14 @@ def test_policy_pending_count_excludes_pending_external_policy_rows() -> None:
             row.get("policy_disposition") == "external_dependency_not_redistributed"
             for row in selected_rows
         )
-        == 37
+        == 36
     )
-    assert selected_policy_pending_package_count(selected_rows) == 124  # 119 + 5 net-new
-    # dependabot rows, see above; policy rows (36/37) unchanged.
+    assert selected_policy_pending_package_count(selected_rows) == 125
+    # Policy rows remain unchanged. Click 8.5.0 no longer matches the reviewed
+    # exact-version exclusion for 8.3.1, so all 36 remaining external rows are
+    # pending exclusions and the new Click row stays conservatively pending.
+    click = next(row for row in selected_rows if row["name"] == "click")
+    assert click["policy_disposition"] == "review_required"
 
 
 def test_v2_receipt_summary_separates_findings_and_pending_rows() -> None:

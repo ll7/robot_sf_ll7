@@ -566,6 +566,59 @@ def _assert_router_app_token_boundary(workflow: dict[str, Any]) -> None:
             assert _token_condition(step, context) is expected, f"mint/probe event policy: {case}"
 
 
+def _credential_context_references(value: str) -> tuple[bool, bool]:
+    """Match broad steps and direct credentials using one case-folded token stream.
+
+    Keep quoted expression literals opaque, except for bracket property access.
+    Parentheses and whitespace cannot change the identity of a context reference.
+    Scan literal text too, preserving the existing ban on raw credential references.
+    """
+    expression_pattern = r"\$\{\{((?:'(?:''|[^'])*'|[^'])*?)\}\}"
+    expressions = re.findall(expression_pattern, value, re.DOTALL)
+    literal_text = re.sub(expression_pattern, "", value, flags=re.DOTALL)
+    broad = direct = False
+    for text, is_expression in [*((item, True) for item in expressions), (literal_text, False)]:
+        token_pattern = r"'(?:''|[^'])*'|[\w-]+|[^\s]" if is_expression else r"[\w-]+|[^\s]"
+        tokens = [
+            token.casefold() for token in re.findall(token_pattern, text) if token not in {"(", ")"}
+        ]
+        normalised: list[str] = []
+        index = 0
+        while index < len(tokens):
+            if (
+                tokens[index] == "["
+                and index + 2 < len(tokens)
+                and tokens[index + 1].startswith("'")
+                and tokens[index + 2] == "]"
+            ):
+                normalised.extend((".", tokens[index + 1][1:-1].replace("''", "'")))
+                index += 3
+            else:
+                normalised.append(tokens[index])
+                index += 1
+        for index, token in enumerate(normalised):
+            tail = normalised[index + 1 :]
+            direct |= token.startswith("robot_sf_router_app_")
+            if token != "steps":
+                continue
+            direct |= tail[:2] == [".", "router-token"]
+            # Whole contexts, wildcard steps, and whole step outputs carry credentials.
+            # Retain the existing conservative toJSON(steps...) refusal as well.
+            broad |= (
+                not tail
+                or tail[0] != "."
+                or tail[:2] == [".", "*"]
+                or (index > 0 and normalised[index - 1] == "tojson")
+                or (
+                    len(tail) >= 4
+                    and tail[0] == "."
+                    and tail[2:4] == [".", "outputs"]
+                    and (len(tail) < 6 or tail[4] != "." or tail[5] == "*")
+                )
+            )
+    return broad, direct
+
+
 def _assert_token_references(workflow: dict[str, Any]) -> None:
     """Refuse token or App-secret references outside their exact action input locations."""
     allowed = {
@@ -574,11 +627,6 @@ def _assert_token_references(workflow: dict[str, Any]) -> None:
         ("jobs", "runner-availability", "steps", 2, "if"),
         ("jobs", "runner-availability", "steps", 2, "with", "github-token"),
     }
-    broad_serialization = (
-        re.compile(r"to\s*json\s*\(\s*steps\b", re.IGNORECASE),
-        re.compile(r"steps\s*(?:\.\s*\*|\[\s*['\"]\s*\*\s*['\"]\s*\])"),
-        re.compile(r"steps\s*\.\s*[\w\-]+\s*\.\s*outputs(?!\s*\.\s*[\w\-\*]+)"),
-    )
 
     def inspect(value: Any, path: tuple[Any, ...] = ()) -> None:
         if isinstance(value, dict):
@@ -588,11 +636,10 @@ def _assert_token_references(workflow: dict[str, Any]) -> None:
             for index, child in enumerate(value):
                 inspect(child, (*path, index))
         elif isinstance(value, str):
-            if path[:2] == ("jobs", "runner-availability") and any(
-                pattern.search(value) for pattern in broad_serialization
-            ):
+            broad, direct = _credential_context_references(value)
+            if path[:2] == ("jobs", "runner-availability") and broad:
                 raise AssertionError("App credential must not escape via broad step serialization")
-            if "ROBOT_SF_ROUTER_APP_" in value or "steps.router-token" in value:
+            if direct:
                 assert path in allowed, (
                     "App credential must not escape mint inputs and probe input/guard"
                 )
@@ -734,6 +781,8 @@ def test_token_reference_check_accepts_checked_in_workflow() -> None:
     "expression",
     [
         "${{ steps.route.outputs.fast_feedback }}",
+        "${{ StEpS['route']['outputs']['fast_feedback'] }}",
+        "${{ format('steps', steps.route.outputs.fast_feedback) }}",
         "${{ needs.self-hosted-admission.outputs.self_hosted }}",
     ],
 )
@@ -770,3 +819,46 @@ def test_token_reference_check_ignores_other_jobs_step_serialization() -> None:
     other = workflow["jobs"]["fast-feedback"]["steps"][0]
     other.setdefault("env", {})["ROUTER_DEBUG_SNAPSHOT"] = "${{ toJSON(steps) }}"
     _assert_token_references(workflow)
+
+
+@pytest.mark.parametrize(
+    "expression",
+    [
+        "${{ toJSON((steps)) }}",
+        "${{ join(StEpS.*.outputs.token, ',') }}",
+        "${{ StEpS.*.outputs.token }}",
+        "${{ toJSON(StEpS.route.OuTpUtS) }}",
+        "${{ StEpS.route.OuTpUtS }}",
+        "${{ steps['router-token']['outputs']['token'] }}",
+        "${{ steps . router-token . outputs . token }}",
+        "${{ (StEpS) . (router-token) . outputs . token }}",
+        "${{ SeCrEtS['robot_sf_router_app_key'] }}",
+        "${{ StEpS['*'].outputs.token }}",
+        "${{ format('{0}', (StEpS)) }}",
+    ],
+)
+def test_normalised_credential_references_reject_reviewer_probes(expression: str) -> None:
+    """Equivalent context spelling must never bypass the complete credential boundary."""
+    workflow = copy.deepcopy(yaml.safe_load(CI_WORKFLOW.read_text(encoding="utf-8")))
+    _, probe = _token_steps(workflow)
+    probe.setdefault("env", {})["ROUTER_DEBUG_SNAPSHOT"] = expression
+    with pytest.raises(AssertionError, match="must not escape"):
+        _assert_router_app_token_boundary(workflow)
+
+
+@pytest.mark.parametrize(
+    "expression",
+    [
+        "${{ toJSON((StEpS)) }}",
+        "${{ join(StEpS.*.outputs.token, ',') }}",
+        "${{ toJSON(StEpS.route.OuTpUtS) }}",
+        "${{ StEpS.route.OuTpUtS }}",
+    ],
+)
+def test_normalised_serialization_rejected_before_allowlist(expression: str) -> None:
+    """The exact input allowlist cannot exempt broad credential serialization."""
+    workflow = copy.deepcopy(yaml.safe_load(CI_WORKFLOW.read_text(encoding="utf-8")))
+    _, probe = _token_steps(workflow)
+    probe["with"]["github-token"] = expression
+    with pytest.raises(AssertionError, match="broad step serialization"):
+        _assert_token_references(workflow)

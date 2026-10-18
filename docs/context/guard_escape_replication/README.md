@@ -154,3 +154,11 @@ that archive, avoiding a self-referential manifest. Final Git SHA256SUMS covers
 the final compact packet, including that receipt.
 
 Full run uploaded **once** to W&B: [ll7/robot_sf/guard-escape-replication-development-1031-1060:v0](https://wandb.ai/ll7/robot_sf/runs/0y6h7fvo). A fresh W&B API download matched the archive and manifest SHA-256 values. See [wandb.json](provenance/wandb.json) and [archive.json](provenance/archive.json). Credentials were loaded only in process memory and never printed.
+
+The top-hybrid follow-up adds an explicit `--acquisition-seed-start` option to
+`reproduce.py` (default 1031). Its default invocation still reproduces this
+packet byte for byte, including the archived acquisition analyzer crosscheck.
+The follow-up's regression shifts only acquisition labels to 1061–1090 and
+checks that both numerical CSVs are unchanged. The numeric analyzer and all
+14 files in the original registration remain unchanged. Only the helper and this explanatory README
+have refreshed entries in this packet's SHA256SUMS.

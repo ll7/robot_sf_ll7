@@ -1,0 +1,35 @@
+{
+  "tested_head": "22c164dde4486a4106c4b2eb2ca0f03fbd6410b0",
+  "suite_slot_helper": true,
+  "suite_slots": 3,
+  "pytest_workers": 2,
+  "numerical_threads": 1,
+  "lanes": {
+    "core": {
+      "command": "SUITE_SLOTS=3 PYTEST_NUM_WORKERS=2 ~/suite_slot.sh scripts/dev/run_worktree_shared_venv.sh -- scripts/dev/run_tests_parallel.sh --lane core",
+      "exit_code": 0,
+      "completed_utc": "2026-10-18T08:13:18.936999+00:00",
+      "wrapper_log_sha256": "042341a8686eccc2a6cae6959547f17f0719a2a1d3ea65dc23308a0027ba8a62"
+    },
+    "optional": {
+      "command": "SUITE_SLOTS=3 PYTEST_NUM_WORKERS=2 ~/suite_slot.sh scripts/dev/run_worktree_shared_venv.sh -- scripts/dev/run_tests_parallel.sh --lane optional",
+      "exit_code": 0,
+      "completed_utc": "2026-10-18T08:31:29.647470+00:00",
+      "wrapper_log_sha256": "bb5343bab2873116d3184f8c1e37fecb56ad3e4d953e1bfec16c40486cb711ff"
+    }
+  },
+  "individual_test_counts": "Not retained: repository wrapper deletes its captured pytest log on success. No count is inferred.",
+  "guard_tests": {
+    "current_main": "6 failed, 1 passed before archived runtime reconstruction",
+    "reconstructed_source": "7 passed; pure candidate fixtures, no simulation"
+  },
+  "seed_adapter_regression": {
+    "main": "TypeError on unsupported explicit acquisition seed start",
+    "changed_helper": "1 passed; both numeric CSVs byte-identical after label-only shift; wrong label start rejected"
+  },
+  "old_replication_reproduction": "summary and both CSVs byte-identical; archived original analyzer crosscheck passed",
+  "ruff": "check and format --check passed",
+  "pr_ready_check": "Did not pass contract preflight; independent domain review pending. Core and optional suites were run directly through the host slot helper, without claiming full PR readiness.",
+  "ty_advisory_ratchet": "passed: general 6434 versus baseline 6435; no per-module increase; baseline and exceptions unchanged",
+  "red_test_main_head": "d54a1e575471b4990fb51005f94c1e7a3480d9cb"
+}

@@ -1,0 +1,26 @@
+{
+  "schema": "guard-escape-replication.analysis-view.v1",
+  "actual_seeds": {
+    "first": 1061,
+    "last": 1090
+  },
+  "analysis_alias_seeds": {
+    "first": 1001,
+    "last": 1030
+  },
+  "mapping": "analysis_alias_seed = acquisition_seed - 60; one-to-one, order preserving",
+  "rows": 2160,
+  "alias_jsonl_sha256": "52fec77d9758a96f0e5caa3ec12cad886627d81a47f430c54e7f8c9072537473",
+  "alias_gzip_sha256": "b9bff729099222f8f1426a248078ad7a5d8df6046b71d0623452d2e91c8997e5",
+  "analyzer_sha256": "82d39e20877647fc5d2081fd2f2eb79d84153f994e931db9e422650ba87316a7",
+  "analyzer_unchanged": true,
+  "outcomes_changed": false,
+  "output_adapter_changes": [
+    "schema",
+    "development_seeds",
+    "input_sha256",
+    "review_verdict",
+    "registration_commit"
+  ],
+  "archived_acquisition_analyzer_csvs_byte_identical": true
+}

@@ -185,7 +185,7 @@ def _native_outcome(identity: dict[str, Any], packet: dict[str, Any]) -> dict[st
         "configured_desired_speed_mean_m_s": target_speed,
         "configured_desired_speed_std_m_s": target_std,
         "realized_desired_speed_mean_m_s": realized_speed,
-        "realized_desired_speed_std_m_s": 0.0 if target_std is None else target_std,
+        "realized_desired_speed_std_m_s": 0.0,
         "initial_spawn_speed_mean_m_s": 0.5,
         "initial_spawn_speed_peak_m_s": 0.5,
         "time_to_desired_speed_target_seconds": None if target_speed is None else 1.0,
@@ -392,6 +392,150 @@ def test_accounting_rejects_checkpoint_substitution(tampered_field: str) -> None
     assert report["admissible"] is False
     row = next(item for item in report["rows"] if item["identity_key"] == identity["identity_key"])
     assert row["terminal_status"] == "provenance_invalid"
+
+
+def _assert_preserved_diagnostics_rejected(
+    tmp_path: Any,
+    boundary: str,
+    regime_id: str,
+    updates: dict[str, Any],
+    reason: str,
+) -> None:
+    packet = _packet()
+    outcomes = [_native_outcome(identity, packet) for identity in packet["identities"]]
+    outcome = next(row for row in outcomes if row["provenance"]["regime_id"] == regime_id)
+    # Serialize valid producer output first, then corrupt the preserved evidence.
+    payload = campaign._journal_row_payload(outcome, packet_context=packet)
+    outcome["provenance"]["diagnostics"].update(updates)
+    payload["provenance"]["diagnostics"].update(updates)
+    if boundary == "accounting":
+        report = campaign.account_production_rows(
+            packet, outcomes, source_commit=packet["source_commit"]
+        )
+        assert report["terminal_status_counts"] == {
+            campaign.SUCCESS_STATUS: 2159,
+            "provenance_invalid": 1,
+        }
+        assert report["admissible"] is False
+        assert report["complete_native"] is False
+        row = next(row for row in report["rows"] if row["identity_key"] == outcome["identity_key"])
+        assert row["missingness"] == "provenance_invalid"
+    else:
+        journal = tmp_path / "tampered-diagnostics.jsonl"
+        with journal.open("w", encoding="utf-8") as handle:
+            campaign._append_journal_event(
+                handle, **_journal_header(expected_rows=2160, packet=packet)
+            )
+            campaign._append_journal_event(
+                handle, "row_started", identity_key=outcome["identity_key"]
+            )
+            campaign._append_journal_event(handle, "row_finished", **payload)
+        with pytest.raises(campaign.CampaignAdapterError, match=reason):
+            _reconcile(journal, expected_rows=2160, packet=packet)
+
+
+@pytest.mark.parametrize("boundary", ("accounting", "journal"))
+@pytest.mark.parametrize(
+    ("regime_id", "updates"),
+    [
+        ("slow_distributed", {"desired_speed_activation_fraction": 0.0}),
+        ("slow_distributed", {"desired_speed_activation_fraction": 1.01}),
+        ("slow_distributed", {"time_to_desired_speed_target_seconds": 60.0}),
+        ("slow_distributed", {"time_to_desired_speed_target_seconds": -1.0}),
+        ("slow_distributed", {"acceleration_transient_steps": 600}),
+        ("slow_distributed", {"acceleration_transient_steps": -1}),
+        ("slow_distributed", {"acceleration_transient_steps": 5}),
+        ("slow_distributed", {"configured_desired_speed_mean_m_s": 1.3}),
+        ("slow_distributed", {"configured_desired_speed_std_m_s": 0.0}),
+        (
+            "slow_distributed",
+            {
+                "realized_desired_speed_mean_m_s": 1.3,
+                "runtime_max_speed_m_s_by_pedestrian": {"p0": 1.3},
+            },
+        ),
+        ("legacy_default", {"configured_desired_speed_mean_m_s": 0.65}),
+        ("legacy_default", {"desired_speed_activation_fraction": 1.0}),
+    ],
+)
+def test_preserved_activation_diagnostics_cannot_contradict_success(
+    tmp_path: Any, boundary: str, regime_id: str, updates: dict[str, Any]
+) -> None:
+    _assert_preserved_diagnostics_rejected(
+        tmp_path, boundary, regime_id, updates, "activation diagnostic"
+    )
+
+
+@pytest.mark.parametrize("boundary", ("accounting", "journal"))
+@pytest.mark.parametrize(
+    "updates",
+    [
+        {
+            "initial_spawn_velocity_xy_by_pedestrian": {"p0": [1.2, 0.0]},
+            "initial_spawn_speed_mean_m_s": 1.2,
+            "initial_spawn_speed_peak_m_s": 1.2,
+        },
+        {"initial_spawn_velocity_xy_by_pedestrian": {"p0": [1.2, 0.0]}},
+        {"initial_spawn_speed_mean_m_s": 1.2},
+        {"initial_spawn_speed_peak_m_s": 1.2},
+        {"initial_spawn_velocity_xy_by_pedestrian": {"p9": [0.5, 0.0]}},
+        {"final_post_integration_velocity_xy_by_pedestrian": {"p9": [0.65, 0.0]}},
+        {"runtime_max_speed_m_s_by_pedestrian": {"p9": 0.65}},
+        {"realized_desired_speed_mean_m_s": 0.7},
+        {"realized_desired_speed_std_m_s": 0.2},
+    ],
+)
+def test_preserved_trajectory_diagnostics_enforce_spawn_and_actor_contracts(
+    tmp_path: Any, boundary: str, updates: dict[str, Any]
+) -> None:
+    _assert_preserved_diagnostics_rejected(
+        tmp_path, boundary, "slow_distributed", updates, "trajectory diagnostic"
+    )
+
+
+@pytest.mark.parametrize("regime_id", ("legacy_default", "slow_distributed", "typical_distributed"))
+def test_preserved_diagnostics_accept_valid_vectors_and_activation_boundary(
+    tmp_path: Any, regime_id: str
+) -> None:
+    packet = _packet()
+    identity = next(row for row in packet["identities"] if row["regime_id"] == regime_id)
+    outcome = _native_outcome(identity, packet)
+    diagnostics = outcome["provenance"]["diagnostics"]
+    mean = (
+        0.5 if regime_id == "legacy_default" else identity["runtime_controls"]["desired_speed_mean"]
+    )
+    diagnostics.update(
+        {
+            "runtime_max_speed_m_s_by_pedestrian": {"p0": mean - 0.2, "p1": mean + 0.2},
+            "realized_desired_speed_std_m_s": 0.2,
+            "initial_spawn_velocity_xy_by_pedestrian": {"p0": [0.3, 0.4], "p1": [-0.5, 0.0]},
+            "final_post_integration_velocity_xy_by_pedestrian": {
+                "p0": [mean, 0.0],
+                "p1": [0.0, mean],
+            },
+        }
+    )
+    if regime_id != "legacy_default":
+        diagnostics.update(
+            {
+                "desired_speed_activation_fraction": 0.8,
+                "time_to_desired_speed_target_seconds": 2.0,
+                "acceleration_transient_steps": 20,
+            }
+        )
+    report = campaign.account_production_rows(
+        packet, [outcome], source_commit=packet["source_commit"]
+    )
+    assert report["terminal_status_counts"][campaign.SUCCESS_STATUS] == 1
+    journal = tmp_path / "valid-diagnostics.jsonl"
+    with journal.open("w", encoding="utf-8") as handle:
+        campaign._append_journal_event(handle, **_journal_header(expected_rows=2160, packet=packet))
+        campaign._append_journal_event(handle, "row_started", identity_key=identity["identity_key"])
+        campaign._append_journal_event(
+            handle, "row_finished", **campaign._journal_row_payload(outcome, packet_context=packet)
+        )
+    summary = _reconcile(journal, expected_rows=2160, packet=packet)
+    assert summary["rows"][0]["terminal_status"] == campaign.SUCCESS_STATUS
 
 
 def test_accounting_rejects_source_commit_detached_from_packet() -> None:

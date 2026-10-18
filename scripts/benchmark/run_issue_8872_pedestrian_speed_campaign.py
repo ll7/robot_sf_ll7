@@ -50,6 +50,7 @@ from collections.abc import Callable, Mapping, Sequence
 from contextlib import contextmanager
 from functools import lru_cache
 from pathlib import Path
+from statistics import fmean, pstdev
 from typing import Any, cast
 
 from scripts.validation.check_issue_6561_pedestrian_speed_protocol import (
@@ -958,6 +959,106 @@ def _journal_provenance(  # noqa: C901, PLR0912
     return normalized
 
 
+@lru_cache(maxsize=1)
+def _frozen_diagnostic_contracts() -> tuple[Mapping[str, Any], Mapping[str, Any]]:
+    """Resolve activation and spawn limits from the unchanged frozen protocol."""
+    protocol = load_protocol(DEFAULT_PROTOCOL_CONFIG)
+    speed = _mapping(protocol.get("pedestrian_speed_contract"), "pedestrian_speed_contract")
+    return (
+        _mapping(protocol.get("activation_contract"), "activation_contract"),
+        _mapping(speed.get("spawn"), "pedestrian_speed_contract.spawn"),
+    )
+
+
+def _validate_preserved_activation_diagnostics(
+    diagnostics: Mapping[str, Any], expected: Mapping[str, Any]
+) -> None:
+    """Bind an activated label to the frozen controls and activation rule."""
+    controls = expected["runtime_controls"]
+    for diagnostic, control in (
+        ("configured_desired_speed_mean_m_s", "desired_speed_mean"),
+        ("configured_desired_speed_std_m_s", "desired_speed_std"),
+    ):
+        _require(
+            diagnostics[diagnostic] == controls[control],
+            "journal native terminal row activation diagnostics contradict runtime controls",
+        )
+    if expected["regime_id"] == "legacy_default":
+        _require(
+            all(
+                diagnostics[field] is None
+                for field in (
+                    "desired_speed_activation_fraction",
+                    "time_to_desired_speed_target_seconds",
+                    "acceleration_transient_steps",
+                )
+            ),
+            "journal native terminal row activation diagnostics treat the reference as activated",
+        )
+        return
+
+    values = {
+        field: _finite_metric(
+            diagnostics[field], f"journal native terminal row activation diagnostic {field}"
+        )
+        for field in JOURNAL_DIAGNOSTIC_SCALARS
+    }
+    rule, _ = _frozen_diagnostic_contracts()
+    fraction = values["desired_speed_activation_fraction"]
+    time_to_target = values["time_to_desired_speed_target_seconds"]
+    transient_seconds = values["acceleration_transient_steps"] * expected["dt_seconds"]
+    maximum_seconds = float(rule["maximum_spawn_transient_seconds"])
+    _require(
+        float(rule["minimum_activation_fraction"]) <= fraction <= 1.0
+        and 0.0 <= time_to_target <= maximum_seconds
+        and 0.0 <= transient_seconds <= maximum_seconds
+        and math.isclose(time_to_target, transient_seconds, rel_tol=0.0, abs_tol=1e-9)
+        and abs(
+            values["realized_desired_speed_mean_m_s"] - values["configured_desired_speed_mean_m_s"]
+        )
+        <= float(rule["target_tolerance_m_s"]),
+        "journal native terminal row activation diagnostics violate the frozen activation rule",
+    )
+
+
+def _validate_preserved_trajectory_diagnostics(diagnostics: Mapping[str, Any]) -> None:
+    """Check actor identity, released spawn speed, and preserved aggregate consistency."""
+    initial = diagnostics["initial_spawn_velocity_xy_by_pedestrian"]
+    final = diagnostics["final_post_integration_velocity_xy_by_pedestrian"]
+    speeds = diagnostics[JOURNAL_DIAGNOSTIC_SPEED_MAP]
+    _require(
+        set(initial) == set(final) == set(speeds),
+        "journal native terminal row trajectory diagnostic actor identities differ",
+    )
+    _, spawn = _frozen_diagnostic_contracts()
+    _require(
+        spawn.get("initial_speed_binding") == "released_default"
+        and spawn.get("change_forbidden") is True,
+        "frozen released spawn-speed contract is not valid",
+    )
+    spawn_speeds = [math.hypot(*velocity) for velocity in initial.values()]
+    _require(
+        all(
+            math.isclose(speed, float(spawn["initial_speed_m_s"]), rel_tol=0.0, abs_tol=1e-9)
+            for speed in spawn_speeds
+        ),
+        "journal native terminal row trajectory diagnostics violate the frozen spawn-speed contract",
+    )
+    for field, measured in (
+        ("initial_spawn_speed_mean_m_s", fmean(spawn_speeds)),
+        ("initial_spawn_speed_peak_m_s", max(spawn_speeds)),
+        ("realized_desired_speed_mean_m_s", fmean(speeds.values())),
+        ("realized_desired_speed_std_m_s", pstdev(speeds.values())),
+    ):
+        scalar = _finite_metric(
+            diagnostics[field], f"journal native terminal row trajectory diagnostic {field}"
+        )
+        _require(
+            math.isclose(scalar, measured, rel_tol=0.0, abs_tol=1e-9),
+            "journal native terminal row trajectory diagnostic scalars contradict pedestrian maps",
+        )
+
+
 def _validate_journal_success_provenance(
     provenance: Mapping[str, Any],
     identity_key: str,
@@ -1044,12 +1145,8 @@ def _validate_journal_success_provenance(
         ),
         "journal native terminal row trajectory diagnostics are incomplete",
     )
-    if expected["regime_id"] != "legacy_default":
-        for field in JOURNAL_DIAGNOSTIC_SCALARS:
-            _finite_metric(
-                diagnostics.get(field),
-                f"journal native terminal row activation diagnostic {field}",
-            )
+    _validate_preserved_activation_diagnostics(diagnostics, expected)
+    _validate_preserved_trajectory_diagnostics(diagnostics)
     checkpoint_provenance = provenance.get("checkpoint_provenance")
     _require(
         isinstance(checkpoint_provenance, list),

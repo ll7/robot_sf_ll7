@@ -701,12 +701,13 @@ def _credential_context_references(value: str) -> tuple[bool, bool, bool]:
                 normalised.append(tokens[index])
             index += 1
     # Keep a linear index map into the existing parenthesis-free step view.
-    step_tokens: list[tuple[str, str]] = []
-    step_indices: list[int] = []
-    for item in normalised:
-        step_indices.append(len(step_tokens))
-        if item not in {("symbol", "("), ("symbol", ")")}:
-            step_tokens.append(item)
+    step_items = [
+        (index, item)
+        for index, item in enumerate(normalised)
+        if item not in {("symbol", "("), ("symbol", ")")}
+    ]
+    step_indices = {original: index for index, (original, _) in enumerate(step_items)}
+    step_tokens = [item for _, item in step_items]
     broad = False
     unsafe_secrets = False
     for context, index in _root_references(normalised):

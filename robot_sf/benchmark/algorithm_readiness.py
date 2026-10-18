@@ -59,6 +59,13 @@ _ALGORITHMS: tuple[AlgorithmReadiness, ...] = (
         note="Social-force adapter baseline.",
     ),
     _contract_readiness("orca"),
+    AlgorithmReadiness(
+        canonical_name="orca_avo",
+        tier="experimental",
+        aliases=("orca_avo",),
+        note="Research-only sampled acceleration filter; empirical, no AVO safety guarantee.",
+        requires_explicit_opt_in=True,
+    ),
     _contract_readiness("socnav_orca_nonholonomic"),
     _contract_readiness("socnav_orca_dd"),
     _contract_readiness("socnav_orca_relaxed"),

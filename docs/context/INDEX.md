@@ -1,5 +1,7 @@
 # Context Retrieval Index
 
+[issue_10404_orca_avo.md](issue_10404_orca_avo.md): opt-in research-only ORCA acceleration filter and empirical claim boundary.
+
 Guard/escape factorial ablation: 2,160 paired development episodes, independently
 confirmed numerical results, portable compact inputs and SHA-256 custody:
 [guard_escape_ablation/README.md](guard_escape_ablation/README.md).

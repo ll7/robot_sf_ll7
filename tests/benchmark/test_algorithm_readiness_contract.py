@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
+import yaml
 
 from robot_sf.benchmark.algorithm_readiness import (
     get_algorithm_readiness,
@@ -172,3 +175,35 @@ def test_actuation_aware_hybrid_rule_alias_stays_experimental() -> None:
         )
         == spec
     )
+
+
+def test_supplied_orca_avo_config_is_admitted_only_as_explicit_research() -> None:
+    """Ship runnable research YAML while preserving default and paper-profile blocks."""
+    with pytest.raises(ValueError, match="allow_testing_algorithms"):
+        require_algorithm_allowed(
+            algo="orca_avo",
+            benchmark_profile="experimental",
+            ppo_paper_ready=False,
+        )
+
+    config_path = Path(__file__).resolve().parents[2] / "configs/algos/orca_avo_v1.yaml"
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    readiness = require_algorithm_allowed(
+        algo="orca_avo",
+        benchmark_profile="experimental",
+        ppo_paper_ready=False,
+        allow_testing_algorithms=bool(config.get("allow_testing_algorithms", False)),
+    )
+    assert readiness is not None
+    assert readiness.canonical_name == "orca_avo"
+    assert readiness.tier == "experimental"
+    assert readiness.requires_explicit_opt_in is True
+
+    for profile in ("baseline-safe", "paper-baseline"):
+        with pytest.raises(ValueError, match=f"blocked by profile '{profile}'"):
+            require_algorithm_allowed(
+                algo="orca_avo",
+                benchmark_profile=profile,
+                ppo_paper_ready=True,
+                allow_testing_algorithms=bool(config.get("allow_testing_algorithms", False)),
+            )

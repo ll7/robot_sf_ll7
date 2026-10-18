@@ -1,0 +1,10 @@
+{
+  "passed": true,
+  "purpose": "Label-adapter regression on original evidence only; no replication outcomes or simulation",
+  "analyzer_unchanged_sha256": "82d39e20877647fc5d2081fd2f2eb79d84153f994e931db9e422650ba87316a7",
+  "rates_byte_identical_to_original": 48,
+  "contrasts_byte_identical_to_original": 36,
+  "interval_pairs": 84,
+  "archived_acquisition_analyzer_crosscheck": true,
+  "temporary_fixture_removed": true
+}

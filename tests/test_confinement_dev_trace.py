@@ -162,3 +162,9 @@ def test_missing_actor_observation_breaks_crossing_segment():
     }
     record = {"algorithm_metadata": {"simulation_step_trace": trace}}
     assert not MODULE.episode_indicators(record, [P])["traversal"]
+
+
+def test_unfinished_attempt_is_reported_as_censored():
+    result = MODULE.actor_indicators(frames([[-0.1, 0], [0.3, 0], [0.6, 0]]), [P])
+    assert result["unfinished_passages"] == ["door"]
+    assert result["terminal_inside"] and not result["passages"]

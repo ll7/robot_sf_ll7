@@ -113,6 +113,12 @@ def actor_indicators(frames, passages):
                 uninterrupted.add(name)
                 all_passages_uninterrupted |= len(uninterrupted) == len(passages)
     return {
+        "unfinished_passages": sorted(active),
+        "terminal_inside": any(
+            p["entry"] < frames[-1]["position"][p["axis"]] < p["exit"]
+            and p["lateral_min"] <= frames[-1]["position"][1 - p["axis"]] <= p["lateral_max"]
+            for p in passages
+        ),
         "passages": sorted(found),
         "all_passages_uninterrupted": all_passages_uninterrupted,
         "stationary": stationary,
@@ -159,6 +165,8 @@ def episode_indicators(record, passages):
         "traversal": any(x["passages"] for x in indicators),
         "stationary": any(x["stationary"] for x in indicators),
         "actors": len(indicators),
+        "unfinished_attempt_actor_slots": sum(bool(x["unfinished_passages"]) for x in indicators),
+        "terminal_inside_actor_slots": sum(x["terminal_inside"] for x in indicators),
         "first_step_sentinels": sum(x["first_step_sentinels"] for x in indicators),
         "max_sentinel_discrepancy": max(
             (x["max_sentinel_discrepancy"] for x in indicators), default=0

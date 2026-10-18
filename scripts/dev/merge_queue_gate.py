@@ -204,6 +204,7 @@ class MergeGateAudit:
     evidence_registry_status: str = "not_evaluated"
     evidence_registry_head_sha: str = ""
     evidence_registry_expected_head_sha: str = ""
+    mergeable_status: str = "not_evaluated"
     reasons: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
@@ -349,6 +350,26 @@ def _closing_discipline_state(pr: dict[str, Any]) -> tuple[str, list[str]]:
     return status, blockers
 
 
+def _normalize_mergeability(value: Any, merge_state_status: Any = None) -> str:
+    """Normalize GitHub mergeability signals to ``conflicting``/``mergeable``/``unknown``.
+
+    ``mergeable`` (``MERGEABLE``/``CONFLICTING``/``UNKNOWN``) and
+    ``mergeStateStatus`` (``DIRTY`` for a conflicted PR) come from the live PR
+    payload. Returns an empty string when neither signal is present so legacy
+    snapshots and fixtures keep their pre-mergeability behaviour. A definitive
+    ``CONFLICTING``/``DIRTY``/``False`` value wins over a transient ``UNKNOWN``.
+    """
+    raw = "" if value is None else str(value).strip().upper()
+    state = "" if merge_state_status is None else str(merge_state_status).strip().upper()
+    if raw in {"CONFLICTING", "FALSE"} or state == "DIRTY":
+        return "conflicting"
+    if raw in {"MERGEABLE", "TRUE"}:
+        return "mergeable"
+    if raw == "UNKNOWN" or (not raw and state == "UNKNOWN"):
+        return "unknown"
+    return ""
+
+
 def _core_preflight_reasons(
     *,
     draft: bool,
@@ -357,6 +378,7 @@ def _core_preflight_reasons(
     changed_coverage_status: str,
     staleness_verdict: str,
     gate_verdict_status: str,
+    mergeable_status: str = "not_evaluated",
 ) -> list[str]:
     """Collect core preflight gate failure reasons."""
     reasons: list[str] = []
@@ -390,6 +412,10 @@ def _core_preflight_reasons(
                 "malformed": "malformed_exact_head_gate_verdict",
             }.get(gate_verdict_status, "missing_exact_head_gate_verdict")
         )
+    if mergeable_status == "conflicting":
+        reasons.append("mergeable_conflict")
+    elif mergeable_status == "unknown":
+        reasons.append("mergeable_unknown")
     return reasons
 
 
@@ -410,6 +436,7 @@ def _fail_closed_reasons(  # noqa: C901, PLR0913
     ancestry_state: str = "",
     closing_discipline_status: str = "not_evaluated",
     evidence_registry_status: str = "not_evaluated",
+    mergeable_status: str = "not_evaluated",
 ) -> list[str]:
     """Collect fail-closed reasons for one gate evaluation.
 
@@ -423,6 +450,7 @@ def _fail_closed_reasons(  # noqa: C901, PLR0913
         changed_coverage_status=changed_coverage_status,
         staleness_verdict=staleness_verdict,
         gate_verdict_status=gate_verdict_status,
+        mergeable_status=mergeable_status,
     )
 
     meta_reason = _metadata_verdict_reason(metadata_verdict_status)
@@ -663,6 +691,10 @@ def evaluate_merge_gate(  # noqa: C901, PLR0913, PLR0915 - explicit fail-closed 
     )
 
     staleness_verdict = _resolve_staleness_verdict(base_sha, main_sha)
+    mergeable_status = (
+        _normalize_mergeability(pr.get("mergeable"), pr.get("merge_state_status"))
+        or "not_evaluated"
+    )
     thread_resolution = _resolve_bool_status(threads_resolved, "resolved", "unresolved")
     reviewer_request_status = _resolve_bool_status(reviewers_requested, "requested", "clear")
 
@@ -690,6 +722,7 @@ def evaluate_merge_gate(  # noqa: C901, PLR0913, PLR0915 - explicit fail-closed 
             ancestry_state=ancestry_state,
             closing_discipline_status=closing_discipline_status,
             evidence_registry_status=evidence_registry_status,
+            mergeable_status=mergeable_status,
         )
     )
     if not head_sha:
@@ -730,6 +763,7 @@ def evaluate_merge_gate(  # noqa: C901, PLR0913, PLR0915 - explicit fail-closed 
         evidence_registry_status=evidence_registry_status,
         evidence_registry_head_sha=evidence_registry_head_sha,
         evidence_registry_expected_head_sha=evidence_registry_expected_head_sha,
+        mergeable_status=mergeable_status,
         reasons=reasons,
     )
 
@@ -1291,6 +1325,60 @@ def _fetch_pr_base_sha(pr_number: str | int, *, repo: str) -> tuple[str | None, 
     if not isinstance(sha, str) or not sha:
         return None, "PR base SHA is empty"
     return sha, None
+
+
+def _fetch_pr_mergeability(
+    pr_number: str | int, *, repo: str, head_sha: str, base_sha: str | None
+) -> tuple[str, str]:
+    """Return ``(mergeable, mergeable_state)`` from the REST pull endpoint.
+
+    Used as a bounded re-read when the GraphQL snapshot reports a transient
+    ``UNKNOWN`` mergeability. Returns ``("", "")`` on any read failure so the
+    caller keeps its prior classification rather than inventing a value. Only
+    accept a calculation bound to the snapshot's exact head and base SHAs.
+    """
+    result = _gh(["api", f"repos/{repo}/pulls/{pr_number}"])
+    if result.returncode != 0:
+        return "", ""
+    payload, err = _parse_json(result.stdout)
+    if err or not isinstance(payload, dict):
+        return "", ""
+    head = payload.get("head")
+    base = payload.get("base")
+    if (
+        not head_sha
+        or not base_sha
+        or not isinstance(head, dict)
+        or not isinstance(base, dict)
+        or head.get("sha") != head_sha
+        or base.get("sha") != base_sha
+    ):
+        return "", ""
+    mergeable = payload.get("mergeable")
+    mergeable_state = payload.get("mergeable_state")
+    return (
+        "" if mergeable is None else str(mergeable).upper(),
+        "" if mergeable_state is None else str(mergeable_state).upper(),
+    )
+
+
+def _resolve_snapshot_mergeability(
+    payload: dict[str, Any], pr_number: str | int, *, repo: str, base_sha: str | None
+) -> str:
+    """Normalize snapshot mergeability, re-reading once when GitHub reports UNKNOWN.
+
+    GitHub computes mergeability asynchronously; one bounded REST re-read
+    resolves most transient ``UNKNOWN`` responses without turning them into a
+    hard conflict (issue #10421). Missing or changed reread identities preserve
+    the blocking unknown classification.
+    """
+    status = _normalize_mergeability(payload.get("mergeable"), payload.get("mergeStateStatus"))
+    if status == "unknown":
+        rest_mergeable, rest_state = _fetch_pr_mergeability(
+            pr_number, repo=repo, head_sha=str(payload.get("headRefOid") or ""), base_sha=base_sha
+        )
+        status = _normalize_mergeability(rest_mergeable, rest_state) or status
+    return status
 
 
 def _fetch_pr_changed_file_records(
@@ -1947,6 +2035,8 @@ def _rest_pull_core(
         "mergeCommit": (
             {"oid": pull.get("merge_commit_sha")} if pull.get("merge_commit_sha") else None
         ),
+        "mergeable": pull.get("mergeable"),
+        "mergeStateStatus": pull.get("mergeable_state"),
     }, None
 
 
@@ -2013,7 +2103,7 @@ def fetch_pr_snapshot(  # noqa: C901, PLR0912 - validates several independent li
             "--repo",
             repo,
             "--json",
-            "number,title,body,state,mergedAt,isDraft,headRefOid,labels,statusCheckRollup,comments,reviews,reviewRequests,mergeCommit",
+            "number,title,body,state,mergedAt,isDraft,headRefOid,labels,statusCheckRollup,comments,reviews,reviewRequests,mergeCommit,mergeable,mergeStateStatus",
         ],
         timeout=30,
     )
@@ -2083,6 +2173,9 @@ def fetch_pr_snapshot(  # noqa: C901, PLR0912 - validates several independent li
         return {}, f"failed to fetch PR base SHA: {base_err}"
 
     head_sha = str(payload.get("headRefOid") or "")
+    mergeable_status = _resolve_snapshot_mergeability(
+        payload, pr_number, repo=repo, base_sha=base_sha
+    )
     changed_coverage, changed_coverage_err = _fetch_exact_head_changed_coverage(head_sha, repo=repo)
     if changed_coverage_err:
         return {}, f"failed to fetch exact-head changed coverage: {changed_coverage_err}"
@@ -2142,6 +2235,7 @@ def fetch_pr_snapshot(  # noqa: C901, PLR0912 - validates several independent li
         "metadata_digest": current_metadata_digest,
         "body": body,
         "base_sha": base_sha,
+        "mergeable": mergeable_status,
         "labels": _normalize_labels(payload.get("labels")),
         "checks": {"overall": _rollup_overall(payload.get("statusCheckRollup") or [])},
         "changed_coverage": changed_coverage,
@@ -2420,6 +2514,7 @@ def _format_summary(audit: MergeGateAudit) -> str:
         f"- closing-discipline status: `{audit.closing_discipline_status}`",
         f"- body narrative status: `{audit.body_narrative_status}`",
         f"- staleness verdict: `{audit.staleness_verdict}`",
+        f"- mergeable status: `{audit.mergeable_status}`",
         f"- CI conclusion: `{audit.ci_overall}`",
         f"- thread resolution: `{audit.thread_resolution}`",
         f"- requested-reviewer status: `{audit.reviewer_request_status}`",
@@ -2439,7 +2534,8 @@ def _format_summary(audit: MergeGateAudit) -> str:
         "accepted carrier) + current `pr-metadata: reconciled` "
         "trailer + exact-head `changed-coverage-gate` proof (or a complete CI-ignored docs-only "
         "file-set proof) + resolved threads + no outstanding reviewer requests + "
-        "no active exact-head review claim + `ALLGREEN` queue strategy; fail-closed on any "
+        "no active exact-head review claim + a non-conflicting PR mergeability "
+        "(`mergeable` is not `CONFLICTING`) + `ALLGREEN` queue strategy; fail-closed on any "
         "missing dimension. The canonical evidence-registry projection is consumed through its "
         "exact-head status check; its report remains owned by the evidence linter/ratchet. "
         "See `docs/dev_guide.md` and "

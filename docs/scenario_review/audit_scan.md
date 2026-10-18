@@ -136,12 +136,29 @@ Within-outcome outliers are accompanied by independent default channels:
 - `outcome_incidence` reports timeout, collision, other failure and total adverse
   rates per planner and exact scenario within a campaign. Its denominator includes
   all terminal outcomes, including successes; missing outcomes make the affected
-  planner denominator unavailable. Equal-weight cross-planner median rates and
-  excess rates are disclosed. An adverse episode remains a flagged candidate
-  above the default absolute failure-rate floor of zero, even with one planner.
-  This intentionally preserves every recorded failure subgroup. An excess above
-  0.1 flags the planner's cell, including its successes. These are descriptive
-  triage signals, not significance tests or proof that a failure is unexpected.
+  planner denominator unavailable. Cross-planner medians remain descriptive;
+  excess rates compare the target with pooled external complete peer cells. An
+  adverse episode remains a flagged candidate above the default absolute
+  failure-rate floor of zero, even with one planner. This preserves every recorded
+  failure subgroup.
+  The relative flag uses one-sided Fisher exact tests for those four outcomes,
+  excluding the target from its controls. Existing seed-set integrity requires
+  equal cell sizes, so each complete peer receives equal weight. Missing peer
+  outcomes exclude that peer without shrinking its denominator. Bonferroni
+  correction covers four outcomes times all planned planner cells, including
+  excluded cells. `family_alpha` defaults to 0.05 and cannot exceed it; the retired
+  `excess_rate_threshold` is rejected. Exact target/peer counts, `peer_sample_size`,
+  `pooled_peer_rates`, `incidence_p_values`, significant outcomes and corrected
+  thresholds are retained. A significant relative flag applies to the whole target
+  cell, including successes. Without complete external controls only the unchanged
+  absolute floor can flag.
+  Nominal scenario-family false positives are at most 5% under independent,
+  exchangeable Bernoulli outcomes within and across planner cells. Shared seeds can
+  induce cross-planner dependence, which invalidates that nominal guarantee; these
+  remain triage signals, not causal evidence or defect probabilities. The synthetic
+  Bernoulli(0.2) regression uses 100 null scenarios, five planners and 30 seeds per
+  cell, with the absolute floor disabled to isolate the relative rule. This
+  calibration does not bound the default absolute-failure flag rate.
 - `planner_cohort_shift` compares unconditioned planner features using paired
   episode differences at the same seeds. It needs at least four
   valid episodes per planner/feature and one external planner control. Each

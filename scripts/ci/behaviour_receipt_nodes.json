@@ -1,0 +1,20 @@
+{
+  "schema_version": "behaviour-receipt-node-inventory.v1",
+  "nodes": {
+    "auxme-imech091": {
+      "cpu_model": "AMD EPYC 9354P 32-Core Processor",
+      "architecture": "x86_64",
+      "node_class": "l40s"
+    },
+    "auxme-imech142": {
+      "cpu_model": "AMD EPYC 9115 16-Core Processor",
+      "architecture": "x86_64",
+      "node_class": "pro6000"
+    },
+    "auxme-imech172": {
+      "cpu_model": "Intel(R) Xeon(R) Silver 4310 CPU @ 2.10GHz",
+      "architecture": "x86_64",
+      "node_class": "a30"
+    }
+  }
+}

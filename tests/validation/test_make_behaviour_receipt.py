@@ -17,6 +17,13 @@ import pytest
 
 from scripts.ci import behaviour_receipt as gate
 from scripts.ci import make_behaviour_receipt as producer
+from tests.validation.receipt_scheduler_fixture import install_scheduler
+
+
+@pytest.fixture(autouse=True)
+def _scheduler_authority(tmp_path, monkeypatch):
+    install_scheduler(tmp_path, monkeypatch)
+
 
 REVIEWED_HEAD = "e7fd36f98fab243ce95cf45bc50ca8a9f7c30893"
 ORIGINAL_MAIN = "de3e37774049b2c6d017116426ae522dc232f679"
@@ -79,11 +86,17 @@ def _fake_release_api(tmp_path, monkeypatch):
 
 def _raw_row(seed, *, failing=False):
     return {
+        "scheduler_job_id": "123",
+        "scheduler_node": "auxme-imech142",
         "algo": "goal",
         "scenario_id": "open",
         "seed": seed,
         "steps": 1,
-        "metrics": {"success": not (failing and seed == 1001), "total_collision_count": 0},
+        "metrics": {
+            "success": not (failing and seed == 1001),
+            "collisions": 0,
+            "total_collision_count": 0,
+        },
         "algorithm_metadata": {
             "status": "ok",
             "planner_kinematics": {"execution_mode": "native"},
@@ -105,20 +118,26 @@ def _raw_row(seed, *, failing=False):
     }
 
 
-def _sweep_rows(root, label, *, source_sha="a" * 40, failing=False):
-    out = root / label
-    out.mkdir()
+def _sweep_rows(root, label, *, source_sha="a" * 40, failing=False, job="123"):
+    out = root / label / job
+    out.mkdir(parents=True)
     raw_path = out / "campaigns/empty_world_main/runs/goal__differential_drive/episodes.jsonl"
     raw_path.parent.mkdir(parents=True)
     raw_rows = [_raw_row(seed, failing=failing) for seed in range(1001, 1031)]
+    for row in raw_rows:
+        row["scheduler_job_id"] = job
+        row["git_hash"] = source_sha
     raw_path.write_text("".join(json.dumps(row) + "\n" for row in raw_rows))
     rows = [
         {
+            "scheduler_job_id": job,
+            "scheduler_node": "auxme-imech142",
             "arm": "goal",
             "scenario": "open",
             "seed": row["seed"],
             "success": row["metrics"]["success"],
             "collisions": 0,
+            "steps": row["steps"],
             "execution_status": "written",
             "trace_complete": True,
             "source_file": "runs/goal__differential_drive/episodes.jsonl",
@@ -145,7 +164,18 @@ def _sweep_rows(root, label, *, source_sha="a" * 40, failing=False):
         "incomplete_trace_slots": [],
     }
     (out / "execution_main.json").write_text(json.dumps(meta))
+    from tests.validation.test_behaviour_receipt_gate import _hardware
+
+    for name, entry in _hardware(source_sha, job).items():
+        (out / name).write_text(entry["content"])
+    request_path = out / "execution_request.json"
+    request = json.loads(request_path.read_text())
+    request["arm_role"] = "baseline" if label == "baseline" else "head"
+    request_path.write_text(json.dumps(request))
     (out / "README.md").write_text(label + "\n")
+    from tests.validation.test_behaviour_receipt_provenance import refresh_sweep_binding
+
+    refresh_sweep_binding(out)
     return out
 
 
@@ -163,6 +193,11 @@ def _existing(source_sha, out, digest=None):
 def test_existing_sweep_rejects_relabelled_source(tmp_path, claimed_sha):
     """Foreign recorded source cannot become either claimed execution source."""
     out = _sweep_rows(tmp_path, "foreign", source_sha="b" * 40)
+    # Keep hardware valid for the claimed source to isolate the execution-metadata guard.
+    request = out / "execution_request.json"
+    hardware_request = json.loads(request.read_text())
+    hardware_request["source_sha"] = claimed_sha
+    request.write_text(json.dumps(hardware_request))
     with pytest.raises(ValueError, match="recorded SHA differs"):
         _existing(claimed_sha, out)
 
@@ -1364,7 +1399,7 @@ def test_real_row_unclassified_fault_fields_fail_closed_even_in_optional_objects
     assert row == original
 
 
-def _payload_fixture(tmp_path, monkeypatch):
+def _payload_fixture(tmp_path, monkeypatch, *, legacy_projection=False):
     git = _git_repo(tmp_path)
     _fake_release_api(tmp_path, monkeypatch)
     scope_path = tmp_path / "scope.json"
@@ -1387,6 +1422,11 @@ def _payload_fixture(tmp_path, monkeypatch):
         classification_class="known_limitation",
         evidence_base_uri="https://example.org/e",
     )
+    if legacy_projection:
+        # Historical policy controls retain their historical wire schema; the
+        # optional native-slot presentation field is unrelated to those defects.
+        for row in [*rows, *classes]:
+            row.pop("native_slot", None)
     kwargs = {
         "repo_root": tmp_path,
         "receipt_id": "synthetic",
@@ -1408,7 +1448,7 @@ def _payload_fixture(tmp_path, monkeypatch):
         "output_dir": tmp_path / "receipts/behaviour",
     }
     producer.write_receipt_and_header(**kwargs)
-    git("add", "receipts/behaviour/synthetic.json")
+    git("add", "receipts/behaviour")
     git("commit", "-m", "receipt payload")
     kwargs["head_sha"] = git("rev-parse", "HEAD")
     _, header = producer.write_receipt_and_header(**kwargs)
@@ -1431,13 +1471,15 @@ def test_placeholder_review_fails_real_gate(monkeypatch, tmp_path):
 def _revision_module(tmp_path, revision, filename):
     name = f"receipt_{revision[:8]}_{filename.removesuffix('.py')}"
     source = subprocess.check_output(
-        ["git", "show", f"{revision}:scripts/ci/{filename}"], cwd=producer.ROOT, text=True
+        ["git", "show", f"{revision}:scripts/ci/{filename}"],
+        cwd=Path(__file__).resolve().parents[2],
+        text=True,
     )
     path = tmp_path / filename
     path.write_text(source)
     schema = subprocess.check_output(
         ["git", "show", f"{revision}:scripts/ci/behaviour_receipt.schema.json"],
-        cwd=producer.ROOT,
+        cwd=Path(__file__).resolve().parents[2],
     )
     (tmp_path / "behaviour_receipt.schema.json").write_bytes(schema)
     spec = importlib.util.spec_from_file_location(name, path)
@@ -1467,7 +1509,9 @@ def test_p1_regression_controls_fail_on_reviewed_head(monkeypatch, tmp_path, fin
             with pytest.raises(pytest.fail.Exception, match="DID NOT RAISE"):
                 test_existing_sweep_rejects_relabelled_source(fixture_dir, "a" * 40)
         elif finding == "review":
-            header = _payload_fixture(fixture_dir, monkeypatch)
+            old_gate = _revision_module(tmp_path, REVIEWED_HEAD, "behaviour_receipt.py")
+            monkeypatch.setattr(sys.modules[__name__], "gate", old_gate)
+            header = _payload_fixture(fixture_dir, monkeypatch, legacy_projection=True)
             body = "<!-- behaviour-change-receipt:v2\n" + json.dumps(header) + "\n-->"
             assert (
                 gate.check_receipt(body, ["robot_sf/planner/guarded_ppo.py"], "ll7/robot_sf_ll7")
@@ -1490,6 +1534,11 @@ def _install_cli_fixture(tmp_path, monkeypatch):
         "make_behaviour_receipt.py",
         "behaviour_receipt.py",
         "behaviour_receipt.schema.json",
+        "behaviour_receipt_nodes.json",
+        "receipt_provenance.py",
+        "receipt_native_slots.py",
+        "receipt_outcomes.py",
+        "receipt_arm_execution.py",
     ):
         destination = tmp_path / "scripts/ci" / filename
         destination.parent.mkdir(parents=True, exist_ok=True)
@@ -1501,10 +1550,18 @@ def _install_cli_fixture(tmp_path, monkeypatch):
         producer.ROOT / "scripts/validation/run_empty_world_sweep.py",
         validation / "run_empty_world_sweep.py",
     )
+    from scripts.validation import run_empty_world_sweep as native
+
+    # The isolated CLI must carry the same reviewed configuration authority as
+    # acquisition, rather than inventing a test-only kinematics default.
+    for template in native.SUITES.values():
+        destination = tmp_path / template
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(producer.ROOT / template, destination)
     scope_path = tmp_path / gate.SCOPE_FILE
-    scope_path.parent.mkdir(parents=True)
+    scope_path.parent.mkdir(parents=True, exist_ok=True)
     scope_path.write_text(json.dumps(_scope()))
-    git("add", "scripts", gate.SCOPE_FILE)
+    git("add", "scripts", "configs", gate.SCOPE_FILE)
     git("commit", "-m", "baseline launcher")
     baseline_source = git("rev-parse", "HEAD")
     git("tag", RELEASE_TAG)
@@ -1516,7 +1573,11 @@ def _install_cli_fixture(tmp_path, monkeypatch):
     git("commit", "-m", "synthetic behaviour change")
     source = git("rev-parse", "HEAD")
     head = _sweep_rows(tmp_path, "head", source_sha=source, failing=True)
-    baseline = _sweep_rows(tmp_path, "baseline", source_sha=baseline_source)
+    baseline = _sweep_rows(tmp_path, "baseline", source_sha=baseline_source, job="456")
+    request = baseline / "execution_request.json"
+    metadata = json.loads(request.read_text())
+    metadata["job_id"] = "456"
+    request.write_text(json.dumps(metadata))
     _fake_release_api(tmp_path, monkeypatch)
     monkeypatch.delenv("PYTHONPATH", raising=False)
     monkeypatch.setattr(gate, "ROOT", tmp_path)
@@ -1553,7 +1614,7 @@ def test_file_cli_and_real_gate_cover_name_only_baseline(monkeypatch, tmp_path):
         json.loads(first.stdout.split("\n", 1)[1].rsplit("-->", 1)[0])["baseline"]["release"]
         == RELEASE_TAG
     )
-    git("add", "receipts/behaviour/synthetic.json")
+    git("add", "receipts/behaviour")
     git("commit", "-m", "receipt payload")
     final_head = git("rev-parse", "HEAD")
     command[command.index("--head-sha") + 1] = final_head
@@ -1583,10 +1644,40 @@ def test_file_cli_and_real_gate_cover_name_only_baseline(monkeypatch, tmp_path):
     original = _revision_module(tmp_path, ORIGINAL_MAIN, "behaviour_receipt.py")
     original.ROOT, original.SCOPE_PATH = tmp_path, gate.SCOPE_PATH
     assert original.latest_release("ll7/robot_sf_ll7") == "0.0.7"
-    receipt = original.load_receipt(header, final_head)
+    legacy_payload = json.loads((tmp_path / header["rows_artifact"]["path"]).read_text())
+    legacy_payload.pop("hardware")
+    legacy_payload.pop("source_artifacts")
+    for row in [*legacy_payload["rows"], *legacy_payload["classifications"]]:
+        row.pop("native_slot", None)
+    for row in legacy_payload["rows"]:
+        for key in (
+            "scheduler_job_id",
+            "scheduler_node",
+            "baseline_scheduler_job_id",
+            "baseline_scheduler_node",
+        ):
+            row.pop(key)
+    legacy_raw = json.dumps(legacy_payload).encode()
+    (tmp_path / header["rows_artifact"]["path"]).write_bytes(legacy_raw)
+    git("add", header["rows_artifact"]["path"])
+    git("commit", "-m", "historical transport control")
+    legacy_head = git("rev-parse", "HEAD")
+    legacy_header = copy.deepcopy(header)
+    legacy_header["rows_artifact"]["sha256"] = hashlib.sha256(legacy_raw).hexdigest()
+    legacy_header["classifications"] = {
+        "count": len(legacy_payload["classifications"]),
+        "sha256": hashlib.sha256(
+            json.dumps(
+                legacy_payload["classifications"], sort_keys=True, separators=(",", ":")
+            ).encode()
+        ).hexdigest(),
+    }
+    legacy_header["head_sha"] = legacy_head
+    legacy_header["refute_review"]["head_sha"] = legacy_head
+    receipt = original.load_receipt(legacy_header, legacy_head)
     with pytest.raises(ValueError, match="baseline is not the latest published software release"):
         original.validate_receipt(
-            receipt, _scope(), final_head, "0.0.7", original.release_source("0.0.7")
+            receipt, _scope(), legacy_head, "0.0.7", original.release_source("0.0.7")
         )
     assert original.check_receipt(body, changed, "ll7/robot_sf_ll7")
 
@@ -1613,7 +1704,7 @@ def test_raw_trace_file_is_decoded_once_per_invocation(tmp_path, monkeypatch):
     monkeypatch.setattr(Path, "read_text", track_reads)
     rows = producer._load_sweep_rows(out)
     assert len(rows) == 30
-    assert rows[("goal", "open", 1001)]["metrics"]["success"] is True
+    assert rows[("goal", "differential_drive", "open", 1001)]["metrics"]["success"] is True
     assert len(reads) == 1
 
 
@@ -1651,6 +1742,7 @@ def test_raw_index_preserves_planted_regression_detection(tmp_path, fault, reaso
     elif fault == "success":
         raw[-1]["metrics"]["success"] = False
     elif fault == "collision":
+        raw[-1]["metrics"]["collisions"] = 1
         raw[-1]["metrics"]["total_collision_count"] = 1
     elif fault == "duplicate_summary":
         summary.append(copy.deepcopy(summary[-1]))

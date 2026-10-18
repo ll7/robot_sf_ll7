@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 import base64
+import copy
+import hashlib
 import json
 import shlex
+import subprocess
+import sys
 from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -2989,3 +2993,636 @@ def test_audit_summary_records_ancestry_state(capsys) -> None:
     summary = _format_summary(audit)
     assert "ancestry state: `stacked`" in summary
     assert "stacked_ancestry_not_independently_mergeable" in summary
+
+
+@pytest.fixture(params=["regular", "lfs"])
+def queue_equivalence(tmp_path, monkeypatch, request):
+    """Start with a fully accepted typed receipt and otherwise green queue snapshot."""
+    from scripts.ci import behaviour_receipt as gate
+    from tests.validation.receipt_scheduler_fixture import install_scheduler
+    from tests.validation.test_default_path_equivalence import _build_admitted
+
+    records_path = install_scheduler(tmp_path, monkeypatch)
+    records = json.loads(records_path.read_text())
+    for job in ("11", "12"):
+        records[job] = {**records["123"], "job_id": job}
+    records_path.write_text(json.dumps(records))
+    payload, header, _, head, base, body = _build_admitted(tmp_path, monkeypatch)
+    artifact = tmp_path / header["rows_artifact"]["path"]
+    if request.param == "lfs":
+        raw = artifact.read_bytes()
+        object_file = tmp_path / "archived-lfs-payload.json"
+        object_file.write_bytes(raw)
+        artifact.write_text(
+            "version https://git-lfs.github.com/spec/v1\n"
+            f"oid sha256:{hashlib.sha256(raw).hexdigest()}\nsize {len(raw)}\n"
+        )
+        subprocess.run(["git", "add", str(artifact)], cwd=tmp_path, check=True)
+        subprocess.run(
+            ["git", "commit", "-m", "receipt LFS transport"],
+            cwd=tmp_path,
+            check=True,
+            capture_output=True,
+        )
+        head = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=tmp_path, text=True
+        ).strip()
+        header["head_sha"] = header["refute_review"]["head_sha"] = head
+        body = "<!-- default-path-equivalence:v1\n" + json.dumps(header) + "\n-->"
+        lfs = tmp_path / "scheduler-bin/git-lfs"
+        lfs.write_text(
+            f"#!{sys.executable}\nimport pathlib,sys\nassert sys.argv[1:3] == ['smudge','--']\nsys.stdin.buffer.read()\nsys.stdout.buffer.write(pathlib.Path({str(object_file)!r}).read_bytes())\n"
+        )
+        lfs.chmod(0o755)
+        monkeypatch.setenv("BEHAVIOUR_PR_HEAD_SHA", head)
+        assert (
+            gate.check_receipt(
+                body, ["robot_sf/benchmark/camera_ready/_run_state.py"], "test/repo", base
+            )
+            == []
+        )
+    monkeypatch.setattr(merge_queue_gate_module, "_REPO_ROOT", tmp_path)
+    monkeypatch.setenv("GH_TOKEN", "queue-test-credential")
+    metadata = metadata_digest("merge queue test PR", body)
+    snapshot = _gate_ready_pr(
+        head_sha=head,
+        base_sha=base,
+        body=body,
+        reviewers_requested=False,
+        changed_coverage={"status": "success", "head_sha": head},
+        gate_verdicts=[f"gate-verdict: accepted @ {head}"],
+        metadata_digest=metadata,
+        metadata_verdicts=[metadata_trailer(metadata)],
+    )
+    state = {"main_sha": base}
+    monkeypatch.setattr(
+        merge_queue_gate_module,
+        "fetch_pr_snapshot",
+        lambda *_args, **_kwargs: (copy.deepcopy(snapshot), None),
+    )
+    monkeypatch.setattr(
+        merge_queue_gate_module,
+        "_fetch_live_closing_discipline",
+        lambda *_args, **_kwargs: ("passed", []),
+    )
+    monkeypatch.setattr(
+        merge_queue_gate_module,
+        "_fetch_exact_head_evidence_registry",
+        lambda head, **_kwargs: ({"status": "success", "head_sha": head}, None),
+    )
+    monkeypatch.setattr(
+        merge_queue_gate_module,
+        "fetch_merge_queue_strategy",
+        lambda *_args, **_kwargs: ("ALLGREEN", None),
+    )
+    monkeypatch.setattr(
+        merge_queue_gate_module, "fetch_threads_resolved", lambda *_args, **_kwargs: (True, None)
+    )
+    monkeypatch.setattr(
+        merge_queue_gate_module, "fetch_main_sha", lambda **_kwargs: state["main_sha"]
+    )
+    event = tmp_path / "queue-event.json"
+
+    def invoke(group_base=base):
+        event.write_text(
+            json.dumps(
+                {
+                    "merge_group": {
+                        "head_ref": f"gh-readonly-queue/main/pr-42-{snapshot['head_sha']}",
+                        "base_sha": group_base,
+                    }
+                }
+            )
+        )
+        return main(
+            [
+                "--from-event",
+                str(event),
+                "--repo",
+                "test/repo",
+                "--merge-group-evidence-head",
+                "9" * 40,
+            ]
+        )
+
+    return snapshot, state, invoke, base, head, header, payload
+
+
+def test_live_queue_reads_committed_receipt_and_refuses_moved_main(queue_equivalence, capsys):
+    """Previously green exact-head checks cannot outlive this route's main baseline."""
+    _, state, invoke, base, head, _, _ = queue_equivalence
+    assert invoke() == 0
+    audit = json.loads(capsys.readouterr().out)
+    assert audit["passed"] and audit["equivalence_freshness"]["baseline_sha"] == base
+    assert audit["equivalence_freshness"]["head_sha"] == head
+    state["main_sha"] = "d" * 40
+    assert invoke(state["main_sha"]) == 1
+    audit = json.loads(capsys.readouterr().out)
+    assert "equivalence_freshness_stale" in audit["reasons"]
+    assert audit["equivalence_freshness"]["baseline_sha"] == base
+    assert audit["equivalence_freshness"]["live_main_sha"] == state["main_sha"]
+
+
+def test_live_queue_refuses_when_actual_main_and_old_group_base_disagree(queue_equivalence, capsys):
+    """A synthetic merge-group base cannot stand in for the independently read live main."""
+    _, state, invoke, _, _, _, _ = queue_equivalence
+    assert invoke() == 0
+    capsys.readouterr()
+    state["main_sha"] = "d" * 40
+    assert invoke() == 1
+    audit = json.loads(capsys.readouterr().out)
+    assert "equivalence_freshness_stale" in audit["reasons"]
+
+
+@pytest.mark.parametrize("fault", ["missing_file", "digest", "header_baseline_spoof"])
+def test_live_queue_refuses_body_spoof_or_unreadable_committed_payload(
+    queue_equivalence, capsys, fault
+):
+    """Body edits cannot manufacture immutable payload custody or freshness."""
+    snapshot, state, invoke, _, _, header, _ = queue_equivalence
+    assert invoke() == 0
+    capsys.readouterr()
+    header = copy.deepcopy(header)
+    if fault == "missing_file":
+        header["rows_artifact"]["path"] = "receipts/behaviour/missing.json"
+    elif fault == "digest":
+        header["rows_artifact"]["sha256"] = "0" * 64
+    else:
+        state["main_sha"] = "d" * 40
+        header["baseline"] = {"source_sha": state["main_sha"]}
+    snapshot["body"] = "<!-- default-path-equivalence:v1\n" + json.dumps(header) + "\n-->"
+    assert invoke(state["main_sha"]) == 1
+    audit = json.loads(capsys.readouterr().out)
+    reason = "malformed" if fault == "header_baseline_spoof" else "unavailable"
+    assert f"equivalence_freshness_{reason}" in audit["reasons"]
+
+
+def test_pure_queue_requires_bound_freshness_evidence(queue_equivalence):
+    """The deterministic audit cannot assume an old green check means a fresh baseline."""
+    snapshot, _, _, base, _head, _header, _ = queue_equivalence
+    kwargs = {"main_sha": base, "threads_resolved": True, "reviewers_requested": False}
+    audit = evaluate_merge_gate(snapshot, **kwargs)
+    assert audit.reasons == ["equivalence_freshness_unavailable"]
+    snapshot["equivalence_freshness"] = merge_queue_gate_module._fetch_equivalence_freshness(
+        snapshot, repo="test/repo", queue_base_sha=base, live_main_sha=base
+    )
+    assert evaluate_merge_gate(snapshot, **kwargs).passed
+    snapshot["equivalence_freshness"]["status"] = "not_required"
+    assert evaluate_merge_gate(snapshot, **kwargs).reasons == ["equivalence_freshness_unavailable"]
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "<!-- default-path-equivalence:v1 {}-->",
+        "<!-- default-path-equivalence:v1\n{}",
+        "<!-- default-path-equivalence:v1\n{}--><!-- behaviour-change-receipt:v2\n{}-->",
+    ],
+)
+def test_pure_queue_refuses_malformed_or_mixed_equivalence_marker(body):
+    """Malformed explicit route comments fail while ordinary/full receipts retain their path."""
+    snapshot = _gate_ready_pr(body=body)
+    audit = evaluate_merge_gate(
+        snapshot, main_sha=FULL_SHA, threads_resolved=True, reviewers_requested=False
+    )
+    assert audit.reasons == ["equivalence_freshness_malformed"]
+    snapshot["body"] = "<!-- behaviour-change-receipt:v2\n{}-->"
+    assert evaluate_merge_gate(
+        snapshot, main_sha=FULL_SHA, threads_resolved=True, reviewers_requested=False
+    ).passed
+
+
+@pytest.mark.parametrize("fetch_succeeds", [True, False])
+def test_live_queue_missing_head_uses_authenticated_object_fetch_without_checkout(
+    queue_equivalence, tmp_path, monkeypatch, capsys, fetch_succeeds
+):
+    """An absent source object is fetched by immutable SHA; failure never reuses green CI."""
+    _, _, invoke, base, head, _, _ = queue_equivalence
+    assert invoke() == 0
+    capsys.readouterr()
+    source = tmp_path
+    trusted = tmp_path / "trusted-base-objects"
+    trusted.mkdir()
+    subprocess.run(["git", "init", "-b", "main"], cwd=trusted, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "fetch", "--no-tags", str(source), base],
+        cwd=trusted,
+        check=True,
+        capture_output=True,
+    )
+    initial_head_file = (trusted / ".git/HEAD").read_bytes()
+    monkeypatch.setattr(merge_queue_gate_module, "_REPO_ROOT", trusted)
+    original_run = subprocess.run
+    fetches = []
+
+    def readonly_fetch(command, **kwargs):
+        assert "checkout" not in command
+        if command[:5] == ["git", "-c", "core.hooksPath=/dev/null", "fetch", "--no-tags"]:
+            fetches.append(command)
+            assert command[5:] == ["https://github.com/test/repo.git", head]
+            assert kwargs["cwd"] == trusted
+            assert kwargs["env"]["GH_TOKEN"] == "queue-test-credential"
+            assert kwargs["env"]["GIT_CONFIG_VALUE_1"] == "!gh auth git-credential"
+            if not fetch_succeeds:
+                raise subprocess.CalledProcessError(1, command)
+            return original_run(["git", "fetch", "--no-tags", str(source), head], **kwargs)
+        return original_run(command, **kwargs)
+
+    monkeypatch.setattr(merge_queue_gate_module.subprocess, "run", readonly_fetch)
+    assert invoke() == (0 if fetch_succeeds else 1)
+    audit = json.loads(capsys.readouterr().out)
+    assert len(fetches) == 1
+    assert audit["equivalence_freshness"]["status"] == (
+        "success" if fetch_succeeds else "unavailable"
+    )
+    assert (trusted / ".git/HEAD").read_bytes() == initial_head_file
+    assert list(trusted.iterdir()) == [trusted / ".git"]
+
+
+def _inject_runtime_alias(repo, payload, fault, base):
+    from scripts.ci import default_path_equivalence as eq
+    from tests.validation.test_default_path_equivalence import (
+        rewrite_source_archive,
+        stamp_runtime_aliases,
+    )
+
+    rewrite_source_archive(
+        repo,
+        payload,
+        "head",
+        lambda root: stamp_runtime_aliases(
+            root,
+            wrong_source=base,
+            wrong_leaf=eq.RUNTIME_SOURCE_LEAVES[int(fault.rsplit("_", 1)[1])],
+        ),
+        suffix="invalid",
+    )
+    if fault.endswith("_2"):
+        return "provenance digest producer source contradicts claimed commit"
+    return (
+        "producer row source or link differs"
+        if fault.endswith("_0")
+        else "original row source differs"
+    )
+
+
+def _inject_equivalence_identity(repo, payload, fault, base):
+    from tests.validation.test_default_path_equivalence import mutate_archived_identity
+
+    mutate_archived_identity(repo, payload, fault, base)
+    return (
+        "producer source or arm role differs"
+        if fault.startswith("binding_")
+        else "archived request source/role differs"
+        if fault in {"request_source", "request_role"}
+        else "archived request differs from verified allocation/hardware"
+    )
+
+
+def _prepare_legacy_choice(repo, payload, fault):
+    if not fault.startswith("legacy_"):
+        return payload
+    from tests.validation.test_default_path_equivalence import prepare_legacy_receipt
+
+    payload = copy.deepcopy(payload)
+    prepare_legacy_receipt(repo, payload)
+    artifact = repo / "receipts/behaviour/equivalence.json"
+    raw = json.dumps(payload).encode()
+    if artifact.read_bytes().startswith(b"version https://git-lfs.github.com/spec/v1"):
+        (repo / "archived-lfs-payload.json").write_bytes(raw)
+        artifact.write_text(
+            "version https://git-lfs.github.com/spec/v1\n"
+            f"oid sha256:{hashlib.sha256(raw).hexdigest()}\nsize {len(raw)}\n"
+        )
+    else:
+        artifact.write_bytes(raw)
+    return payload
+
+
+def _current_choice_header(header, payload, fault, head):
+    from scripts.ci import default_path_equivalence as eq
+
+    header = copy.deepcopy(header)
+    if fault.startswith("legacy_"):
+        header["rows_artifact"]["sha256"] = hashlib.sha256(json.dumps(payload).encode()).hexdigest()
+        header["refute_review"]["comparison_sha256"] = eq.digest(payload["rows"])
+    header["head_sha"] = header["refute_review"]["head_sha"] = head
+    return header
+
+
+def _inject_strict_json_source(repo, payload, fault):
+    if fault.startswith("duplicate_"):
+        _inject_duplicate_equivalence_source(repo, payload, fault.removeprefix("duplicate_"))
+        return "duplicate object key refused"
+    from tests.validation.test_default_path_equivalence import (
+        LEGACY_MUTATIONS,
+        NONFINITE_LITERALS,
+        legacy_metrics,
+        nonfinite_source_json,
+        rewrite_source_archive,
+    )
+
+    index = int(fault.rsplit("_", 1)[1])
+    if fault.startswith("legacy_"):
+        rewrite_source_archive(
+            repo,
+            payload,
+            "head",
+            lambda root: legacy_metrics(root, LEGACY_MUTATIONS[index]),
+            synchronize=True,
+            suffix="invalid",
+        )
+        return "changed behavioral byte"
+    rewrite_source_archive(
+        repo,
+        payload,
+        "head",
+        lambda root: nonfinite_source_json(root, NONFINITE_LITERALS[index % 4], index >= 4),
+        suffix="invalid",
+    )
+    return "non-finite number refused"
+
+
+def _inject_duplicate_equivalence_source(repo, payload, kind):
+    from tests.validation.test_default_path_equivalence import (
+        duplicate_source_json,
+        rewrite_source_archive,
+    )
+
+    def mutate(root):
+        duplicate_source_json(root, kind)
+
+    rewrite_source_archive(
+        repo,
+        payload,
+        "head",
+        (lambda _root: None) if kind == "binding" else mutate,
+        suffix="invalid",
+        post_binding_mutator=mutate if kind == "binding" else None,
+    )
+
+
+@pytest.mark.parametrize(
+    "fault",
+    [
+        "byte",
+        "fallback",
+        "trace_proof",
+        "raw_job",
+        "binding_source",
+        "binding_role",
+        "request_source",
+        "request_role",
+        "request_job",
+        "request_node",
+        "request_schema",
+        "request_extra",
+        "summary_missing",
+        "summary_wrong_arm",
+        "summary_duplicate",
+        "summary_extra",
+        *[f"runtime_alias_{index}" for index in range(8)],
+        *[f"nonfinite_{index}" for index in range(8)],
+        *[f"legacy_{index}" for index in range(6)],
+        *[
+            f"duplicate_{kind}"
+            for kind in ("raw_top", "raw_nested", "summary", "metadata", "binding")
+        ],
+    ],
+)
+def test_same_head_body_switch_revalidates_current_committed_receipt(
+    queue_equivalence, tmp_path, monkeypatch, capsys, fault
+):
+    """Green A and refused B share one H; current B cannot inherit A's admission."""
+    from scripts.ci import behaviour_receipt as gate
+    from scripts.ci import default_path_equivalence as eq
+
+    snapshot, _, invoke, base, _, header_a, payload = queue_equivalence
+    payload = _prepare_legacy_choice(tmp_path, payload, fault)
+    invalid = copy.deepcopy(payload)
+    first = invalid["rows"][0]
+    if fault == "byte":
+        from tests.validation.test_default_path_equivalence import (
+            change_first_raw_reward,
+            rewrite_source_archive,
+        )
+
+        rewrite_source_archive(
+            tmp_path, invalid, "head", change_first_raw_reward, synchronize=True, suffix="invalid"
+        )
+        reason = "changed behavioral byte"
+    elif fault.startswith(("binding_", "request_")):
+        reason = _inject_equivalence_identity(tmp_path, invalid, fault, base)
+    elif fault.startswith("summary_"):
+        from tests.validation.test_default_path_equivalence import (
+            mutate_summary_source,
+            rewrite_source_archive,
+        )
+
+        rewrite_source_archive(
+            tmp_path,
+            invalid,
+            "head",
+            lambda root: mutate_summary_source(root, fault, payload),
+            suffix="invalid",
+        )
+        reason = {
+            "summary_duplicate": "producer summary/raw coverage or source differs",
+            "summary_wrong_arm": "producer summary/raw coverage or source differs",
+            "summary_missing": "producer summary/raw coverage or source differs",
+            "summary_extra": "producer summary/raw coverage or source differs",
+        }[fault]
+    elif fault.startswith(("duplicate_", "nonfinite_", "legacy_")):
+        reason = _inject_strict_json_source(tmp_path, invalid, fault)
+    elif fault.startswith("runtime_alias_"):
+        reason = _inject_runtime_alias(tmp_path, invalid, fault, base)
+    elif fault == "fallback":
+        first["head_execution"]["fallback"] = True
+        reason = "head_execution.fallback"
+    elif fault == "trace_proof":
+        first["head_execution"]["controller_executed"] = False
+        reason = "head_execution.controller_executed"
+    else:
+        first["scheduler_job_id"] = "123"
+        reason = "head row job differs"
+    relative = "receipts/behaviour/equivalence-invalid.json"
+    file_b = tmp_path / relative
+    raw_b = json.dumps(invalid).encode()
+    file_b.write_bytes(raw_b)
+    subprocess.run(["git", "add", "receipts"], cwd=tmp_path, check=True)
+    subprocess.run(
+        ["git", "commit", "-m", "both receipt choices at one head"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+    )
+    head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=tmp_path, text=True).strip()
+    header_a = _current_choice_header(header_a, payload, fault, head)
+    header_b = copy.deepcopy(header_a)
+    header_b["rows_artifact"] = {"path": relative, "sha256": hashlib.sha256(raw_b).hexdigest()}
+    header_b["refute_review"]["comparison_sha256"] = eq.digest(invalid["rows"])
+
+    def select(header):
+        snapshot["body"] = "<!-- default-path-equivalence:v1\n" + json.dumps(header) + "\n-->"
+        metadata = metadata_digest("merge queue test PR", snapshot["body"])
+        snapshot.update(
+            head_sha=head,
+            gate_verdicts=[f"gate-verdict: accepted @ {head}"],
+            changed_coverage={"status": "success", "head_sha": head},
+            metadata_digest=metadata,
+            metadata_verdicts=[metadata_trailer(metadata)],
+        )
+
+    monkeypatch.setenv("BEHAVIOUR_PR_HEAD_SHA", head)
+    select(header_a)
+    assert gate.check_receipt(snapshot["body"], [], "test/repo", base) == []
+    assert invoke() == 0
+    capsys.readouterr()
+    select(header_b)
+    blockers = gate.check_receipt(snapshot["body"], [], "test/repo", base)
+    assert len(blockers) == 1 and reason in blockers[0]
+    assert invoke() == 1
+    audit = json.loads(capsys.readouterr().out)
+    assert "equivalence_freshness_rejected" in audit["reasons"]
+    snapshot["equivalence_freshness"] = audit["equivalence_freshness"]
+    assert (
+        snapshot["equivalence_freshness"]["admission_status"] == "rejected"
+        and reason in snapshot["equivalence_freshness"]["admission_reason"]
+    )
+    assert evaluate_merge_gate(
+        snapshot, main_sha=base, threads_resolved=True, reviewers_requested=False
+    ).reasons == ["equivalence_freshness_rejected"]
+
+
+@pytest.mark.parametrize(
+    "fault", ["review_digest", "review_head", "pending_review", "scheduler_auth", "lfs_bytes"]
+)
+def test_current_queue_selection_requires_complete_admission(
+    queue_equivalence, tmp_path, capsys, fault
+):
+    """Current review and authenticated evidence must pass even at an unchanged green head."""
+    snapshot, _, invoke, _, _, header, _ = queue_equivalence
+    assert invoke() == 0
+    capsys.readouterr()
+    header = copy.deepcopy(header)
+    reason = None
+    if fault == "review_digest":
+        header["refute_review"]["comparison_sha256"] = "0" * 64
+        reason = "review does not bind the comparison evidence"
+    elif fault == "review_head":
+        header["refute_review"]["head_sha"] = "d" * 40
+    elif fault == "pending_review":
+        header["refute_review"]["verdict"] = "pending_independent_review"
+    elif fault == "scheduler_auth":
+        (tmp_path / "scheduler.json").write_text("{}")
+        reason = "missing authoritative scheduler allocations"
+    else:
+        archive = tmp_path / "archived-lfs-payload.json"
+        if not archive.exists():
+            pytest.skip("LFS materialization fault requires LFS fixture")
+        archive.write_bytes(archive.read_bytes() + b" ")
+    snapshot["body"] = "<!-- default-path-equivalence:v1\n" + json.dumps(header) + "\n-->"
+    metadata = metadata_digest("merge queue test PR", snapshot["body"])
+    snapshot.update(metadata_digest=metadata, metadata_verdicts=[metadata_trailer(metadata)])
+    assert invoke() == 1
+    audit = json.loads(capsys.readouterr().out)
+    assert not audit["passed"]
+    if reason is not None:
+        assert "equivalence_freshness_rejected" in audit["reasons"]
+        assert reason in audit["equivalence_freshness"]["admission_reason"]
+
+
+def test_pure_queue_cannot_reuse_full_admission_for_edited_review(queue_equivalence):
+    """A freshness proof alone or proof of an earlier header cannot authorize the new selection."""
+    snapshot, _, _, base, _, header, _ = queue_equivalence
+    proof = merge_queue_gate_module._fetch_equivalence_freshness(
+        snapshot, repo="test/repo", queue_base_sha=base, live_main_sha=base
+    )
+    snapshot["equivalence_freshness"] = proof
+    kwargs = {"main_sha": base, "threads_resolved": True, "reviewers_requested": False}
+    assert evaluate_merge_gate(snapshot, **kwargs).passed
+    old = proof.pop("admission_status")
+    assert evaluate_merge_gate(snapshot, **kwargs).reasons == ["equivalence_freshness_unavailable"]
+    proof["admission_status"] = old
+    header = copy.deepcopy(header)
+    header["refute_review"]["comparison_sha256"] = "0" * 64
+    snapshot["body"] = "<!-- default-path-equivalence:v1\n" + json.dumps(header) + "\n-->"
+    assert evaluate_merge_gate(snapshot, **kwargs).reasons == ["equivalence_freshness_unavailable"]
+
+
+def test_queue_workflow_pins_full_equivalence_validation_dependencies():
+    """Hosted queue runtime installs the exact lightweight validators recorded in uv.lock."""
+    path = Path(__file__).resolve().parents[2] / ".github/workflows/merge-queue-gate.yml"
+    workflow = yaml.safe_load(path.read_text())
+    steps = workflow["jobs"]["merge-queue-gate"]["steps"]
+    command = next(
+        step["run"] for step in steps if step.get("name") == "Install gate runtime dependencies"
+    )
+    assert (
+        "pyyaml==6.0.3 jsonschema==4.26.0 loguru==0.7.3 numpy==2.4.6 numba==0.67.0 shapely==2.1.2 matplotlib==3.11.1 python-motion-planning==2.0.1"
+        in command
+    )
+
+
+def test_queue_rechecks_live_main_after_complete_receipt_admission(
+    queue_equivalence, monkeypatch, capsys
+):
+    """A main move during scheduler/source validation invalidates the otherwise accepted result."""
+    _, _, invoke, base, _, _, _ = queue_equivalence
+    assert invoke() == 0
+    capsys.readouterr()
+    reads = iter([base, "d" * 40])
+    monkeypatch.setattr(merge_queue_gate_module, "fetch_main_sha", lambda **_kwargs: next(reads))
+    assert invoke() == 1
+    audit = json.loads(capsys.readouterr().out)
+    assert audit["reasons"] == ["equivalence_freshness_stale"]
+    assert audit["equivalence_freshness"]["live_main_sha"] == "d" * 40
+
+
+def test_queue_deepens_trusted_shallow_history_without_checkout(
+    queue_equivalence, tmp_path, monkeypatch, capsys
+):
+    """Hosted depth-one checkout obtains complete immutable ancestry before semantic validation."""
+    _, _, invoke, base, head, _, _ = queue_equivalence
+    assert invoke() == 0
+    capsys.readouterr()
+    trusted = tmp_path / "trusted-shallow-objects"
+    trusted.mkdir()
+    subprocess.run(["git", "init", "-b", "main"], cwd=trusted, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "fetch", "--depth=1", tmp_path.as_uri(), base],
+        cwd=trusted,
+        check=True,
+        capture_output=True,
+    )
+    assert (
+        subprocess.check_output(
+            ["git", "rev-parse", "--is-shallow-repository"], cwd=trusted, text=True
+        ).strip()
+        == "true"
+    )
+    original_head = (trusted / ".git/HEAD").read_bytes()
+    monkeypatch.setattr(merge_queue_gate_module, "_REPO_ROOT", trusted)
+    original_run = subprocess.run
+    deepened = []
+
+    def readonly_fetch(command, **kwargs):
+        assert "checkout" not in command
+        if command[:5] == ["git", "-c", "core.hooksPath=/dev/null", "fetch", "--no-tags"]:
+            assert command[-2] == "https://github.com/test/repo.git"
+            assert command[-1] in {head, base}
+            assert kwargs["env"]["GH_TOKEN"] == "queue-test-credential"
+            flags = ["--unshallow"] if "--unshallow" in command else []
+            deepened.extend(flags)
+            return original_run(
+                ["git", "fetch", "--no-tags", *flags, tmp_path.as_uri(), command[-1]], **kwargs
+            )
+        return original_run(command, **kwargs)
+
+    monkeypatch.setattr(merge_queue_gate_module.subprocess, "run", readonly_fetch)
+    assert invoke() == 0
+    audit = json.loads(capsys.readouterr().out)
+    assert audit["equivalence_freshness"]["admission_status"] == "accepted"
+    assert deepened == ["--unshallow"]
+    assert (trusted / ".git/HEAD").read_bytes() == original_head
+    assert list(trusted.iterdir()) == [trusted / ".git"]

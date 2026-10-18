@@ -59,6 +59,7 @@ from __future__ import annotations
 import argparse
 import base64
 import binascii
+import hashlib
 import json
 import os
 import re
@@ -79,6 +80,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
+from scripts.ci import behaviour_receipt as behaviour_receipt_policy  # noqa: E402
 from scripts.ci.pr_contract_check import (  # noqa: E402
     check_closes_discipline,
     get_pr_commit_messages,
@@ -204,6 +206,9 @@ class MergeGateAudit:
     evidence_registry_status: str = "not_evaluated"
     evidence_registry_head_sha: str = ""
     evidence_registry_expected_head_sha: str = ""
+    equivalence_freshness: dict[str, Any] = field(
+        default_factory=lambda: {"status": "not_required"}
+    )
     reasons: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
@@ -520,7 +525,277 @@ def _resolve_merge_group_binding(
     return binding, str(queue_merging_strategy or "unknown").upper()
 
 
-def evaluate_merge_gate(  # noqa: C901, PLR0913, PLR0915 - explicit fail-closed admission dimensions.
+def _equivalence_header(body: str) -> dict[str, Any] | None:
+    """Recognize this route strictly; malformed or mixed receipt markers refuse."""
+    header = behaviour_receipt_policy.parse_equivalence_header(body)
+    if header is None:
+        return None
+    if (
+        not isinstance(header, dict)
+        or set(header)
+        != {"schema_version", "admission_context", "head_sha", "rows_artifact", "refute_review"}
+        or header.get("schema_version") != "default-path-equivalence-header.v1"
+        or header.get("admission_context") != "pull_request"
+    ):
+        raise ValueError("malformed equivalence receipt header")
+    if not behaviour_receipt_policy._digest(header.get("head_sha"), 40):
+        raise ValueError("invalid equivalence receipt header head")
+    artifact = header.get("rows_artifact")
+    review = header.get("refute_review")
+    if (
+        not isinstance(artifact, dict)
+        or set(artifact) != {"path", "sha256"}
+        or not isinstance(artifact.get("path"), str)
+        or not behaviour_receipt_policy._digest(artifact.get("sha256"))
+    ):
+        raise ValueError("malformed equivalence committed artifact reference")
+    if (
+        not isinstance(review, dict)
+        or set(review) != {"head_sha", "verdict", "uri", "comparison_sha256"}
+        or review.get("head_sha") != header["head_sha"]
+        or review.get("verdict") != "accepted"
+        or not (
+            behaviour_receipt_policy._uri(review.get("uri"))
+            and behaviour_receipt_policy._digest(review.get("comparison_sha256"))
+        )
+    ):
+        raise ValueError("malformed equivalence independent review binding")
+    return header
+
+
+def _equivalence_audit(pr: dict, head_sha: str, base_sha: str, main_sha: str) -> dict[str, Any]:
+    """Require a trusted committed-payload freshness proof, never body declarations alone."""
+    try:
+        header = _equivalence_header(str(pr.get("body") or ""))
+    except (ValueError, TypeError):
+        return {"status": "malformed"}
+    if header is None:
+        return {"status": "not_required"}
+    proof = pr.get("equivalence_freshness")
+    if not isinstance(proof, dict):
+        return {"status": "unavailable"}
+    audit = dict(proof)
+    if not isinstance(audit.get("status"), str):
+        return {"status": "malformed"}
+    if audit.get("status") != "success":
+        return (
+            audit
+            if audit.get("status") in {"stale", "unavailable", "malformed", "rejected"}
+            else {"status": "unavailable"}
+        )
+    if (
+        audit.get("admission_status") != "accepted"
+        or audit.get("header_sha256")
+        != hashlib.sha256(
+            json.dumps(header, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+    ):
+        audit["status"] = "unavailable"
+        return audit
+    if not (
+        header["head_sha"] == head_sha == audit.get("head_sha")
+        and header["rows_artifact"]["path"] == audit.get("payload_path")
+        and header["rows_artifact"]["sha256"] == audit.get("payload_sha256")
+        and behaviour_receipt_policy._digest(audit.get("baseline_sha"), 40)
+        and audit.get("baseline_sha") == audit.get("live_main_sha") == main_sha == base_sha
+        and audit.get("queue_base_sha") == base_sha
+    ):
+        audit["status"] = "stale"
+    return audit
+
+
+def _equivalence_git_environment() -> dict[str, str]:
+    """Give read-only Git/LFS subprocesses process-local GitHub credentials."""
+    environment = dict(os.environ)
+    if not environment.get("GH_TOKEN"):
+        environment["GH_TOKEN"] = subprocess.check_output(
+            ["gh", "auth", "token"], text=True, stderr=subprocess.PIPE
+        ).strip()
+    if not environment["GH_TOKEN"]:
+        raise ValueError("equivalence Git authentication unavailable")
+    environment.update(
+        {
+            "GIT_TERMINAL_PROMPT": "0",
+            "GIT_CONFIG_COUNT": "2",
+            "GIT_CONFIG_KEY_0": "credential.helper",
+            "GIT_CONFIG_VALUE_0": "",
+            "GIT_CONFIG_KEY_1": "credential.helper",
+            "GIT_CONFIG_VALUE_1": "!gh auth git-credential",
+        }
+    )
+    return environment
+
+
+def _ensure_equivalence_commit(
+    source: str, repo: str, environment: dict[str, str], *, complete_history: bool = False
+) -> None:
+    """Fetch immutable data objects only, deepening trusted history when source proofs need it."""
+    if not behaviour_receipt_policy._digest(source, 40):
+        raise ValueError("invalid equivalence Git source")
+    present = (
+        subprocess.run(
+            ["git", "cat-file", "-e", f"{source}^{{commit}}"],
+            cwd=_REPO_ROOT,
+            env=environment,
+            capture_output=True,
+            check=False,
+            timeout=60,
+        ).returncode
+        == 0
+    )
+    shallow = (
+        complete_history
+        and subprocess.check_output(
+            ["git", "rev-parse", "--is-shallow-repository"],
+            cwd=_REPO_ROOT,
+            env=environment,
+            text=True,
+            timeout=60,
+        ).strip()
+        == "true"
+    )
+    if not present or shallow:
+        subprocess.run(
+            [
+                "git",
+                "-c",
+                "core.hooksPath=/dev/null",
+                "fetch",
+                "--no-tags",
+                *(["--unshallow"] if shallow else []),
+                f"https://github.com/{repo}.git",
+                source,
+            ],
+            cwd=_REPO_ROOT,
+            env=environment,
+            capture_output=True,
+            check=True,
+            timeout=60,
+        )
+
+
+def _record_equivalence_admission(proof: dict, header: dict, repo: str, main_sha: str) -> None:
+    """Bind complete validation to the selected header and the final live-main read."""
+    proof.update(
+        admission_status="accepted",
+        header_sha256=hashlib.sha256(
+            json.dumps(header, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest(),
+    )
+    latest_main = fetch_main_sha(repo=repo)
+    if latest_main != main_sha:
+        proof.update(
+            status="stale" if behaviour_receipt_policy._digest(latest_main, 40) else "unavailable",
+            admission_status="stale",
+            live_main_sha=latest_main,
+        )
+
+
+def _fetch_equivalence_freshness(
+    snapshot: dict, *, repo: str, queue_base_sha: str, live_main_sha: str
+) -> dict[str, Any]:
+    """Read immutable receipt bytes in the trusted checkout without PR checkout/execution."""
+    head = str(snapshot.get("head_sha") or "")
+    proof: dict[str, Any] = {
+        "status": "unavailable",
+        "head_sha": head,
+        "queue_base_sha": queue_base_sha,
+        "live_main_sha": live_main_sha,
+    }
+    import jsonschema
+
+    try:
+        header = _equivalence_header(str(snapshot.get("body") or ""))
+        if header is None:
+            return {"status": "not_required"}
+        if header["head_sha"] != head or not behaviour_receipt_policy._digest(head, 40):
+            raise ValueError("equivalence header differs from source head")
+        if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repo) or any(
+            part in {".", ".."} for part in repo.split("/")
+        ):
+            raise ValueError("invalid repository identity for equivalence object fetch")
+        environment = _equivalence_git_environment()
+        _ensure_equivalence_commit(head, repo, environment)
+        raw = behaviour_receipt_policy.read_committed_payload_bytes(
+            header, head, repo_root=_REPO_ROOT, git_environment=environment, timeout=60
+        )
+        from scripts.ci import default_path_equivalence as equivalence
+
+        payload = equivalence.strict_json_loads(raw)
+        if (
+            not isinstance(payload, dict)
+            or payload.get("schema_version") != "default-path-equivalence.v1"
+            or payload.get("admission_context") != "pull_request"
+        ):
+            raise ValueError("invalid committed equivalence payload type")
+        baseline = payload.get("baseline")
+        if not isinstance(baseline, dict) or not behaviour_receipt_policy._digest(
+            baseline.get("source_sha"), 40
+        ):
+            raise ValueError("invalid committed equivalence baseline")
+        proof.update(
+            {
+                "baseline_sha": baseline["source_sha"],
+                "payload_path": header["rows_artifact"]["path"],
+                "payload_sha256": header["rows_artifact"]["sha256"],
+                "status": "success"
+                if baseline["source_sha"] == live_main_sha == queue_base_sha
+                and behaviour_receipt_policy._digest(live_main_sha, 40)
+                else "stale",
+            }
+        )
+        if proof["status"] == "success":
+            _ensure_equivalence_commit(live_main_sha, repo, environment, complete_history=True)
+            # Revalidate the *current* selected receipt and review. An old green
+            # check at this head could have admitted a different body/payload.
+            _ensure_equivalence_commit(payload.get("tooling_sha"), repo, environment)
+            changed = subprocess.check_output(
+                ["git", "diff", "--name-only", "--no-renames", live_main_sha, head],
+                cwd=_REPO_ROOT,
+                env=environment,
+                text=True,
+                timeout=60,
+            ).splitlines()
+            try:
+                behaviour_receipt_policy.admit_equivalence_payload(
+                    header,
+                    raw,
+                    head,
+                    queue_base_sha,
+                    live_main_sha,
+                    changed,
+                    repo_root=_REPO_ROOT,
+                    git_environment=environment,
+                )
+            except (
+                ValueError,
+                TypeError,
+                KeyError,
+                OSError,
+                subprocess.SubprocessError,
+                jsonschema.ValidationError,
+            ) as exc:
+                proof.update(status="rejected", admission_status="rejected")
+                proof["admission_reason"] = (
+                    str(exc)
+                    if isinstance(exc, ValueError)
+                    else "selected equivalence evidence failed full admission"
+                )
+            else:
+                _record_equivalence_admission(proof, header, repo, live_main_sha)
+    except (
+        ValueError,
+        TypeError,
+        KeyError,
+        OSError,
+        subprocess.SubprocessError,
+        jsonschema.ValidationError,
+    ):
+        proof["status"] = "unavailable"
+    return proof
+
+
+def evaluate_merge_gate(  # noqa: C901, PLR0912, PLR0913, PLR0915 - explicit fail-closed admission dimensions.
     pr: dict[str, Any],
     *,
     main_sha: str = "",
@@ -691,6 +966,11 @@ def evaluate_merge_gate(  # noqa: C901, PLR0913, PLR0915 - explicit fail-closed 
     if queue_strategy not in {"not_applicable", "ALLGREEN"}:
         reasons.append(f"unsafe_merge_queue_strategy:{queue_strategy}")
 
+    equivalence_freshness = _equivalence_audit(pr, head_sha, base_sha, main_sha)
+    if equivalence_freshness.get("status") not in {"not_required", "success"}:
+        reasons.append(
+            f"equivalence_freshness_{equivalence_freshness.get('status', 'unavailable')}"
+        )
     passed = not reasons
 
     return MergeGateAudit(
@@ -724,6 +1004,7 @@ def evaluate_merge_gate(  # noqa: C901, PLR0913, PLR0915 - explicit fail-closed 
         evidence_registry_status=evidence_registry_status,
         evidence_registry_head_sha=evidence_registry_head_sha,
         evidence_registry_expected_head_sha=evidence_registry_expected_head_sha,
+        equivalence_freshness=equivalence_freshness,
         reasons=reasons,
     )
 
@@ -2403,6 +2684,7 @@ def _format_summary(audit: MergeGateAudit) -> str:
         f"- closing-discipline status: `{audit.closing_discipline_status}`",
         f"- body narrative status: `{audit.body_narrative_status}`",
         f"- staleness verdict: `{audit.staleness_verdict}`",
+        f"- equivalence freshness: `{audit.equivalence_freshness.get('status', 'unavailable')}`",
         f"- CI conclusion: `{audit.ci_overall}`",
         f"- thread resolution: `{audit.thread_resolution}`",
         f"- requested-reviewer status: `{audit.reviewer_request_status}`",
@@ -2527,6 +2809,17 @@ def _evaluate_live(
                 "failed to fetch current main SHA; refusing a source-head gate pass"
             )
         queue_merging_strategy = ""
+
+    # Only this receipt type invalidates its baseline when actual main moves.
+    # Preserve legacy/full route staleness behavior for native queue groups.
+    if re.search(r"<!--\s*default-path-equivalence", str(snapshot.get("body") or "")):
+        actual_main_sha = fetch_main_sha(repo=repo) if merge_group_base_sha else main_sha
+        snapshot["equivalence_freshness"] = _fetch_equivalence_freshness(
+            snapshot,
+            repo=repo,
+            queue_base_sha=merge_group_base_sha or snapshot.get("base_sha", ""),
+            live_main_sha=actual_main_sha,
+        )
 
     threads_resolved, thread_err = fetch_threads_resolved(pr_number, repo=repo)
     if thread_err:

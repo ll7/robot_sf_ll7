@@ -12,12 +12,19 @@ import yaml
 
 from scripts.ci import behaviour_receipt as adapter
 from scripts.ci import pr_contract_check as checker
+from scripts.ci import receipt_arm_execution
 from scripts.validation import check_seed_holdout_diff as seed_checker
+from tests.validation.receipt_scheduler_fixture import install_scheduler
 from tests.validation.test_behaviour_receipt_gate import (
-    _commit_receipt,
     _header,
     _inventory_receipt,
 )
+
+
+@pytest.fixture(autouse=True)
+def _scheduler_authority(tmp_path, monkeypatch):
+    install_scheduler(tmp_path, monkeypatch)
+
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -197,60 +204,133 @@ def _trusted_fixture(root):
     shutil.copytree(
         ROOT / "robot_sf", root / "robot_sf", ignore=shutil.ignore_patterns("__pycache__", "*.pyc")
     )
+    # The trusted detached checkout carries native scope configuration and its
+    # dependencies, matching the acquisition and admission configuration owner.
+    shutil.copytree(ROOT / "configs", root / "configs")
     files = [
         ".gitattributes",
+        "scripts/__init__.py",
         "scripts/ci/behaviour_receipt.py",
         "scripts/ci/behaviour_receipt.schema.json",
+        "scripts/ci/behaviour_receipt_nodes.json",
+        "scripts/ci/make_behaviour_receipt.py",
+        "scripts/ci/receipt_provenance.py",
+        "scripts/ci/receipt_native_slots.py",
+        "scripts/ci/receipt_outcomes.py",
+        "scripts/ci/receipt_arm_execution.py",
+        "scripts/validation/run_empty_world_sweep.py",
         "scripts/dev/check_dependabot_update_policy.py",
         "scripts/dev/check_dependency_coherence.py",
         "configs/benchmarks/releases/behaviour_gate_0_1_0.json",
         "model/registry.yaml",
+        "configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4_s30_h600_release_0_0_8_frozen.yaml",
+        "configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard_v4_s30_h600_release_0_0_8_frozen.yaml",
     ]
     for path in files:
         target = root / path
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(ROOT / path, target)
     (root / ".gitignore").write_text("__pycache__/\n")
-    git("add", "robot_sf", ".gitignore", *files)
+    git("add", "robot_sf", "configs", ".gitignore", *files)
     git("commit", "-m", "trusted gate base")
     git("tag", "0.0.7")
     return git, git("rev-parse", "HEAD")
 
 
-def test_full_roster_pr_body_file_and_base_policy_end_to_end(tmp_path):
+def _tamper_candidate_policies(root):
+    (root / "scripts/ci/behaviour_receipt.py").write_text("raise SystemExit(0)\n")
+    (root / "scripts/ci/behaviour_receipt.schema.json").write_text("{}\n")
+    (root / "scripts/ci/behaviour_receipt_nodes.json").write_text('{"nodes": {}}\n')
+    (root / adapter.SCOPE_FILE).write_text('{"arms": []}\n')
+
+
+def _native_inventory_receipt(scope):
+    receipt = _inventory_receipt(scope)
+    for row in receipt["rows"]:
+        if (
+            row["arm"] in receipt_arm_execution.PROFILES
+            and row["map"] == receipt_arm_execution.SCENARIO
+        ):
+            row.update(algorithm="orca", execution_mode="adapter")
+        if row["algorithm"] == "guarded_ppo":
+            row["execution_mode"] = "mixed"
+        if row["algorithm"] == "hybrid_rule_local_planner":
+            row["execution_mode"] = "adapter"
+    return receipt
+
+
+def _source_shaped_artifacts(root, receipt, scope, monkeypatch):
+    """Generate complete composite/adapter raw before the existing producer seals."""
+    from tests.validation import test_behaviour_receipt_provenance as provenance_fixture
+    from tests.validation.receipt_guarded_fixture import guarded_episode
+    from tests.validation.receipt_hybrid_fixture import hybrid_episode
+
+    original_trace = provenance_fixture._fixture_execution_trace
+
+    def source_shaped_trace(raw, row, algo_configs):
+        original_trace(raw, row, algo_configs)
+        if raw["algo"] == "guarded_ppo":
+            # Complete the synthetic producer row before either normal seal is
+            # written; the gate receives the actual guarded writer's metadata.
+            completed = guarded_episode(raw)
+            raw.clear()
+            raw.update(completed)
+        if raw["algo"] == "hybrid_rule_local_planner":
+            completed = hybrid_episode(raw)
+            raw.clear()
+            raw.update(completed)
+
+    monkeypatch.setattr(provenance_fixture, "_fixture_execution_trace", source_shaped_trace)
+
+    return provenance_fixture.source_artifacts_for_receipt(
+        root,
+        receipt,
+        algo_configs={
+            arm: root / profile[0] for arm, profile in receipt_arm_execution.PROFILES.items()
+        },
+        arm_algorithms=scope["arm_algorithms"],
+    )
+
+
+def test_full_roster_pr_body_file_and_base_policy_end_to_end(tmp_path, monkeypatch):
     """The deployed shell accepts compact source data and rejects head-policy bypasses."""
     root = tmp_path / "repo"
     git, base = _trusted_fixture(root)
     scope = json.loads((ROOT / adapter.SCOPE_FILE).read_text())
-    receipt = _inventory_receipt(scope)
-    raw = json.dumps(
-        {
-            "schema_version": "behaviour-change-rows.v1",
-            "rows": receipt["rows"],
-            "classifications": receipt["classifications"],
-        }
-    ).encode()
+    receipt = _native_inventory_receipt(scope)
     path = "receipts/behaviour/sweep.json"
     target = root / path
     target.parent.mkdir(parents=True)
-    target.write_bytes(raw)
-    # A behaviour PR tampers with all three head policy surfaces. Base execution
+    # A behaviour PR tampers with all four head policy surfaces. Base execution
     # must still accept honest rows and reject absent/corrupted receipts.
-    (root / "scripts/ci/behaviour_receipt.py").write_text("raise SystemExit(0)\n")
-    (root / "scripts/ci/behaviour_receipt.schema.json").write_text("{}\n")
-    (root / adapter.SCOPE_FILE).write_text('{"arms": []}\n')
+    _tamper_candidate_policies(root)
     planner = root / "robot_sf/planner/new_policy.py"
     planner.write_text("VALUE = 1\n")
     git(
         "add",
         "scripts/ci/behaviour_receipt.py",
         "scripts/ci/behaviour_receipt.schema.json",
+        "scripts/ci/behaviour_receipt_nodes.json",
         adapter.SCOPE_FILE,
         "robot_sf/planner/new_policy.py",
     )
     git("commit", "-m", "executed source with untrusted policy edits")
     run_source = git("rev-parse", "HEAD")
-    git("add", path)
+    from tests.validation.test_behaviour_receipt_gate import _hardware
+
+    receipt["hardware"] = {"head": _hardware(run_source), "baseline": _hardware(base)}
+    sources = _source_shaped_artifacts(root, receipt, scope, monkeypatch)
+    raw = json.dumps(
+        {
+            "schema_version": "behaviour-change-rows.v1",
+            "hardware": receipt["hardware"],
+            "source_artifacts": sources,
+            "rows": receipt["rows"],
+            "classifications": receipt["classifications"],
+        }
+    ).encode()
+    target.write_bytes(raw)
+    git("add", "receipts/behaviour")
     git("commit", "-m", "preserve run rows after execution")
     head = git("rev-parse", "HEAD")
     # Leave CI at a distinct synthetic merge identity.
@@ -375,18 +455,23 @@ def test_base_gate_bootstrap_never_executes_head_policy(tmp_path):
     assert "not installed on the event base" in result.stdout
 
 
-def test_full_roster_compact_body_and_committed_rows(monkeypatch, tmp_path):
-    """All 21,420 rows pass admission via a GitHub-sized body and committed file."""
+def test_full_roster_plain_header_cannot_attest_frozen_dispatch():
+    """A full set of registry-shaped rows alone cannot authenticate published dispatch."""
     scope = json.loads((ROOT / adapter.SCOPE_FILE).read_text())
-    receipt = _inventory_receipt(scope)
-    body = _commit_receipt(monkeypatch, tmp_path, receipt)
-    monkeypatch.setattr(adapter, "latest_release", lambda repo: "0.0.7")
-    monkeypatch.setattr(adapter, "release_source", lambda release: "c" * 40)
-    assert len(body) < 65536
-    assert len((tmp_path / "receipts/behaviour/sweep.json").read_bytes()) > 65536
-    assert (
-        adapter.check_receipt(body, ["robot_sf/planner/guarded_ppo.py"], "ll7/robot_sf_ll7") == []
+    receipt = _native_inventory_receipt(scope)
+    assert len(receipt["rows"]) == 21420
+    dispatched = [
+        row
+        for row in receipt["rows"]
+        if row["arm"] in receipt_arm_execution.PROFILES
+        and row["map"] == receipt_arm_execution.SCENARIO
+    ]
+    assert len(dispatched) == 60
+    assert all(
+        row["algorithm"] == "orca" and row["execution_mode"] == "adapter" for row in dispatched
     )
+    with pytest.raises(adapter.HardwareIdentityError, match="JSON claims cannot attest dispatch"):
+        adapter.validate_receipt(receipt, scope, receipt["head_sha"], "0.0.7", "c" * 40)
 
 
 def test_event_head_overrides_merge_identity(monkeypatch, tmp_path):

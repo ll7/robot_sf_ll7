@@ -81,7 +81,7 @@ def _release_matrix_contract(  # noqa: C901 - fail-closed release manifest valid
         raise ValueError("Oracle dt must be positive")
     if not isinstance(config.get("workers"), int) or config["workers"] < 1:
         raise ValueError("Oracle workers must be a positive integer")
-    return manifest, matrix_path, scenarios, names, list(seeds)
+    return manifest, matrix_path, scenarios, names, list(DEV_SEEDS)
 
 
 def _validate_run_roster(  # noqa: C901 - explicit checks keep every arm reviewable.

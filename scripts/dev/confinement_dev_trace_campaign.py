@@ -155,12 +155,57 @@ def run(task):
         episode._step_build_simulation_trace = original_trace
 
 
+def remaining_identities(expected, completed):
+    """Refuse foreign identities before resuming only missing episodes."""
+    if not completed <= expected:
+        raise ValueError("unexpected completed identities")
+    return expected - completed
+
+
+def _resume_records(output, expected):
+    journal = [json.loads(line) for line in (output / "completed.jsonl").read_text().splitlines()]
+    known = {r["path"]: r for r in journal}
+    completed = set()
+    for path in sorted((output / "raw").glob("*.json.gz")):
+        wrapper = json.load(gzip.open(path, "rt"))
+        key = wrapper["cell"], wrapper["seed"], wrapper["policy"]
+        if key in completed or key not in expected:
+            raise ValueError("unexpected or duplicated persisted episode")
+        record = wrapper["record"]
+        assert record["git_hash"] == PRODUCER and record["seed"] == key[1]
+        assert record["algorithm_metadata"]["status"] == "ok"
+        assert record["algorithm_metadata"]["simulation_step_trace"]["steps"]
+        assert not record["spawn_validity"]["invalid_run"]
+        relative = str(path.relative_to(output))
+        hashed = sha(path)
+        if relative in known:
+            assert known[relative]["sha256"] == hashed
+        else:
+            adopted = {
+                "cell": key[0],
+                "seed": key[1],
+                "policy": key[2],
+                "sha256": hashed,
+                "bytes": path.stat().st_size,
+                "steps": record["steps"],
+                "path": relative,
+                "finished_utc": now(),
+                "adopted_after_controller_drain": True,
+            }
+            with (output / "completed.jsonl").open("a") as handle:
+                handle.write(json.dumps(adopted) + "\n")
+        completed.add(key)
+    assert len(completed) >= len(journal)
+    return completed
+
+
 def main():
     """Launch once, preserve receipts, and stop dispatch on infrastructure errors."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--producer", type=Path, required=True)
     parser.add_argument("--campaign", type=Path, required=True)
     parser.add_argument("--workers", type=int, default=4, choices=range(1, 7))
+    parser.add_argument("--resume-infrastructure", action="store_true")
     args = parser.parse_args()
     root, output = args.producer.resolve(), args.campaign.resolve()
     assert Path.cwd().resolve() == root
@@ -172,7 +217,7 @@ def main():
         ["git", "-C", str(root), "status", "--porcelain", "--untracked-files=no"], text=True
     )
     assert shutil.disk_usage(output).free > 50 * 1024**3
-    assert not (output / "launch.json").exists()
+    assert (output / "launch.json").exists() == args.resume_infrastructure
     for key in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS", "NUMBA_NUM_THREADS"):
         assert os.environ[key] == "1"
     assert os.environ["CUDA_VISIBLE_DEVICES"] == ""
@@ -214,7 +259,17 @@ def main():
             )
         },
     }
-    (output / "launch.json").write_text(json.dumps(manifest, indent=2) + "\n")
+    if args.resume_infrastructure:
+        original = json.loads((output / "launch.json").read_text())
+        for name, hashed in original["input_sha256"].items():
+            assert sha(output / "inputs" / name) == hashed
+        assert original["packages"] == manifest["packages"]
+        manifest["original_launch_sha256"] = sha(output / "launch.json")
+        resume_path = output / "resume_six_workers.json"
+        assert not resume_path.exists()
+        resume_path.write_text(json.dumps(manifest, indent=2) + "\n")
+    else:
+        (output / "launch.json").write_text(json.dumps(manifest, indent=2) + "\n")
     (output / "raw").mkdir(exist_ok=True)
     tasks = [
         (c, s, p, str(root), str(output))
@@ -223,10 +278,14 @@ def main():
         for p in policies
     ]
     assert len(tasks) == 2700
+    expected = {(c["name"], seed, p["key"]) for c, seed, p, _, _ in tasks}
+    completed = _resume_records(output, expected) if args.resume_infrastructure else set()
+    missing = remaining_identities(expected, completed)
+    tasks = [task for task in tasks if (task[0]["name"], task[1], task[2]["key"]) in missing]
     with ProcessPoolExecutor(max_workers=args.workers) as pool:
         # Bounded queue: do not pre-submit the full campaign.
         pending = {pool.submit(run, t) for t in tasks[: args.workers]}
-        next_task, count = args.workers, 0
+        next_task, count = min(args.workers, len(tasks)), len(completed)
         while pending:
             future = next(as_completed(pending))
             pending.remove(future)

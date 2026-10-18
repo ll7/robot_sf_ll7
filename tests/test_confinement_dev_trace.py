@@ -133,3 +133,17 @@ def test_two_necks_must_be_completed_without_respawn_between_them():
     result = MODULE.actor_indicators(fs, [P, second])
     assert result["passages"] == ["door", "second"]
     assert not result["all_passages_uninterrupted"]
+
+
+def test_resume_adopts_only_complete_verified_identities():
+    spec = importlib.util.spec_from_file_location(
+        "campaign", Path(__file__).parents[1] / "scripts/dev/confinement_dev_trace_campaign.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    expected = {("cell", 1091, "orca"), ("cell", 1092, "orca")}
+    assert module.remaining_identities(expected, {("cell", 1091, "orca")}) == {
+        ("cell", 1092, "orca")
+    }
+    with pytest.raises(ValueError, match="unexpected"):
+        module.remaining_identities(expected, {("different", 1091, "orca")})

@@ -1,5 +1,10 @@
 # VV-2 reference-planner oracle plan
 
+Current executable contract: the [development successor](../benchmark_reference_oracles.md)
+uses seeds 1001–1030 and diagnostic-only identity. The original schedule below is
+historical; its YAML is archived byte-for-byte and refused by the runner. No new
+campaign is admitted or executed by the repair.
+
 ## Goal and scope
 
 Implement issue #9732 for the 48-scenario release matrix and seeds 111–140: a blind goal run with no pedestrians, a stationary robot run with the original pedestrian population, and a paired dominance gate for pedestrian-aware planner results. The output is a versioned JSON report and a Markdown summary. Spawn, social-force, and hybrid-planner implementations are out of scope.

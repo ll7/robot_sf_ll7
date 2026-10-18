@@ -3,14 +3,16 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
 from copy import deepcopy
-from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pytest
 
 from robot_sf.benchmark.reference_oracle_report import evaluate_oracles, render_markdown
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+    from pathlib import Path
 
 SCENARIOS = ["open", "probe"]
 SEEDS = [1001, 1002]

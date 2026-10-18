@@ -22,7 +22,9 @@ from scripts.validation.run_reference_planner_oracles import (
 )
 
 CONFIG = ROOT / "configs/validation/issue_9732_reference_oracles_development_v1.yaml"
-HISTORICAL_CONFIG = ROOT / "configs/validation/issue_9732_reference_oracles.yaml"
+HISTORICAL_CONFIG = (
+    ROOT / "docs/context/archive/reference_oracles/issue_9732_reference_oracles.yaml"
+)
 
 if TYPE_CHECKING:
     from pathlib import Path

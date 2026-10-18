@@ -6,7 +6,7 @@ check over the release-pinned 48-scenario matrix. The executable development suc
 Its `reference-planner-oracles.v2` contract requires `development_v1` and the complete
 admitted development schedule, seeds 1001–1030. It pins the historical matrix and H600
 without inheriting the release evaluation seed schedule. The historical
-[`issue_9732_reference_oracles.yaml`](../configs/validation/issue_9732_reference_oracles.yaml)
+[`issue_9732_reference_oracles.yaml`](context/archive/reference_oracles/issue_9732_reference_oracles.yaml)
 is retained unchanged for provenance and is refused by the executable entrypoint.
 The successor names the reference arms, explicit probe exemptions, and unchanged
 thresholds. It does not edit source scenarios or the release manifest. Its resolved

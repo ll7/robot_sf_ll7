@@ -63,7 +63,11 @@ def _release_matrix_contract(  # noqa: C901 - fail-closed release manifest valid
     if _sha256(matrix_path) != scenario_spec.get("matrix_sha256"):
         raise ValueError("Pinned scenario matrix SHA-256 differs from release manifest")
     seeds = config.get("expected_seeds")
-    if config.get("seed_policy") != "development_v1" or seeds != list(DEV_SEEDS):
+    if (
+        config.get("seed_policy") != "development_v1"
+        or not isinstance(seeds, list)
+        or seeds != list(DEV_SEEDS)
+    ):
         raise ValueError("Oracle development_v1 requires the complete admitted development seeds")
     scenarios = load_scenario_matrix(matrix_path)
     names = [str(scenario.get("name", "")) for scenario in scenarios]

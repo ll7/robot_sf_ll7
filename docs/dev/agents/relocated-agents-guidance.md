@@ -11,7 +11,6 @@ Git history, and historical issue references stay discoverable through `docs/con
 | Autonomous usage stop guard | `docs/templates/token_efficient_thread_profile.md` and the `goal-autopilot` skill | usage-bounded goal loops |
 | Native worker feedback, completed-worker messages, active-thread capacity | `docs/templates/token_efficient_thread_profile.md` | completed-worker feedback or thread-limit failures |
 | SLURM lane priority and submission preparation | `SLURM/AGENTS.md` and the `goal-slurm-experiment` skill | cluster campaign work |
-| Shared knowledge graph | `docs/ai/understand_anything.md` | architecture discovery before broad reads |
 | Local machine context | `docs/templates/local.machine.example.md` | expensive or host-specific commands |
 | Worktree bootstrap, branch synchronization, teardown, stash safety | `docs/dev/worktree_lifecycle.md` | linked worktree creation, sync, or cleanup |
 | Knowledge capture, context notes, durable memory | `docs/context/README.md` and `memory/MEMORY.md` | reusable findings or handoffs |

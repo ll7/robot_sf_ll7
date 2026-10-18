@@ -28,19 +28,12 @@ _RECEIPT_FIELDS = frozenset(
     }
 )
 _INPUT_IDENTITY_FIELDS = frozenset({"config_hash", "source_commit", "input_sha256"})
-_FALLBACK_FIELDS = frozenset(
-    {
-        "fallback",
-        "fallback_triggered",
-        "used",
-        "fallback_count",
-        "count",
-        "fallback_reason",
-        "first_reason",
-        "fallback_reasons",
-        "reasons",
-    }
-)
+_FALLBACK_ALIASES = {
+    "used": ("used", "fallback", "fallback_triggered"),
+    "count": ("count", "fallback_count"),
+    "first_reason": ("first_reason", "fallback_reason"),
+    "reasons": ("reasons", "fallback_reasons"),
+}
 _CANONICAL_FALLBACK_FIELDS = frozenset({"used", "count", "first_reason", "reasons"})
 
 
@@ -108,57 +101,80 @@ def _reject_unknown_nested_fallback_fields(nested: Mapping[str, Any]) -> None:
         )
 
 
+def _fallback_value(field: str, value: Any) -> Any:
+    """Validate each supplied alias before equality checks or projection.
+
+    Returns:
+        The canonical JSON-safe value for one fallback field.
+    """
+    if field == "used":
+        if not isinstance(value, bool):
+            raise ObstacleForceDiagnosticReceiptError("fallback.used must be a boolean")
+        return value
+    if field == "count":
+        if isinstance(value, bool) or not isinstance(value, Integral) or value < 0:
+            raise ObstacleForceDiagnosticReceiptError(
+                "fallback.count must be a non-negative integer"
+            )
+        return int(value)
+    if field == "first_reason":
+        return None if value is None else _non_empty_text(value, field="fallback.first_reason")
+    if not isinstance(value, Mapping):
+        raise ObstacleForceDiagnosticReceiptError("fallback.reasons must be a mapping")
+    reasons: dict[str, int] = {}
+    for key, count in value.items():
+        reason = _non_empty_text(key, field="fallback.reasons key")
+        if isinstance(count, bool) or not isinstance(count, Integral) or count < 0:
+            raise ObstacleForceDiagnosticReceiptError(
+                "fallback.reasons values must be non-negative integers"
+            )
+        reasons[reason] = int(count)
+    return reasons
+
+
 def obstacle_force_fallback_from_mapping(
     payload: Mapping[str, Any] | None,
 ) -> Mapping[str, Any] | None:
-    """Extract fallback fields from a metadata or planner-diagnostics mapping.
+    """Extract fallback telemetry without losing conflicting or malformed inputs.
 
-    The wrapper diagnostics use the ``fallback_*`` names while the receipt uses
-    shorter names. Returning only the recognized fields keeps unrelated planner
-    diagnostics out of the receipt and lets callers preserve an absent state as
-    the explicit default ``used=false, count=0``.
+    Missing producer telemetry may default to unused. Every supplied alias,
+    including outer fields beside a nested block, must agree before projection.
 
     Returns:
-        Recognized fallback fields, or ``None`` when no fallback fields are present.
+        Supplied canonical fields, or ``None`` when no telemetry is present.
     """
-
-    if not isinstance(payload, Mapping):
+    if payload is None:
         return None
+    if not isinstance(payload, Mapping):
+        raise ObstacleForceDiagnosticReceiptError("fallback telemetry must be a mapping")
     nested = payload.get("fallback")
+    outer = dict(payload)
+    sources = [outer]
     if isinstance(nested, Mapping):
         _reject_unknown_nested_fallback_fields(nested)
-        return dict(nested)
-    if not any(key in payload for key in _FALLBACK_FIELDS):
-        return None
-    return {key: payload[key] for key in _FALLBACK_FIELDS if key in payload}
+        del outer["fallback"]
+        sources.append(nested)
+    result: dict[str, Any] = {}
+    for field, aliases in _FALLBACK_ALIASES.items():
+        values = [
+            _fallback_value(field, source[alias])
+            for source in sources
+            for alias in aliases
+            if alias in source
+        ]
+        if values:
+            if any(value != values[0] for value in values[1:]):
+                raise ObstacleForceDiagnosticReceiptError(f"fallback.{field} aliases disagree")
+            result[field] = values[0]
+    return result or None
 
 
 def _normalize_fallback(payload: Mapping[str, Any] | None) -> dict[str, Any]:
     source = obstacle_force_fallback_from_mapping(payload) or {}
-    raw_used = source.get("used", source.get("fallback", source.get("fallback_triggered", False)))
-    if not isinstance(raw_used, bool):
-        raise ObstacleForceDiagnosticReceiptError("fallback.used must be a boolean")
-
-    raw_count = source.get("count", source.get("fallback_count", 0))
-    if isinstance(raw_count, bool) or not isinstance(raw_count, Integral) or raw_count < 0:
-        raise ObstacleForceDiagnosticReceiptError("fallback.count must be a non-negative integer")
-    count = int(raw_count)
-
-    raw_reason = source.get("first_reason", source.get("fallback_reason"))
-    if raw_reason is not None:
-        raw_reason = _non_empty_text(raw_reason, field="fallback.first_reason")
-
-    raw_reasons = source.get("reasons", source.get("fallback_reasons", {}))
-    if not isinstance(raw_reasons, Mapping):
-        raise ObstacleForceDiagnosticReceiptError("fallback.reasons must be a mapping")
-    reasons: dict[str, int] = {}
-    for key, value in raw_reasons.items():
-        reason = _non_empty_text(key, field="fallback.reasons key")
-        if isinstance(value, bool) or not isinstance(value, Integral) or value < 0:
-            raise ObstacleForceDiagnosticReceiptError(
-                "fallback.reasons values must be non-negative integers"
-            )
-        reasons[reason] = int(value)
+    raw_used = source.get("used", False)
+    count = source.get("count", 0)
+    raw_reason = source.get("first_reason")
+    reasons = source.get("reasons", {})
 
     if count > 0 and not raw_used:
         raise ObstacleForceDiagnosticReceiptError("fallback.count requires fallback.used=true")
@@ -282,8 +298,11 @@ def validate_obstacle_force_diagnostic_receipt(
     _validate_receipt_shape(receipt)
     site, law_version, selection_source, parameters_sha256 = _validate_receipt_selection(receipt)
     fallback_payload = receipt["fallback"]
-    if isinstance(fallback_payload, Mapping):
-        _reject_unknown_nested_fallback_fields(fallback_payload)
+    if not isinstance(fallback_payload, Mapping):
+        raise ObstacleForceDiagnosticReceiptError("fallback must be a canonical mapping")
+    _reject_unknown_nested_fallback_fields(fallback_payload)
+    if set(fallback_payload) != _CANONICAL_FALLBACK_FIELDS:
+        raise ObstacleForceDiagnosticReceiptError("fallback canonical fields are incomplete")
     fallback = _normalize_fallback(fallback_payload)
     input_identity = _validate_receipt_input_identity(
         receipt,
@@ -343,6 +362,10 @@ def build_obstacle_force_diagnostic_receipt(
 
     config_hash = _non_empty_text(config_hash, field="config_hash")
     source_commit = _non_empty_text(source_commit, field="source_commit")
+    metadata_fallback = _normalize_fallback(metadata)
+    fallback_state = metadata_fallback if fallback is None else _normalize_fallback(fallback)
+    if metadata_fallback["used"] and not fallback_state["used"]:
+        raise ObstacleForceDiagnosticReceiptError("fallback metadata and diagnostics disagree")
     receipt = {
         "schema_version": OBSTACLE_FORCE_DIAGNOSTIC_RECEIPT_SCHEMA_VERSION,
         "claim_boundary": "diagnostic_only",
@@ -352,7 +375,7 @@ def build_obstacle_force_diagnostic_receipt(
         "parameters_sha256": parameters_sha256,
         "enabled": enabled,
         "applied": applied,
-        "fallback": _normalize_fallback(fallback or metadata),
+        "fallback": fallback_state,
         "input_identity": {
             "config_hash": config_hash,
             "source_commit": source_commit,

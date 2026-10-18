@@ -1227,6 +1227,7 @@ _LEGACY_FAST_FILES = {
     # provenance contracts for the receipt builder; keep them in the
     # exact-head fast lane for changed-coverage admission (issue #8277).
     "test_obstacle_force_diagnostic_receipt.py",
+    "test_obstacle_force_fallback_admission.py",
     # Pedestrian reset compatibility covers the simulator metadata forwarding
     # branch in the changed environment reset path.
     "test_pedestrian_env_compat.py",

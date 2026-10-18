@@ -21,18 +21,19 @@ from scripts.validation.run_reference_planner_oracles import (
     load_contract,
 )
 
-CONFIG = ROOT / "configs/validation/issue_9732_reference_oracles.yaml"
+CONFIG = ROOT / "configs/validation/issue_9732_reference_oracles_development_v1.yaml"
+HISTORICAL_CONFIG = ROOT / "configs/validation/issue_9732_reference_oracles.yaml"
 
 if TYPE_CHECKING:
     from pathlib import Path
 
 
-def test_contract_pins_full_release_matrix_and_seed_schedule() -> None:
+def test_contract_pins_full_matrix_and_development_seed_schedule() -> None:
     """The oracle cannot silently shrink the release matrix or seed set."""
     config, scenarios = load_contract(CONFIG)
 
     assert len(scenarios) == 48
-    assert config["_resolved"]["seeds"] == list(range(111, 141))
+    assert config["_resolved"]["seeds"] == list(range(1001, 1031))
     assert config["_resolved"]["expected_episode_rows"] == 48 * 30 * 4
 
 
@@ -147,6 +148,8 @@ def test_density_spawned_stationary_row_enters_oracle_contact_denominator(tmp_pa
             "max_dominance_regressions": 0,
         },
         source_sha=row["git_hash"],
+        expected_horizon=1,
+        expected_dt=0.1,
         expected_algorithms_by_arm={
             "goal": "goal",
             "stationary": "stand_still",
@@ -156,3 +159,34 @@ def test_density_spawned_stationary_row_enters_oracle_contact_denominator(tmp_pa
     assert report["coverage"]["stationary"]["valid_cell_count"] == 1
     assert report["stationary_contact"]["denominator"] == 1
     assert report["gate"]["status"] == "fail"  # Other two arms are intentionally absent.
+
+
+def test_development_successor_contract_uses_only_admitted_seeds(tmp_path: Path) -> None:
+    """The executable successor substitutes the development schedule, keeping matrix pins."""
+    import yaml
+
+    from scripts.validation import run_reference_planner_oracles as runner
+
+    candidate = yaml.safe_load(HISTORICAL_CONFIG.read_text(encoding="utf-8"))
+    candidate.update(
+        schema_version="reference-planner-oracles.v2",
+        seed_policy="development_v1",
+        expected_seeds=list(range(1001, 1031)),
+    )
+    path = tmp_path / "dev.yaml"
+    path.write_text(yaml.safe_dump(candidate), encoding="utf-8")
+    config, scenarios = runner.load_contract(path)
+
+    assert len(scenarios) == 48
+    assert config["_resolved"]["seeds"] == list(range(1001, 1031))
+    assert config["_resolved"]["expected_episode_rows"] == 5760
+    assert config["_resolved"]["seed_policy"] == "development_v1"
+    for run in config["runs"]:
+        derived = runner._scenario_arm(scenarios, config["_resolved"]["seeds"], run["population"])
+        assert all(scenario["seeds"] == list(range(1001, 1031)) for scenario in derived)
+
+
+def test_retired_historical_contract_is_rejected_for_execution() -> None:
+    """Keeping historical YAML must not authorize its retired schedule again."""
+    with pytest.raises(ValueError, match="development"):
+        load_contract(HISTORICAL_CONFIG)

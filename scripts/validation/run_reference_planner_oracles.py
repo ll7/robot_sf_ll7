@@ -19,6 +19,7 @@ import yaml
 
 from robot_sf.benchmark.reference_oracle_report import evaluate_oracles, render_markdown
 from robot_sf.benchmark.runner import load_scenario_matrix
+from robot_sf.benchmark.seed_bands import DEV_SEEDS
 
 ROOT = Path(__file__).resolve().parents[2]
 EPISODE_SCHEMA = ROOT / "robot_sf/benchmark/schemas/episode.schema.v1.json"
@@ -47,7 +48,7 @@ def _git(*args: str) -> str:
 def _release_matrix_contract(  # noqa: C901 - fail-closed release manifest validation.
     config: dict[str, Any], manifest_path: Path
 ) -> tuple[dict[str, Any], Path, list[dict[str, Any]], list[str], list[int]]:
-    """Bind the configured matrix, seed schedule, and horizon to the release."""
+    """Pin the historical scenario matrix and horizon, with a development-only seed contract."""
     manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
     if not isinstance(manifest, dict):
         raise ValueError("Release manifest must be a mapping")
@@ -61,9 +62,9 @@ def _release_matrix_contract(  # noqa: C901 - fail-closed release manifest valid
         raise ValueError("Pinned scenario matrix is missing or outside the repository")
     if _sha256(matrix_path) != scenario_spec.get("matrix_sha256"):
         raise ValueError("Pinned scenario matrix SHA-256 differs from release manifest")
-    seeds = seed_spec.get("resolved_seeds")
-    if seeds != config.get("expected_seeds") or seeds != list(range(111, 141)):
-        raise ValueError("Oracle seeds must match the pinned release seeds 111–140")
+    seeds = config.get("expected_seeds")
+    if config.get("seed_policy") != "development_v1" or seeds != list(DEV_SEEDS):
+        raise ValueError("Oracle development_v1 requires the complete admitted development seeds")
     scenarios = load_scenario_matrix(matrix_path)
     names = [str(scenario.get("name", "")) for scenario in scenarios]
     if not all(names) or len(set(names)) != len(names):
@@ -145,14 +146,17 @@ def load_contract(config_path: Path) -> tuple[dict[str, Any], list[dict[str, Any
     config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
     if (
         not isinstance(config, dict)
-        or config.get("schema_version") != "reference-planner-oracles.v1"
+        or config.get("schema_version") != "reference-planner-oracles.v2"
     ):
-        raise ValueError("Expected reference-planner-oracles.v1 configuration")
+        raise ValueError("Expected reference-planner-oracles.v2 development configuration")
     manifest_path = _repo_path(str(config.get("release_manifest", "")))
     manifest, matrix_path, scenarios, names, seeds = _release_matrix_contract(config, manifest_path)
     runs = _validate_run_roster(config, names)
     config["_resolved"] = {
-        "release_id": str(manifest["release_id"]),
+        "release_id": str(manifest["release_id"]) + "__reference_oracles_development_v1",
+        "source_release_id": str(manifest["release_id"]),
+        "seed_policy": "development_v1",
+        "evidence_tier": "diagnostic-only",
         "manifest_path": str(manifest_path.relative_to(ROOT)),
         "manifest_sha256": _sha256(manifest_path),
         "matrix_path": str(matrix_path.relative_to(ROOT)),
@@ -342,6 +346,8 @@ def _gate(
         stationary_no_pedestrian_scenario_ids=config["stationary_no_pedestrian_scenario_ids"],
         thresholds=config["thresholds"],
         source_sha=source_sha,
+        expected_horizon=config["horizon"],
+        expected_dt=config["dt"],
     )
     report["input_errors"] = input_errors
     report["config"] = {

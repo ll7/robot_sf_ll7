@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from copy import deepcopy
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -454,3 +456,210 @@ def test_invalid_actual_stationary_population_cannot_enter_contact_denominator(
         "instantiated_population_size must be" in error
         for error in report["coverage"]["stationary"]["invalid_cells"][0]["errors"]
     )
+
+
+@pytest.mark.parametrize("arm", ["goal", "stationary", "social"])
+@pytest.mark.parametrize("marker", ["error", "placeholder"])
+def test_failed_runtime_status_excluded_from_nominal_cells(arm: str, marker: str) -> None:
+    """Terminal success cannot rehabilitate failed or unimplemented execution."""
+    inputs = _inputs()
+    assert evaluate_oracles(**inputs)["gate"]["status"] == "pass"
+    inputs["rows_by_arm"][arm][0]["algorithm_metadata"]["status"] = marker
+
+    report = evaluate_oracles(**inputs)
+
+    assert report["gate"]["status"] == "fail"
+    assert report["coverage"][arm]["valid_cell_count"] == 3
+    errors = report["coverage"][arm]["invalid_cells"][0]["errors"]
+    assert any("algorithm_metadata.status" in error for error in errors)
+    if arm == "stationary":
+        assert report["stationary_contact"]["denominator"] == 3
+
+
+@pytest.mark.parametrize("arm", ["goal", "stationary", "social"])
+def test_degraded_effective_view_excluded_from_nominal_cells(arm: str) -> None:
+    """Saved evidence retains the native runner's degraded-view refusal."""
+    inputs = _inputs()
+    assert evaluate_oracles(**inputs)["gate"]["status"] == "pass"
+    inputs["rows_by_arm"][arm][0]["integrity"]["effective_view"] = {
+        "degraded": True,
+        "degraded_reason": "degenerate_planner_view",
+    }
+
+    report = evaluate_oracles(**inputs)
+
+    assert report["gate"]["status"] == "fail"
+    assert report["coverage"][arm]["valid_cell_count"] == 3
+    assert any(
+        "integrity.effective_view" in error
+        for error in report["coverage"][arm]["invalid_cells"][0]["errors"]
+    )
+    if arm == "stationary":
+        assert report["stationary_contact"]["denominator"] == 3
+
+
+@pytest.mark.parametrize("field", ["algorithm", "canonical_algorithm"])
+@pytest.mark.parametrize("identity", ["goal", "", None])
+def test_conflicting_runtime_planner_identity_blocks(field: str, identity: str | None) -> None:
+    """Each present runtime identity must agree with the requested arm."""
+    inputs = _inputs()
+    assert evaluate_oracles(**inputs)["gate"]["status"] == "pass"
+    inputs["rows_by_arm"]["social"][0]["algorithm_metadata"][field] = identity
+
+    report = evaluate_oracles(**inputs)
+
+    assert report["gate"]["status"] == "fail"
+    assert report["coverage"]["social"]["valid_cell_count"] == 3
+    assert any(
+        f"algorithm_metadata.{field}" in error
+        for error in report["coverage"]["social"]["invalid_cells"][0]["errors"]
+    )
+
+
+def test_canonical_runtime_aliases_remain_admissible() -> None:
+    """The registry's sf alias describes the same planner as social_force."""
+    inputs = _inputs()
+    inputs["rows_by_arm"]["social"][0]["algo"] = "sf"
+    inputs["rows_by_arm"]["social"][0]["algorithm_metadata"].update(
+        algorithm="sf", canonical_algorithm="social_force"
+    )
+
+    assert evaluate_oracles(**inputs)["gate"]["status"] == "pass"
+
+
+@pytest.fixture
+def saved_gate(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> tuple[dict[str, Any], Callable[[], dict[str, Any]]]:
+    """Persist a passing development fixture through the real saved-row gate."""
+    from scripts.validation import run_reference_planner_oracles as runner
+
+    monkeypatch.setattr(runner, "ROOT", tmp_path)
+    inputs = _inputs()
+    runs = [
+        {
+            "key": key,
+            "algo": algo,
+            "population": "original" if key == "stationary" else "pedestrian_free_v1",
+        }
+        for key, algo in inputs["expected_algorithms_by_arm"].items()
+    ]
+    config = {
+        "horizon": 600,
+        "dt": 0.1,
+        "runs": runs,
+        **{
+            key: inputs[key]
+            for key in (
+                "goal_key",
+                "stationary_key",
+                "aware_keys",
+                "probe_scenario_ids",
+                "thresholds",
+            )
+        },
+        "stationary_no_pedestrian_scenario_ids": [],
+        "_resolved": {
+            "release_id": "development-fixture",
+            "scenario_ids": SCENARIOS,
+            "seeds": SEEDS,
+            "manifest_sha256": "b" * 64,
+            "matrix_sha256": "c" * 64,
+        },
+    }
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text("diagnostic_fixture: development-only\n", encoding="utf-8")
+    (tmp_path / "oracle_run_manifest.json").write_text(
+        json.dumps(
+            {
+                "source_sha": SOURCE_SHA,
+                "config_sha256": runner._sha256(config_path),
+                "release": config["_resolved"],
+            }
+        ),
+        encoding="utf-8",
+    )
+    for rows in inputs["rows_by_arm"].values():
+        for row in rows:
+            row.update(horizon=600, effective_budget_steps=600, steps=600)
+            row["scenario_params"].update(run_horizon=600, run_dt=0.1)
+
+    def gate() -> dict[str, Any]:
+        for key, rows in inputs["rows_by_arm"].items():
+            path = tmp_path / "runs" / key / "episodes.jsonl"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+        return runner._gate(config, tmp_path, config_path)
+
+    assert gate()["gate"]["status"] == "pass"
+    return inputs, gate
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("horizon", 1),
+        ("effective_budget_steps", 1),
+        ("run_horizon", 1),
+        ("run_dt", 9.0),
+        ("steps", 1),
+        ("steps", 601),
+        ("horizon", None),
+        ("effective_budget_steps", None),
+        ("run_horizon", None),
+        ("run_dt", None),
+        ("steps", None),
+        ("steps", True),
+        ("run_dt", float("inf")),
+    ],
+)
+def test_saved_gate_refuses_execution_contract_mismatch(
+    saved_gate: tuple[dict[str, Any], Callable[[], dict[str, Any]]],
+    field: str,
+    value: Any,
+) -> None:
+    """A declared H600/dt0.1 window cannot be replaced by shorter/wrong-clock rows."""
+    inputs, gate = saved_gate
+    row = inputs["rows_by_arm"]["stationary"][1]  # A max_steps row, without contact.
+    target = row["scenario_params"] if field in {"run_horizon", "run_dt"} else row
+    if value is None:
+        del target[field]
+    else:
+        target[field] = value
+
+    report = gate()
+
+    assert report["gate"]["status"] == "fail"
+    assert report["stationary_contact"]["denominator"] == 3
+    assert any(
+        field in error for error in report["coverage"]["stationary"]["invalid_cells"][0]["errors"]
+    )
+
+
+def test_saved_gate_refuses_forged_one_step_stationary_window(
+    saved_gate: tuple[dict[str, Any], Callable[[], dict[str, Any]]],
+) -> None:
+    """Mutually consistent shortened row fields still violate the config contract."""
+    inputs, gate = saved_gate
+    for row in inputs["rows_by_arm"]["stationary"]:
+        row.update(horizon=1, effective_budget_steps=1, steps=1)
+        row["scenario_params"].update(run_horizon=1, run_dt=9.0)
+
+    report = gate()
+
+    assert report["gate"]["status"] == "fail"
+    assert report["stationary_contact"]["denominator"] == 0
+
+
+def test_saved_gate_allows_early_success_and_collision(
+    saved_gate: tuple[dict[str, Any], Callable[[], dict[str, Any]]],
+) -> None:
+    """Early terminal events retain the full configured budget and timestep."""
+    inputs, gate = saved_gate
+    inputs["rows_by_arm"]["goal"][0]["steps"] = 1
+    inputs["rows_by_arm"]["stationary"][0]["steps"] = 2
+
+    report = gate()
+
+    assert report["gate"]["status"] == "pass"
+    assert report["stationary_contact"]["denominator"] == 4

@@ -18,6 +18,7 @@ from typing import Any, cast
 
 from jsonschema import Draft202012Validator
 
+from robot_sf.benchmark.algorithm_metadata import canonical_algorithm_name
 from robot_sf.benchmark.termination_reason import (
     outcome_contradictions,
     status_from_termination_reason,
@@ -38,7 +39,16 @@ _THRESHOLD_KEYS = frozenset(
 _ALLOWED_STATUSES = frozenset({"success", "collision", "failure"})
 _NATIVE_RUN_MODES = frozenset({"native", "adapter"})
 _DEGRADED_MARKERS = frozenset(
-    {"fallback", "degraded", "failed", "unavailable", "not_available", "not-available"}
+    {
+        "fallback",
+        "degraded",
+        "failed",
+        "error",
+        "placeholder",
+        "unavailable",
+        "not_available",
+        "not-available",
+    }
 )
 
 
@@ -56,6 +66,8 @@ def evaluate_oracles(  # noqa: C901, PLR0912, PLR0913, PLR0915
     source_sha: str | None = None,
     stationary_no_pedestrian_scenario_ids: list[str] | None = None,
     expected_algorithms_by_arm: dict[str, str] | None = None,
+    expected_horizon: int | None = None,
+    expected_dt: float | None = None,
 ) -> dict[str, Any]:
     """Evaluate completeness, episode outcomes, contacts, and paired regressions.
 
@@ -276,10 +288,13 @@ def evaluate_oracles(  # noqa: C901, PLR0912, PLR0913, PLR0915
             if expected_algorithm is not None:
                 if algorithm is None:
                     row_errors.append("algo is missing or invalid")
-                elif algorithm.lower() != expected_algorithm.lower():
+                elif canonical_algorithm_name(algorithm) != canonical_algorithm_name(
+                    expected_algorithm
+                ):
                     row_errors.append(
                         f"algo {algorithm!r} does not match configured {expected_algorithm!r}"
                     )
+                _validate_runtime_algorithm(raw_row, expected_algorithm, row_errors)
             if scenario_id is None:
                 row_errors.append("scenario_id is missing or invalid")
             if seed is None:
@@ -295,6 +310,8 @@ def evaluate_oracles(  # noqa: C901, PLR0912, PLR0913, PLR0915
             mode = _execution_mode(raw_row, row_errors)
             mode_counts[mode or "missing"] += 1
             _validate_degraded_markers(raw_row, row_errors)
+            if expected_horizon is not None or expected_dt is not None:
+                _validate_execution_budget(raw_row, expected_horizon, expected_dt, row_errors)
             _validate_source_provenance(
                 raw_row,
                 expected_source_sha,
@@ -911,6 +928,65 @@ def _nonempty_string(value: Any) -> str | None:
     return normalized or None
 
 
+def _validate_runtime_algorithm(
+    row: Mapping[str, Any], expected_algorithm: str, errors: list[str]
+) -> None:
+    """Cross-check producer identities against the configured planner, including aliases."""
+    metadata = row.get("algorithm_metadata")
+    if not isinstance(metadata, Mapping):
+        return
+    for key in ("algorithm", "canonical_algorithm"):
+        if key not in metadata:
+            continue
+        algorithm = _nonempty_string(metadata[key])
+        if algorithm is None:
+            errors.append(f"algorithm_metadata.{key} is present but invalid")
+        elif canonical_algorithm_name(algorithm) != canonical_algorithm_name(expected_algorithm):
+            errors.append(
+                f"algorithm_metadata.{key} {algorithm!r} does not match configured "
+                f"{expected_algorithm!r}"
+            )
+
+
+def _validate_execution_budget(
+    row: Mapping[str, Any], horizon: int | None, dt: float | None, errors: list[str]
+) -> None:
+    """Bind saved observation windows to the config; allow early success or collision."""
+    if (
+        isinstance(horizon, bool)
+        or not isinstance(horizon, int)
+        or horizon <= 0
+        or isinstance(dt, bool)
+        or not isinstance(dt, (int, float))
+        or not math.isfinite(dt)
+        or dt <= 0
+    ):
+        errors.append("expected execution horizon and dt must be finite and positive")
+        return
+    params = row.get("scenario_params")
+    params = params if isinstance(params, Mapping) else {}
+    for path, value in (
+        ("horizon", row.get("horizon")),
+        ("effective_budget_steps", row.get("effective_budget_steps")),
+        ("scenario_params.run_horizon", params.get("run_horizon")),
+    ):
+        if isinstance(value, bool) or not isinstance(value, int) or value != horizon:
+            errors.append(f"{path} must equal configured horizon {horizon}")
+    run_dt = params.get("run_dt")
+    if (
+        isinstance(run_dt, bool)
+        or not isinstance(run_dt, (int, float))
+        or not math.isfinite(run_dt)
+        or run_dt != dt
+    ):
+        errors.append(f"scenario_params.run_dt must equal configured dt {dt}")
+    steps = row.get("steps")
+    if isinstance(steps, bool) or not isinstance(steps, int) or not 0 <= steps <= horizon:
+        errors.append(f"steps must be an integer between zero and configured horizon {horizon}")
+    elif row.get("termination_reason") == "max_steps" and steps != horizon:
+        errors.append(f"max_steps termination requires steps={horizon}")
+
+
 def _validate_canonical_episode(row: Mapping[str, Any], errors: list[str]) -> None:
     """Reject saved rows that bypassed the map runner's canonical writer."""
     schema_error = next(_EPISODE_VALIDATOR.iter_errors(row), None)
@@ -918,8 +994,12 @@ def _validate_canonical_episode(row: Mapping[str, Any], errors: list[str]) -> No
         location = ".".join(str(part) for part in schema_error.absolute_path)
         errors.append(f"canonical episode schema {location or '<root>'}: {schema_error.message}")
     integrity = row.get("integrity")
-    if isinstance(integrity, Mapping) and integrity.get("contradictions") != []:
-        errors.append("integrity.contradictions must be empty")
+    if isinstance(integrity, Mapping):
+        if integrity.get("contradictions") != []:
+            errors.append("integrity.contradictions must be empty")
+        effective_view = integrity.get("effective_view")
+        if isinstance(effective_view, Mapping) and effective_view.get("degraded") is True:
+            errors.append("integrity.effective_view.degraded marks a degraded row")
 
 
 def _validate_terminal_partition(

@@ -1,10 +1,17 @@
 # VV-2 reference-planner oracles
 
 Issue [#9732](https://github.com/ll7/robot_sf_ll7/issues/9732) adds a diagnostic
-check over the release-pinned 48-scenario matrix and seeds 111–140. The config is
-[`issue_9732_reference_oracles.yaml`](../configs/validation/issue_9732_reference_oracles.yaml).
-It names the release manifest, reference arms, explicit probe exemptions, and
-thresholds. It does not edit the source scenarios or release manifest.
+check over the release-pinned 48-scenario matrix. The executable development successor is
+[`issue_9732_reference_oracles_development_v1.yaml`](../configs/validation/issue_9732_reference_oracles_development_v1.yaml).
+Its `reference-planner-oracles.v2` contract requires `development_v1` and the complete
+admitted development schedule, seeds 1001–1030. It pins the historical matrix and H600
+without inheriting the release evaluation seed schedule. The historical
+[`issue_9732_reference_oracles.yaml`](../configs/validation/issue_9732_reference_oracles.yaml)
+is retained unchanged for provenance and is refused by the executable entrypoint.
+The successor names the reference arms, explicit probe exemptions, and unchanged
+thresholds. It does not edit source scenarios or the release manifest. Its resolved
+identity is distinct from the source release and carries `diagnostic-only` evidence tier;
+config admission does not supply a behaviour receipt, campaign custody or domain approval.
 
 The **goal** arm uses the existing blind goal policy and a `pedestrian_free_v1`
 overlay. The overlay sets an exact population of zero and removes fixed SVG
@@ -32,7 +39,7 @@ Run preflight before cluster submission:
 ```bash
 scripts/dev/run_worktree_shared_venv.sh -- uv run python \
   scripts/validation/run_reference_planner_oracles.py \
-  --config configs/validation/issue_9732_reference_oracles.yaml \
+  --config configs/validation/issue_9732_reference_oracles_development_v1.yaml \
   --output-root output/validation/issue_9732/<run-id> --mode preflight
 ```
 
@@ -51,16 +58,22 @@ simulator:
 ```bash
 scripts/dev/run_worktree_shared_venv.sh -- uv run python \
   scripts/validation/run_reference_planner_oracles.py \
-  --config configs/validation/issue_9732_reference_oracles.yaml \
+  --config configs/validation/issue_9732_reference_oracles_development_v1.yaml \
   --output-root output/validation/issue_9732/<run-id> --mode release-gate
 ```
 
 The gate requires one valid row for every scenario and seed in every configured
 arm. Saved rows must pass the canonical episode schema, have an empty integrity
-contradiction list, and contain exactly one terminal event consistent with the
+contradiction list, no degraded effective view, and contain exactly one terminal event consistent with the
 status and termination reason. This VV-2 runner admits `success`, `collision`,
 and `max_steps` terminal reasons; `error`, partial, and other terminal rows are
 retained as diagnostic failures and cannot enter the threshold denominators.
+Runtime error/placeholder statuses are excluded too. Present runtime planner identities
+(`algorithm_metadata.algorithm` and `canonical_algorithm`) must match the configured
+arm after canonical alias normalization. The saved-artifact gate binds each row's
+`horizon`, `effective_budget_steps`, `scenario_params.run_horizon` and `run_dt` to
+the configured horizon/timestep. A `max_steps` timeout must exhaust that budget;
+early success or collision may use fewer steps while retaining the full declared budget.
 It lists all goal failures, including probes; only explicitly declared
 probes are exempt from the goal-failure threshold. Stationary contact rate is
 the fraction of episodes with pedestrians present and

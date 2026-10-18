@@ -1,5 +1,16 @@
 # Contributing A Planner
 
+For map-backed hybrid development configs, run
+`uv run python -m scripts.validation.check_hybrid_config_consumption CONFIG.yaml`
+before tuning. This opt-in check resolves default, family and named scenario overrides
+and rejects enabled escape/corridor-transit rules masked by continuous static checking.
+It checks unconditional parameters separately from named overrides. Without a scenario
+roster, it conservatively checks every declared family compatible with each scenario
+name; runtime prefix-based family inference and override precedence still apply.
+It assumes exact map geometry is available; it does not prove general parameter
+consumption, candidate eligibility, geometry-free fallback behavior or planner quality.
+It changes no runtime defaults or released configs and is not a behavior-gate receipt.
+
 This is the minimum path for adding a Robot SF planner without overclaiming its status. It is a
 checklist for a first useful contribution, not a substitute for the detailed benchmark, policy
 search, or artifact-provenance docs linked below.

@@ -14,6 +14,8 @@ from pathlib import Path
 
 import pytest
 
+from robot_sf.evidence.writers import write_json
+
 ROOT = Path(__file__).resolve().parents[2]
 PRODUCERS = "404ad70b26f62199fb3a035a54e14ff6003291f0"
 SOURCE = "03f96dbf4907622ea0ec7f865db4adf1630ede7a"
@@ -248,7 +250,7 @@ def test_historical_cli_roundtrip(compactor, packets, tmp_path, monkeypatch):
     args = ["vv5", "--source-commit", SOURCE, "--producer-commit", PRODUCERS]
     for name, packet in packets.items():
         path = tmp_path / f"{name}.json"
-        path.write_text(json.dumps(packet))
+        write_json(path, packet)
         args.extend(["--" + name.replace("_", "-"), str(path)])
     output = tmp_path / "matrix.json"
     args.extend(["--output", str(output)])

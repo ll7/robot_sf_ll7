@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import asdict
+from dataclasses import asdict, fields
 from typing import Any
 
 import numpy as np
@@ -26,9 +26,12 @@ from robot_sf.planner.socnav import (
     ORCAPlannerAdapter,
     SocNavPlannerConfig,
 )
+from robot_sf.planner.socnav_base import _SOCNAV_CONFIG_INIT_KEYS
 
 # Fields accepted when building a SocNavPlannerConfig from a loose mapping.
-_SOCNAV_CONFIG_FIELDS = tuple(SocNavPlannerConfig.__dataclass_fields__.keys())
+_SOCNAV_CONFIG_FIELDS = tuple(field.name for field in fields(SocNavPlannerConfig)) + tuple(
+    _SOCNAV_CONFIG_INIT_KEYS
+)
 
 
 def _coerce_scalar(value: Any, default: float) -> float:

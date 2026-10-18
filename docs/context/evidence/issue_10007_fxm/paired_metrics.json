@@ -1,0 +1,802 @@
+{
+  "base": "073f492abced5dcff749ddfed01c44dc9fd864b7",
+  "evidence": "diagnostic-only dev-seed metric definition probes; no release or paper admission",
+  "episodes": [
+    {
+      "episode": "classic_doorway_low__goal__1001",
+      "scenario": "classic_doorway_low",
+      "seed": 1001,
+      "planner": "goal",
+      "steps": 100,
+      "outcome": {
+        "route_complete": false,
+        "collision_event": true,
+        "timeout_event": false
+      },
+      "start": [
+        29.670548281804777,
+        13.72763420796822
+      ],
+      "terminal_goal": [
+        16.894179422786184,
+        11.458144150035618
+      ],
+      "old_metric_goal": [
+        17.0,
+        12.15
+      ],
+      "new_metric_goal": [
+        16.894179422786184,
+        11.458144150035618
+      ],
+      "first_segment_m": 0.00500000000000016,
+      "same_trajectory": true,
+      "same_outcome": true,
+      "before": {
+        "shortest_path_m": 12.589678312014172,
+        "path_efficiency": 1.0,
+        "path_length_m": 8.97932365039342,
+        "path_length_ratio": 0.7035171987838307,
+        "path_irregularity": 0.1899479372465535,
+        "failure_distance_m": 4.164725400691507,
+        "failure_to_progress": 0.0,
+        "deadlock": false,
+        "stall_windows": 0,
+        "jerk_mean": 0.045713419615266496,
+        "time_to_goal_s": null,
+        "time_to_goal_norm": 1.0,
+        "time_to_goal_ideal_ratio": null,
+        "trace_initial_goal_distance_m": 3.5663165519579394,
+        "trace_final_progress_m": -2.327474774588085
+      },
+      "after": {
+        "shortest_path_m": 13.302037874564414,
+        "path_efficiency": 1.0,
+        "path_length_m": 8.98432365039342,
+        "path_length_ratio": 0.6923610715345562,
+        "path_irregularity": 0.2614281219822968,
+        "failure_distance_m": 4.493407018039138,
+        "failure_to_progress": 0.0,
+        "deadlock": false,
+        "stall_windows": 0,
+        "jerk_mean": 0.45713419615266493,
+        "time_to_goal_s": null,
+        "time_to_goal_norm": 1.0,
+        "time_to_goal_ideal_ratio": null,
+        "trace_initial_goal_distance_m": 12.976370307014014,
+        "trace_final_progress_m": 8.482963288974876
+      }
+    },
+    {
+      "episode": "classic_doorway_low__hybrid_rule_local_planner__1001",
+      "scenario": "classic_doorway_low",
+      "seed": 1001,
+      "planner": "hybrid_rule_local_planner",
+      "steps": 82,
+      "outcome": {
+        "route_complete": true,
+        "collision_event": false,
+        "timeout_event": false
+      },
+      "start": [
+        29.670548281804777,
+        13.72763420796822
+      ],
+      "terminal_goal": [
+        16.894179422786184,
+        11.458144150035618
+      ],
+      "old_metric_goal": [
+        16.894179422786184,
+        11.458144150035618
+      ],
+      "new_metric_goal": [
+        16.894179422786184,
+        11.458144150035618
+      ],
+      "first_segment_m": 0.00500000000000016,
+      "same_trajectory": true,
+      "same_outcome": true,
+      "before": {
+        "shortest_path_m": 13.302037874564414,
+        "path_efficiency": 1.0,
+        "path_length_m": 12.09156523401558,
+        "path_length_ratio": 0.9321700917786759,
+        "path_irregularity": 0.28773788030029235,
+        "failure_distance_m": 1.8424977017944904,
+        "failure_to_progress": 0.0,
+        "deadlock": false,
+        "stall_windows": 0,
+        "jerk_mean": 0.16547635696041196,
+        "time_to_goal_s": 8.1,
+        "time_to_goal_norm": 0.135,
+        "time_to_goal_ideal_ratio": 1.2178585080543896,
+        "trace_initial_goal_distance_m": 3.5663165519579394,
+        "trace_final_progress_m": -5.052434975086166
+      },
+      "after": {
+        "shortest_path_m": 13.302037874564414,
+        "path_efficiency": 1.0,
+        "path_length_m": 12.096565234015578,
+        "path_length_ratio": 0.9322002183828796,
+        "path_irregularity": 0.28606847085214543,
+        "failure_distance_m": 1.8424977017944904,
+        "failure_to_progress": 0.0,
+        "deadlock": false,
+        "stall_windows": 0,
+        "jerk_mean": 1.6547635696041199,
+        "time_to_goal_s": 8.200000000000001,
+        "time_to_goal_norm": 0.13666666666666666,
+        "time_to_goal_ideal_ratio": 1.2328937982772834,
+        "trace_initial_goal_distance_m": 12.976370307014014,
+        "trace_final_progress_m": 11.133872605219523
+      }
+    },
+    {
+      "episode": "classic_doorway_low__orca__1001",
+      "scenario": "classic_doorway_low",
+      "seed": 1001,
+      "planner": "orca",
+      "steps": 60,
+      "outcome": {
+        "route_complete": false,
+        "collision_event": true,
+        "timeout_event": false
+      },
+      "start": [
+        29.670548281804777,
+        13.72763420796822
+      ],
+      "terminal_goal": [
+        16.894179422786184,
+        11.458144150035618
+      ],
+      "old_metric_goal": [
+        17.0,
+        12.15
+      ],
+      "new_metric_goal": [
+        16.894179422786184,
+        11.458144150035618
+      ],
+      "first_segment_m": 0.00500000000000016,
+      "same_trajectory": true,
+      "same_outcome": true,
+      "before": {
+        "shortest_path_m": 12.589678312014172,
+        "path_efficiency": 1.0,
+        "path_length_m": 7.849716576156508,
+        "path_length_ratio": 0.6150141944925566,
+        "path_irregularity": 0.4868330968950488,
+        "failure_distance_m": 6.247664248620273,
+        "failure_to_progress": 0.0,
+        "deadlock": false,
+        "stall_windows": 0,
+        "jerk_mean": 0.2026342933128932,
+        "time_to_goal_s": null,
+        "time_to_goal_norm": 1.0,
+        "time_to_goal_ideal_ratio": null,
+        "trace_initial_goal_distance_m": 3.5663165519579394,
+        "trace_final_progress_m": -0.42199811187889935
+      },
+      "after": {
+        "shortest_path_m": 13.302037874564414,
+        "path_efficiency": 1.0,
+        "path_length_m": 7.854716576156509,
+        "path_length_ratio": 0.6053099896440884,
+        "path_irregularity": 0.48206321772343325,
+        "failure_distance_m": 6.504985765327849,
+        "failure_to_progress": 0.0,
+        "deadlock": false,
+        "stall_windows": 0,
+        "jerk_mean": 2.026342933128933,
+        "time_to_goal_s": null,
+        "time_to_goal_norm": 1.0,
+        "time_to_goal_ideal_ratio": null,
+        "trace_initial_goal_distance_m": 12.976370307014014,
+        "trace_final_progress_m": 6.471384541686165
+      }
+    },
+    {
+      "episode": "classic_merging_low__goal__1001",
+      "scenario": "classic_merging_low",
+      "seed": 1001,
+      "planner": "goal",
+      "steps": 479,
+      "outcome": {
+        "route_complete": false,
+        "collision_event": true,
+        "timeout_event": false
+      },
+      "start": [
+        8.775071281804777,
+        6.0924542079682205
+      ],
+      "terminal_goal": [
+        36.45408742278618,
+        34.04730225003562
+      ],
+      "old_metric_goal": [
+        31.5,
+        18.8
+      ],
+      "new_metric_goal": [
+        36.45408742278618,
+        34.04730225003562
+      ],
+      "first_segment_m": 0.005000000000000197,
+      "same_trajectory": true,
+      "same_outcome": true,
+      "before": {
+        "shortest_path_m": 42.39249107575393,
+        "path_efficiency": 0.9497402398951609,
+        "path_length_m": 44.635879680567726,
+        "path_length_ratio": 1.7145802282257052,
+        "path_irregularity": 1.0418422918702173,
+        "failure_distance_m": 6.036147503573945,
+        "failure_to_progress": 61.0,
+        "deadlock": true,
+        "stall_windows": 187,
+        "jerk_mean": 0.036067459677508185,
+        "time_to_goal_s": null,
+        "time_to_goal_norm": 1.0,
+        "time_to_goal_ideal_ratio": null,
+        "trace_initial_goal_distance_m": 5.213332995086486,
+        "trace_final_progress_m": -12.09176722573988
+      },
+      "after": {
+        "shortest_path_m": 57.13714306953529,
+        "path_efficiency": 1.0,
+        "path_length_m": 44.640879680567735,
+        "path_length_ratio": 1.134758058308272,
+        "path_irregularity": 1.014231213873389,
+        "failure_distance_m": 19.79909552981609,
+        "failure_to_progress": 114.0,
+        "deadlock": false,
+        "stall_windows": 113,
+        "jerk_mean": 0.3606745967750818,
+        "time_to_goal_s": null,
+        "time_to_goal_norm": 1.0,
+        "time_to_goal_ideal_ratio": null,
+        "trace_initial_goal_distance_m": 39.339566133700416,
+        "trace_final_progress_m": 19.540470603884327
+      }
+    },
+    {
+      "episode": "classic_merging_low__hybrid_rule_local_planner__1001",
+      "scenario": "classic_merging_low",
+      "seed": 1001,
+      "planner": "hybrid_rule_local_planner",
+      "steps": 510,
+      "outcome": {
+        "route_complete": true,
+        "collision_event": false,
+        "timeout_event": false
+      },
+      "start": [
+        8.775071281804777,
+        6.0924542079682205
+      ],
+      "terminal_goal": [
+        36.45408742278618,
+        34.04730225003562
+      ],
+      "old_metric_goal": [
+        36.0,
+        34.0
+      ],
+      "new_metric_goal": [
+        36.45408742278618,
+        34.04730225003562
+      ],
+      "first_segment_m": 0.00499999999999982,
+      "same_trajectory": true,
+      "same_outcome": true,
+      "before": {
+        "shortest_path_m": 57.13714306953529,
+        "path_efficiency": 0.840129880806484,
+        "path_length_m": 68.00989272597518,
+        "path_length_ratio": 1.7445958665683288,
+        "path_irregularity": 1.1465502633838394,
+        "failure_distance_m": 2.002506538779805,
+        "failure_to_progress": 147.0,
+        "deadlock": false,
+        "stall_windows": 178,
+        "jerk_mean": 0.19490264612749217,
+        "time_to_goal_s": 50.900000000000006,
+        "time_to_goal_norm": 0.8483333333333334,
+        "time_to_goal_ideal_ratio": 1.7816781611938577,
+        "trace_initial_goal_distance_m": 5.213332995086486,
+        "trace_final_progress_m": -28.154408927302153
+      },
+      "after": {
+        "shortest_path_m": 57.13714306953529,
+        "path_efficiency": 0.8400681200768016,
+        "path_length_m": 68.01489272597517,
+        "path_length_ratio": 1.7289184759897467,
+        "path_irregularity": 1.1462273116884572,
+        "failure_distance_m": 2.1905186044072207,
+        "failure_to_progress": 146.0,
+        "deadlock": false,
+        "stall_windows": 151,
+        "jerk_mean": 1.9490264612749217,
+        "time_to_goal_s": 51.0,
+        "time_to_goal_norm": 0.85,
+        "time_to_goal_ideal_ratio": 1.7851785112158494,
+        "trace_initial_goal_distance_m": 39.339566133700416,
+        "trace_final_progress_m": 37.14904752929319
+      }
+    },
+    {
+      "episode": "classic_merging_low__orca__1001",
+      "scenario": "classic_merging_low",
+      "seed": 1001,
+      "planner": "orca",
+      "steps": 470,
+      "outcome": {
+        "route_complete": true,
+        "collision_event": false,
+        "timeout_event": false
+      },
+      "start": [
+        8.775071281804777,
+        6.0924542079682205
+      ],
+      "terminal_goal": [
+        36.45408742278618,
+        34.04730225003562
+      ],
+      "old_metric_goal": [
+        36.45408742278618,
+        34.04730225003562
+      ],
+      "new_metric_goal": [
+        36.45408742278618,
+        34.04730225003562
+      ],
+      "first_segment_m": 0.005000000000000197,
+      "same_trajectory": true,
+      "same_outcome": true,
+      "before": {
+        "shortest_path_m": 57.13714306953529,
+        "path_efficiency": 0.6976701860640042,
+        "path_length_m": 81.89706857316321,
+        "path_length_ratio": 2.082028148861294,
+        "path_irregularity": 1.0162199944764165,
+        "failure_distance_m": 1.911517221490748,
+        "failure_to_progress": 132.0,
+        "deadlock": false,
+        "stall_windows": 129,
+        "jerk_mean": 0.13601632168221117,
+        "time_to_goal_s": 46.900000000000006,
+        "time_to_goal_norm": 0.7816666666666666,
+        "time_to_goal_ideal_ratio": 1.6416641603141833,
+        "trace_initial_goal_distance_m": 5.213332995086486,
+        "trace_final_progress_m": -28.729661345031086
+      },
+      "after": {
+        "shortest_path_m": 57.13714306953529,
+        "path_efficiency": 0.6976275943323044,
+        "path_length_m": 81.90206857316323,
+        "path_length_ratio": 2.0819263307279194,
+        "path_irregularity": 1.015178079924565,
+        "failure_distance_m": 1.911517221490748,
+        "failure_to_progress": 132.0,
+        "deadlock": false,
+        "stall_windows": 139,
+        "jerk_mean": 1.3601632168221118,
+        "time_to_goal_s": 47.0,
+        "time_to_goal_norm": 0.7833333333333333,
+        "time_to_goal_ideal_ratio": 1.645164510336175,
+        "trace_initial_goal_distance_m": 39.339566133700416,
+        "trace_final_progress_m": 37.42804891220967
+      }
+    },
+    {
+      "episode": "francis2023_frontal_approach__goal__1001",
+      "scenario": "francis2023_frontal_approach",
+      "seed": 1001,
+      "planner": "goal",
+      "steps": 185,
+      "outcome": {
+        "route_complete": false,
+        "collision_event": true,
+        "timeout_event": false
+      },
+      "start": [
+        4.387535640902389,
+        4.04622710398411
+      ],
+      "terminal_goal": [
+        37.227043711393094,
+        5.0236511250178095
+      ],
+      "old_metric_goal": [
+        37.0,
+        5.0
+      ],
+      "new_metric_goal": [
+        37.227043711393094,
+        5.0236511250178095
+      ],
+      "first_segment_m": 0.004999999999999788,
+      "same_trajectory": true,
+      "same_outcome": true,
+      "before": {
+        "shortest_path_m": 33.015148038438355,
+        "path_efficiency": 1.0,
+        "path_length_m": 17.859858261995576,
+        "path_length_ratio": 0.5474891566549837,
+        "path_irregularity": 0.027027165558741642,
+        "failure_distance_m": 14.801048832653377,
+        "failure_to_progress": 0.0,
+        "deadlock": false,
+        "stall_windows": 0,
+        "jerk_mean": 0.013576059243295613,
+        "time_to_goal_s": null,
+        "time_to_goal_norm": 1.0,
+        "time_to_goal_ideal_ratio": null,
+        "trace_initial_goal_distance_m": 2.7811243705972286,
+        "trace_final_progress_m": -12.421005341915581
+      },
+      "after": {
+        "shortest_path_m": 33.015148038438355,
+        "path_efficiency": 1.0,
+        "path_length_m": 17.864858261995572,
+        "path_length_ratio": 0.5437645549374374,
+        "path_irregularity": 0.027330126733070132,
+        "failure_distance_m": 15.028430441185135,
+        "failure_to_progress": 0.0,
+        "deadlock": false,
+        "stall_windows": 0,
+        "jerk_mean": 0.1357605924329561,
+        "time_to_goal_s": null,
+        "time_to_goal_norm": 1.0,
+        "time_to_goal_ideal_ratio": null,
+        "trace_initial_goal_distance_m": 32.854050709596194,
+        "trace_final_progress_m": 17.825620268411058
+      }
+    },
+    {
+      "episode": "francis2023_frontal_approach__hybrid_rule_local_planner__1001",
+      "scenario": "francis2023_frontal_approach",
+      "seed": 1001,
+      "planner": "hybrid_rule_local_planner",
+      "steps": 198,
+      "outcome": {
+        "route_complete": true,
+        "collision_event": false,
+        "timeout_event": false
+      },
+      "start": [
+        4.387535640902389,
+        4.04622710398411
+      ],
+      "terminal_goal": [
+        37.227043711393094,
+        5.0236511250178095
+      ],
+      "old_metric_goal": [
+        37.227043711393094,
+        5.0236511250178095
+      ],
+      "new_metric_goal": [
+        37.227043711393094,
+        5.0236511250178095
+      ],
+      "first_segment_m": 0.004999999999999788,
+      "same_trajectory": true,
+      "same_outcome": true,
+      "before": {
+        "shortest_path_m": 33.015148038438355,
+        "path_efficiency": 1.0,
+        "path_length_m": 31.95255065835673,
+        "path_length_ratio": 0.9727087438319872,
+        "path_irregularity": 0.10237593550078583,
+        "failure_distance_m": 1.1907018809873255,
+        "failure_to_progress": 0.0,
+        "deadlock": false,
+        "stall_windows": 0,
+        "jerk_mean": 0.06911725228985971,
+        "time_to_goal_s": 19.700000000000003,
+        "time_to_goal_norm": 0.3283333333333333,
+        "time_to_goal_ideal_ratio": 1.193391589646304,
+        "trace_initial_goal_distance_m": 2.7811243705972286,
+        "trace_final_progress_m": -26.255846855961124
+      },
+      "after": {
+        "shortest_path_m": 33.015148038438355,
+        "path_efficiency": 1.0,
+        "path_length_m": 31.957550658356734,
+        "path_length_ratio": 0.9727129522272999,
+        "path_irregularity": 0.10199844274898122,
+        "failure_distance_m": 1.1907018809873255,
+        "failure_to_progress": 0.0,
+        "deadlock": false,
+        "stall_windows": 0,
+        "jerk_mean": 0.6911725228985969,
+        "time_to_goal_s": 19.8,
+        "time_to_goal_norm": 0.33,
+        "time_to_goal_ideal_ratio": 1.1994494149744577,
+        "trace_initial_goal_distance_m": 32.854050709596194,
+        "trace_final_progress_m": 31.663348828608868
+      }
+    },
+    {
+      "episode": "francis2023_frontal_approach__orca__1001",
+      "scenario": "francis2023_frontal_approach",
+      "seed": 1001,
+      "planner": "orca",
+      "steps": 170,
+      "outcome": {
+        "route_complete": true,
+        "collision_event": false,
+        "timeout_event": false
+      },
+      "start": [
+        4.387535640902389,
+        4.04622710398411
+      ],
+      "terminal_goal": [
+        37.227043711393094,
+        5.0236511250178095
+      ],
+      "old_metric_goal": [
+        37.227043711393094,
+        5.0236511250178095
+      ],
+      "new_metric_goal": [
+        37.227043711393094,
+        5.0236511250178095
+      ],
+      "first_segment_m": 0.004999999999999788,
+      "same_trajectory": true,
+      "same_outcome": true,
+      "before": {
+        "shortest_path_m": 33.015148038438355,
+        "path_efficiency": 1.0,
+        "path_length_m": 31.90499999999999,
+        "path_length_ratio": 0.9712611934571326,
+        "path_irregularity": 0.08489529133370502,
+        "failure_distance_m": 1.2335029258135666,
+        "failure_to_progress": 0.0,
+        "deadlock": false,
+        "stall_windows": 0,
+        "jerk_mean": 0.04134176220307034,
+        "time_to_goal_s": 16.900000000000002,
+        "time_to_goal_norm": 0.2816666666666667,
+        "time_to_goal_ideal_ratio": 1.0237724804579968,
+        "trace_initial_goal_distance_m": 2.7811243705972286,
+        "trace_final_progress_m": -26.226523759539297
+      },
+      "after": {
+        "shortest_path_m": 33.015148038438355,
+        "path_efficiency": 1.0,
+        "path_length_m": 31.90999999999999,
+        "path_length_ratio": 0.9712656220707523,
+        "path_irregularity": 0.08455821289252352,
+        "failure_distance_m": 1.2335029258135666,
+        "failure_to_progress": 0.0,
+        "deadlock": false,
+        "stall_windows": 0,
+        "jerk_mean": 0.4134176220307034,
+        "time_to_goal_s": 17.0,
+        "time_to_goal_norm": 0.2833333333333333,
+        "time_to_goal_ideal_ratio": 1.0298303057861506,
+        "trace_initial_goal_distance_m": 32.854050709596194,
+        "trace_final_progress_m": 31.620547783782627
+      }
+    },
+    {
+      "episode": "fxm_open_dev__goal__1002",
+      "scenario": "fxm_open_dev",
+      "seed": 1002,
+      "planner": "goal",
+      "steps": 134,
+      "outcome": {
+        "route_complete": true,
+        "collision_event": false,
+        "timeout_event": false
+      },
+      "start": [
+        3.24202342267626,
+        4.36613609387457
+      ],
+      "terminal_goal": [
+        18.1134646371953,
+        4.897439424609203
+      ],
+      "old_metric_goal": [
+        18.1134646371953,
+        4.897439424609203
+      ],
+      "new_metric_goal": [
+        18.1134646371953,
+        4.897439424609203
+      ],
+      "first_segment_m": 0.004999999999999788,
+      "same_trajectory": true,
+      "same_outcome": true,
+      "before": {
+        "shortest_path_m": 15.008331019803634,
+        "path_efficiency": 1.0,
+        "path_length_m": 12.882034448810614,
+        "path_length_ratio": 0.8659655532016269,
+        "path_irregularity": 0.018909563025717804,
+        "failure_distance_m": 1.9971431991605488,
+        "failure_to_progress": 0.0,
+        "deadlock": false,
+        "stall_windows": 0,
+        "jerk_mean": 0.012788646121400035,
+        "time_to_goal_s": 13.3,
+        "time_to_goal_norm": 0.22166666666666668,
+        "time_to_goal_ideal_ratio": 1.7723489683763671,
+        "trace_initial_goal_distance_m": 2.0000009999999997,
+        "trace_final_progress_m": -8.977876680296731
+      },
+      "after": {
+        "shortest_path_m": 15.008331019803634,
+        "path_efficiency": 1.0,
+        "path_length_m": 12.887034448810613,
+        "path_length_ratio": 0.8660107493508323,
+        "path_irregularity": 0.019015501300237745,
+        "failure_distance_m": 1.9971431991605488,
+        "failure_to_progress": 0.0,
+        "deadlock": false,
+        "stall_windows": 0,
+        "jerk_mean": 0.12788646121400035,
+        "time_to_goal_s": 13.4,
+        "time_to_goal_norm": 0.22333333333333333,
+        "time_to_goal_ideal_ratio": 1.7856749004694226,
+        "trace_initial_goal_distance_m": 14.880928970536257,
+        "trace_final_progress_m": 12.883785771375708
+      }
+    },
+    {
+      "episode": "fxm_open_dev__hybrid_rule_local_planner__1002",
+      "scenario": "fxm_open_dev",
+      "seed": 1002,
+      "planner": "hybrid_rule_local_planner",
+      "steps": 77,
+      "outcome": {
+        "route_complete": true,
+        "collision_event": false,
+        "timeout_event": false
+      },
+      "start": [
+        3.24202342267626,
+        4.36613609387457
+      ],
+      "terminal_goal": [
+        18.1134646371953,
+        4.897439424609203
+      ],
+      "old_metric_goal": [
+        18.1134646371953,
+        4.897439424609203
+      ],
+      "new_metric_goal": [
+        18.1134646371953,
+        4.897439424609203
+      ],
+      "first_segment_m": 0.004999999999999788,
+      "same_trajectory": true,
+      "same_outcome": true,
+      "before": {
+        "shortest_path_m": 15.008331019803634,
+        "path_efficiency": 1.0,
+        "path_length_m": 12.899999994039531,
+        "path_length_ratio": 0.8671732453016309,
+        "path_irregularity": 0.03730373640836106,
+        "failure_distance_m": 1.9909074618867773,
+        "failure_to_progress": 0.0,
+        "deadlock": false,
+        "stall_windows": 0,
+        "jerk_mean": 0.06349279199323084,
+        "time_to_goal_s": 7.6000000000000005,
+        "time_to_goal_norm": 0.12666666666666668,
+        "time_to_goal_ideal_ratio": 1.0127708390722099,
+        "trace_initial_goal_distance_m": 2.0000009999999997,
+        "trace_final_progress_m": -8.984078858771822
+      },
+      "after": {
+        "shortest_path_m": 15.008331019803634,
+        "path_efficiency": 1.0,
+        "path_length_m": 12.90499999403953,
+        "path_length_ratio": 0.8672180358894945,
+        "path_irregularity": 0.03725126837858604,
+        "failure_distance_m": 1.9909074618867773,
+        "failure_to_progress": 0.0,
+        "deadlock": false,
+        "stall_windows": 0,
+        "jerk_mean": 0.6349279199323085,
+        "time_to_goal_s": 7.7,
+        "time_to_goal_norm": 0.12833333333333333,
+        "time_to_goal_ideal_ratio": 1.026096771165265,
+        "trace_initial_goal_distance_m": 14.880928970536257,
+        "trace_final_progress_m": 12.890021508649479
+      }
+    },
+    {
+      "episode": "fxm_open_dev__orca__1002",
+      "scenario": "fxm_open_dev",
+      "seed": 1002,
+      "planner": "orca",
+      "steps": 77,
+      "outcome": {
+        "route_complete": true,
+        "collision_event": false,
+        "timeout_event": false
+      },
+      "start": [
+        3.24202342267626,
+        4.36613609387457
+      ],
+      "terminal_goal": [
+        18.1134646371953,
+        4.897439424609203
+      ],
+      "old_metric_goal": [
+        18.1134646371953,
+        4.897439424609203
+      ],
+      "new_metric_goal": [
+        18.1134646371953,
+        4.897439424609203
+      ],
+      "first_segment_m": 0.004999999999999788,
+      "same_trajectory": true,
+      "same_outcome": true,
+      "before": {
+        "shortest_path_m": 15.008331019803634,
+        "path_efficiency": 1.0,
+        "path_length_m": 12.895000000000003,
+        "path_length_ratio": 0.8668371323017379,
+        "path_irregularity": 0.0199503211773174,
+        "failure_distance_m": 1.984589772927759,
+        "failure_to_progress": 0.0,
+        "deadlock": false,
+        "stall_windows": 0,
+        "jerk_mean": 0.03699380565274982,
+        "time_to_goal_s": 7.6000000000000005,
+        "time_to_goal_norm": 0.12666666666666668,
+        "time_to_goal_ideal_ratio": 1.0127708390722099,
+        "trace_initial_goal_distance_m": 2.0000009999999997,
+        "trace_final_progress_m": -8.990535541704132
+      },
+      "after": {
+        "shortest_path_m": 15.008331019803634,
+        "path_efficiency": 1.0,
+        "path_length_m": 12.900000000000006,
+        "path_length_ratio": 0.8668820357614497,
+        "path_irregularity": 0.02012033282999167,
+        "failure_distance_m": 1.984589772927759,
+        "failure_to_progress": 0.0,
+        "deadlock": false,
+        "stall_windows": 0,
+        "jerk_mean": 0.3699380565274982,
+        "time_to_goal_s": 7.7,
+        "time_to_goal_norm": 0.12833333333333333,
+        "time_to_goal_ideal_ratio": 1.026096771165265,
+        "trace_initial_goal_distance_m": 14.880928970536257,
+        "trace_final_progress_m": 12.896339197608498
+      }
+    }
+  ],
+  "corrected_source_identity": {
+    "source_commit": "1e524f3a4b7a9a73f3a87405994f669e31fdc4b1",
+    "dirty": true,
+    "seeds": [
+      1001,
+      1002
+    ],
+    "simulations_concurrent": 1,
+    "evidence": "diagnostic-only; no calibration, held-out or release evaluation",
+    "source_sha256": {
+      "robot_sf/benchmark/metrics.py": "9c05dfa239c7cec90589451b86dce2aea7f4145ae93ec6db4977677f48a7f61a",
+      "robot_sf/benchmark/map_runner/map_runner_episode.py": "e003dbe455ff13e670a5189dca14316c0c63d2eaf06438aa392b5330da28cc98",
+      "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml": "8b16cb1ba6155567f31855ec453d596e17e4ed859caf60b6e1092f49b4766ac8",
+      "scripts/validation/probe_issue_10007_metrics.py": "96bac38d8709c819f484b3b22368f5098f6de7ae416e1a2a08bed075b0dc4947"
+    }
+  }
+}

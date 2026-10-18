@@ -1,0 +1,300 @@
+{
+  "anchors_sha256": "8d86636bcb33a27bab6ba97318516145112aaebe4a4a9713665ec2e39fbc7349",
+  "arm_execution": {
+    "campaign_execution_status": "completed",
+    "evidence_status": "valid",
+    "row_status_summary": {
+      "accepted_unavailable_rows": 0,
+      "fallback_or_degraded_rows": 0,
+      "successful_evidence_rows": 14,
+      "unexpected_failed_rows": 0
+    }
+  },
+  "calibration_rows": 1344,
+  "candidate_attachment": {
+    "artifact_only": "passed",
+    "episodes_executed": 0,
+    "scientific_admission": false,
+    "strict_raw_custody": "passed"
+  },
+  "command_mode_counts": {
+    "goal": {
+      "native": 96
+    },
+    "guarded_ppo": {
+      "mixed": 96
+    },
+    "hybrid_rule_v4_fast_progress_static_escape": {
+      "adapter": 96
+    },
+    "hybrid_rule_v4_fast_progress_static_escape_continuous": {
+      "adapter": 96
+    },
+    "orca": {
+      "adapter": 96
+    },
+    "ppo": {
+      "native": 96
+    },
+    "prediction_planner": {
+      "adapter": 96
+    },
+    "predictive_mppi": {
+      "adapter": 96
+    },
+    "risk_dwa": {
+      "adapter": 96
+    },
+    "sacadrl": {
+      "adapter": 96
+    },
+    "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4": {
+      "adapter": 96
+    },
+    "scenario_adaptive_hybrid_orca_v2_collision_guard_v4": {
+      "adapter": 96
+    },
+    "social_force": {
+      "adapter": 96
+    },
+    "socnav_sampling": {
+      "adapter": 96
+    }
+  },
+  "config_sha256": "fe55f5efb6fd885ae86fc978dffc01afd5928fba75128442a6dcd88ae9e94ff3",
+  "determinism_receipt": {
+    "classification": "a",
+    "different_rows": 0,
+    "identical_rows": 1344,
+    "path": "docs/context/evidence/2026-10-04_freeze008_f2_calibration/determinism-receipt.json",
+    "same_recorded_environment": true,
+    "sha256": "cd29d6c9a3213e4dbfabc1b8b8c23305066a6a39c5eb088f54d8f8d539827464"
+  },
+  "force_decision_rho_recomputed": 0.60110908310645,
+  "force_sample_status_counts": {
+    "no-pedestrians": 28,
+    "ok": 1316
+  },
+  "force_sample_timing": {
+    "pre_integration": 1344
+  },
+  "force_sources": {
+    "recorded_robot_pedestrian_social_force": 1344
+  },
+  "guard_arbitration_counts": {
+    "guarded_ppo": {
+      "fallback_best_effort": 452,
+      "fallback_safe": 14954,
+      "goal_reached": 0,
+      "ppo_clear": 11431,
+      "ppo_safe": 0,
+      "prior_blend_safe": 0,
+      "prior_residual_safe": 0,
+      "prior_safe": 0,
+      "stop_best_effort": 5147,
+      "stop_safe": 1040,
+      "uncertainty_fallback_configured": 0,
+      "uncertainty_fallback_slow_down": 0,
+      "uncertainty_fallback_stop": 0
+    }
+  },
+  "historical_to_F2_neutrality": {
+    "different_rows": 0,
+    "historical_acquisition_proof_sha256": "c676a390325e586f1acdf7a261da5db19533e47c3881ce816fb1b848cee63154",
+    "historical_source_commit": "3e73b04b43aa99b9fbe4a6ab34b89a5a9f1933b6",
+    "identical_rows": 1344,
+    "original_source_commit": "66f402ba176b13e45210d0da0b2cf20fcdc0cc02",
+    "path": "docs/context/evidence/2026-10-04_freeze008_f2_calibration/cross-source-grid-neutrality-receipt.json",
+    "rehearsal_audit_scope": "d56092ed-to-3e73b04b only",
+    "sha256": "e4b987527fef53b37fb6cd1de5597bb7b1e185f370ac62fb9b9bfd21b556deca"
+  },
+  "launcher_sha256": "da8e6480426ef0eb6651dd3f4c5dec3ec6436d6d38a93bcfa881330f473b0280",
+  "navigation_outcomes": {
+    "collision": 201,
+    "failure": 239,
+    "success": 904
+  },
+  "preservation": {
+    "cold_files_byte_verified": 153,
+    "cold_manifest_sha256": "40ab6e5b7aa48d3196ee6d052a9d746996fa0e59ada9546a89af94cb43a63998",
+    "independent_snapshot_files_byte_verified": 153,
+    "manifest_digest": "sha256:fd1b66fb5d64f53dbc0c3bc143fc2e6973cd261cba698945cf4279c434853af5",
+    "qualified_name": "ll7/robot_sf/campaign-issue9667_snqi_v2_calibration_dev1001_1002_f2_66f402ba17_a_20261004:v0",
+    "receipt_sha256": "cbc2e8535775ed6357641e2bf471c31229455b7539e2293787b6dbeee9c82757"
+  },
+  "producer_manifest_sha256": "7accd9a480e98767e69b7ca50a2bdf69e362357de6e3c16f42914ff5ecdd613f",
+  "producer_provenance_sha256": "7026a5d8f8c1a4b9f1f0c452db126452ed41a684c50fa6c4c9b5f5efff136a2b",
+  "producer_runtime_commit": "c857a30b77fbd82b73fe4f72b71c045aae9c4d10",
+  "producer_signed_files": 105,
+  "recorded_force_sample_totals": {
+    "finite_samples": 1771047,
+    "invalid_samples": 0,
+    "nonzero_force_samples": 1771047,
+    "raw_samples": 1771047,
+    "zero_force_samples": 0
+  },
+  "rehearsal_comparison": {
+    "acquisition_config_byte_identical": true,
+    "causal_attribution": "not isolated by these two acquisitions",
+    "changed_source_paths": [
+      "configs/robots/t60_bicycle_30deg_v1.yaml",
+      "configs/robots/t60_bicycle_45deg_v1.yaml",
+      "robot_sf/benchmark/artifact_publication.py",
+      "robot_sf/benchmark/camera_ready/_legacy_campaign_facade.py",
+      "robot_sf/benchmark/camera_ready/campaign.py",
+      "robot_sf/benchmark/map_runner/map_runner_episode.py",
+      "robot_sf/benchmark/map_runner/map_runner_observations.py",
+      "robot_sf/benchmark/map_runner_policies/map_runner_actions.py",
+      "robot_sf/benchmark/release_notes.py",
+      "robot_sf/benchmark/release_protocol.py",
+      "robot_sf/benchmark/snqi/v2_reports.py",
+      "robot_sf/gym_env/unified_config.py",
+      "robot_sf/planner/classic_planner_adapter.py",
+      "robot_sf/planner/grid_route.py",
+      "robot_sf/planner/hybrid_rule_local_planner.py",
+      "robot_sf/planner/kinematics_model.py",
+      "robot_sf/planner/socnav_occupancy.py",
+      "robot_sf/release_cli.py",
+      "robot_sf/robot/bicycle_drive.py",
+      "robot_sf/sensor/socnav_observation.py",
+      "robot_sf/training/scenario_loader.py"
+    ],
+    "changed_source_paths_behaviourally_inert_for_this_grid": true,
+    "changed_source_paths_behaviourally_inert_reason": "rr10126 independently reviewed the complete d56092ed-to-3e73b04b diff: behavioural changes are bicycle-only or gated by default-off flags on this differential-drive grid; other changes are diagnostic metadata.",
+    "jerk_p95_bracketing_rows": [
+      [
+        1.957837635866961,
+        "hybrid_rule_v4_fast_progress_static_escape",
+        "classic_doorway_high",
+        1001
+      ],
+      [
+        1.957837635866961,
+        "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+        "classic_doorway_high",
+        1001
+      ]
+    ],
+    "jerk_p95_zero_based_index": 1275.85,
+    "source_commit": "d56092ed9d4b442f9dfb99e31010a9f5a8666547"
+  },
+  "rehearsal_delta": {
+    "F": 0.0,
+    "J": 0.018161933593934476,
+    "K": 0.0
+  },
+  "repeat_census": {
+    "arm_execution": {
+      "campaign_execution_status": "completed",
+      "evidence_status": "valid",
+      "row_status_summary": {
+        "accepted_unavailable_rows": 0,
+        "fallback_or_degraded_rows": 0,
+        "successful_evidence_rows": 14,
+        "unexpected_failed_rows": 0
+      }
+    },
+    "command_mode_counts": {
+      "goal": {
+        "native": 96
+      },
+      "guarded_ppo": {
+        "mixed": 96
+      },
+      "hybrid_rule_v4_fast_progress_static_escape": {
+        "adapter": 96
+      },
+      "hybrid_rule_v4_fast_progress_static_escape_continuous": {
+        "adapter": 96
+      },
+      "orca": {
+        "adapter": 96
+      },
+      "ppo": {
+        "native": 96
+      },
+      "prediction_planner": {
+        "adapter": 96
+      },
+      "predictive_mppi": {
+        "adapter": 96
+      },
+      "risk_dwa": {
+        "adapter": 96
+      },
+      "sacadrl": {
+        "adapter": 96
+      },
+      "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4": {
+        "adapter": 96
+      },
+      "scenario_adaptive_hybrid_orca_v2_collision_guard_v4": {
+        "adapter": 96
+      },
+      "social_force": {
+        "adapter": 96
+      },
+      "socnav_sampling": {
+        "adapter": 96
+      }
+    },
+    "force_sample_status_counts": {
+      "no-pedestrians": 28,
+      "ok": 1316
+    },
+    "force_sample_timing": {
+      "pre_integration": 1344
+    },
+    "force_sources": {
+      "recorded_robot_pedestrian_social_force": 1344
+    },
+    "guard_arbitration_counts": {
+      "guarded_ppo": {
+        "fallback_best_effort": 452,
+        "fallback_safe": 14954,
+        "goal_reached": 0,
+        "ppo_clear": 11431,
+        "ppo_safe": 0,
+        "prior_blend_safe": 0,
+        "prior_residual_safe": 0,
+        "prior_safe": 0,
+        "stop_best_effort": 5147,
+        "stop_safe": 1040,
+        "uncertainty_fallback_configured": 0,
+        "uncertainty_fallback_slow_down": 0,
+        "uncertainty_fallback_stop": 0
+      }
+    },
+    "recorded_force_sample_totals": {
+      "finite_samples": 1771047,
+      "invalid_samples": 0,
+      "nonzero_force_samples": 1771047,
+      "raw_samples": 1771047,
+      "zero_force_samples": 0
+    },
+    "rows": 1344
+  },
+  "repeat_preservation": {
+    "cold_files_byte_verified": 140,
+    "cold_manifest_sha256": "c059b05f49855974729e0975ff04c130cb1d4121ac96460b793c4c3fce0baa86",
+    "independent_snapshot_files_byte_verified": 140,
+    "manifest_digest": "sha256:8821a3bd7e92ccfb2739c7f646a538df1500c69d6e344e6874f24949c8b2d155",
+    "qualified_name": "ll7/robot_sf/campaign-issue9667_snqi_v2_calibration_dev1001_1002_f2_66f402ba17_b_20261004:v0",
+    "receipt_sha256": "cb2f7a4ae754c8ebfe4392bdaac93a59c66a8272dcc05f098990654de6169c09"
+  },
+  "run_id": "issue9667_snqi_v2_calibration_dev1001_1002_f2_66f402ba17_a_20261004",
+  "scheduler_job_id": "21337",
+  "schema": "snqi-v2-acquisition-review-input.v1",
+  "scientific_review": "pending_independent_review",
+  "seeds": [
+    1001,
+    1002
+  ],
+  "source_commit": "66f402ba176b13e45210d0da0b2cf20fcdc0cc02",
+  "submission_id": "sha256:17b8752b53115596ee989d9eb7bbf159208f837a50ad3e2a8e0ceed4857dbc98",
+  "upper_anchors_recomputed": {
+    "F": 78.44270546210876,
+    "J": 1.957837635866961,
+    "K": 0.5160654761904677
+  }
+}

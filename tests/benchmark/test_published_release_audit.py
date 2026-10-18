@@ -36,6 +36,8 @@ from robot_sf.benchmark.release_erratum import (
 _CLI_SCRIPT = (
     Path(__file__).resolve().parents[2] / "scripts" / "benchmark" / "published_release_audit.py"
 )
+# ZIP timestamps have two-second granularity; pin metadata so separately made fixtures stay equal.
+_FIXTURE_ZIP_TIMESTAMP = (2020, 1, 1, 0, 0, 0)
 
 
 def _write_bytes(path: Path, data: bytes) -> None:
@@ -372,10 +374,10 @@ def test_cold_publication_document_rejects_malformed_known_identity_mappings() -
 def _make_bundle(
     path: Path, *, member: str = "manifest.json", data: bytes = b"bundle-bytes"
 ) -> None:
-    """Write a real zip bundle with one member."""
+    """Write a real zip bundle with stable metadata and one member."""
     path.parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(path, "w") as zf:
-        zf.writestr(member, data)
+        zf.writestr(zipfile.ZipInfo(member, date_time=_FIXTURE_ZIP_TIMESTAMP), data)
 
 
 def _make_archive(path: Path, archive_kind: str, entries: list[tuple[str, bytes]]) -> None:
@@ -2027,8 +2029,13 @@ def test_source_sha_tag_binding_enforced(tmp_path: Path) -> None:
     assert any("disagrees with" in problem for problem in receipt["problems"])
 
 
-def test_historical_precontract_tag_retains_exact_read_only_exception(tmp_path: Path) -> None:
+def test_historical_precontract_tag_retains_exact_read_only_exception(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """The one documented August tag remains auditable at its known immutable source."""
+    # Reproduce zipfile's two-second DOS timestamp tick across the two channels.
+    zip_timestamps = iter(((2026, 9, 28, 10, 0, 0), (2026, 9, 28, 10, 0, 2)))
+    monkeypatch.setattr(zipfile.time, "localtime", lambda *_args: next(zip_timestamps))
     github = tmp_path / "github"
     zenodo = tmp_path / "zenodo"
     for channel in (github, zenodo):
@@ -2040,7 +2047,7 @@ def test_historical_precontract_tag_retains_exact_read_only_exception(tmp_path: 
         zenodo_dir=zenodo,
         source_sha="b1d5ab6de708385c0828c99501a9d1c29727ec11",
     )
-    assert receipt["ok"] is True
+    assert receipt["ok"] is True, receipt["problems"]
 
 
 def test_receipt_is_deterministic(tmp_path: Path) -> None:

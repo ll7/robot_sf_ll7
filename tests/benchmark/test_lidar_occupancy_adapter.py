@@ -96,7 +96,7 @@ def test_lidar_occupancy_map_episode_uses_sensor_fusion_observation(
     dummy_config = type(
         "Cfg",
         (),
-        {"sim_config": type("SC", (), {"time_per_step_in_secs": 0.1})()},
+        {"sim_config": type("SC", (), {"max_sim_steps": 600, "time_per_step_in_secs": 0.1})()},
     )()
     captured_config = {}
 
@@ -165,7 +165,7 @@ def test_lidar_safety_barrier_requires_explicit_occupancy_adapter(monkeypatch) -
     dummy_config = type(
         "Cfg",
         (),
-        {"sim_config": type("SC", (), {"time_per_step_in_secs": 0.1})()},
+        {"sim_config": type("SC", (), {"max_sim_steps": 600, "time_per_step_in_secs": 0.1})()},
     )()
     monkeypatch.setattr(
         "robot_sf.benchmark.map_runner.map_runner._build_env_config",

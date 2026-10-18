@@ -144,6 +144,7 @@ def test_main_ignores_superseded_failed_check_run_after_successful_pr_body_edit(
     # Scope the required-check gate to the job under test; required-identity
     # enforcement itself is covered by the dedicated issue #9174 fixtures.
     monkeypatch.setattr(ci_status, "required_check_identities", lambda: ("pr-body-contracts",))
+    monkeypatch.setattr(ci_status, "AGGREGATE_JOB", "pr-body-contracts")
     mock_data = json.dumps(
         {
             "number": 5136,
@@ -631,7 +632,7 @@ def test_partial_bot_only_rollup_is_pending_and_names_missing_required_checks(
     required = checks["required_checks"]
     assert required["reason"] == "required_checks_absent"
     assert required["present"] == []
-    assert required["missing"] == list(check_ci_needs.REQUIRED_JOBS)
+    assert required["missing"] == ["ci", *check_ci_needs.REQUIRED_JOBS]
     assert checks["pending_reason"] == "required_checks_absent"
 
 
@@ -648,17 +649,28 @@ def test_queued_dispatched_run_with_no_attached_check_runs_is_pending(
     assert checks["required_checks"]["missing"]
 
 
-def test_complete_green_required_rollup_reports_success(
+def test_complete_green_jobs_without_full_aggregate_remain_pending(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """All declared required identities present and green is the only success shape."""
+    """Individual jobs do not replace the exact-head full-run aggregate."""
     data = _fetch_with_rollup(monkeypatch, _required_job_checks())
 
     checks = data["checks"]
-    assert checks["overall"] == "success"
-    assert checks["required_checks"]["missing"] == []
+    assert checks["overall"] == "pending"
+    assert checks["required_checks"]["missing"] == ["ci"]
     assert checks["required_checks"]["not_green"] == []
-    assert checks["required_checks"]["reason"] is None
+    assert checks["required_checks"]["reason"] == "required_checks_absent"
+
+
+def test_green_draft_aggregate_does_not_prove_full_ci(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A draft-only success on this head cannot satisfy ready-PR CI."""
+    rollup = [{"name": "ci-draft", "status": "completed", "conclusion": "success"}]
+    data = _fetch_with_rollup(monkeypatch, rollup)
+
+    assert data["checks"]["overall"] == "pending"
+    assert data["checks"]["required_checks"]["missing"][0] == "ci"
 
 
 def test_green_aggregate_ci_check_proves_required_identities(
@@ -1865,6 +1877,7 @@ def test_rest_workflow_identity_preserves_supersession_and_fail_closed_cases(
     # Scope required-identity enforcement to the job under test (issue #9174 has
     # dedicated fixtures for the required-check gate itself).
     monkeypatch.setattr(ci_status, "required_check_identities", lambda: ("pr-body-contracts",))
+    monkeypatch.setattr(ci_status, "AGGREGATE_JOB", "pr-body-contracts")
     runs = [
         _rest_check_run(
             run_id=101,

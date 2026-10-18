@@ -73,6 +73,10 @@ _BACKEND_RESPONSE_MARKERS = (
     "/codex/responses",
 )
 _TRANSIENT_STARTUP_STATUSES = frozenset({429, 500, 502, 503, 504})
+_AUTHENTICATION_HTTP_STATUSES = frozenset({401, 403})
+_AUTHENTICATION_FAILURE_CLASSES = frozenset(
+    {"authentication_error", "credential_error", "auth_failure"}
+)
 
 
 class TerminalFailure(enum.StrEnum):
@@ -85,13 +89,32 @@ class TerminalFailure(enum.StrEnum):
     MISSING_ARTIFACT = "missing_artifact"
     ROUTE_NOT_STARTED = "route_not_started"
     SCOPE_VIOLATION = "scope_violation"
+    AUTHENTICATION_FAILED = "authentication_failed"
     UNAVAILABLE = "unavailable"
+
+
+def _normalized_failure_class(value: object) -> str:
+    """Return a normalized producer failure class for known-signature matching."""
+    return str(value).strip().lower() if value is not None else ""
+
+
+def _is_authentication_failure(*, http_status: int | None, failure_class: str) -> bool:
+    """Return whether explicit metadata reports an authentication or credential failure.
+
+    Only structured producer metadata is inspected. Free-text worker logs are never scanned
+    for status digits, and no credential is read, refreshed, or recorded by this check.
+    """
+    return (
+        http_status in _AUTHENTICATION_HTTP_STATUSES
+        or failure_class in _AUTHENTICATION_FAILURE_CLASSES
+    )
 
 
 def classify_terminal_state(
     *,
     returncode: int | None = None,
     failure_class: str | None = None,
+    http_status: int | None = None,
     artifact_presence: dict[str, ArtifactPresence] | None = None,
     has_run_dir: bool = True,
 ) -> TerminalFailure:
@@ -100,8 +123,17 @@ def classify_terminal_state(
     Absent details remain explicit rather than inferred: an attempt with no
     run_dir is ``ROUTE_NOT_STARTED``; missing artifacts yield
     ``MISSING_ARTIFACT``; non-zero returncode or known failure classes map to
-    their respective terminal states.
+    their respective terminal states. Explicit authentication or credential
+    metadata (HTTP 401/403 or a known auth failure class) is recognized first and
+    maps to the non-retryable ``AUTHENTICATION_FAILED``, so a credential blocker
+    is never pooled with an ordinary route failure. ``http_status`` defaults to
+    ``None`` and keeps existing callers unchanged.
     """
+    if _is_authentication_failure(
+        http_status=http_status,
+        failure_class=_normalized_failure_class(failure_class),
+    ):
+        return TerminalFailure.AUTHENTICATION_FAILED
     if not has_run_dir:
         return TerminalFailure.ROUTE_NOT_STARTED
     if failure_class == "timeout" or returncode == 124:
@@ -196,8 +228,7 @@ def _worker_started(attempt: dict[str, Any]) -> bool | None:
 
 def _failure_class(attempt: dict[str, Any]) -> str:
     """Return a normalized producer failure class for matching known signatures."""
-    value = attempt.get("failure_class")
-    return str(value).strip().lower() if value is not None else ""
+    return _normalized_failure_class(attempt.get("failure_class"))
 
 
 def classify_delegation_attempt(attempt: dict[str, Any]) -> dict[str, Any]:
@@ -205,6 +236,8 @@ def classify_delegation_attempt(attempt: dict[str, Any]) -> dict[str, Any]:
 
     This is route evidence only.  A backend 404 is recognized as a startup failure only when the
     worker did not start, preventing a task that happens to mention HTTP 404 from being relabeled.
+    Explicit authentication or credential metadata is recognized once the worker-start state is
+    known and is never retryable, because a bounded retry cannot repair a credential.
     The returned retryability is a bounded recommendation for a caller; this function never sleeps,
     spawns a worker, or authorizes review evidence.
     """
@@ -225,6 +258,19 @@ def classify_delegation_attempt(attempt: dict[str, Any]) -> dict[str, Any]:
             "retryable": False,
             "review_evidence_status": "unavailable",
             "reason": "worker_started must be an explicit boolean when supplied",
+        }
+
+    if _is_authentication_failure(http_status=status, failure_class=failure_class):
+        return {
+            "phase": "worker_startup" if not started else "worker_task",
+            "classification": "authentication_failed",
+            "signature": "worker_authentication_failed",
+            "retryable": False,
+            "review_evidence_status": "none",
+            "reason": (
+                "explicit authentication or credential failure; a bounded retry cannot repair "
+                "the credential and no independent review evidence exists"
+            ),
         }
 
     if not started:
@@ -1053,6 +1099,7 @@ def build_routing_manifest(
                 terminal_state = classify_terminal_state(
                     returncode=attempt.get("returncode"),
                     failure_class=attempt.get("failure_class"),
+                    http_status=_http_status(attempt),
                     artifact_presence=artifact_presence,
                     has_run_dir=True,
                 )
@@ -1077,6 +1124,7 @@ def build_routing_manifest(
             terminal_state = classify_terminal_state(
                 returncode=attempt.get("returncode"),
                 failure_class=attempt.get("failure_class"),
+                http_status=_http_status(attempt),
                 has_run_dir=False,
             )
         scope_dict = asdict(scope_check) if scope_check is not None else None

@@ -1,0 +1,193 @@
+{
+  "candidates": [
+    {
+      "analysis_eligibility": {
+        "certificate_ok": false,
+        "eligible": false,
+        "execution_mode": null,
+        "objective_scored": false,
+        "reason_codes": [
+          "certificate_not_allowed",
+          "effective_hash_unbound",
+          "evaluation_errored",
+          "execution_mode_unknown",
+          "objective_unscored",
+          "trace_missing"
+        ],
+        "schema_version": "search_analysis_eligibility.v1",
+        "trace_present": false
+      },
+      "bundle_path": "output/issue9645-smoke/results/constraints_first_lexicographic_v1/budget_0001/seed_909/random/candidate_0000",
+      "candidate": {
+        "goal": {
+          "theta": 0.0,
+          "x": 8.629959556653366,
+          "y": 2.4734004290342106
+        },
+        "pedestrian_delay_s": 0.0,
+        "pedestrian_speed_mps": 0.9735279574603825,
+        "scenario_seed": 123,
+        "spawn_time_s": 0.0,
+        "start": {
+          "theta": 0.0,
+          "x": 1.4119246999022372,
+          "y": 2.794891054171655
+        }
+      },
+      "certification_status": {
+        "details": {
+          "certificates": [
+            {
+              "benchmark_eligibility": "excluded",
+              "checks": {
+                "all_routes_benchmark_eligible": false,
+                "route_count": 1,
+                "settings": {
+                  "hard_clearance_margin_m": 0.35,
+                  "hard_path_length_ratio": 1.5,
+                  "hard_turn_count": 3,
+                  "knife_edge_clearance_margin_m": 0.15,
+                  "knife_edge_path_length_ratio": 2.5,
+                  "planner_cells_per_meter": 2.0
+                }
+              },
+              "classification": "geometrically_infeasible",
+              "evidence": {
+                "archetype": "adversarial_crossing_ttc",
+                "difficulty_analysis": {
+                  "role": "optional_diagnostic_evidence_only",
+                  "source": "docs/context/issue_692_scenario_difficulty_analysis.md"
+                },
+                "scenario_fingerprint": "f51dc8044e89be9c"
+              },
+              "reasons": [
+                "no_inflated_collision_free_path: Planning aborted because start/goal is in an invalid cell; resample start/goal and retry.; last error: start at (1.25, 2.75) is in an invalid cell (inflated area); choose a free/start/goal cell."
+              ],
+              "route_certificates": [
+                {
+                  "benchmark_eligibility": "excluded",
+                  "checks": {
+                    "authored_route_length_m": 7.225190891272393,
+                    "direct_start_goal_distance_m": 7.225190891272393,
+                    "goal": [
+                      8.629959556653366,
+                      2.4734004290342106
+                    ],
+                    "inflated_collision_free_path": false,
+                    "map_name": "classic_cross_trap",
+                    "minimum_static_clearance_m": -0.5880753000977628,
+                    "ped_radius_m": 0.4,
+                    "robot_radius_m": 1.0,
+                    "start": [
+                      1.4119246999022372,
+                      2.794891054171655
+                    ],
+                    "waypoint_count": 2
+                  },
+                  "classification": "geometrically_infeasible",
+                  "evidence": {},
+                  "goal_id": 100000,
+                  "reasons": [
+                    "no_inflated_collision_free_path: Planning aborted because start/goal is in an invalid cell; resample start/goal and retry.; last error: start at (1.25, 2.75) is in an invalid cell (inflated area); choose a free/start/goal cell."
+                  ],
+                  "route_id": "override_adversarial",
+                  "spawn_id": 100000
+                }
+              ],
+              "scenario_id": "crossing_ttc_template_adversarial_0000",
+              "schema_version": "scenario_cert.v1",
+              "source": "output/issue9645-smoke/results/constraints_first_lexicographic_v1/budget_0001/seed_909/random/candidate_0000/scenario.yaml"
+            }
+          ]
+        },
+        "reason": "no_inflated_collision_free_path: Planning aborted because start/goal is in an invalid cell; resample start/goal and retry.; last error: start at (1.25, 2.75) is in an invalid cell (inflated area); choose a free/start/goal cell.",
+        "schema_version": "scenario_cert.v1",
+        "status": "failed"
+      },
+      "effective_scenario_hash": null,
+      "episode_record_path": null,
+      "error": "no_inflated_collision_free_path: Planning aborted because start/goal is in an invalid cell; resample start/goal and retry.; last error: start at (1.25, 2.75) is in an invalid cell (inflated area); choose a free/start/goal cell.",
+      "failure_attribution": {
+        "details": {},
+        "primary_failure": "invalid_candidate",
+        "reasons": [
+          "no_inflated_collision_free_path: Planning aborted because start/goal is in an invalid cell; resample start/goal and retry.; last error: start at (1.25, 2.75) is in an invalid cell (inflated area); choose a free/start/goal cell."
+        ],
+        "status": "not_evaluated"
+      },
+      "objective_value": null,
+      "scenario_yaml_path": "output/issue9645-smoke/results/constraints_first_lexicographic_v1/budget_0001/seed_909/random/candidate_0000/scenario.yaml",
+      "trajectory_csv_path": null
+    }
+  ],
+  "config": {
+    "algo_config_path": null,
+    "benchmark_profile": "baseline-safe",
+    "budget": 1,
+    "dt": null,
+    "horizon": null,
+    "objective": "constraints_first_lexicographic_v1",
+    "output_dir": "output/issue9645-smoke/results/constraints_first_lexicographic_v1/budget_0001/seed_909/random",
+    "policy": "goal",
+    "record_forces": true,
+    "require_certification": false,
+    "scenario_template": "configs/scenarios/templates/crossing_ttc.yaml",
+    "search_space": {
+      "constraints": {
+        "min_start_goal_distance_m": 2.0
+      },
+      "pedestrian": {},
+      "variables": {
+        "goal_x": {
+          "max": 9.0,
+          "min": 7.0
+        },
+        "goal_y": {
+          "max": 4.0,
+          "min": 2.0
+        },
+        "pedestrian_delay_s": {
+          "max": 0.0,
+          "min": 0.0
+        },
+        "pedestrian_speed_mps": {
+          "max": 1.4,
+          "min": 0.8
+        },
+        "scenario_seed": {
+          "max": 123.0,
+          "min": 123.0
+        },
+        "spawn_time_s": {
+          "max": 0.0,
+          "min": 0.0
+        },
+        "start_x": {
+          "max": 3.0,
+          "min": 1.0
+        },
+        "start_y": {
+          "max": 4.0,
+          "min": 2.0
+        }
+      }
+    },
+    "search_space_path": "configs/adversarial/issue_9645_pilot_space.v1.yaml",
+    "seed": 909,
+    "snqi_baseline_path": null,
+    "snqi_weights_path": null,
+    "warm_start": [],
+    "workers": 1
+  },
+  "created_at": "2026-09-24T06:45:07.741705+00:00",
+  "schema_version": "adversarial-search-manifest.v1",
+  "summary": {
+    "best_bundle_path": null,
+    "best_objective_value": null,
+    "num_analysis_eligible": 0,
+    "num_candidates": 1,
+    "num_failed_evaluations": 0,
+    "num_invalid_candidates": 1,
+    "num_valid_candidates": 0
+  }
+}

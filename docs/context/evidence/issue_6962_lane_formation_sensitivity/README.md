@@ -1,5 +1,7 @@
 <!-- AI-GENERATED (robot_sf#6962, 2026-08-13) - NEEDS-REVIEW -->
 
+**Affected / superseded geometry evidence (#10056).** This historical bundle used the pre-fix emergent-phenomena builders, whose walls were misplaced by the endpoint/axis tuple-order defect. Its original measurements and exhibits are retained for comparison, not current face-validity evidence. See the [corrected-wall replay](../issue_10056_wall_order_2026-09/README.md) and [issue #10056](https://github.com/ll7/robot_sf_ll7/issues/10056). Historical replay GIFs drew intended walls while pedestrians used misplaced walls.
+
 # Issue #6962 lane-formation sensitivity diagnostic
 
 Plain-language summary: a native Social Force Model diagnostic varied corridor geometry,

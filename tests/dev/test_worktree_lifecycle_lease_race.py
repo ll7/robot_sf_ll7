@@ -123,6 +123,13 @@ def test_creator_task_id_acquires_path_lease_before_return(
     else:
         environment.pop("ROBOT_SF_WORKTREE_FORCE_PYTHON_LOCK", None)
 
+    support = REPO_ROOT / "tests" / "support"
+    expected_pythonpath = (
+        os.pathsep.join((str(support / "seedguard_bootstrap"), str(support)))
+        if os.environ.get("ROBOT_SF_PYTEST_SEED_GUARD") == "1"
+        else ""
+    )
+
     result = subprocess.run(
         [
             str(CREATE_WORKTREE),
@@ -140,7 +147,7 @@ def test_creator_task_id_acquires_path_lease_before_return(
             "--exec",
             "python3",
             "-c",
-            "import os; assert 'PYTHONPATH' not in os.environ; "
+            f"import os; assert os.environ.get('PYTHONPATH', '') == {expected_pythonpath!r}; "
             "assert 'ROBOT_SF_WORKTREE_LOCK_FD' not in os.environ",
         ],
         cwd=repo,

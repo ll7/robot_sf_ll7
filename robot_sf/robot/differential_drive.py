@@ -1,6 +1,6 @@
 """Differential Drive Robot Model"""
 
-from dataclasses import dataclass, field
+from dataclasses import InitVar, dataclass, field
 from math import cos, isfinite, sin
 from numbers import Real
 
@@ -10,6 +10,7 @@ from gymnasium import spaces
 from robot_sf.common.math_utils import clip_scalar
 from robot_sf.common.robot_defaults import DEFAULT_ROBOT_RADIUS
 from robot_sf.common.types import DifferentialDriveAction, PolarVec2D, RobotPose, Vec2D
+from robot_sf.robot.reverse_drive import reverse_identity, validate_reverse_settings
 
 WheelSpeedState = tuple[float, float]
 """Left and right wheel angular velocities in radians per second."""
@@ -51,7 +52,13 @@ class DifferentialDriveSettings:
     # (issue #4976).
     max_linear_decel: float | None = None
 
-    def __post_init__(self):
+    # InitVars keep dataclasses.asdict() byte-identical for historical configs.
+    # Explicit limited_reverse selects the versioned plant, independently of the
+    # legacy allow_backwards flag (which retains full-speed reverse semantics).
+    limited_reverse: InitVar[bool] = False
+    max_reverse_speed: InitVar[float] = 0.5
+
+    def __post_init__(self, limited_reverse: bool, max_reverse_speed: float):
         """
         Post-initialization processing to ensure valid configuration values.
 
@@ -59,6 +66,10 @@ class DifferentialDriveSettings:
             ValueError: If any of the provided settings are not within the
                         expected positive, non-zero ranges.
         """
+        validate_reverse_settings(limited_reverse, max_reverse_speed)
+        self.limited_reverse = limited_reverse
+        self.max_reverse_speed = float(max_reverse_speed)
+
         if self.radius <= 0:
             raise ValueError("Robot's radius must be positive and non-zero!")
         if self.wheel_radius <= 0:
@@ -92,7 +103,17 @@ class DifferentialDriveSettings:
     @property
     def min_linear_speed(self) -> float:
         """Return the minimum linear speed based on allow_backwards."""
+        if self.limited_reverse:
+            return -self.max_reverse_speed
         return -self.max_linear_speed if self.allow_backwards else 0.0
+
+    def _config_hash_overrides(self) -> dict:
+        """Bind the opt-in plant version and cap in canonical config identity.
+
+        Returns:
+            Opt-in selectors, or no additions for legacy settings.
+        """
+        return reverse_identity(self)
 
 
 @dataclass

@@ -3,7 +3,7 @@
   "closed_child_symbols_still_over_threshold": [],
   "counting_rule": "inclusive source lines from def to end of body; decorators excluded",
   "findings_count": 32,
-  "full_report_pointer": "output/function_length_audit.json (ignored, worktree-local)",
+  "full_report_pointer": "<scratch-root>/function_length_audit.json (git-ignored scratch; unavailable)",
   "full_report_sha256": "81da165d9bf9a0dc9b4bf9cf89e0529739f8a8e977c876a731f8eb85cfba97a9",
   "no_benchmark_execution": true,
   "no_production_change": true,
@@ -25,5 +25,8 @@
   "scanner": "scripts/dev/audit_function_lengths.py",
   "scanner_schema": "function_length_audit.v1",
   "schema": "function_length_reconciliation.v1",
-  "threshold": 200
+  "threshold": 200,
+  "full_report_retained": false,
+  "full_report_durable_retrieval_pointer": null,
+  "report_path_is_reproduction_template": true
 }

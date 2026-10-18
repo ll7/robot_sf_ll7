@@ -9,23 +9,13 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from robot_sf.benchmark import published_release_audit, zenodo_publisher
-from robot_sf.benchmark.post_execution_release_doctor import (
-    EXPECTED_CAMPAIGN_ID,
-    EXPECTED_VALIDATOR_SHA,
-    collect_post_execution_release_doctor_report,
-)
-from robot_sf.benchmark.release_doctor import collect_release_doctor_report
 from robot_sf.benchmark.release_erratum import (
     ERRATUM_CONTRACT_SCHEMA,
     ErratumContract,
     ReleaseErratumError,
     load_erratum_contract,
 )
-from robot_sf.benchmark.release_protocol import (
-    RELEASE_MANIFEST_SCHEMA_VERSION_V0_2,
-    load_release_manifest,
-    validate_release_manifest,
-)
+from robot_sf.benchmark.release_notes import gate_manifest, notes_gate
 from robot_sf.common.artifact_paths import get_repository_root
 
 if TYPE_CHECKING:
@@ -37,8 +27,34 @@ if TYPE_CHECKING:
 # explicit pre-reservation exception; every operation after that point must
 # carry the reviewed manifest binding before an authenticated session is built.
 _RELEASE_BOUND_ZENODO_MODES = frozenset(
-    {"repair-draft-metadata", "recover", "upload", "verify", "publish"}
+    {"repair-draft-metadata", "recover", "update-draft-metadata", "upload", "verify", "publish"}
 )
+
+
+def collect_release_doctor_report(**kwargs: Any) -> dict[str, Any]:
+    """Load campaign diagnostics only when the release doctor is executed.
+
+    Returns:
+        The existing release doctor report.
+    """
+    from robot_sf.benchmark.release_doctor import (  # noqa: PLC0415
+        collect_release_doctor_report as collect,
+    )
+
+    return collect(**kwargs)
+
+
+def collect_post_execution_release_doctor_report(**kwargs: Any) -> dict[str, Any]:
+    """Defer preserved-evidence diagnostics until that doctor is executed.
+
+    Returns:
+        The existing post-execution doctor report.
+    """
+    from robot_sf.benchmark.post_execution_release_doctor import (  # noqa: PLC0415
+        collect_post_execution_release_doctor_report as collect,
+    )
+
+    return collect(**kwargs)
 
 
 def _add_new_version_arguments(parser: Any) -> None:
@@ -144,6 +160,7 @@ def build_subparser(subparsers: Any) -> None:  # noqa: PLR0915
         "reserve",
         "repair-draft-metadata",
         "recover",
+        "update-draft-metadata",
         "upload",
         "publish",
         "verify",
@@ -160,7 +177,8 @@ def build_subparser(subparsers: Any) -> None:  # noqa: PLR0915
             required=mode in _RELEASE_BOUND_ZENODO_MODES,
             help=(
                 "Validated benchmark release manifest or derived-metadata erratum contract "
-                "that binds Zenodo operations. Required for repair/recover/upload/verify/publish; "
+                "that binds Zenodo operations. Required for repair-draft-metadata/recover/update-draft-metadata/"
+                "upload/verify/publish; "
                 "reserve and new-version may omit it only while the server is assigning a new "
                 "version DOI."
             ),
@@ -169,6 +187,7 @@ def build_subparser(subparsers: Any) -> None:  # noqa: PLR0915
             "reserve",
             "repair-draft-metadata",
             "recover",
+            "update-draft-metadata",
             "publish",
             "verify",
             "new-version",
@@ -313,6 +332,11 @@ def _load_release_binding(args: argparse.Namespace) -> tuple[Any, dict[str, Any]
         The parsed manifest and credential-free publisher binding, or ``None``
         for the explicit pre-reservation reserve/new-version route.
     """
+    from robot_sf.benchmark.release_protocol import (  # noqa: PLC0415
+        load_release_manifest,
+        validate_release_manifest,
+    )
+
     manifest_path = getattr(args, "manifest", None)
     if manifest_path is None:
         return None
@@ -353,12 +377,18 @@ def _load_release_binding(args: argparse.Namespace) -> tuple[Any, dict[str, Any]
             raise zenodo_publisher.ZenodoPublisherError(
                 "Zenodo metadata path does not match the release erratum contract"
             )
+        # Historical derived-metadata errata are the sole release-contract exemption:
+        # their immutable predecessor predates the 0.0.8 notes receipt. The erratum
+        # validator binds that predecessor and permits no new campaign or claims.
+        # Ordinary manifests still pass the publication notes gate below.
         return contract, binding
     manifest = load_release_manifest(manifest_path, repository_root=repository_root)
     validation = validate_release_manifest(manifest, repository_root=repository_root)
     if validation["status"] != "valid":
         problems = "; ".join(str(problem) for problem in validation["problems"])
         raise zenodo_publisher.ZenodoPublisherError(f"release manifest is invalid: {problems}")
+    if getattr(args, "zenodo_mode", None) == "publish":
+        _publication_notes_gate(manifest)
     binding = zenodo_publisher.build_release_binding(manifest)
     metadata_path = getattr(args, "metadata", None)
     if metadata_path is not None and Path(metadata_path).resolve() != binding["metadata_path"]:
@@ -514,6 +544,11 @@ def _handle_post_execution_doctor(args: argparse.Namespace, repo_root: Path) -> 
     Returns:
         Process-style exit code.
     """
+    from robot_sf.benchmark.post_execution_release_doctor import (  # noqa: PLC0415
+        EXPECTED_CAMPAIGN_ID,
+        EXPECTED_VALIDATOR_SHA,
+    )
+
     report = collect_post_execution_release_doctor_report(
         repo=repo_root,
         manifest_path=_repo_relative_path(args.manifest, repo_root),
@@ -589,6 +624,46 @@ def _handle_published_audit(args: argparse.Namespace) -> int:
     return 2
 
 
+def _publication_notes_gate(manifest: Any) -> None:
+    """Repeat the mint disclosure check immediately before publication admission."""
+    try:
+        receipt = gate_manifest(manifest, get_repository_root())
+        if receipt is not None:
+            notes_gate(
+                get_repository_root(),
+                source_commit=manifest.source_sha,
+                phase="publication",
+                receipt=receipt,
+            )
+    except (OSError, TypeError, ValueError) as exc:
+        raise zenodo_publisher.ZenodoPublisherError(str(exc)) from exc
+
+
+def _preflight_zenodo(args: argparse.Namespace) -> dict[str, Any] | None:
+    """Admit state destination and manifest before constructing an authenticated session.
+
+    Returns:
+        Validated release binding, or None for a pre-reservation operation.
+    """
+    if args.zenodo_mode == "reserve":
+        zenodo_publisher.require_unused_state_path(args.state)
+    release_context = _load_release_binding(args)
+    release_definition = release_context[0] if release_context is not None else None
+    release_binding = release_context[1] if release_context is not None else None
+    if args.zenodo_mode in _RELEASE_BOUND_ZENODO_MODES and release_binding is None:
+        # Keep this check ahead of build_session: the direct CLI must not
+        # even construct an authenticated HTTP client for an unbound
+        # post-reservation operation.  ``argparse`` enforces this for
+        # normal invocations; the duplicate guard protects callers that
+        # invoke ``handle`` with a hand-built Namespace.
+        raise zenodo_publisher.ZenodoPublisherError(
+            f"Zenodo {args.zenodo_mode} requires a validated release manifest or erratum contract"
+        )
+    if args.zenodo_mode == "new-version":
+        _validate_erratum_new_version_arguments(args, release_definition)
+    return release_binding
+
+
 def handle(args: argparse.Namespace) -> int:  # noqa: C901, PLR0912, PLR0915
     """Dispatch release operations and return a process exit code.
 
@@ -640,19 +715,7 @@ def handle(args: argparse.Namespace) -> int:  # noqa: C901, PLR0912, PLR0915
         _print(report)
         return 0 if report["status"] == "pass" else 2
     try:
-        release_context = _load_release_binding(args)
-        release_definition = release_context[0] if release_context is not None else None
-        release_binding = release_context[1] if release_context is not None else None
-        if args.zenodo_mode in _RELEASE_BOUND_ZENODO_MODES and release_binding is None:
-            # Keep this check ahead of build_session: the direct CLI must not
-            # even construct an authenticated HTTP client for an unbound
-            # post-reservation operation.  ``argparse`` enforces this for
-            # normal invocations; the duplicate guard protects callers that
-            # invoke ``handle`` with a hand-built Namespace.
-            raise zenodo_publisher.ZenodoPublisherError(
-                f"Zenodo {args.zenodo_mode} requires a validated release manifest or erratum "
-                "contract"
-            )
+        release_binding = _preflight_zenodo(args)
         operational_metadata_kwargs: dict[str, Any] = {}
         if args.zenodo_mode in {"publish", "verify"}:
             operational_metadata_kwargs = _operational_metadata_kwargs(
@@ -660,11 +723,9 @@ def handle(args: argparse.Namespace) -> int:  # noqa: C901, PLR0912, PLR0915
                 required=(
                     release_binding is not None
                     and release_binding.get("manifest_schema_version")
-                    == RELEASE_MANIFEST_SCHEMA_VERSION_V0_2
+                    == "benchmark-release-manifest.v0.2"
                 ),
             )
-        if args.zenodo_mode == "new-version":
-            _validate_erratum_new_version_arguments(args, release_definition)
         session = zenodo_publisher.build_session(args.token_file)
         if args.zenodo_mode == "repair-draft-metadata":
             return _handle_repair_draft_metadata(args, session, release_binding)
@@ -688,9 +749,15 @@ def handle(args: argparse.Namespace) -> int:  # noqa: C901, PLR0912, PLR0915
                 )
             else:
                 state = zenodo_publisher.reserve(
-                    session, metadata, api_base=args.api_base, **operation_kwargs
+                    session,
+                    metadata,
+                    api_base=args.api_base,
+                    state_path=args.state,
+                    **operation_kwargs,
                 )
             zenodo_publisher.write_state(args.state, state)
+            if args.zenodo_mode == "reserve":
+                zenodo_publisher.complete_reserve_attempt(args.state)
             _print(state)
             return 0
         if args.zenodo_mode == "new-version":
@@ -731,13 +798,17 @@ def handle(args: argparse.Namespace) -> int:  # noqa: C901, PLR0912, PLR0915
             zenodo_publisher.write_state(args.state, state)
             _print(state)
             return 0
-        if args.zenodo_mode == "publish":
+        if args.zenodo_mode in {"publish", "update-draft-metadata"}:
             metadata_kwargs = _release_metadata_kwargs(release_binding)
             metadata = zenodo_publisher.load_dataset_metadata(args.metadata, **metadata_kwargs)
             operation_kwargs = (
                 {"release_binding": release_binding} if release_binding is not None else {}
             )
-            state = zenodo_publisher.publish(
+            operation = {
+                "publish": zenodo_publisher.publish,
+                "update-draft-metadata": zenodo_publisher.update_draft_metadata,
+            }[args.zenodo_mode]
+            state = operation(
                 session,
                 state,
                 metadata,

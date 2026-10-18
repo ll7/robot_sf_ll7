@@ -1,5 +1,7 @@
 <!-- AI-GENERATED (robot_sf_ll7#5149, 2026-07-10) - NEEDS-REVIEW -->
 
+**Affected / superseded geometry evidence (#10056).** This historical bundle used the pre-fix emergent-phenomena builders, whose walls were misplaced by the endpoint/axis tuple-order defect. Its original measurements and exhibits are retained for comparison, not current face-validity evidence. See the [corrected-wall replay](../issue_10056_wall_order_2026-09/README.md) and [issue #10056](https://github.com/ll7/robot_sf_ll7/issues/10056). Historical replay GIFs drew intended walls while pedestrians used misplaced walls.
+
 # Issue #5149: Emergent-Phenomena Demonstration for the Released Pedestrian Substrate
 
 Plain-language summary: this bundle demonstrates whether THIS repository's pedestrian simulator (the bundled `fast-pysf` / PySocialForce Social Force model) reproduces the three canonical crowd-dynamics emergent phenomena (lane formation in bidirectional flow, doorway oscillation, and an exit arching diagnostic), run at the released-default speed calibration (~0.65 m/s desired) and at a literature-typical calibration (~1.3 m/s).

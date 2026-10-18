@@ -2,7 +2,7 @@
   "candidate_cluster_count": 1,
   "disposition": "no_safe_cluster",
   "duplicate_owner_check": "no overlap with #6462, #7607, or an open PR",
-  "full_report_pointer": "output/validation_helper_inventory.json (ignored, worktree-local)",
+  "full_report_pointer": "<scratch-root>/validation_helper_inventory.json (git-ignored scratch; unavailable)",
   "full_report_sha256": "74e21a365d761b287ff9737a8a2c3385362d88e502b4c16fd4b9951087b1aa15",
   "no_benchmark_execution": true,
   "no_production_change": true,
@@ -35,6 +35,9 @@
     "file_count": 933,
     "helper_count": 8673
   },
-  "scan_command": "python scripts/dev/audit_validation_helpers.py --root robot_sf --report output/validation_helper_inventory.json",
-  "schema": "validation_helper_inventory_receipt.v1"
+  "scan_command": "python scripts/dev/audit_validation_helpers.py --root robot_sf --report <scratch-root>/validation_helper_inventory.json",
+  "schema": "validation_helper_inventory_receipt.v1",
+  "full_report_retained": false,
+  "full_report_durable_retrieval_pointer": null,
+  "report_path_is_reproduction_template": true
 }

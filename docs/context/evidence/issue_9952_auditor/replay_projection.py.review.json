@@ -1,0 +1,7 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/issue_9952_auditor/replay_projection.py",
+  "artifact_sha256": "d6cd55ccd2b0a44602859707e8537844eaab466622269cf3e7617f54482ea1b6",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "preserved_exact_bytes": true
+}

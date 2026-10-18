@@ -130,7 +130,8 @@ def test_fixture_computes_trace_derivable_external_style_metrics() -> None:
 
     traversal_time = rows["common.traversal_time_s"]
     assert traversal_time.status == "approximate"
-    assert traversal_time.value == pytest.approx(2.0)
+    # Goal index 2 is zero-based: three executed steps at dt=1 second (metric v2).
+    assert traversal_time.value == pytest.approx(3.0)
     assert "timeout" in traversal_time.semantic_notes
 
     ttc = rows["common.time_to_collision_min_s"]
@@ -178,3 +179,19 @@ def test_context_note_links_mapping_and_wrapper_surfaces() -> None:
     assert "configs/benchmarks/cross_benchmark_metric_mapping_v1.yaml" in note
     assert "robot_sf/benchmark/cross_benchmark_metrics.py" in note
     assert "not simulator parity or paper-grade evidence" in note
+
+
+def test_report_declares_metric_definition_version() -> None:
+    """Persisted traversal-time reports identify the metric definition they use."""
+    data = EpisodeData(
+        robot_pos=np.array([[0.0, 0.0], [1.0, 0.0]]),
+        robot_vel=np.zeros((2, 2)),
+        robot_acc=np.zeros((2, 2)),
+        peds_pos=np.zeros((2, 0, 2)),
+        ped_forces=np.zeros((2, 0, 2)),
+        goal=np.array([1.0, 0.0]),
+        dt=1.0,
+        reached_goal_step=1,
+    )
+    report = build_cross_benchmark_metric_report(data, horizon=10)
+    assert report["metric_schema_version"] == "robot-sf-metrics.v2"

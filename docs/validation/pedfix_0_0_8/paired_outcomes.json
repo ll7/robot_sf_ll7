@@ -1,0 +1,872 @@
+[
+  {
+    "planner": "goal",
+    "name": "classic_head_on_corridor_medium",
+    "seed": 1001,
+    "before": {
+      "source_sha": "32b58d273f3dbdec72a385844cb8c100f8581136",
+      "termination_reason": "collision",
+      "steps": 147,
+      "outcome": {
+        "route_complete": false,
+        "collision_event": true,
+        "timeout_event": false
+      },
+      "config_hash": "706bcc172a5b69aa",
+      "planner_status": "ok"
+    },
+    "after": {
+      "source_sha": "e8af63df613529517472671a891e4e684540ac5c",
+      "termination_reason": "collision",
+      "steps": 164,
+      "outcome": {
+        "route_complete": false,
+        "collision_event": true,
+        "timeout_event": false
+      },
+      "config_hash": "706bcc172a5b69aa",
+      "planner_status": "ok"
+    }
+  },
+  {
+    "planner": "goal",
+    "name": "classic_head_on_corridor_medium",
+    "seed": 1002,
+    "before": {
+      "source_sha": "32b58d273f3dbdec72a385844cb8c100f8581136",
+      "termination_reason": "collision",
+      "steps": 154,
+      "outcome": {
+        "route_complete": false,
+        "collision_event": true,
+        "timeout_event": false
+      },
+      "config_hash": "f23e449aa47da468",
+      "planner_status": "ok"
+    },
+    "after": {
+      "source_sha": "e8af63df613529517472671a891e4e684540ac5c",
+      "termination_reason": "success",
+      "steps": 308,
+      "outcome": {
+        "route_complete": true,
+        "collision_event": false,
+        "timeout_event": false
+      },
+      "config_hash": "f23e449aa47da468",
+      "planner_status": "ok"
+    }
+  },
+  {
+    "planner": "goal",
+    "name": "francis2023_circular_crossing",
+    "seed": 1001,
+    "before": {
+      "source_sha": "32b58d273f3dbdec72a385844cb8c100f8581136",
+      "termination_reason": "success",
+      "steps": 123,
+      "outcome": {
+        "route_complete": true,
+        "collision_event": false,
+        "timeout_event": false
+      },
+      "config_hash": "385b7b598fdad40b",
+      "planner_status": "ok"
+    },
+    "after": {
+      "source_sha": "e8af63df613529517472671a891e4e684540ac5c",
+      "termination_reason": "success",
+      "steps": 123,
+      "outcome": {
+        "route_complete": true,
+        "collision_event": false,
+        "timeout_event": false
+      },
+      "config_hash": "385b7b598fdad40b",
+      "planner_status": "ok"
+    }
+  },
+  {
+    "planner": "goal",
+    "name": "francis2023_circular_crossing",
+    "seed": 1002,
+    "before": {
+      "source_sha": "32b58d273f3dbdec72a385844cb8c100f8581136",
+      "termination_reason": "success",
+      "steps": 119,
+      "outcome": {
+        "route_complete": true,
+        "collision_event": false,
+        "timeout_event": false
+      },
+      "config_hash": "99a3a89bcc382cf3",
+      "planner_status": "ok"
+    },
+    "after": {
+      "source_sha": "e8af63df613529517472671a891e4e684540ac5c",
+      "termination_reason": "success",
+      "steps": 119,
+      "outcome": {
+        "route_complete": true,
+        "collision_event": false,
+        "timeout_event": false
+      },
+      "config_hash": "99a3a89bcc382cf3",
+      "planner_status": "ok"
+    }
+  },
+  {
+    "planner": "goal",
+    "name": "classic_group_crossing_low",
+    "seed": 1001,
+    "before": {
+      "source_sha": "32b58d273f3dbdec72a385844cb8c100f8581136",
+      "termination_reason": "success",
+      "steps": 171,
+      "outcome": {
+        "route_complete": true,
+        "collision_event": false,
+        "timeout_event": false
+      },
+      "config_hash": "ca479defc8dda178",
+      "planner_status": "ok"
+    },
+    "after": {
+      "source_sha": "e8af63df613529517472671a891e4e684540ac5c",
+      "termination_reason": "success",
+      "steps": 171,
+      "outcome": {
+        "route_complete": true,
+        "collision_event": false,
+        "timeout_event": false
+      },
+      "config_hash": "ca479defc8dda178",
+      "planner_status": "ok"
+    }
+  },
+  {
+    "planner": "goal",
+    "name": "classic_group_crossing_low",
+    "seed": 1002,
+    "before": {
+      "source_sha": "32b58d273f3dbdec72a385844cb8c100f8581136",
+      "termination_reason": "success",
+      "steps": 161,
+      "outcome": {
+        "route_complete": true,
+        "collision_event": false,
+        "timeout_event": false
+      },
+      "config_hash": "0603928a819f2bc4",
+      "planner_status": "ok"
+    },
+    "after": {
+      "source_sha": "e8af63df613529517472671a891e4e684540ac5c",
+      "termination_reason": "success",
+      "steps": 161,
+      "outcome": {
+        "route_complete": true,
+        "collision_event": false,
+        "timeout_event": false
+      },
+      "config_hash": "0603928a819f2bc4",
+      "planner_status": "ok"
+    }
+  },
+  {
+    "planner": "goal",
+    "name": "classic_group_crossing_medium",
+    "seed": 1001,
+    "before": {
+      "source_sha": "32b58d273f3dbdec72a385844cb8c100f8581136",
+      "termination_reason": "success",
+      "steps": 171,
+      "outcome": {
+        "route_complete": true,
+        "collision_event": false,
+        "timeout_event": false
+      },
+      "config_hash": "5b8faed621ae65a7",
+      "planner_status": "ok"
+    },
+    "after": {
+      "source_sha": "e8af63df613529517472671a891e4e684540ac5c",
+      "termination_reason": "collision",
+      "steps": 90,
+      "outcome": {
+        "route_complete": false,
+        "collision_event": true,
+        "timeout_event": false
+      },
+      "config_hash": "5b8faed621ae65a7",
+      "planner_status": "ok"
+    }
+  },
+  {
+    "planner": "goal",
+    "name": "classic_group_crossing_medium",
+    "seed": 1002,
+    "before": {
+      "source_sha": "32b58d273f3dbdec72a385844cb8c100f8581136",
+      "termination_reason": "success",
+      "steps": 161,
+      "outcome": {
+        "route_complete": true,
+        "collision_event": false,
+        "timeout_event": false
+      },
+      "config_hash": "553d52eae7d559ed",
+      "planner_status": "ok"
+    },
+    "after": {
+      "source_sha": "e8af63df613529517472671a891e4e684540ac5c",
+      "termination_reason": "collision",
+      "steps": 72,
+      "outcome": {
+        "route_complete": false,
+        "collision_event": true,
+        "timeout_event": false
+      },
+      "config_hash": "553d52eae7d559ed",
+      "planner_status": "ok"
+    }
+  },
+  {
+    "planner": "goal",
+    "name": "classic_group_crossing_high",
+    "seed": 1001,
+    "before": {
+      "source_sha": "32b58d273f3dbdec72a385844cb8c100f8581136",
+      "termination_reason": "success",
+      "steps": 171,
+      "outcome": {
+        "route_complete": true,
+        "collision_event": false,
+        "timeout_event": false
+      },
+      "config_hash": "311bbcd3e06c496b",
+      "planner_status": "ok"
+    },
+    "after": {
+      "source_sha": "e8af63df613529517472671a891e4e684540ac5c",
+      "termination_reason": "collision",
+      "steps": 90,
+      "outcome": {
+        "route_complete": false,
+        "collision_event": true,
+        "timeout_event": false
+      },
+      "config_hash": "311bbcd3e06c496b",
+      "planner_status": "ok"
+    }
+  },
+  {
+    "planner": "goal",
+    "name": "classic_group_crossing_high",
+    "seed": 1002,
+    "before": {
+      "source_sha": "32b58d273f3dbdec72a385844cb8c100f8581136",
+      "termination_reason": "success",
+      "steps": 161,
+      "outcome": {
+        "route_complete": true,
+        "collision_event": false,
+        "timeout_event": false
+      },
+      "config_hash": "810612b0f58104af",
+      "planner_status": "ok"
+    },
+    "after": {
+      "source_sha": "e8af63df613529517472671a891e4e684540ac5c",
+      "termination_reason": "collision",
+      "steps": 72,
+      "outcome": {
+        "route_complete": false,
+        "collision_event": true,
+        "timeout_event": false
+      },
+      "config_hash": "810612b0f58104af",
+      "planner_status": "ok"
+    }
+  },
+  {
+    "planner": "orca",
+    "name": "classic_head_on_corridor_medium",
+    "seed": 1001,
+    "before": {
+      "source_sha": "32b58d273f3dbdec72a385844cb8c100f8581136",
+      "termination_reason": "success",
+      "steps": 162,
+      "outcome": {
+        "route_complete": true,
+        "collision_event": false,
+        "timeout_event": false
+      },
+      "config_hash": "6bd5bda6e6d3ce60",
+      "planner_status": "ok"
+    },
+    "after": {
+      "source_sha": "e8af63df613529517472671a891e4e684540ac5c",
+      "termination_reason": "success",
+      "steps": 166,
+      "outcome": {
+        "route_complete": true,
+        "collision_event": false,
+        "timeout_event": false
+      },
+      "config_hash": "6bd5bda6e6d3ce60",
+      "planner_status": "ok"
+    }
+  },
+  {
+    "planner": "orca",
+    "name": "classic_head_on_corridor_medium",
+    "seed": 1002,
+    "before": {
+      "source_sha": "32b58d273f3dbdec72a385844cb8c100f8581136",
+      "termination_reason": "success",
+      "steps": 163,
+      "outcome": {
+        "route_complete": true,
+        "collision_event": false,
+        "timeout_event": false
+      },
+      "config_hash": "7e4be9f2b4c0a263",
+      "planner_status": "ok"
+    },
+    "after": {
+      "source_sha": "e8af63df613529517472671a891e4e684540ac5c",
+      "termination_reason": "success",
+      "steps": 162,
+      "outcome": {
+        "route_complete": true,
+        "collision_event": false,
+        "timeout_event": false
+      },
+      "config_hash": "7e4be9f2b4c0a263",
+      "planner_status": "ok"
+    }
+  },
+  {
+    "planner": "orca",
+    "name": "francis2023_circular_crossing",
+    "seed": 1001,
+    "before": {
+      "source_sha": "32b58d273f3dbdec72a385844cb8c100f8581136",
+      "termination_reason": "success",
+      "steps": 83,
+      "outcome": {
+        "route_complete": true,
+        "collision_event": false,
+        "timeout_event": false
+      },
+      "config_hash": "27e094e306249e82",
+      "planner_status": "ok"
+    },
+    "after": {
+      "source_sha": "e8af63df613529517472671a891e4e684540ac5c",
+      "termination_reason": "success",
+      "steps": 83,
+      "outcome": {
+        "route_complete": true,
+        "collision_event": false,
+        "timeout_event": false
+      },
+      "config_hash": "27e094e306249e82",
+      "planner_status": "ok"
+    }
+  },
+  {
+    "planner": "orca",
+    "name": "francis2023_circular_crossing",
+    "seed": 1002,
+    "before": {
+      "source_sha": "32b58d273f3dbdec72a385844cb8c100f8581136",
+      "termination_reason": "success",
+      "steps": 81,
+      "outcome": {
+        "route_complete": true,
+        "collision_event": false,
+        "timeout_event": false
+      },
+      "config_hash": "2f981389f719e6af",
+      "planner_status": "ok"
+    },
+    "after": {
+      "source_sha": "e8af63df613529517472671a891e4e684540ac5c",
+      "termination_reason": "success",
+      "steps": 81,
+      "outcome": {
+        "route_complete": true,
+        "collision_event": false,
+        "timeout_event": false
+      },
+      "config_hash": "2f981389f719e6af",
+      "planner_status": "ok"
+    }
+  },
+  {
+    "planner": "orca",
+    "name": "classic_group_crossing_low",
+    "seed": 1001,
+    "before": {
+      "source_sha": "32b58d273f3dbdec72a385844cb8c100f8581136",
+      "termination_reason": "success",
+      "steps": 100,
+      "outcome": {
+        "route_complete": true,
+        "collision_event": false,
+        "timeout_event": false
+      },
+      "config_hash": "f42d9ad352edeb77",
+      "planner_status": "ok"
+    },
+    "after": {
+      "source_sha": "e8af63df613529517472671a891e4e684540ac5c",
+      "termination_reason": "success",
+      "steps": 96,
+      "outcome": {
+        "route_complete": true,
+        "collision_event": false,
+        "timeout_event": false
+      },
+      "config_hash": "f42d9ad352edeb77",
+      "planner_status": "ok"
+    }
+  },
+  {
+    "planner": "orca",
+    "name": "classic_group_crossing_low",
+    "seed": 1002,
+    "before": {
+      "source_sha": "32b58d273f3dbdec72a385844cb8c100f8581136",
+      "termination_reason": "success",
+      "steps": 88,
+      "outcome": {
+        "route_complete": true,
+        "collision_event": false,
+        "timeout_event": false
+      },
+      "config_hash": "11dff43816df8454",
+      "planner_status": "ok"
+    },
+    "after": {
+      "source_sha": "e8af63df613529517472671a891e4e684540ac5c",
+      "termination_reason": "success",
+      "steps": 91,
+      "outcome": {
+        "route_complete": true,
+        "collision_event": false,
+        "timeout_event": false
+      },
+      "config_hash": "11dff43816df8454",
+      "planner_status": "ok"
+    }
+  },
+  {
+    "planner": "orca",
+    "name": "classic_group_crossing_medium",
+    "seed": 1001,
+    "before": {
+      "source_sha": "32b58d273f3dbdec72a385844cb8c100f8581136",
+      "termination_reason": "success",
+      "steps": 101,
+      "outcome": {
+        "route_complete": true,
+        "collision_event": false,
+        "timeout_event": false
+      },
+      "config_hash": "0dc04d0ca472cd99",
+      "planner_status": "ok"
+    },
+    "after": {
+      "source_sha": "e8af63df613529517472671a891e4e684540ac5c",
+      "termination_reason": "success",
+      "steps": 107,
+      "outcome": {
+        "route_complete": true,
+        "collision_event": false,
+        "timeout_event": false
+      },
+      "config_hash": "0dc04d0ca472cd99",
+      "planner_status": "ok"
+    }
+  },
+  {
+    "planner": "orca",
+    "name": "classic_group_crossing_medium",
+    "seed": 1002,
+    "before": {
+      "source_sha": "32b58d273f3dbdec72a385844cb8c100f8581136",
+      "termination_reason": "success",
+      "steps": 88,
+      "outcome": {
+        "route_complete": true,
+        "collision_event": false,
+        "timeout_event": false
+      },
+      "config_hash": "1c6f75827afff99a",
+      "planner_status": "ok"
+    },
+    "after": {
+      "source_sha": "e8af63df613529517472671a891e4e684540ac5c",
+      "termination_reason": "success",
+      "steps": 88,
+      "outcome": {
+        "route_complete": true,
+        "collision_event": false,
+        "timeout_event": false
+      },
+      "config_hash": "1c6f75827afff99a",
+      "planner_status": "ok"
+    }
+  },
+  {
+    "planner": "orca",
+    "name": "classic_group_crossing_high",
+    "seed": 1001,
+    "before": {
+      "source_sha": "32b58d273f3dbdec72a385844cb8c100f8581136",
+      "termination_reason": "success",
+      "steps": 100,
+      "outcome": {
+        "route_complete": true,
+        "collision_event": false,
+        "timeout_event": false
+      },
+      "config_hash": "dee6712c0eaca541",
+      "planner_status": "ok"
+    },
+    "after": {
+      "source_sha": "e8af63df613529517472671a891e4e684540ac5c",
+      "termination_reason": "success",
+      "steps": 108,
+      "outcome": {
+        "route_complete": true,
+        "collision_event": false,
+        "timeout_event": false
+      },
+      "config_hash": "dee6712c0eaca541",
+      "planner_status": "ok"
+    }
+  },
+  {
+    "planner": "orca",
+    "name": "classic_group_crossing_high",
+    "seed": 1002,
+    "before": {
+      "source_sha": "32b58d273f3dbdec72a385844cb8c100f8581136",
+      "termination_reason": "success",
+      "steps": 92,
+      "outcome": {
+        "route_complete": true,
+        "collision_event": false,
+        "timeout_event": false
+      },
+      "config_hash": "c341c4759db9a181",
+      "planner_status": "ok"
+    },
+    "after": {
+      "source_sha": "e8af63df613529517472671a891e4e684540ac5c",
+      "termination_reason": "success",
+      "steps": 207,
+      "outcome": {
+        "route_complete": true,
+        "collision_event": false,
+        "timeout_event": false
+      },
+      "config_hash": "c341c4759db9a181",
+      "planner_status": "ok"
+    }
+  },
+  {
+    "planner": "hybrid_rule_v4_fast_progress_static_escape",
+    "name": "classic_head_on_corridor_medium",
+    "seed": 1001,
+    "before": {
+      "source_sha": "32b58d273f3dbdec72a385844cb8c100f8581136",
+      "termination_reason": "success",
+      "steps": 202,
+      "outcome": {
+        "route_complete": true,
+        "collision_event": false,
+        "timeout_event": false
+      },
+      "config_hash": "682617ab6d0e1fa1",
+      "planner_status": "ok"
+    },
+    "after": {
+      "source_sha": "e8af63df613529517472671a891e4e684540ac5c",
+      "termination_reason": "success",
+      "steps": 254,
+      "outcome": {
+        "route_complete": true,
+        "collision_event": false,
+        "timeout_event": false
+      },
+      "config_hash": "682617ab6d0e1fa1",
+      "planner_status": "ok"
+    }
+  },
+  {
+    "planner": "hybrid_rule_v4_fast_progress_static_escape",
+    "name": "classic_head_on_corridor_medium",
+    "seed": 1002,
+    "before": {
+      "source_sha": "32b58d273f3dbdec72a385844cb8c100f8581136",
+      "termination_reason": "success",
+      "steps": 227,
+      "outcome": {
+        "route_complete": true,
+        "collision_event": false,
+        "timeout_event": false
+      },
+      "config_hash": "e28d6676419deef6",
+      "planner_status": "ok"
+    },
+    "after": {
+      "source_sha": "e8af63df613529517472671a891e4e684540ac5c",
+      "termination_reason": "success",
+      "steps": 209,
+      "outcome": {
+        "route_complete": true,
+        "collision_event": false,
+        "timeout_event": false
+      },
+      "config_hash": "e28d6676419deef6",
+      "planner_status": "ok"
+    }
+  },
+  {
+    "planner": "hybrid_rule_v4_fast_progress_static_escape",
+    "name": "francis2023_circular_crossing",
+    "seed": 1001,
+    "before": {
+      "source_sha": "32b58d273f3dbdec72a385844cb8c100f8581136",
+      "termination_reason": "collision",
+      "steps": 3,
+      "outcome": {
+        "route_complete": false,
+        "collision_event": true,
+        "timeout_event": false
+      },
+      "config_hash": "1a5938916115ad0d",
+      "planner_status": "ok"
+    },
+    "after": {
+      "source_sha": "e8af63df613529517472671a891e4e684540ac5c",
+      "termination_reason": "success",
+      "steps": 75,
+      "outcome": {
+        "route_complete": true,
+        "collision_event": false,
+        "timeout_event": false
+      },
+      "config_hash": "1a5938916115ad0d",
+      "planner_status": "ok"
+    }
+  },
+  {
+    "planner": "hybrid_rule_v4_fast_progress_static_escape",
+    "name": "francis2023_circular_crossing",
+    "seed": 1002,
+    "before": {
+      "source_sha": "32b58d273f3dbdec72a385844cb8c100f8581136",
+      "termination_reason": "success",
+      "steps": 72,
+      "outcome": {
+        "route_complete": true,
+        "collision_event": false,
+        "timeout_event": false
+      },
+      "config_hash": "4999b99b181d666a",
+      "planner_status": "ok"
+    },
+    "after": {
+      "source_sha": "e8af63df613529517472671a891e4e684540ac5c",
+      "termination_reason": "success",
+      "steps": 71,
+      "outcome": {
+        "route_complete": true,
+        "collision_event": false,
+        "timeout_event": false
+      },
+      "config_hash": "4999b99b181d666a",
+      "planner_status": "ok"
+    }
+  },
+  {
+    "planner": "hybrid_rule_v4_fast_progress_static_escape",
+    "name": "classic_group_crossing_low",
+    "seed": 1001,
+    "before": {
+      "source_sha": "32b58d273f3dbdec72a385844cb8c100f8581136",
+      "termination_reason": "success",
+      "steps": 144,
+      "outcome": {
+        "route_complete": true,
+        "collision_event": false,
+        "timeout_event": false
+      },
+      "config_hash": "72092ba7edfd8385",
+      "planner_status": "ok"
+    },
+    "after": {
+      "source_sha": "e8af63df613529517472671a891e4e684540ac5c",
+      "termination_reason": "success",
+      "steps": 118,
+      "outcome": {
+        "route_complete": true,
+        "collision_event": false,
+        "timeout_event": false
+      },
+      "config_hash": "72092ba7edfd8385",
+      "planner_status": "ok"
+    }
+  },
+  {
+    "planner": "hybrid_rule_v4_fast_progress_static_escape",
+    "name": "classic_group_crossing_low",
+    "seed": 1002,
+    "before": {
+      "source_sha": "32b58d273f3dbdec72a385844cb8c100f8581136",
+      "termination_reason": "success",
+      "steps": 104,
+      "outcome": {
+        "route_complete": true,
+        "collision_event": false,
+        "timeout_event": false
+      },
+      "config_hash": "4fbbedd73fc14bd3",
+      "planner_status": "ok"
+    },
+    "after": {
+      "source_sha": "e8af63df613529517472671a891e4e684540ac5c",
+      "termination_reason": "success",
+      "steps": 252,
+      "outcome": {
+        "route_complete": true,
+        "collision_event": false,
+        "timeout_event": false
+      },
+      "config_hash": "4fbbedd73fc14bd3",
+      "planner_status": "ok"
+    }
+  },
+  {
+    "planner": "hybrid_rule_v4_fast_progress_static_escape",
+    "name": "classic_group_crossing_medium",
+    "seed": 1001,
+    "before": {
+      "source_sha": "32b58d273f3dbdec72a385844cb8c100f8581136",
+      "termination_reason": "success",
+      "steps": 144,
+      "outcome": {
+        "route_complete": true,
+        "collision_event": false,
+        "timeout_event": false
+      },
+      "config_hash": "36d8b9cf179c4491",
+      "planner_status": "ok"
+    },
+    "after": {
+      "source_sha": "e8af63df613529517472671a891e4e684540ac5c",
+      "termination_reason": "success",
+      "steps": 153,
+      "outcome": {
+        "route_complete": true,
+        "collision_event": false,
+        "timeout_event": false
+      },
+      "config_hash": "36d8b9cf179c4491",
+      "planner_status": "ok"
+    }
+  },
+  {
+    "planner": "hybrid_rule_v4_fast_progress_static_escape",
+    "name": "classic_group_crossing_medium",
+    "seed": 1002,
+    "before": {
+      "source_sha": "32b58d273f3dbdec72a385844cb8c100f8581136",
+      "termination_reason": "success",
+      "steps": 105,
+      "outcome": {
+        "route_complete": true,
+        "collision_event": false,
+        "timeout_event": false
+      },
+      "config_hash": "25253ae8de7b6f74",
+      "planner_status": "ok"
+    },
+    "after": {
+      "source_sha": "e8af63df613529517472671a891e4e684540ac5c",
+      "termination_reason": "success",
+      "steps": 150,
+      "outcome": {
+        "route_complete": true,
+        "collision_event": false,
+        "timeout_event": false
+      },
+      "config_hash": "25253ae8de7b6f74",
+      "planner_status": "ok"
+    }
+  },
+  {
+    "planner": "hybrid_rule_v4_fast_progress_static_escape",
+    "name": "classic_group_crossing_high",
+    "seed": 1001,
+    "before": {
+      "source_sha": "32b58d273f3dbdec72a385844cb8c100f8581136",
+      "termination_reason": "success",
+      "steps": 142,
+      "outcome": {
+        "route_complete": true,
+        "collision_event": false,
+        "timeout_event": false
+      },
+      "config_hash": "1168eaf4ac7f2228",
+      "planner_status": "ok"
+    },
+    "after": {
+      "source_sha": "e8af63df613529517472671a891e4e684540ac5c",
+      "termination_reason": "success",
+      "steps": 160,
+      "outcome": {
+        "route_complete": true,
+        "collision_event": false,
+        "timeout_event": false
+      },
+      "config_hash": "1168eaf4ac7f2228",
+      "planner_status": "ok"
+    }
+  },
+  {
+    "planner": "hybrid_rule_v4_fast_progress_static_escape",
+    "name": "classic_group_crossing_high",
+    "seed": 1002,
+    "before": {
+      "source_sha": "32b58d273f3dbdec72a385844cb8c100f8581136",
+      "termination_reason": "success",
+      "steps": 125,
+      "outcome": {
+        "route_complete": true,
+        "collision_event": false,
+        "timeout_event": false
+      },
+      "config_hash": "fdeaf216b245e719",
+      "planner_status": "ok"
+    },
+    "after": {
+      "source_sha": "e8af63df613529517472671a891e4e684540ac5c",
+      "termination_reason": "success",
+      "steps": 287,
+      "outcome": {
+        "route_complete": true,
+        "collision_event": false,
+        "timeout_event": false
+      },
+      "config_hash": "fdeaf216b245e719",
+      "planner_status": "ok"
+    }
+  }
+]

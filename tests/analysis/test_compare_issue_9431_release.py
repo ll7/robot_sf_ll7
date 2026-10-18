@@ -11,6 +11,7 @@ import pytest
 import yaml
 
 import scripts.analysis.compare_issue_9431_release as release_diff
+from robot_sf.benchmark.seed_bands import EVAL_SEEDS_0_0_8
 from robot_sf.training.scenario_loader import load_scenarios
 from scripts.analysis.compare_issue_9431_release import (
     EXPECTED_ARM_KEYS,
@@ -26,6 +27,7 @@ from scripts.analysis.compare_issue_9431_release import (
     _validate_matrix,
     _validate_successor_bundle_root,
 )
+from scripts.analysis.compare_release_0_0_7_to_0_0_8 import V4_SLOT_REPLACEMENTS
 
 
 def test_execution_audit_admits_mixed_mode_and_outcome_failures() -> None:
@@ -297,7 +299,6 @@ def test_frozen_matrix_matches_the_versioned_issue_9431_sources() -> None:
         repo_root
         / "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml"
     )
-    seed_sets = repo_root / "configs/benchmarks/seed_sets_v1.yaml"
 
     assert (
         sha256(predecessor_scenario_manifest.read_bytes()).hexdigest()
@@ -310,10 +311,20 @@ def test_frozen_matrix_matches_the_versioned_issue_9431_sources() -> None:
     predecessor_ids = {str(row["name"]) for row in load_scenarios(predecessor_scenario_manifest)}
     successor_ids = {str(row["name"]) for row in load_scenarios(successor_scenario_manifest)}
     resolved_template = yaml.safe_load(campaign_template.read_text(encoding="utf-8"))
+    seed_sets = repo_root / resolved_template["seed_policy"]["seed_sets_path"]
     resolved_seed_sets = yaml.safe_load(seed_sets.read_text(encoding="utf-8"))
 
     assert predecessor_ids == EXPECTED_SCENARIO_IDS
     assert successor_ids == EXPECTED_SCENARIO_IDS
-    assert resolved_template["scenario_matrix"] == EXPECTED_SUCCESSOR_SCENARIO_MANIFEST
-    assert {row["key"] for row in resolved_template["planners"]} == EXPECTED_ARM_KEYS
-    assert set(resolved_seed_sets[resolved_template["seed_policy"]["seed_set"]]) == EXPECTED_SEEDS
+    # The 0.0.7 matrix is pinned above by path and SHA-256. The campaign template is
+    # mutable and now points at the 0.0.8 scenario manifest, so it is not used here.
+    # The accepted 0.0.7 bundle retains the frozen v3 roster; the current
+    # 0.0.8 template replaces exactly four slots under new v4 keys (#9751).
+    expected_current_arms = (EXPECTED_ARM_KEYS - V4_SLOT_REPLACEMENTS.keys()) | set(
+        V4_SLOT_REPLACEMENTS.values()
+    )
+    assert {row["key"] for row in resolved_template["planners"]} == expected_current_arms
+    assert set(resolved_seed_sets[resolved_template["seed_policy"]["seed_set"]]) == set(
+        EVAL_SEEDS_0_0_8
+    )
+    assert EXPECTED_SEEDS == set(range(111, 141))  # seed-holdout: synthetic-fixture

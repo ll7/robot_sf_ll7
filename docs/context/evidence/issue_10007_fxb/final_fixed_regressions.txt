@@ -1,0 +1,21 @@
+.......................                                                  [100%]
+============================= slowest 10 durations =============================
+0.01s call     tests/benchmark/test_issue_10007_fxb.py::test_orca_release_binding_sets_native_solver_speed_cap[paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml]
+0.01s call     tests/benchmark/test_issue_10007_fxb.py::test_orca_release_binding_sets_native_solver_speed_cap[paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate.yaml]
+0.01s call     tests/benchmark/test_issue_10007_fxb.py::test_sampling_rollouts_use_flat_nondefault_dt
+
+(7 durations < 0.005s hidden.  Use -vv to show these durations.)
+
+Slow Test Report (soft<20s hard=60s, top 10)
+1) tests/benchmark/test_issue_10007_fxb.py::test_orca_release_binding_sets_native_solver_speed_cap[paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml]  0.01s
+2) tests/benchmark/test_issue_10007_fxb.py::test_orca_release_binding_sets_native_solver_speed_cap[paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate.yaml]  0.01s
+3) tests/benchmark/test_issue_10007_fxb.py::test_sampling_rollouts_use_flat_nondefault_dt  0.01s
+4) tests/benchmark/test_issue_10007_fxb.py::test_native_orca_solver_uses_flat_nondefault_dt  0.00s
+5) tests/benchmark/test_issue_10007_fxb.py::test_social_force_flat_and_nested_timestep_actions_agree  0.00s
+6) tests/benchmark/test_issue_10007_fxb.py::test_social_force_uses_real_flat_sim_dt  0.00s
+7) tests/test_socnav_planner_adapter.py::test_orca_velocity_projection_records_optional_adapter_trace  0.00s
+8) tests/benchmark/test_issue_10007_fxb.py::test_orca_default_adapter_projects_forward_component[0.0-1.5]  0.00s
+9) tests/benchmark/test_issue_10007_fxb.py::test_timestep_consumers_reject_missing_or_invalid_dt[None-sampling]  0.00s
+10) tests/benchmark/test_issue_10007_fxb.py::test_orca_default_adapter_projects_forward_component[0.7853981633974483-1.060660172]  0.00s
+
+23 passed in 3.85s

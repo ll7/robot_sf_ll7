@@ -5,15 +5,40 @@ The packet does not run a simulator, sampler, search, replay, SLURM job,
 registered campaign, or result admission. It makes no benchmark, publication,
 empirical-evidence, or scientific-result claim.
 
-Source provenance has two explicit layers. Each `sha256` is immutable historical
-source identity resolved from `source.base_commit`. An optional
-`working_tree_sha256` records the current implementation bytes when a diagnostic
-feature branch intentionally differs before merge; omitting it retains the
-legacy exact working-tree binding. This split does not authorize execution or
-change the frozen planning boundary.
-The source-bound input roster also pins the sampler implementation, including
-the CMA-ES builder named by the search-family contract, and the benchmark
-runner that records the effective evaluation timestep in episode artifacts.
+Source provenance is tied to `source.base_commit`. Each `sha256` must match
+that commit's immutable source bytes, and scenario semantics are read from the
+same snapshot. Missing commits, invalid hashes, path escapes and inconsistent
+historical semantics remain hard errors. Later edits or deletions in the current
+checkout appear in the validator's `source_staleness` list as informational
+`stale since <commit>` or `unreadable since <commit>` records; they do not require
+repinning the packet or imply that evidence was regenerated. Legacy `working_tree_sha256` fields remain
+readable and format-checked for compatibility, but do not establish provenance
+or suppress staleness.
+
+Pinned paths are validated lexically before lookup: absolute paths, parent
+traversal, empty or dot segments, backslashes and NUL are rejected. UTF-8 paths
+are limited to 4096 bytes total and 255 bytes per segment, with field-specific
+packet errors before any lookup. Historical validation never inspects the working
+tree. Each exact, literal tree path must
+resolve to one Git `blob` with mode `100644` or `100755`; its bytes are read by
+object ID with `git cat-file blob`. Trees, symlink blobs and submodules cannot
+serve as pinned inputs, even with a matching digest.
+
+Only after every historical gate passes does drift reporting inspect current
+paths. It checks file types before opening, rejects symlinks escaping the repo,
+and uses descriptor-relative, no-follow, nonblocking opens so a current FIFO or
+file replacement cannot stall the audit or redirect the read outside the repo.
+Missing, unreadable, non-regular or unsafe current objects are informational
+`unreadable` entries, including any remaining drift-side `OSError`; symlinks to
+regular files within the repo can still report equality.
+On platforms without safe descriptor-relative reads, drift is reported as
+unavailable through the same staleness records.
+
+This applies only to the outcome-free, read-only planning audit. It grants no
+permission to run current code or admit results: `claim_eligible` and
+`campaign_execution_allowed` remain false. The immutable input roster still
+binds the sampler builder and the benchmark runner. Budget, seed, certification,
+replay, confirmation, lineage and result-admission checks are unchanged.
 
 ## Frozen contract
 

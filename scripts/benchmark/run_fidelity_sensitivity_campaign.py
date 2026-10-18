@@ -40,6 +40,7 @@ from robot_sf.benchmark.fidelity_sensitivity import (
     DIAGNOSTIC_SMOKE_CLAIM_BOUNDARY,
     validate_fidelity_sensitivity_config,
 )
+from robot_sf.benchmark.metric_definitions import metric_schema_version
 from robot_sf.benchmark.snqi.compute import (
     SNQI_SCORE_VERSION_V0,
     compute_snqi,
@@ -1382,13 +1383,13 @@ def aggregate_rows(rows: Sequence[Mapping[str, Any]]) -> dict[str, dict[str, dic
     return summary
 
 
-def _snqi_input_metrics(metrics: Mapping[str, Any]) -> dict[str, float]:
+def _snqi_input_metrics(metrics: Mapping[str, Any]) -> dict[str, Any]:
     """Map one runtime metric row onto the canonical SNQI input contract.
 
     Returns:
         SNQI input metrics keyed by canonical name.
     """
-    resolved: dict[str, float] = {}
+    resolved: dict[str, Any] = {"metric_schema_version": metric_schema_version(metrics)}
     for snqi_name, runtime_name in SNQI_INPUT_FROM_RUNTIME_METRIC.items():
         value = _finite_or_none(metrics.get(runtime_name))
         if value is None:

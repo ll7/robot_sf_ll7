@@ -454,6 +454,7 @@ def test_periodic_eval_prefers_evaluation_scenario_matrix_selection() -> None:
     """Evaluation should honor the eval matrix over the training matrix."""
     config_path = Path("configs/training/rllib_dreamerv3/benchmark_socnav_grid_br08_full.yaml")
     run_config = dreamer.load_run_config(config_path)
+    run_config.experiment.seed = 1013
     assert run_config.env.scenario_matrix is not None
     assert run_config.evaluation.scenario_matrix is not None
 
@@ -480,6 +481,7 @@ def test_benchmark_socnav_grid_eval_env_matches_base_scenario_contract() -> None
     """Dreamer eval should preserve the BR-08 base env contract."""
     config_path = Path("configs/training/rllib_dreamerv3/benchmark_socnav_grid_br08_full.yaml")
     run_config = dreamer.load_run_config(config_path)
+    run_config.experiment.seed = 1013
     eval_config = _make_periodic_eval_config(run_config)
     matrix = eval_config.env.scenario_matrix
     assert matrix is not None

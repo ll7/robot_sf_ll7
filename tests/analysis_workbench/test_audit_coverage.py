@@ -616,7 +616,7 @@ def test_ba01_scan_report_uses_typed_inventory_and_detector_identity() -> None:
     assert report.counts["coverage"]["duplicate"] == 1
     assert report.identity.source_digest == scan.audit.source_digest
     assert report.identity.detector_registry_digest == scan.detector_registry.digest
-    assert report.counts["detectors"]["scheduled"] == 70
+    assert report.counts["detectors"]["scheduled"] == 85
     assert report.status == STATUS_INCOMPLETE
 
 

@@ -57,11 +57,23 @@ from robot_sf.benchmark.constants import (
 )
 from robot_sf.benchmark.constants import (
     COMFORT_FORCE_THRESHOLD,
+    CURVATURE_LENGTH_FLOOR_M,
+    CURVATURE_MIN_DISPLACEMENT_M,
 )
 from robot_sf.benchmark.constants import (
     NEAR_MISS_DIST as D_NEAR,
 )
 from robot_sf.benchmark.group_space_metrics import compute_group_space_metrics
+from robot_sf.benchmark.metric_definitions import (
+    LEGACY_METRIC_SCHEMA_VERSION,
+    METRIC_SCHEMA_VERSION,
+    metric_definitions_sha256,
+    require_anchor_compatibility,
+)
+from robot_sf.benchmark.metric_definitions import (
+    metric_schema_version as resolve_metric_schema_version,
+)
+from robot_sf.benchmark.path_utils import remaining_route_length
 from robot_sf.benchmark.robot_force_contract import (
     ROBOT_FORCE_POSTHOC_SOURCE,
     ROBOT_FORCE_QUANTITY,
@@ -91,6 +103,21 @@ CLEAR_TRACKING_METADATA_KEY = "clear_tracking_uncertainty"
 SOCIAL_GROUPS_METADATA_KEY = "social_groups"
 
 
+# Contracts declared by the metric implementations below. Runtime witnesses import
+# these identities from the executing metric module rather than release defaults.
+TTC_DEFINITION = {
+    "identity": "time_to_collision_min.center_distance_v1",
+    "geometry": "center_based",
+    "formula": "min(distance/relative_speed), dot(relative_velocity,displacement)>0",
+    "relative_speed_floor_m_s": 1e-9,
+    "ped_velocity": "finite_difference_post_step_positions/dt",
+}
+CLEARANCE_DEFINITION = {
+    "identity": "surface_clearance_v1",
+    "formula": "center_distance-robot_radius-pedestrian_radius",
+}
+
+
 @dataclass
 class EpisodeData:
     """Container for a single episode trajectory.
@@ -107,7 +134,9 @@ class EpisodeData:
         robot interaction when enabled). The data is not decomposed by source.
     goal : (2,) array robot target position
     dt : float timestep
-    reached_goal_step : int | None (first step index reaching goal)  # optional helper
+    reached_goal_step : int | None
+        Index of the first goal-reaching sample. Default samples are post-step;
+        reset-inclusive synthetic producers set robot_pos_includes_reset=True.
     obstacles : (M,2) array | None
         Obstacle/wall positions for collision detection (default: None).
         Used by wall_collisions (WC) and clearing_distance (CD) metrics.
@@ -151,13 +180,24 @@ class EpisodeData:
     robot_force_config: dict[str, Any] | None = None
     social_force_config: dict[str, Any] | None = None
     robot_force_samples: list[dict[str, Any]] | None = None
+    # Reset pose for geometric metrics; sampled safety/force arrays stay post-step.
+    initial_robot_pos: np.ndarray | None = None
+    collision_event: bool = False
+    # Synthetic producers retain reset in all aligned safety/force arrays.
+    robot_pos_includes_reset: bool = False
+    # Frozen reset route; geometric progress must not follow waypoint handoffs.
+    route_waypoints: np.ndarray | None = None
+    # Sample cardinality declares presence independently of force validity.
+    robot_force_presence: np.ndarray | None = None
 
 
 def recompute_robot_ped_forces(data: EpisodeData, cfg: dict[str, Any]) -> np.ndarray:
     """Evaluate inverse-cubic robot repulsion from aligned positions, without a simulator.
 
     Positions must be force-evaluation inputs, not post-integration snapshots. NaN
-    rows stay NaN. Coincident centers are singular and rejected, as in the model.
+    rows stay NaN. Downstream reductions reject this padding unless the caller
+    supplies an explicit robot_force_presence mask marking absent slots.
+    Coincident centers are singular and rejected, as in the model.
     Per-pedestrian response multipliers, when used, must be supplied explicitly.
 
     Returns:
@@ -181,28 +221,43 @@ def recompute_robot_ped_forces(data: EpisodeData, cfg: dict[str, Any]) -> np.nda
 
 
 def robot_force_reductions(
-    forces: np.ndarray, *, dt: float, reference: float, prefix: str = "robot_force"
+    forces: np.ndarray,
+    *,
+    dt: float,
+    reference: float,
+    prefix: str = "robot_force",
+    presence: np.ndarray | None = None,
 ) -> dict[str, float]:
-    """Reduce model accelerations; absent/despawned NaN rows contribute no exposure.
+    """Reduce model accelerations; explicitly absent NaN rows contribute no exposure.
+
+    Without a mask every slot is present. Nonfinite force cannot imply absence.
 
     Empty exposure gives zero impulse, peak, duration and count; the conditional
     mean and per-exposed-pedestrian impulse are NaN (undefined denominator).
 
     Returns:
-        Six named scalar reductions in model acceleration/time units.
+        Six scalar reductions and a validity count in model acceleration/time units.
     """
     if forces.ndim != 3 or forces.shape[-1] != 2:
         raise ValueError("robot forces must have shape (T,K,2)")
     if not math.isfinite(dt) or dt <= 0 or not math.isfinite(reference) or reference < 0:
         raise ValueError("dt and force reference must be finite, with dt > 0 and reference >= 0")
-    if np.isinf(forces).any():
-        raise ValueError("infinite robot force sample")
-    magnitude = np.linalg.norm(forces, axis=-1)
-    magnitude = np.where(np.isfinite(magnitude), magnitude, 0.0)
+    presence = np.ones(forces.shape[:2], dtype=bool) if presence is None else np.asarray(presence)
+    if presence.shape != forces.shape[:2] or presence.dtype != np.dtype(bool):
+        raise ValueError("robot force presence must be a boolean array of shape (T,K)")
+    if np.any(presence & ~np.isfinite(forces).all(axis=-1)):
+        raise ValueError("non-finite or infinite robot force sample for present pedestrian")
+    if np.any(~presence & ~np.isnan(forces).all(axis=-1)):
+        raise ValueError("absent pedestrian force slot must contain only NaN padding")
+    with np.errstate(over="ignore"):
+        magnitude = np.linalg.norm(np.where(presence[..., None], forces, 0.0), axis=-1)
+    if not np.isfinite(magnitude).all():
+        raise ValueError("non-finite robot force magnitude for present pedestrian")
     active = magnitude > 0
     count = int(np.count_nonzero(active.any(axis=0)))
     impulse = float(magnitude.sum() * dt)
     return {
+        f"{prefix}_invalid_present_samples": 0,
         f"{prefix}_impulse_total": impulse,
         f"{prefix}_impulse_per_exposed_ped": impulse / count if count else float("nan"),
         f"{prefix}_peak": float(np.max(magnitude, initial=0)),
@@ -227,7 +282,8 @@ def robot_force_pp_equivalent(data: EpisodeData) -> np.ndarray:
     samples = data.robot_force_samples
     if not samples or len(samples) < 2 or data.social_force_config is None:
         raise ValueError("pp-equivalent requires at least two aligned force-input samples")
-    positions = np.full_like(data.peds_pos, np.nan)
+    shape_source = data.robot_ped_forces if data.robot_ped_forces is not None else data.peds_pos
+    positions = np.full_like(shape_source, np.nan)
     component_count = len(samples[0]["components"])
     for t, sample in enumerate(samples):
         if len(sample["components"]) != component_count:
@@ -283,7 +339,9 @@ def robot_force_metrics(data: EpisodeData) -> dict[str, Any]:
     posthoc = data.robot_ped_forces is None
     forces = recompute_robot_ped_forces(data, cfg) if posthoc else data.robot_ped_forces
     reference = robot_force_reference(data.social_force_config, cfg["prf_ped_radius_m"])
-    result = robot_force_reductions(forces, dt=data.dt, reference=reference)
+    result = robot_force_reductions(
+        forces, dt=data.dt, reference=reference, presence=data.robot_force_presence
+    )
     result["robot_force_metadata"] = {
         **cfg,
         "source": ROBOT_FORCE_RECORDED_SOURCE,
@@ -305,6 +363,7 @@ def robot_force_metrics(data: EpisodeData) -> dict[str, Any]:
                 dt=data.dt,
                 reference=reference,
                 prefix="robot_force_pp_equiv",
+                presence=data.robot_force_presence,
             )
         )
         result["robot_force_metadata"]["pp_equiv_status"] = "experimental_counterfactual"
@@ -933,7 +992,9 @@ def time_to_goal_norm(data: EpisodeData, horizon: int) -> float:
     if success_rate(data, horizon=horizon) == 1.0:
         if data.reached_goal_step is None:
             raise RuntimeError("successful episode has no recorded goal step")
-        return float(data.reached_goal_step) / float(horizon)
+        return float(data.reached_goal_step + int(not data.robot_pos_includes_reset)) / float(
+            horizon
+        )
     return 1.0
 
 
@@ -947,7 +1008,7 @@ def time_to_goal_norm_success_only(data: EpisodeData, horizon: int) -> float:
         return float("nan")
     if data.reached_goal_step is None:
         raise RuntimeError("successful episode has no recorded goal step")
-    return float(data.reached_goal_step) / float(horizon)
+    return float(data.reached_goal_step + int(not data.robot_pos_includes_reset)) / float(horizon)
 
 
 def ideal_time_to_goal(
@@ -1130,33 +1191,44 @@ def ped_force_mean(data: EpisodeData) -> float:
     return float(np.nanmean(mags))
 
 
-def path_efficiency(data: EpisodeData, shortest_path_len: float) -> float:
-    """Compute shortest_path_len / actual_path_len (clipped to 1).
-
-    Actual path taken: positions up to goal step (inclusive) if reached, else full horizon.
-    If actual length is ~0 (stationary) returns 1.0.
+def _path_positions(data: EpisodeData, *, through_goal: bool = False) -> np.ndarray:
+    """Return geometric samples including the reset pose when recorded.
 
     Returns:
-        Path efficiency ratio (0.0 to 1.0).
+        Reset plus selected post-step positions, or legacy positions without reset.
     """
-    if data.robot_pos.shape[0] < 2:
-        return 1.0
-    end_idx = (
-        data.reached_goal_step
-        if data.reached_goal_step is not None
-        else data.robot_pos.shape[0] - 1
-    )
-    end_idx = min(end_idx, data.robot_pos.shape[0] - 1)
-    # slice positions including end index
-    pos_slice = data.robot_pos[: end_idx + 1]
-    diffs = pos_slice[1:] - pos_slice[:-1]
-    seg_lengths = np.linalg.norm(diffs, axis=1)
-    actual = float(seg_lengths.sum())
-    if actual <= 1e-9:
-        return 1.0
-    ratio = shortest_path_len / actual if actual > 0 else 1.0
-    ratio = min(ratio, 1.0)
-    return float(ratio)
+    positions = np.asarray(data.robot_pos, dtype=float)
+    if through_goal and data.reached_goal_step is not None:
+        positions = positions[: data.reached_goal_step + 1]
+    if data.initial_robot_pos is not None and len(positions):
+        positions = np.vstack([np.asarray(data.initial_robot_pos, dtype=float), positions])
+    return positions
+
+
+def path_efficiency(
+    data: EpisodeData, shortest_path_len: float, *, successful: bool | None = None
+) -> float:
+    """Shortest completion reference / travelled path, among successful runs only.
+
+    Values above one remain visible and are flagged by compute_all_metrics;
+    never conceal an inconsistent reference with clipping.
+
+    Returns:
+        Unclipped success efficiency, or NaN on failure/unavailable reference.
+    """
+    if successful is None:
+        successful = (
+            data.reached_goal_step is not None
+            and not data.collision_event
+            and collision_count(data) == 0
+        )
+    if not successful:
+        return float("nan")
+    positions = _path_positions(data, through_goal=True)
+    actual = float(np.linalg.norm(np.diff(positions, axis=0), axis=1).sum())
+    if actual > 1e-9:
+        return float(shortest_path_len / actual)
+    return 1.0 if shortest_path_len == 0.0 else float("nan")
 
 
 def force_quantiles(data: EpisodeData, qs: Iterable[float] = (0.5, 0.9, 0.95)) -> dict[str, float]:
@@ -1275,7 +1347,7 @@ def comfort_exposure(data: EpisodeData, threshold: float = COMFORT_FORCE_THRESHO
 def jerk_mean(data: EpisodeData) -> float:
     """Mean magnitude of jerk (time derivative of acceleration).
 
-    Computes jerk vectors as consecutive differences of acceleration: j_t = a_{t+1} - a_t.
+    Computes jerk vectors as consecutive differences of acceleration: j_t = (a_{t+1} - a_t) / dt, in m/s^3.
     The function averages the norms of the first T-2 jerk vectors (i.e., uses diffs[:-1]) so the denominator is T-2.
     Returns 0.0 if there are fewer than three acceleration samples.
 
@@ -1289,7 +1361,9 @@ def jerk_mean(data: EpisodeData) -> float:
     T = acc.shape[0]
     if T < 3:
         return 0.0
-    diffs = acc[1:] - acc[:-1]  # length T-1
+    if not math.isfinite(data.dt) or data.dt <= 0:
+        return float("nan")
+    diffs = (acc[1:] - acc[:-1]) / data.dt  # length T-1
     # Use first T-2 differences as per definition (exclude last to align with spec denominator) if T>2
     jerk_vecs = diffs[:-1]
     norms = np.linalg.norm(jerk_vecs, axis=1)
@@ -1299,7 +1373,40 @@ def jerk_mean(data: EpisodeData) -> float:
     return float(norms.sum() / denom)
 
 
-def curvature_mean(data: EpisodeData) -> float:
+def curvature_mean(
+    data: EpisodeData, *, metric_schema_version: str = METRIC_SCHEMA_VERSION
+) -> float:
+    """Arc-length mean absolute path curvature in rad/m for metric v2 (D-055).
+
+    Sum absolute wrapped turns between consecutive displacement directions and
+    divide by max(counted path length, 1 m). Only displacements >= 1e-3 m
+    count: stationary samples add neither turning nor length. A stop followed
+    by a new direction therefore counts one turn. Fewer than two counted steps
+    give zero. Reset geometry is included when supplied; invalid displacement
+    samples are ignored. Timestep and recorded velocity/acceleration do not enter.
+
+    Args:
+        data: Recorded episode positions, optionally including the reset pose.
+        metric_schema_version: Explicit row definition for historical recomputation;
+            v1 retains the original time mean cross-product calculation exactly.
+
+    Returns:
+        Finite, nonnegative path curvature; short paths use the 1 m length floor.
+    """
+    version = resolve_metric_schema_version({"metric_schema_version": metric_schema_version})
+    if version == LEGACY_METRIC_SCHEMA_VERSION:
+        return _legacy_curvature_mean(data)
+    displacement = np.diff(_path_positions(data), axis=0)
+    lengths = np.hypot(displacement[:, 0], displacement[:, 1])
+    counted = np.isfinite(lengths) & (lengths >= CURVATURE_MIN_DISPLACEMENT_M)
+    if np.count_nonzero(counted) < 2:
+        return 0.0
+    directions = np.arctan2(displacement[counted, 1], displacement[counted, 0])
+    turns = np.abs(wrap_angle_pi_array(np.diff(directions)))
+    return float(turns.sum() / max(float(lengths[counted].sum()), CURVATURE_LENGTH_FLOOR_M))
+
+
+def _legacy_curvature_mean(data: EpisodeData) -> float:
     """Mean path curvature.
 
     Curvature is computed using the cross product formula: κ = |v × a| / |v|³
@@ -1399,8 +1506,9 @@ def evaluate_stability_margin(
 
     A value of ``1.0`` indicates no lateral-acceleration load, while ``0.0`` means the
     estimated lateral acceleration is at or beyond the critical rollover threshold. Geometry
-    parameters follow the reviewer-supplied TWV proxy: rear track width ``t_w``, wheelbase
-    ``L``, center-of-gravity height ``h_c``, and CG distance from the front axle ``a``.
+    parameters follow the reviewer-supplied TWV proxy: track ``t_w`` of the axle with two
+    wheels, wheelbase ``L``, center-of-gravity height ``h_c``, and CG distance from the axle
+    with one wheel ``a``. The single wheel may be at the front or at the rear.
 
     Returns:
         Stability margin in ``[0.0, 1.0]`` or ``NaN`` when speed/yaw-rate samples are invalid.
@@ -1795,6 +1903,9 @@ def snqi(
         float: Aggregated SNQI score (higher is better).
     """
 
+    if baseline_stats is not None:
+        require_anchor_compatibility(metric_values, baseline_stats)
+
     def _norm(name: str, value: float) -> float:
         """Normalize a penalized metric to ``[0, 1]`` based on baseline stats.
 
@@ -2181,12 +2292,16 @@ def compute_deadlock_stall(
     *,
     window_steps: int = 15,
     progress_eps_m: float = 0.05,
+    collision_detected: bool | None = None,
 ) -> dict[str, Any]:
     """Detect per-episode deadlock/stall as no-progress-over-window.
 
-    A stall window is a run of ``window_steps`` consecutive trajectory samples in
-    which the robot's distance to goal does not decrease by more than
-    ``progress_eps_m``. A deadlock is recorded when at least one such window
+    A stall window has ``window_steps`` samples (``window_steps - 1`` intervals).
+    Its first minus last remaining route arclength is <= ``progress_eps_m``.
+    Positions project onto the waypoint polyline frozen at reset. Synthetic callers
+    without a route use the straight reset/first-position to final-goal segment.
+    Only windows ending strictly before the terminal sample count; overlapping
+    windows count independently. A deadlock is recorded when at least one such window
     occurs while the episode still had steps remaining (the robot neither reached
     the goal nor collided, yet made no measurable progress). This is distinct
     from ``timeout``/``max_steps`` (which only triggers at the horizon) and from
@@ -2196,18 +2311,19 @@ def compute_deadlock_stall(
     Args:
         data: Episode trajectory data.
         window_steps: Consecutive-sample window length over which to test progress.
-        progress_eps_m: Minimum required distance-to-goal reduction per window.
+        progress_eps_m: Minimum required remaining-route-length reduction per window.
+        collision_detected: Optional precomputed collision summary; otherwise derive
+            footprint collisions from samples. Episode collision flags always take precedence.
 
     Returns:
         Mapping with ``deadlock`` (bool) plus typed diagnostics: ``window_steps``,
         ``progress_eps_m``, ``stall_window_count`` (number of detected stall
-        windows), and ``max_no_progress_run`` (longest consecutive stalled-sample
-        run). All diagnostics are finite and JSON-safe.
+        windows), and ``max_no_progress_run`` (longest run of consecutive stalled window starts). All diagnostics are finite and JSON-safe.
     """
     if not math.isfinite(data.dt) or data.dt <= 0.0:
         return {
             "deadlock": False,
-            "schema_version": "deadlock-stall.v1",
+            "schema_version": "deadlock-stall.v2",
             "window_steps": int(window_steps),
             "progress_eps_m": float(progress_eps_m),
             "stall_window_count": 0,
@@ -2220,7 +2336,7 @@ def compute_deadlock_stall(
     if n_steps < 2:
         return {
             "deadlock": False,
-            "schema_version": "deadlock-stall.v1",
+            "schema_version": "deadlock-stall.v2",
             "window_steps": int(window_steps),
             "progress_eps_m": float(progress_eps_m),
             "stall_window_count": 0,
@@ -2231,45 +2347,35 @@ def compute_deadlock_stall(
             ),
         }
 
-    dist_to_goal = np.linalg.norm(data.robot_pos - np.asarray(data.goal, dtype=float), axis=1)
+    route = data.route_waypoints
+    if route is None:
+        start = data.initial_robot_pos if data.initial_robot_pos is not None else data.robot_pos[0]
+        route = np.vstack([start, data.goal])
+    dist_to_goal = remaining_route_length(data.robot_pos, route)
     win = int(window_steps) if int(window_steps) > 1 else 2
 
-    # Per-sample stalled flag: distance-to-goal did not improve beyond eps vs the
-    # previous sample. The final sample cannot start a stall window because the
-    # episode ended there (no following window), so progress is judged on windows
-    # fully inside the trajectory.
-    stalled_per_sample = np.zeros(n_steps, dtype=bool)
-    for t in range(1, n_steps):
-        if (dist_to_goal[t - 1] - dist_to_goal[t]) < float(progress_eps_m):
-            stalled_per_sample[t] = True
-
-    # Count stall windows fully inside the trajectory (cannot end at last sample).
-    stall_window_count = 0
-    for start in range(0, max(0, n_steps - win + 1)):
-        end = start + win
-        if end > n_steps:
-            break
-        if bool(np.all(stalled_per_sample[start:end])):
-            stall_window_count += 1
-
-    # Longest consecutive run of stalled samples (for diagnostics).
-    max_run = 0
-    run = 0
-    for flag in stalled_per_sample:
-        if flag:
-            run += 1
-            max_run = max(max_run, run)
-        else:
-            run = 0
-
-    # Deadlock/stall requires a full no-progress window while steps remained.
-    # The final step is excluded from window starts, so a genuine internal stall
-    # (not merely ending at the goal/horizon) is what triggers this.
-    deadlock = stall_window_count > 0 and not reached
+    # A window has win samples (win-1 intervals). It must end before the
+    # terminal sample, proving an internal stall while execution continued.
+    stalled_windows = np.array(
+        [
+            dist_to_goal[start] - dist_to_goal[start + win - 1] <= float(progress_eps_m)
+            for start in range(max(0, n_steps - win))
+        ],
+        dtype=bool,
+    )
+    stall_window_count = int(stalled_windows.sum())
+    max_run = run = 0
+    for stalled in stalled_windows:
+        run = run + 1 if stalled else 0
+        max_run = max(max_run, run)
+    collided = data.collision_event or (
+        collision_count(data) > 0 if collision_detected is None else collision_detected
+    )
+    deadlock = stall_window_count > 0 and not reached and not collided
 
     return {
         "deadlock": bool(deadlock),
-        "schema_version": "deadlock-stall.v1",
+        "schema_version": "deadlock-stall.v2",
         "window_steps": int(win),
         "progress_eps_m": float(progress_eps_m),
         "stall_window_count": int(stall_window_count),
@@ -2324,7 +2430,8 @@ def time_to_goal(data: EpisodeData) -> float:
 
     From paper 2306.16740v4 Table 1: Time to reach goal (T) metric.
 
-    Formula: T = reached_goal_step * dt (if reached, else NaN)
+    Formula: T = (reached_goal_step + 1) * dt for post-step samples.
+    Reset-inclusive producers use reached_goal_step * dt (if reached, else NaN).
 
     Parameters
     ----------
@@ -2348,7 +2455,7 @@ def time_to_goal(data: EpisodeData) -> float:
     """
     if data.reached_goal_step is None:
         return float("nan")
-    return float(data.reached_goal_step * data.dt)
+    return float((data.reached_goal_step + int(not data.robot_pos_includes_reset)) * data.dt)
 
 
 def path_length(data: EpisodeData) -> float:
@@ -2378,12 +2485,8 @@ def path_length(data: EpisodeData) -> float:
     ---------------
     Section 3.2, Table 1: "Path length (PL)" metric
     """
-    if data.robot_pos.shape[0] < 2:
-        return 0.0
-
-    diffs = data.robot_pos[1:] - data.robot_pos[:-1]
-    seg_lengths = np.linalg.norm(diffs, axis=1)
-    return float(seg_lengths.sum())
+    positions = _path_positions(data)
+    return float(np.linalg.norm(np.diff(positions, axis=0), axis=1).sum())
 
 
 def socnavbench_path_length(data: EpisodeData) -> float:
@@ -2410,7 +2513,7 @@ def socnavbench_path_length_ratio(data: EpisodeData) -> float:
         return float("nan")
     epsilon = 1e-5
     distance = socnavbench_path_length(data) + epsilon
-    displacement = float(np.linalg.norm(data.goal - data.robot_pos[0]))
+    displacement = float(np.linalg.norm(data.goal - _path_positions(data)[0]))
     if displacement <= 0.0:
         return float("inf")
     return float(distance / displacement)
@@ -2422,7 +2525,7 @@ def _socnavbench_trajectory_with_heading(data: EpisodeData) -> np.ndarray:
     Returns:
         np.ndarray: (T, 3) array of [x, y, heading] entries.
     """
-    positions = np.asarray(data.robot_pos, dtype=float)
+    positions = _path_positions(data)
     if positions.shape[0] == 0:
         return np.zeros((0, 3), dtype=float)
     if positions.shape[0] < 2:
@@ -3042,10 +3145,10 @@ def _is_valid_nonnegative_finite(value: Any) -> bool:
         return False
 
 
-def _cooperative_duration(step: int, dt: Any) -> float:
+def _cooperative_duration(step: int, dt: Any, *, includes_reset: bool = False) -> float:
     """Return a finite cooperative duration, or NaN when multiplication overflows."""
     try:
-        duration = step * dt
+        duration = (step + int(not includes_reset)) * dt
         if not math.isfinite(duration) or duration < 0.0:
             return float("nan")
         return float(duration)
@@ -3058,7 +3161,8 @@ def aggregated_time(data: EpisodeData, *, cooperative_agents: list[int] | None =
 
     From paper 2306.16740v4 Table 1: Aggregated Time (AT).
 
-    Formula: AT = max(reached_goal_step[agent] * dt) over the requested agents.
+    Formula: AT = max((reached_goal_step[agent] + offset) * dt) over requested agents.
+    The offset is zero for reset-inclusive samples and one for post-step samples.
 
     Parameters
     ----------
@@ -3121,7 +3225,7 @@ def aggregated_time(data: EpisodeData, *, cooperative_agents: list[int] | None =
             max_step = step
     if not seen or max_step is None:
         return float("nan")
-    return _cooperative_duration(max_step, data.dt)
+    return _cooperative_duration(max_step, data.dt, includes_reset=data.robot_pos_includes_reset)
 
 
 # --- Orchestrator ---
@@ -3232,10 +3336,14 @@ def _compute_core_navigation_block(
     # Use collision-count-based success semantics for benchmark-facing outputs.
     values["success"] = 1.0 if episode_success else 0.0
     values["time_to_goal_norm"] = (
-        float(data.reached_goal_step) / float(horizon) if episode_success else 1.0
+        float(data.reached_goal_step + int(not data.robot_pos_includes_reset)) / float(horizon)
+        if episode_success
+        else 1.0
     )
     values["time_to_goal_norm_success_only"] = (
-        float(data.reached_goal_step) / float(horizon) if episode_success else float("nan")
+        float(data.reached_goal_step + int(not data.robot_pos_includes_reset)) / float(horizon)
+        if episode_success
+        else float("nan")
     )
     values["time_to_goal_success_only_valid"] = (
         1.0 if math.isfinite(values["time_to_goal_norm_success_only"]) else 0.0
@@ -3275,7 +3383,12 @@ def _compute_core_navigation_block(
     values["min_clearance"] = robot_ped_summary["min_clearance"]
     values["mean_clearance"] = robot_ped_summary["mean_clearance"]
     values["robot_ped_within_5m_frac"] = robot_ped_summary["robot_ped_within_5m_frac"]
-    values["path_efficiency"] = path_efficiency(data, shortest_path_len)
+    values["path_efficiency"] = path_efficiency(
+        data, shortest_path_len, successful=episode_success and not data.collision_event
+    )
+    values["path_efficiency_reference_violation"] = bool(
+        data.reached_goal_step is not None and values["path_efficiency"] > 1.0
+    )
     values["socnavbench_path_length"] = socnavbench_path_length(data)
     values["socnavbench_path_length_ratio"] = socnavbench_path_length_ratio(data)
     values["socnavbench_path_irregularity"] = socnavbench_path_irregularity(data)
@@ -3377,7 +3490,9 @@ def compute_all_metrics(  # noqa: PLR0913
         Mapping from metric name to the computed scalar value.
     """
     if shortest_path_len is None:
-        shortest_path_len = float(np.linalg.norm(data.robot_pos[0] - data.goal))  # simple fallback
+        shortest_path_len = float(
+            np.linalg.norm(_path_positions(data)[0] - data.goal)
+        )  # simple fallback
 
     ped_count = int(data.peds_pos.shape[1]) if data.peds_pos.ndim >= 2 else 0
     if ped_count > 0 and not has_force_data(data):
@@ -3385,7 +3500,10 @@ def compute_all_metrics(  # noqa: PLR0913
             "Missing pedestrian force data; force-based metrics will be NaN.",
         )
 
-    values: dict[str, Any] = {}
+    values: dict[str, Any] = {
+        "metric_schema_version": METRIC_SCHEMA_VERSION,
+        "metric_definitions_sha256": metric_definitions_sha256(),
+    }
     if isinstance(data.episode_metadata, dict):
         values["_episode_metadata"] = dict(data.episode_metadata)
     values.update(_compute_signal_metrics_block(data))
@@ -3527,7 +3645,9 @@ def post_process_metrics(
     metrics.pop("_episode_metadata", None)
     return _sanitize_metrics(
         {
-            key: _robot_force_json_value(value) if key.startswith("robot_force_") else value
+            key: _robot_force_json_value(value)
+            if key.startswith("robot_force_") or key == "path_efficiency"
+            else value
             for key, value in metrics.items()
         }
     )
@@ -3729,7 +3849,9 @@ def _attach_deadlock_stall_block(metrics: dict[str, Any], data: EpisodeData) -> 
     block carries the parameterized window semantics so the detector is
     reproducible and distinct from ``timeout``/``max_steps``.
     """
-    block = compute_deadlock_stall(data)
+    block = compute_deadlock_stall(
+        data, collision_detected=float(metrics["total_collision_count"]) > 0
+    )
     metrics["deadlock"] = bool(block["deadlock"])
     # Filter out deadlock key so deadlock_stall block matches schema properties perfectly
     block_copy = dict(block)

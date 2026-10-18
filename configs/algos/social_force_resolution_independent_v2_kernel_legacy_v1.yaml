@@ -1,0 +1,4 @@
+# Paired issue #9764 diagnostic arm. Matches the wrapped successor config
+# except for the explicitly selected historical pair-kernel behavior.
+social_force_planner_version: resolution_independent_v2
+social_force_kernel_version: legacy_unwrapped_v1

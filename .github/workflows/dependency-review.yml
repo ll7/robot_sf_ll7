@@ -2,6 +2,7 @@ name: Dependency Review
 
 on:
   pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
     paths:
       - "pyproject.toml"
       - "uv.lock"
@@ -44,6 +45,7 @@ concurrency:
 
 jobs:
   review:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -92,7 +94,7 @@ jobs:
 
       - name: Upload dependency license inventory
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: dependency-license-inventory
           path: output/validation/dependency-license-inventory.json

@@ -9,6 +9,7 @@ from loguru import logger
 
 from robot_sf.nav.occupancy_grid_utils import world_to_ego
 from robot_sf.planner import socnav as _socnav
+from robot_sf.robot.reverse_drive import bound_drive_settings
 
 SamplingPlannerAdapter = _socnav.SamplingPlannerAdapter
 SocNavPlannerConfig = _socnav.SocNavPlannerConfig
@@ -76,6 +77,9 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
         self._adapter_trace.clear()
         self._adapter_trace_step = 0
         self._clear_rvo2_simulator()
+        self._reverse_mode = False
+        self._reverse_blocked_steps = 0
+        self._reverse_clear_steps = 0
 
     def _clear_rvo2_simulator(self) -> None:
         """Discard cached rvo2 state at an explicit lifecycle boundary."""
@@ -968,6 +972,164 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
             )
         return new_velocity
 
+    def bind_env(self, env: Any) -> None:
+        """Bind reverse limits and rear geometry from the opt-in live plant."""
+        super().bind_env(env)
+        drive = bound_drive_settings(env)
+        self._reverse_drive = drive if getattr(drive, "limited_reverse", False) else None
+        self._reverse_mode = False
+        self._reverse_blocked_steps = 0
+        self._reverse_clear_steps = 0
+        if self._reverse_drive is not None:
+            self._bind_static_obstacles(env)
+
+    def _use_reverse_escape(self, heading_error, robot_pos, robot_heading, observation) -> bool:
+        """Latch reverse after three stationary, occupancy-blocked forward steps.
+
+        Grid occupancy, bound static geometry and observed pedestrians can
+        establish the obstruction. Enter at 110 degrees and leave when forward
+        alignment is no worse than rear alignment (90 degrees), preventing
+        heading-boundary chatter. Rear-aligned rotation increases forward error;
+        the angular exit responds to a changing world target. Three consecutive
+        clear forward probes also leave escape mode.
+        Heading slowdown alone never counts as an obstruction.
+
+        Returns:
+            Whether the opt-in adapter should attempt a rear-checked escape.
+        """
+        robot, _, _ = self._socnav_fields(observation)
+        radius = float(self._as_1d_float(robot.get("radius", [self._reverse_drive.radius]))[0])
+        forward = np.array([cos(robot_heading), sin(robot_heading)])
+        obstacle, pedestrian = self._path_penalty(
+            robot_pos + radius * forward,
+            forward,
+            observation,
+            min(0.3, self.config.occupancy_lookahead),
+            2,
+        )
+        occupied = obstacle + 0.5 * pedestrian >= 0.95
+        probe = robot_pos + min(0.3, self.config.occupancy_lookahead) * forward
+        geometry = getattr(self, "_static_clearance", None)
+        if geometry is not None:
+            occupied |= geometry.clearance(probe, radius, robot_pos) <= 0.0
+        _, _, pedestrians = self._socnav_fields(observation)
+        count = int(self._as_1d_float(pedestrians.get("count", [0]))[0])
+        positions = np.asarray(pedestrians.get("positions", []), dtype=float).reshape(-1, 2)[:count]
+        ped_radius = float(self._as_1d_float(pedestrians.get("radius", [0.4]))[0])
+        if positions.size:
+            occupied |= bool(
+                np.any(
+                    ((positions - robot_pos) @ forward > self._EPS)
+                    & (np.linalg.norm(positions - probe, axis=1) <= radius + ped_radius)
+                )
+            )
+        stationary = abs(float(self._as_1d_float(robot.get("speed", [0.0]))[0])) < 0.05
+        self._reverse_blocked_steps = (
+            self._reverse_blocked_steps + 1 if occupied and stationary else 0
+        )
+        self._reverse_clear_steps = 0 if occupied else self._reverse_clear_steps + 1
+        if self._reverse_mode:
+            reverse_error = abs(self._wrap_angle(heading_error + pi))
+            if abs(heading_error) <= reverse_error + self._EPS or self._reverse_clear_steps >= 3:
+                self._reverse_mode = False
+                self._reverse_blocked_steps = 0
+        elif (
+            abs(heading_error) >= np.deg2rad(110.0) - self._EPS and self._reverse_blocked_steps >= 3
+        ):
+            self._reverse_mode = True
+        return self._reverse_mode
+
+    def _reverse_command_clear(
+        self,
+        linear: float,
+        angular: float,
+        robot_pos: np.ndarray,
+        robot_heading: float,
+        observation: dict,
+    ) -> bool:
+        """Check the rear swept footprint and pedestrian prediction through braking.
+
+        Uses observed pedestrians and bound static geometry or the local grid.
+        At each predicted sample, only pedestrians at or behind the centre in
+        the travel heading count as rear obstructions. A person blocking the
+        nose must not prevent movement away from them; predicted rear crossings
+        and lateral pedestrians still participate in the clearance check.
+        Missing rear geometry refuses translation. This is a conservative adapter
+        guard, not a proof of preservation of ORCA's world-velocity half-planes.
+
+        Returns:
+            Whether the rear translation is clear through the braking horizon.
+        """
+        drive = self._reverse_drive
+        dt = self._simulation_timestep(observation)
+        accel = float(getattr(drive, "max_linear_accel", getattr(drive, "max_accel", 1.0)))
+        decel = float(getattr(drive, "max_linear_decel", getattr(drive, "max_decel", 1.0)))
+        robot, _, pedestrians = self._socnav_fields(observation)
+        current = float(self._as_1d_float(robot.get("speed", [0.0]))[0])
+        # Check the requested speed as well as residual reverse speed: the latter
+        # may take several control periods to brake after a cap change.
+        peak = max(abs(min(current, 0.0)), abs(linear))
+        horizon = dt + peak / min(accel, decel)
+        radius = float(self._as_1d_float(robot.get("radius", [drive.radius]))[0])
+        count = int(self._as_1d_float(pedestrians.get("count", [0]))[0])
+        positions = np.asarray(pedestrians.get("positions", []), dtype=float).reshape(-1, 2)[:count]
+        velocities = np.asarray(
+            pedestrians.get("velocities", np.zeros_like(positions)), dtype=float
+        ).reshape(-1, 2)[:count]
+        rotation = np.array(
+            [[cos(robot_heading), -sin(robot_heading)], [sin(robot_heading), cos(robot_heading)]]
+        )
+        velocities = velocities @ rotation.T
+        ped_radius = float(self._as_1d_float(pedestrians.get("radius", [0.4]))[0])
+        geometry = getattr(self, "_static_clearance", None)
+        payload = self._extract_grid_payload(observation)
+        if geometry is None and payload is None:
+            return False
+        previous = np.asarray(robot_pos, dtype=float)
+        # <= 0.025 m centre increments, plus a half-step spatial safety margin.
+        steps = max(1, int(np.ceil(horizon * max(peak, 0.1) / 0.025)))
+        margin = peak * horizon / steps
+        for elapsed in np.linspace(0.0, horizon, steps + 1):
+            heading = robot_heading + angular * elapsed
+            forward = np.array([cos(heading), sin(heading)])
+            point = robot_pos - peak * elapsed * forward
+            if positions.size and np.any(
+                ((positions + velocities * elapsed - point) @ forward <= self._EPS)
+                & (
+                    np.linalg.norm(positions + velocities * elapsed - point, axis=1)
+                    <= radius + ped_radius + margin
+                )
+            ):
+                return False
+            if geometry is not None:
+                if geometry.clearance(point, radius + margin, previous) <= 0.0:
+                    return False
+            else:
+                grid, meta = payload
+                channel = self._grid_channel_index(meta, "obstacles")
+                if channel < 0:
+                    return False
+                if not self._reverse_grid_footprint_clear(
+                    point, radius + margin, grid, meta, channel
+                ):
+                    return False
+            previous = point
+        return True
+
+    def _reverse_grid_footprint_clear(self, point, radius, grid, meta, channel) -> bool:
+        """Check the rear footprint against the static observation channel.
+
+        Returns:
+            Whether all sampled footprint cells are free.
+        """
+        for offset in np.linspace(-radius, radius, 9):
+            for lateral in np.linspace(-radius, radius, 9):
+                if offset**2 + lateral**2 > radius**2:
+                    continue
+                if self._grid_value(point + [offset, lateral], grid, meta, channel) > 0.0:
+                    return False
+        return True
+
     def _velocity_world_to_command(
         self,
         *,
@@ -976,7 +1138,13 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
         robot_heading: float,
         observation: dict,
     ) -> tuple[float, float]:
-        """Convert a world-frame velocity vector into ``(v, w)`` with occupancy penalty.
+        """Convert world velocity to a versioned differential-drive command.
+
+        Project speed onto the current forward axis: sideways/backward targets
+        command zero translation while turning. Occupancy and the optional
+        stronger heading slowdown can reduce this further. Acceleration limits
+        still govern braking in the environment; this is not ORCA feasibility
+        preservation for a nonholonomic robot.
 
         Returns:
             tuple[float, float]: Linear and angular velocity command.
@@ -1004,15 +1172,32 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
         heading_scale = 1.0 - min(1.0, abs(heading_error) / (pi / 2)) * float(
             self.config.orca_heading_slowdown
         )
+        heading_scale = min(max(0.0, cos(heading_error)), max(0.0, heading_scale))
         linear = float(
-            np.clip(
-                speed,
-                0.0,
-                self.config.max_linear_speed
-                * max(0.0, 1.0 - occ_penalty)
-                * max(0.0, heading_scale),
-            )
+            min(speed, self.config.max_linear_speed) * max(0.0, 1.0 - occ_penalty) * heading_scale
         )
+        if getattr(self, "_reverse_drive", None) is not None and self._use_reverse_escape(
+            heading_error, robot_pos, robot_heading, observation
+        ):
+            reverse_angular = float(
+                np.clip(
+                    1.5 * self.config.angular_gain * self._wrap_angle(heading_error + pi),
+                    -self.config.max_angular_speed,
+                    self.config.max_angular_speed,
+                )
+            )
+            reverse_linear = -min(
+                speed * max(0.0, -cos(heading_error)), self._reverse_drive.max_reverse_speed
+            ) * max(0.0, 1.0 - occ_penalty)
+            if self._reverse_command_clear(
+                reverse_linear, reverse_angular, robot_pos, robot_heading, observation
+            ):
+                linear, angular = reverse_linear, reverse_angular
+            else:
+                # Keep the complete forward command, including the turn toward
+                # the goal, when rear sensing or clearance refuses the escape.
+                self._reverse_mode = False
+                self._reverse_blocked_steps = 0
         self._record_adapter_trace(
             velocity_world=velocity_world,
             robot_heading=robot_heading,
@@ -1250,15 +1435,7 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
 
         preferred_velocity_world = self._ego_to_world(preferred_velocity_ego, robot_heading)
 
-        time_step = float(
-            np.asarray(observation.get("sim", {}).get("timestep", [0.1]), dtype=float)[0]
-        )
-        if time_step <= self._EPS:
-            logger.warning(
-                "Invalid timestep ({}) for ORCA planner; defaulting to 0.1s.",
-                time_step,
-            )
-            time_step = 0.1
+        time_step = self._simulation_timestep(observation)
 
         robot_radius = float(np.asarray(robot_state.get("radius", [0.3]), dtype=float)[0])
         robot_speed = float(np.asarray(robot_state.get("speed", [0.0]), dtype=float)[0])
@@ -1371,9 +1548,7 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
         )
         preferred_velocity = self._world_to_ego_vec(preferred_velocity_world, robot_heading)
 
-        time_step = float(
-            np.asarray(observation.get("sim", {}).get("timestep", [0.1]), dtype=float)[0]
-        )
+        time_step = self._simulation_timestep(observation)
         robot_radius = float(np.asarray(robot_state.get("radius", [0.3]), dtype=float)[0])
 
         lines = self._build_orca_lines(
@@ -1842,11 +2017,7 @@ class HRVOPlannerAdapter(ORCAPlannerAdapter):
             dtype=float,
         )
         robot_radius = float(np.asarray(robot_state.get("radius", [0.3]), dtype=float)[0])
-        time_step = float(
-            np.asarray(observation.get("sim", {}).get("timestep", [0.1]), dtype=float)[0]
-        )
-        if time_step <= self._EPS:
-            time_step = 0.1
+        time_step = self._simulation_timestep(observation)
 
         ped_positions, ped_velocities, ped_count, ped_radius = self._extract_pedestrians(ped_state)
         if ped_count > 0:

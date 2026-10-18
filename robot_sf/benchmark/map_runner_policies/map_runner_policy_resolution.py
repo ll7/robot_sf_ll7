@@ -6,6 +6,7 @@ candidate manifests, selector-v2 runtime wiring, and prediction metadata overrid
 
 from __future__ import annotations
 
+import os
 from copy import deepcopy
 from dataclasses import fields
 from pathlib import Path
@@ -25,6 +26,7 @@ from robot_sf.benchmark.policy_search_manifest import (
 from robot_sf.benchmark.policy_search_manifest import (
     scenario_family as _scenario_family,
 )
+from robot_sf.benchmark.release_parameter_freeze import assert_release_parameters_frozen
 from robot_sf.planner.hybrid_rule_local_planner import (
     HybridRuleLocalPlannerAdapter,
     build_hybrid_rule_local_planner_config,
@@ -34,6 +36,7 @@ from robot_sf.planner.planner_selector_v2_diagnostic import (
     build_planner_selector_v2_diagnostic_config,
 )
 from robot_sf.planner.socnav import ORCAPlannerAdapter, SocNavPlannerConfig
+from robot_sf.planner.socnav_base import _SOCNAV_CONFIG_INIT_KEYS
 
 
 def _parse_algo_config(algo_config_path: str | None) -> dict[str, Any]:
@@ -51,6 +54,7 @@ def _parse_algo_config(algo_config_path: str | None) -> dict[str, Any]:
     if not isinstance(data, dict):
         raise TypeError("Algorithm config must be a mapping (YAML dict).")
     validate_no_local_model_artifacts(data, config_path=path)
+    assert_release_parameters_frozen(data, label=f"algorithm config {algo_config_path}")
     return data
 
 
@@ -94,7 +98,9 @@ def _apply_scenario_uncertainty_envelope_config(
     return merged
 
 
-def _resolve_config_path(anchor: Path | None, raw_path: Any) -> Path | None:
+def _resolve_config_path(
+    anchor: Path | None, raw_path: Any, *, config_root: Path | None = None
+) -> Path | None:
     """Resolve candidate-manifest config paths from manifest-local or repo-root form.
 
     Returns:
@@ -109,7 +115,7 @@ def _resolve_config_path(anchor: Path | None, raw_path: Any) -> Path | None:
         anchored = (anchor / path).resolve()
         if anchored.exists():
             return anchored
-    return path.resolve()
+    return ((config_root / path) if config_root is not None else path).resolve()
 
 
 def _is_policy_search_candidate_manifest(config: dict[str, Any]) -> bool:
@@ -175,6 +181,7 @@ def _resolve_policy_search_candidate_runtime(
     algo_config_path: str | None,
     scenario: dict[str, Any],
     algo_config: dict[str, Any] | None = None,
+    config_root: Path | None = None,
 ) -> tuple[str, dict[str, Any]]:
     """Resolve a policy-search candidate manifest to the runtime algo/config for a scenario.
 
@@ -187,7 +194,7 @@ def _resolve_policy_search_candidate_runtime(
     config_anchor = Path(algo_config_path).resolve().parent if algo_config_path else None
 
     def load_config(config_path: object) -> dict[str, Any]:
-        resolved_path = _resolve_config_path(config_anchor, config_path)
+        resolved_path = _resolve_config_path(config_anchor, config_path, config_root=config_root)
         if resolved_path is None:
             return {}
         return _parse_algo_config(str(resolved_path))
@@ -226,6 +233,39 @@ def _apply_planner_selector_v2_context(
     )
 
 
+def resolve_episode_policy_runtime(
+    *,
+    default_algo: str,
+    algo_config_path: str | None,
+    scenario: dict[str, Any],
+    seed: int,
+    algo_config: dict[str, Any] | None = None,
+    config_root: Path | None = None,
+) -> tuple[str, dict[str, Any]]:
+    """Resolve the complete episode planner contract for execution and validation.
+
+    Returns:
+        Effective algorithm and config, including selector and uncertainty context.
+    """
+    root_kwargs = {"config_root": config_root} if config_root is not None else {}
+    algo, config = _resolve_policy_search_candidate_runtime(
+        default_algo=default_algo,
+        algo_config_path=algo_config_path,
+        scenario=scenario,
+        algo_config=algo_config,
+        **root_kwargs,
+    )
+    from robot_sf.benchmark.snqi.execution_context import (  # noqa: PLC0415
+        CONTEXT_ENV,
+        require_calibrated_algorithm,
+    )
+
+    if os.environ.get(CONTEXT_ENV) is not None:
+        require_calibrated_algorithm(algo)
+    config = _apply_planner_selector_v2_context(algo, config, scenario=scenario, seed=seed)
+    return algo, _apply_scenario_uncertainty_envelope_config(algo, config, scenario)
+
+
 def _build_socnav_config(cfg: dict[str, Any]) -> SocNavPlannerConfig:
     """Build a SocNav planner config from a loose mapping.
 
@@ -234,7 +274,7 @@ def _build_socnav_config(cfg: dict[str, Any]) -> SocNavPlannerConfig:
     """
     if not isinstance(cfg, dict):
         return SocNavPlannerConfig()
-    allowed = {f.name for f in fields(SocNavPlannerConfig)}
+    allowed = {f.name for f in fields(SocNavPlannerConfig)} | _SOCNAV_CONFIG_INIT_KEYS
     filtered = {key: value for key, value in cfg.items() if key in allowed}
     return SocNavPlannerConfig(**filtered)
 

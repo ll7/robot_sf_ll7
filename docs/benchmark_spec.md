@@ -292,6 +292,17 @@ Below is the credibility scorecard emitted for the camera-ready campaign `paper_
 Full details live in
 [`docs/dev/issues/social-navigation-benchmark/metrics_spec.md`](./dev/issues/social-navigation-benchmark/metrics_spec.md).
 
+Metric meaning is versioned separately from the episode envelope:
+`robot-sf-metrics.v2` fixes route-goal references, window deadlock, physical jerk,
+and completed-step time/path geometry. Route stalls use projected remaining arclength;
+path efficiency is success-only, NaN/JSON null on failure, and unclipped with an explicit
+reference-violation flag. Zone-entry shortest/ideal references terminate at the goal polygon;
+waypoint-radius completion retains the point reference. Unmarked 0.0.7 rows are v1; changed metrics
+have no direct cross-version release contrast, and SNQI requires matching anchors. Unmarked
+v2-only fields fail closed. Simulation-step/native paired trace schemas are v2; readers accept
+each historical version separately and refuse mixed pairs/cohorts.
+See [the metric migration](context/issue_10007_fxm_metrics.md).
+
 **Core metrics**
 * `success`: goal reached before horizon without collision.
 * `time_to_goal_norm`: backward-compatible horizon normalization (clamped to `1.0` on failure).
@@ -301,11 +312,20 @@ Full details live in
 * `outcome.collision_event`: canonical per-episode collision event flag for new episode outputs.
 * `event_ledger.collision_events`: typed exact collision-event records (`EpisodeEventLedger.v2`)
   carrying partner type/id, collision time, relative contact speed, and source provenance.
+* `spawn_validity.v2`: reset overlap and unavailable reset clearance invalidate an episode
+  regardless of its observed route outcome. Attributed route-end respawn contact invalidates
+  an incomplete route. Invalid rows remain in raw episode records with their reason but are
+  excluded from nominal rates and SNQI-v2 calibration. The event ledger preserves an observed
+  `goal_reached` alongside `invalid_run` only when the versioned spawn block explains the
+  invalid start; that pair is not a successful benchmark row. Rate readers also
+  exclude inconsistent v2 reset telemetry even when its `invalid_run` flag says
+  false. Historical v1 rows retain their original diagnostic comparison behavior.
 * `metrics.collisions`: collision count metric based on distance thresholds. For schema v1 episode
   outputs it must agree with `outcome.collision_event`: positive when the canonical event is true
   and zero when the canonical event is false.
 * `near_misses`: count based on distance thresholds.
-* `min_distance`,  `path_efficiency`: closest approach and shortest/actual path ratio.
+* `min_distance`: closest approach. `path_efficiency`: shortest completion reference / actual
+  travel, among successful runs only; undefined failures are excluded from its mean.
 * `aggregated_time`: implementation-only cooperative completion-time diagnostic. When
   `cooperative_agents` is provided, it returns the maximum first goal-reaching step times
   `EpisodeData.dt` from the explicit `EpisodeData.cooperative_goal_steps` mapping. The legacy
@@ -440,7 +460,9 @@ Unit or source-channel metadata that the registry does not own remains explicitl
 When bootstrap sampling is enabled, aggregate output also includes an additive
 `pairwise_contrasts` block when at least two planner groups share paired episode identities. The
 contrast pairing key is `(scenario_id, seed)` with `seed_index` as a fallback, the reported delta is
-`right_minus_left`, and each
+`right_minus_left`. Duplicate keys within either comparison group are rejected;
+repeated episodes must first be reduced under an explicitly declared repeat policy.
+Each
 metric contrast includes the paired mean delta, percentile bootstrap interval, two-sided bootstrap
 sign p-value, Holm-adjusted p-value, and paired Cohen's dz effect size. Holm correction is applied
 within the current aggregate family (`family="all"`) separately for each metric; run aggregation on
@@ -493,7 +515,8 @@ the full pedestrian-pair force magnitude at contact
 3.7030154332523164 m/s² for radius 0.35 m; the approximate 2.6 in issue #9666 omitted the kernel's
 lateral contribution. This reference is a model comparison, not an empirical discomfort threshold.
 
-`record_simulation_step_trace: true` explicitly enables persistence of `robot_force_samples`,
+`record_simulation_step_trace: true` explicitly enables persistence of
+`algorithm_metadata.robot_force_samples` (outside scalar `metrics`),
 including per-step vectors and pre-integration force inputs. Ordinary episode rows retain only
 reductions and metadata; samples remain in memory for all force reductions. Existing
 post-integration trajectories are unchanged. `recompute_robot_ped_forces(data, cfg)` accepts aligned
@@ -511,3 +534,61 @@ difference (floored at zero for overlap). Velocity uses backward differences, wi
 first sample. At least two samples are required. It is a counterfactual, never applied to dynamics
 or included automatically in the Social Navigation Quality Index. Its reductions use the same
 reference and units. Validation campaign evidence remains separate from release evaluation.
+
+### Campaign reporting cohort counts
+
+New campaign tables use `episodes` for the evidence-eligible N that contributes to
+metric means. `episodes_total` counts all object episode rows run, and
+`episodes_excluded = episodes_total - episodes`. These columns appear in the main,
+core/experimental, parity and scenario/family tables, campaign summary JSON and
+publication payload. The count schema is
+[`campaign-table-row.v2.json`](../robot_sf/benchmark/schemas/campaign-table-row.v2.json)
+and is exported as `reports/campaign_table.schema.json` alongside the tables.
+Historical reports with absent eligibility markers retain their previous N and
+means; readers of old tables default total to `episodes` and excluded to zero.
+
+Legacy SNQI diagnostics filter at the campaign episode collector before baseline
+construction, contract evaluation, calibration, ordering and sensitivity. Their
+`evidence_cohort` block records total, eligible and excluded counts plus exclusion
+reason counts. Invalid or unmeasured spawn takes precedence over foresight
+ineligibility when both apply, so reasons sum to the excluded N.
+
+Scenario/family breakdowns and seed variability retain all-excluded arms with N=0,
+no metric samples, and explicit total/excluded counts. Seed lists/counts describe
+eligible seeds; per-seed rows also retain excluded-only seeds with zero eligible N.
+
+Release acceptance checks planned counts against `episodes_total` (legacy fallback: `episodes`); `invalid_or_unmeasured_spawn` exclusions are named campaign-defect blockers with K, while `foresight_ineligible` exclusions are reported counts and do not themselves block acceptance.
+
+## Sealed 0.0.8 evaluation schedule (D-049)
+
+0.0.8 uses `release_eval_0_0_8` from `configs/benchmarks/seed_sets_0_0_8.yaml`.
+The source of truth is `robot_sf.benchmark.seed_bands.EVAL_SEEDS_0_0_8`; static
+tests bind the YAML to the approved SHA-256 derivation. Both that set and retired
+0.0.7 seeds 111..140 remain forbidden for tuning, development and calibration.
+Development episodes use 1001..1030. Historical `paper_eval_s30` remains unchanged for static validation of archived
+0.0.7 artifacts only; seeds 111..140 must never be stepped again (D-049). The release grid has 48 x 30 = 1,440 identities per arm
+and 14 x 1,440 = 20,160 total; these counts are computed without running episodes.
+See [D-049](release/0.0.8/decisions.md) and the [runbook](release/0.0.8/runbook.md).
+
+
+### Development trace slice and resolved comparator identity
+
+D-057 diagnostics use a separate checkout at the named freeze commit and dev seed
+1001. For a small producer trace slice, run
+`uv run python scripts/validation/generate_step_traces_dev_seeds.py --matrix configs/scenarios/single/francis2023_blind_corner_release_0_0_8_v1.yaml --algo goal --seeds 1001 --horizon 400 --dt 0.1 --out output/dev-traces/episodes.jsonl`,
+then `uv run python scripts/validation/check_step_trace_invariants.py output/dev-traces --fail-on-violation`.
+Record the exact source SHA with the output. Campaign-derived slices must override
+`scenario_overrides.seeds` at matrix level as well as the campaign seed policy,
+and print the resolved per-scenario seed lists before execution; a campaign seed
+policy alone can retain authored scenario seeds. Keep diagnostic traces separate
+from release rows and never acquire traces on sealed seeds.
+
+A `slot-paired-successor.v1` comparator manifest may bind the release loader's
+resolved publication fields through `campaign_config.publication_identity`:
+`{"release_tag": "<resolved tag>", "doi": "<resolved version DOI>"}`. The manifest
+digest covers both fields. The detached source resolver applies exactly these
+two fields, matching `load_release_campaign_config`, before reconstructing the
+campaign runtime hash. All scientific inputs still come from the pinned source;
+additional fields and mismatching runtime hashes are refused. This binding is
+not release-identity verification or scientific admission. Partial development
+comparisons remain diagnostics.

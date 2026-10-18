@@ -1,0 +1,47 @@
+{
+  "anchors_sha256": "dfb48e6846665bd8aa0ce6fdbf3043018ebeafb829347e6b23e47b42c37bab7b",
+  "archive_byte_equivalence": {
+    "files_byte_equal": 98,
+    "status": "pass"
+  },
+  "archive_sha256": "437431ac4bd89b0fed0e15e1bbfd8942d1a672ce556e97a305210d3c5df3c04b",
+  "bundle_raw_rows_byte_equal": true,
+  "calibration_rows": 1344,
+  "calibration_seeds": [
+    1001,
+    1002
+  ],
+  "publication_preflight": {
+    "evidence": {
+      "episode_software_commits": {
+        "d56092ed9d4b442f9dfb99e31010a9f5a8666547": 2016
+      },
+      "goal_reached_timeout_rows": 0,
+      "publication_commit": "d56092ed9d4b442f9dfb99e31010a9f5a8666547",
+      "signed_files": 95,
+      "snqi_field_consistency": {
+        "checked": false,
+        "reason": "legacy_snqi_excluded",
+        "violations": []
+      }
+    },
+    "release_eligible": false,
+    "schema_version": "publication-preflight.v1",
+    "status": "pass",
+    "violation_count": 0,
+    "violations": [],
+    "warnings": []
+  },
+  "rehearsal_seeds": [
+    1001,
+    1002,
+    1003
+  ],
+  "release_eligible": false,
+  "scored_rows": 2016,
+  "snqi_v2_max": 0.9846637253898749,
+  "snqi_v2_min": -2.5333852126979393,
+  "snqi_v2_recomputed_rows": 2016,
+  "source": "d56092ed9d4b442f9dfb99e31010a9f5a8666547",
+  "source_declared_routed_rows": 6
+}

@@ -56,7 +56,7 @@ FAILURE_CONCLUSIONS = {
 }
 PENDING_STATUSES = {"expected", "in_progress", "pending", "queued", "requested", "waiting"}
 QUEUE_STATUSES = {"queued", "requested", "waiting"}
-REQUIRED_CHECKS_SOURCE = "check_ci_needs.REQUIRED_JOBS"
+REQUIRED_CHECKS_SOURCE = "check_ci_needs.REQUIRED_JOBS+AGGREGATE_JOB"
 REQUIRED_CHECKS_ABSENT = "required_checks_absent"
 NO_REQUIRED_CHECKS_CONFIGURED = "no_required_checks_configured"
 DOCS_ONLY_SUCCESS_REASON = "ci_not_required_docs_only"
@@ -264,20 +264,18 @@ def _classify_required_checks(
 ) -> dict[str, Any]:
     """Compare an effective rollup against the declared required-check identities.
 
-    A green aggregate ``ci`` check is accepted as proof for every required job
-    identity because that job is the workflow's own enforcement of the required
-    needs manifest.  Without it, each identity must be present and green on its
-    own (matrix jobs match their ``<job> (<params>)`` display names).  An empty
-    identity set means no required CI contract is configured and is reported as
-    such instead of as a silent success.
+    A green full-run ``ci`` check on the PR head proves every required job
+    identity because that job enforces the required needs manifest. The
+    draft-only ``ci-draft`` check and individual jobs cannot replace it.
+    An empty manifest means no required CI contract is configured.
     """
-    identities = (
+    declared = (
         tuple(required_identities)
         if required_identities is not None
         else required_check_identities()
     )
     observed = [_rollup_name(check) for check in rollup]
-    if not identities:
+    if not declared:
         return {
             "source": REQUIRED_CHECKS_SOURCE,
             "expected": [],
@@ -287,6 +285,7 @@ def _classify_required_checks(
             "not_green": [],
             "reason": NO_REQUIRED_CHECKS_CONFIGURED,
         }
+    identities = (AGGREGATE_JOB, *(job for job in declared if job != AGGREGATE_JOB))
     aggregate_green = any(
         _required_identity_matches(_rollup_name(check), AGGREGATE_JOB)
         and _required_check_is_green(check)

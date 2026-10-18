@@ -1,0 +1,22 @@
+{
+  "freeze": "66f402ba176b13e45210d0da0b2cf20fcdc0cc02",
+  "base": "53f8f2666e98d00b70a8ef5376790be474a743aa",
+  "files_at_freeze": 1359,
+  "freeze_to_base_preexisting_changes": [
+    "configs/adversarial/issue_8891_temporal_robustness_packet.yaml",
+    "configs/benchmarks/releases/benchmark_data_release_s30_h600.template.yaml",
+    "configs/benchmarks/releases/benchmark_data_release_s30_h600_zenodo_metadata.template.json",
+    "configs/benchmarks/releases/three_width_doorway_release_0_0_8_v1.template.yaml",
+    "configs/benchmarks/releases/three_width_doorway_release_0_0_8_v1_zenodo_metadata.template.json"
+  ],
+  "base_config_map_tree_sha256": "a04eba285b6f64bc110432f0ff5c304c457a2cdce196465f86c07a094f6265b3",
+  "freeze_config_map_tree_sha256": "000b2d85e8fd66c71a110fe859f83db7ea09838ec4f29ec5056039375114e86a",
+  "final_config_map_tree_sha256": "a04eba285b6f64bc110432f0ff5c304c457a2cdce196465f86c07a094f6265b3",
+  "changed_config_or_map_paths_from_base": [],
+  "preserves_all_base_config_map_bytes": true,
+  "interpretation": "Five freeze-to-main changes predate this branch; this patch changes no config/map bytes, including every 0.0.8 scenario and planner config.",
+  "raw_byte_compared_files": 1359,
+  "raw_base_file_sha256_manifest_digest": "7f775d78b6c3830aba8df5d223c476096218855f7bb3b0fd032fce269f85b6c4",
+  "raw_final_file_sha256_manifest_digest": "7f775d78b6c3830aba8df5d223c476096218855f7bb3b0fd032fce269f85b6c4",
+  "raw_byte_differences": []
+}

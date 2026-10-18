@@ -238,6 +238,7 @@ def resolve_termination_reason(
     success: bool,
     collision: bool,
     reached_max_steps: bool = False,
+    timeout: bool = False,
     had_error: bool = False,
 ) -> str:
     """Resolve a normalized termination reason from step outcomes.
@@ -245,6 +246,8 @@ def resolve_termination_reason(
     Precedence is: ``error`` > terminal/truncation signals > info flags.
     When both ``success`` and ``collision`` are true, ``collision`` wins to
     match collision-aware success semantics in benchmark metrics.
+    A simulator timeout at the runner budget is ``max_steps`` after collision
+    and success checks. Other terminal events retain ``terminated``.
     If no signal is present at all, the resolver defaults to ``"max_steps"``.
 
     Returns:
@@ -257,6 +260,8 @@ def resolve_termination_reason(
             return "collision"
         if success:
             return "success"
+        if timeout and reached_max_steps:
+            return "max_steps"
         return "terminated"
     if truncated:
         return "truncated"

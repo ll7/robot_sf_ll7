@@ -1,0 +1,446 @@
+{
+  "base_head": "1bd98ca26d181fea6fd6e95ef95cd149c9198433",
+  "observation_capture_head": "b3fa204dc4eda5004d67e4fcf518f3370fcd0966",
+  "evidence_tier": "diagnostic-only",
+  "scenarios": [
+    "classic_bottleneck_medium",
+    "classic_doorway_low"
+  ],
+  "seeds": [
+    1001,
+    1002,
+    1003
+  ],
+  "phases": {
+    "before": {
+      "elapsed_s": 8.958163134055212,
+      "observations": 426,
+      "provenance": {
+        "seeds": [
+          1001,
+          1002,
+          1003
+        ],
+        "scenarios": [
+          "classic_doorway_low",
+          "classic_bottleneck_medium"
+        ],
+        "trajectory_policy": "collector goal policy; comparator replays exact captured observation arrays",
+        "observation_snapshot_sha256": "69b5064421d4b0fd46db8144743ba2ff7e7ba9edec7a60f2a1e6390bddd4d4c1",
+        "predictor_fallback": false,
+        "mppi_predictor_fallback": false
+      },
+      "by_scenario": {
+        "classic_bottleneck_medium": {
+          "observations": 269,
+          "collector_velocity_error_m_s": {
+            "base": {
+              "mean": 0.7288983410508216,
+              "maximum": 0.9855927228927612
+            },
+            "hardcase": {
+              "mean": 0.7288983410508216,
+              "maximum": 0.9855927228927612
+            }
+          },
+          "wall_facing_control": {
+            "single": {
+              "nonzero_count": 0,
+              "maximum_cost_delta": 0.0,
+              "mean_cost_delta": 0.0
+            },
+            "sequence": {
+              "nonzero_count": 0,
+              "maximum_cost_delta": 0.0,
+              "mean_cost_delta": 0.0
+            }
+          },
+          "prediction_heading_counts": [
+            3
+          ],
+          "mppi_anchor_heading_counts": [
+            3
+          ],
+          "pedestrian_occupancy_control": {
+            "single": {
+              "nonzero_count": 2,
+              "maximum_cost_delta": 0.0625
+            },
+            "sequence": {
+              "nonzero_count": 2,
+              "maximum_cost_delta": 0.0625
+            }
+          },
+          "pedestrian_occupancy_example": {
+            "scenario": "classic_bottleneck_medium",
+            "observation_sha256": "a74b34774af75dd67fc34c047e142579477fe6c69d1d54e83f9e1da261d99771",
+            "seed": 1001,
+            "tick": 100,
+            "pedestrian_occupancy_control": [
+              0.03125,
+              0.03125
+            ]
+          },
+          "example": {
+            "scenario": "classic_bottleneck_medium",
+            "observation_sha256": "bd92bb23cd0e88588ea2f3281b36183918d8eddf3f00a972b7ce9afc07271c39",
+            "seed": 1001,
+            "tick": 0,
+            "heading": -1.575972080230713,
+            "ped_count": 1,
+            "collector_velocity_error": {
+              "base": 0.7089342474937439,
+              "hardcase": 0.7089342474937439
+            },
+            "wall_facing_control": [
+              2.1213206765716217,
+              0.0,
+              0.0
+            ],
+            "heading_rates": [
+              -1.0,
+              0.0,
+              1.0
+            ],
+            "mppi_heading_rates": [
+              -1.0,
+              0.0,
+              1.0
+            ],
+            "mppi_horizon": {
+              "24": {
+                "steps": 8,
+                "error": null
+              },
+              "4": {
+                "steps": 8,
+                "error": null
+              }
+            }
+          }
+        },
+        "classic_doorway_low": {
+          "observations": 157,
+          "collector_velocity_error_m_s": {
+            "base": {
+              "mean": 1.1968294245422266,
+              "maximum": 1.2921674251556396
+            },
+            "hardcase": {
+              "mean": 1.1968294245422266,
+              "maximum": 1.2921674251556396
+            }
+          },
+          "wall_facing_control": {
+            "single": {
+              "nonzero_count": 0,
+              "maximum_cost_delta": 0.0,
+              "mean_cost_delta": 0.0
+            },
+            "sequence": {
+              "nonzero_count": 0,
+              "maximum_cost_delta": 0.0,
+              "mean_cost_delta": 0.0
+            }
+          },
+          "prediction_heading_counts": [
+            3
+          ],
+          "mppi_anchor_heading_counts": [
+            3
+          ],
+          "pedestrian_occupancy_control": {
+            "single": {
+              "nonzero_count": 0,
+              "maximum_cost_delta": 0.0
+            },
+            "sequence": {
+              "nonzero_count": 0,
+              "maximum_cost_delta": 0.0
+            }
+          },
+          "pedestrian_occupancy_example": null,
+          "example": {
+            "scenario": "classic_doorway_low",
+            "observation_sha256": "03e08055a060c694e4d0db0542ec2672acd5c948602724e49cb0372779c9c87e",
+            "seed": 1001,
+            "tick": 0,
+            "heading": -2.783853769302368,
+            "ped_count": 3,
+            "collector_velocity_error": {
+              "base": 0.9840455055236816,
+              "hardcase": 0.9840455055236816
+            },
+            "wall_facing_control": [
+              6.736468392630024,
+              0.0,
+              0.0
+            ],
+            "heading_rates": [
+              -1.0,
+              0.0,
+              1.0
+            ],
+            "mppi_heading_rates": [
+              -1.0,
+              0.0,
+              1.0
+            ],
+            "mppi_horizon": {
+              "24": {
+                "steps": 8,
+                "error": null
+              },
+              "4": {
+                "steps": 8,
+                "error": null
+              }
+            }
+          }
+        }
+      },
+      "mppi_horizon_requests": {
+        "24": {
+          "steps": 8,
+          "error": null
+        },
+        "4": {
+          "steps": 8,
+          "error": null
+        }
+      }
+    },
+    "after": {
+      "elapsed_s": 15.992420008871704,
+      "observations": 426,
+      "provenance": {
+        "seeds": [
+          1001,
+          1002,
+          1003
+        ],
+        "scenarios": [
+          "classic_doorway_low",
+          "classic_bottleneck_medium"
+        ],
+        "trajectory_policy": "collector goal policy; comparator replays exact captured observation arrays",
+        "observation_snapshot_sha256": "69b5064421d4b0fd46db8144743ba2ff7e7ba9edec7a60f2a1e6390bddd4d4c1",
+        "predictor_fallback": false,
+        "mppi_predictor_fallback": false
+      },
+      "by_scenario": {
+        "classic_bottleneck_medium": {
+          "observations": 269,
+          "collector_velocity_error_m_s": {
+            "base": {
+              "mean": 0.0,
+              "maximum": 0.0
+            },
+            "hardcase": {
+              "mean": 0.0,
+              "maximum": 0.0
+            }
+          },
+          "wall_facing_control": {
+            "single": {
+              "nonzero_count": 19,
+              "maximum_cost_delta": 0.09375,
+              "mean_cost_delta": 0.00383364312267658
+            },
+            "sequence": {
+              "nonzero_count": 19,
+              "maximum_cost_delta": 0.09375,
+              "mean_cost_delta": 0.00383364312267658
+            }
+          },
+          "prediction_heading_counts": [
+            7,
+            11
+          ],
+          "mppi_anchor_heading_counts": [
+            7,
+            11
+          ],
+          "pedestrian_occupancy_control": {
+            "single": {
+              "nonzero_count": 2,
+              "maximum_cost_delta": 0.09375
+            },
+            "sequence": {
+              "nonzero_count": 2,
+              "maximum_cost_delta": 0.09375
+            }
+          },
+          "pedestrian_occupancy_example": {
+            "scenario": "classic_bottleneck_medium",
+            "observation_sha256": "a74b34774af75dd67fc34c047e142579477fe6c69d1d54e83f9e1da261d99771",
+            "seed": 1001,
+            "tick": 100,
+            "pedestrian_occupancy_control": [
+              0.046875,
+              0.046875
+            ]
+          },
+          "example": {
+            "scenario": "classic_bottleneck_medium",
+            "observation_sha256": "66311f5742d17ce38c095ee4ba6a2bd224b10ce12943da6c92954dc2f665fe6b",
+            "seed": 1001,
+            "tick": 70,
+            "heading": -1.4815282821655273,
+            "ped_count": 1,
+            "collector_velocity_error": {
+              "base": 0.0,
+              "hardcase": 0.0
+            },
+            "wall_facing_control": [
+              1.3038407276910229,
+              0.03125,
+              0.03125
+            ],
+            "heading_rates": [
+              -0.9817475,
+              -0.65449875,
+              -0.32724875,
+              0.0,
+              0.32724875,
+              0.65449875,
+              0.9817475
+            ],
+            "mppi_heading_rates": [
+              -0.9817475,
+              -0.65449875,
+              -0.32724875,
+              0.0,
+              0.32724875,
+              0.65449875,
+              0.9817475
+            ],
+            "mppi_horizon": {
+              "8": {
+                "steps": 8,
+                "error": null
+              },
+              "24": {
+                "steps": null,
+                "error": "predictive_mppi horizon_steps=24 exceeds or is outside the model's supported horizon of 8 steps; use 1..8. Longer forecasts require a validated predictor, not silent capping or extrapolation."
+              },
+              "4": {
+                "steps": 4,
+                "error": null
+              }
+            }
+          }
+        },
+        "classic_doorway_low": {
+          "observations": 157,
+          "collector_velocity_error_m_s": {
+            "base": {
+              "mean": 0.0,
+              "maximum": 0.0
+            },
+            "hardcase": {
+              "mean": 0.0,
+              "maximum": 0.0
+            }
+          },
+          "wall_facing_control": {
+            "single": {
+              "nonzero_count": 7,
+              "maximum_cost_delta": 0.09375,
+              "mean_cost_delta": 0.002786624203821656
+            },
+            "sequence": {
+              "nonzero_count": 7,
+              "maximum_cost_delta": 0.09375,
+              "mean_cost_delta": 0.002786624203821656
+            }
+          },
+          "prediction_heading_counts": [
+            7,
+            11
+          ],
+          "mppi_anchor_heading_counts": [
+            7,
+            11
+          ],
+          "pedestrian_occupancy_control": {
+            "single": {
+              "nonzero_count": 0,
+              "maximum_cost_delta": 0.0
+            },
+            "sequence": {
+              "nonzero_count": 0,
+              "maximum_cost_delta": 0.0
+            }
+          },
+          "pedestrian_occupancy_example": null,
+          "example": {
+            "scenario": "classic_doorway_low",
+            "observation_sha256": "b0114311c71f15c7e994ec3e2b381509185eb4ebda82c99c0219f11b7398b477",
+            "seed": 1001,
+            "tick": 55,
+            "heading": -2.499518871307373,
+            "ped_count": 3,
+            "collector_velocity_error": {
+              "base": 0.0,
+              "hardcase": 0.0
+            },
+            "wall_facing_control": [
+              1.2727922167448644,
+              0.03125,
+              0.03125
+            ],
+            "heading_rates": [
+              -0.9817475,
+              -0.65449875,
+              -0.32724875,
+              0.0,
+              0.32724875,
+              0.65449875,
+              0.9817475
+            ],
+            "mppi_heading_rates": [
+              -0.9817475,
+              -0.65449875,
+              -0.32724875,
+              0.0,
+              0.32724875,
+              0.65449875,
+              0.9817475
+            ],
+            "mppi_horizon": {
+              "8": {
+                "steps": 8,
+                "error": null
+              },
+              "24": {
+                "steps": null,
+                "error": "predictive_mppi horizon_steps=24 exceeds or is outside the model's supported horizon of 8 steps; use 1..8. Longer forecasts require a validated predictor, not silent capping or extrapolation."
+              },
+              "4": {
+                "steps": 4,
+                "error": null
+              }
+            }
+          }
+        }
+      },
+      "mppi_horizon_requests": {
+        "8": {
+          "steps": 8,
+          "error": null
+        },
+        "24": {
+          "steps": null,
+          "error": "predictive_mppi horizon_steps=24 exceeds or is outside the model's supported horizon of 8 steps; use 1..8. Longer forecasts require a validated predictor, not silent capping or extrapolation."
+        },
+        "4": {
+          "steps": 4,
+          "error": null
+        }
+      }
+    }
+  },
+  "matched_observation_bytes_equal": true,
+  "matched_observables_equal": true
+}

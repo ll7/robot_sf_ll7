@@ -1,0 +1,7 @@
+{
+  "artifact_path": "docs/validation/bicycle_wrapper_probe_episodes.csv",
+  "artifact_sha256": "6204eeb3947e4b472da45cb7136793ed6551d7b23ca5eb965b8c2ef87ea915c8",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "evidence-review-marker.v1"
+}

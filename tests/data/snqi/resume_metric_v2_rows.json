@@ -1,0 +1,104 @@
+[
+  {
+    "scenario_id": "francis2023_leave_group",
+    "seed": 1001,
+    "metrics": {
+      "metric_schema_version": "robot-sf-metrics.v2",
+      "time_to_goal_norm": 1.0,
+      "collisions": 0,
+      "near_misses": 0,
+      "min_distance": 7.745123207653685,
+      "path_efficiency": null,
+      "force_exceed_events": 0,
+      "comfort_exposure": 0.0,
+      "jerk_mean": 0.0,
+      "curvature_mean": 0.0,
+      "energy": 0.0
+    }
+  },
+  {
+    "scenario_id": "francis2023_leave_group",
+    "seed": 1002,
+    "metrics": {
+      "metric_schema_version": "robot-sf-metrics.v2",
+      "time_to_goal_norm": 1.0,
+      "collisions": 0,
+      "near_misses": 0,
+      "min_distance": 7.341068619013471,
+      "path_efficiency": null,
+      "force_exceed_events": 0,
+      "comfort_exposure": 0.0,
+      "jerk_mean": 0.0,
+      "curvature_mean": 0.0,
+      "energy": 0.0
+    }
+  },
+  {
+    "scenario_id": "francis2023_leave_group",
+    "seed": 1003,
+    "metrics": {
+      "metric_schema_version": "robot-sf-metrics.v2",
+      "time_to_goal_norm": 1.0,
+      "collisions": 0,
+      "near_misses": 0,
+      "min_distance": 8.195741938704208,
+      "path_efficiency": null,
+      "force_exceed_events": 0,
+      "comfort_exposure": 0.0,
+      "jerk_mean": 0.0,
+      "curvature_mean": 0.0,
+      "energy": 0.0
+    }
+  },
+  {
+    "scenario_id": "francis2023_blind_corner",
+    "seed": 1001,
+    "metrics": {
+      "metric_schema_version": "robot-sf-metrics.v2",
+      "time_to_goal_norm": 1.0,
+      "collisions": 0,
+      "near_misses": 0,
+      "min_distance": 30.30087623359241,
+      "path_efficiency": null,
+      "force_exceed_events": 0,
+      "comfort_exposure": 0.0,
+      "jerk_mean": 0.0,
+      "curvature_mean": 0.0,
+      "energy": 0.0
+    }
+  },
+  {
+    "scenario_id": "francis2023_blind_corner",
+    "seed": 1002,
+    "metrics": {
+      "metric_schema_version": "robot-sf-metrics.v2",
+      "time_to_goal_norm": 1.0,
+      "collisions": 0,
+      "near_misses": 0,
+      "min_distance": 30.090206575142332,
+      "path_efficiency": null,
+      "force_exceed_events": 0,
+      "comfort_exposure": 0.0,
+      "jerk_mean": 0.0,
+      "curvature_mean": 0.0,
+      "energy": 0.0
+    }
+  },
+  {
+    "scenario_id": "francis2023_blind_corner",
+    "seed": 1003,
+    "metrics": {
+      "metric_schema_version": "robot-sf-metrics.v2",
+      "time_to_goal_norm": 1.0,
+      "collisions": 0,
+      "near_misses": 0,
+      "min_distance": 31.76232536054247,
+      "path_efficiency": null,
+      "force_exceed_events": 0,
+      "comfort_exposure": 0.0,
+      "jerk_mean": 0.0,
+      "curvature_mean": 0.0,
+      "energy": 0.0
+    }
+  }
+]

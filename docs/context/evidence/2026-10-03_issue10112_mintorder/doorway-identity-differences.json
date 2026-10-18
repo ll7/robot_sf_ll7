@@ -1,0 +1,60 @@
+{
+  "claim_boundary": "Template/config transitions only; regenerate concrete doorway identity at named freeze.",
+  "doorway_additional_field_groups": 4,
+  "doorway_additional_leaf_fields": [
+    {
+      "field": "canonical_campaign_config",
+      "new": "../paper_experiment_matrix_v2_h600_s30_three_width_doorway_v2.yaml",
+      "old": "../paper_experiment_matrix_v2_h600_s30_three_width_doorway_v1.yaml"
+    },
+    {
+      "field": "canonical_campaign_name",
+      "new": "paper_experiment_matrix_v2_h600_s30_three_width_doorway_v2",
+      "old": "paper_experiment_matrix_v2_h600_s30_three_width_doorway_v1"
+    },
+    {
+      "field": "snqi_baseline.path",
+      "new": null,
+      "old": "../snqi_baseline_camera_ready_v3.json"
+    },
+    {
+      "field": "snqi_baseline.sha256",
+      "new": null,
+      "old": "329ca5766491e1587979d0a435c7ba676e148ccdff97040a36546bbb9414035a"
+    },
+    {
+      "field": "snqi_weights.path",
+      "new": null,
+      "old": "../snqi_weights_camera_ready_v3.json"
+    },
+    {
+      "field": "snqi_weights.sha256",
+      "new": null,
+      "old": "71a67c3c02faff166f8c96bef8bcf898533981ca2b2c4493829988520fb1aeb2"
+    }
+  ],
+  "main_difference_fields": 18,
+  "producer_source": "d56092ed9d4b442f9dfb99e31010a9f5a8666547",
+  "snqi_v2_binding": {
+    "acquisition_config": {
+      "location": "Tracked producer template; resolve relative to configs/benchmarks/releases at d56092ed.",
+      "path": "../snqi_v2/calibration.dev1001_1002_scheduled_acquisition.yaml",
+      "sha256": "fe55f5efb6fd885ae86fc978dffc01afd5928fba75128442a6dcd88ae9e94ff3"
+    },
+    "anchors": {
+      "location": "Tracked producer template; resolve relative to configs/benchmarks/releases at d56092ed.",
+      "path": "../snqi_v2/anchors.v2.0.json",
+      "sha256": "bb1a526c818efca16c6d4237127c27dc7812947758f78a18c8f1d28c2a65fa4c"
+    },
+    "family": {
+      "location": "Tracked producer template; resolve relative to configs/benchmarks/releases at d56092ed.",
+      "path": "../snqi_v2/family.v2.0.yaml",
+      "sha256": "6ba0e5f4c1e1d5530e4ae773e22f811e2af9ee39f975c4e42554ca167ea09942"
+    },
+    "weights": {
+      "location": "Tracked producer template; resolve relative to configs/benchmarks/releases at d56092ed.",
+      "path": "../snqi_v2/weights.v2.0.json",
+      "sha256": "684db941093dbd05dc87f3e59e9492494e6f2876f2d05997341a4291de033a25"
+    }
+  }
+}

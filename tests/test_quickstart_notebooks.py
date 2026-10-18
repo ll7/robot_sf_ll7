@@ -18,6 +18,7 @@ from pathlib import Path
 import nbformat
 import pytest
 
+from robot_sf.evidence.writers import write_json
 from scripts.validation.run_notebooks_smoke import discover_notebooks
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -32,6 +33,55 @@ def _load(name: str) -> nbformat.notebooknode:
     """Load a committed notebook from ``notebooks/``."""
     path = REPO_ROOT / "notebooks" / name
     return nbformat.read(path, as_version=4)
+
+
+@pytest.mark.parametrize("successful_efficiency", [None, 0.75])
+def test_notebook_02_charts_success_only_metrics(tmp_path, successful_efficiency) -> None:
+    """Persisted null efficiency stays unavailable in both failed and mixed comparisons."""
+    import matplotlib.pyplot as plt
+    import numpy as np
+
+    records = {
+        planner: {
+            "metrics": {
+                "collisions": 0,
+                "avg_speed": 0.5,
+                "socnavbench_path_length": 2.0,
+                "path_efficiency": efficiency,
+            }
+        }
+        for planner, efficiency in (("simple_policy", None), ("random", successful_efficiency))
+    }
+    records_path = tmp_path / "records.json"
+    write_json(records_path, {"records": records})
+    persisted = json.loads(records_path.read_text(encoding="utf-8"))["records"]
+    namespace = {
+        "np": np,
+        "plt": plt,
+        "records": persisted,
+        "PLANNERS": ["simple_policy", "random"],
+        "SEED": 1001,
+        "HORIZON": 60,
+        "OUTPUT_DIR": tmp_path,
+        "REPO_ROOT": tmp_path,
+        "_inline_matplotlib": lambda: None,
+    }
+    source = _generated_cell_source(_load("02_compare_two_planners.ipynb"), "metric_keys =")
+    try:
+        exec(compile(source, "<notebook-02-chart>", "exec"), namespace)  # noqa: S102
+        values = namespace["values"]
+        assert np.isnan(values[0, 3])
+        if successful_efficiency is None:
+            assert np.isnan(values[1, 3])
+        else:
+            assert values[1, 3] == successful_efficiency
+        np.testing.assert_array_equal(values[:, :3], [[0.0, 0.5, 2.0]] * 2)
+        labels = [text.get_text() for text in namespace["axes"][3].texts]
+        assert labels == ["N/A", "N/A" if successful_efficiency is None else "0.75"]
+        assert persisted == records
+        assert (tmp_path / "planner_comparison.png").is_file()
+    finally:
+        plt.close("all")
 
 
 @pytest.mark.parametrize("name", EXPECTED_NOTEBOOKS)

@@ -102,6 +102,33 @@ def _write_projection_entry(
     return path
 
 
+def test_candidate_config_path_binds_sha256(tmp_path: Path) -> None:
+    """A tuning log candidate's config path binds its hash to the tracked file."""
+    linter = _load_linter()
+    repo, evidence, _commit, config_sha256 = _make_repo(tmp_path)
+    record = evidence / "candidate-config.json"
+    record.write_text(
+        json.dumps(
+            {
+                "provenance": {
+                    "candidate_configs": {
+                        "candidate": {
+                            "path": "configs/campaign.yaml",
+                            "sha256": config_sha256,
+                        }
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    findings = linter._artifact_findings(
+        repo, record.relative_to(repo), json.loads(record.read_text())
+    )
+    assert findings == []
+
+
 def _historical_binding_fixture(
     tmp_path: Path,
     linter,
@@ -1165,6 +1192,58 @@ def test_artifact_manifest_paths_are_repository_root_relative(tmp_path: Path) ->
     repository_relative_report = linter.lint_evidence_registry(repo, evidence)
 
     assert repository_relative_report["issues"] == []
+
+
+def test_evidence_bundle_paths_resolve_against_declared_source_root(tmp_path: Path) -> None:
+    """The evidence_bundle.v1 file index is relative to its explicit source_root."""
+    linter = _load_linter()
+    repo, evidence, _commit, _config_sha256 = _make_repo(tmp_path)
+    payload = evidence / "bundle" / "payload"
+    payload.mkdir(parents=True)
+    artifact = payload / "summary.json"
+    artifact.write_text('{"result": "preserved"}\n', encoding="utf-8")
+    _git(repo, "add", ".")
+    _git(repo, "commit", "-qm", "track evidence bundle payload")
+    manifest_path = evidence / "bundle" / "evidence_bundle_manifest.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "evidence_bundle.v1",
+                "source_root": "docs/context/evidence/bundle/payload",
+                "files": [
+                    {
+                        "path": "summary.json",
+                        "sha256": hashlib.sha256(artifact.read_bytes()).hexdigest(),
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    report = linter.lint_evidence_registry(repo, evidence)
+
+    assert report["issues"] == []
+
+
+def test_resolved_path_binds_a_tracked_source_file(tmp_path: Path) -> None:
+    """A provenance ``resolved_path`` binds the adjacent SHA-256 to source bytes."""
+    linter = _load_linter()
+    repo, evidence, _commit, _config_sha256 = _make_repo(tmp_path)
+    provenance = evidence / "resolved.json"
+    provenance.write_text(
+        json.dumps(
+            {
+                "resolved_path": "configs/campaign.yaml",
+                "sha256": hashlib.sha256((repo / "configs/campaign.yaml").read_bytes()).hexdigest(),
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    report = linter.lint_evidence_registry(repo, evidence)
+
+    assert report["issues"] == []
 
 
 def test_config_hash_mismatch_is_classified(tmp_path: Path) -> None:

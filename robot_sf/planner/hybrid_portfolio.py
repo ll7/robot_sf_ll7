@@ -24,6 +24,7 @@ from robot_sf.planner.socnav import (
     PredictionPlannerAdapter,
     SocNavPlannerConfig,
 )
+from robot_sf.planner.socnav_base import _SOCNAV_CONFIG_INIT_KEYS
 
 _DEFAULT_DENSE_PED_COUNT = 6
 _DEFAULT_HYSTERESIS_STEPS = 6
@@ -259,7 +260,7 @@ def build_hybrid_portfolio_build_config(cfg: dict[str, Any] | None) -> HybridPor
     mppi_raw = cfg.get("mppi_social", {}) if isinstance(cfg.get("mppi_social"), dict) else {}
 
     # Keep SocNav-compatible keys in root to preserve existing ORCA/prediction config format.
-    allowed = {f.name for f in fields(SocNavPlannerConfig)}
+    allowed = {f.name for f in fields(SocNavPlannerConfig)} | _SOCNAV_CONFIG_INIT_KEYS
     socnav_kwargs = {k: v for k, v in cfg.items() if k in allowed}
     socnav = SocNavPlannerConfig(**socnav_kwargs)
 

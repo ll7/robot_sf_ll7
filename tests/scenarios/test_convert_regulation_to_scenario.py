@@ -467,6 +467,27 @@ class TestMapFileResolution:
     def test_map_file_for_output_returns_string(self) -> None:
         assert isinstance(_map_file_for_output("shared_space"), str)
 
+    def test_output_yaml_relative_map_survives_symlinked_directory(self, tmp_path: Path) -> None:
+        """A symlink at a different depth must not change the generated map target."""
+        physical_directory = tmp_path / "physical" / "nested"
+        physical_directory.mkdir(parents=True)
+        alias = tmp_path / "alias"
+        alias.symlink_to(physical_directory, target_is_directory=True)
+        output_path = alias / "not-created-yet" / "scenario.yaml"
+        params = compile_regulation_excerpt("Max speed 1.0 m/s in shared spaces.")
+        payload = _build_scenario_payload(
+            VALID_RECORD["regulation"], params, output_path=output_path
+        )
+        map_file = payload["scenarios"][0]["map_file"]
+        expected_map = (
+            Path(__file__).resolve().parents[2] / "maps/svg_maps/classic_merging.svg"
+        ).resolve()
+
+        assert not Path(map_file).is_absolute()
+        assert _resolve_generated_map_file(output_path, map_file) == expected_map
+        assert _resolve_generated_map_file(output_path.resolve(), map_file) == expected_map
+        assert expected_map.is_file()
+
 
 # ---------------------------------------------------------------------------
 # Integration (end-to-end convert_regulation_record)

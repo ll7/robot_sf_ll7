@@ -224,6 +224,7 @@ class _SimulatorSnapshot:
     pedestrian_groups: dict[Any, Any] | None = None
     pedestrian_group_by_ped: dict[Any, Any] | None = None
     behavior_rng_states: dict[str, Any] | None = None
+    simulator_rng_states: dict[str, Any] | None = None
     residual_adversary: Any = None
     ped_max_speeds: np.ndarray | None = None
     python_random_state: Any = None
@@ -543,7 +544,7 @@ def _capture_behavior_rng_states(peds_behaviors: list[Any]) -> dict[str, Any]:
     captured: dict[str, Any] = {}
     for index, behavior in enumerate(peds_behaviors):
         identity = _stable_behavior_identity(index, behavior)
-        for attribute in ("rng", "_rng"):
+        for attribute in sorted(vars(behavior)):
             generator = getattr(behavior, attribute, None)
             bit_generator = getattr(generator, "bit_generator", None)
             if bit_generator is not None:
@@ -560,7 +561,7 @@ def _behavior_rng_targets(peds_behaviors: list[Any]) -> list[tuple[str, int, Any
     targets: list[tuple[str, int, Any]] = []
     for index, behavior in enumerate(peds_behaviors):
         identity = _stable_behavior_identity(index, behavior)
-        for attribute in ("rng", "_rng"):
+        for attribute in sorted(vars(behavior)):
             generator = getattr(behavior, attribute, None)
             bit_generator = getattr(generator, "bit_generator", None)
             if bit_generator is not None:
@@ -1232,6 +1233,7 @@ class SimulatorCounterfactualModel:
             pedestrian_group_by_ped=pedestrian_group_by_ped,
             residual_adversary=deepcopy(getattr(self.sim, "_residual_adversary", None)),
             behavior_rng_states=behavior_rng_states,
+            simulator_rng_states=_capture_behavior_rng_states([self.sim]),
             ped_max_speeds=None if max_speeds is None else np.asarray(max_speeds).copy(),
             python_random_state=deepcopy(random.getstate()) if self.capture_rng else None,
             residual_adversary_state=_capture_residual_adversary_state(self.sim),
@@ -1294,6 +1296,7 @@ class SimulatorCounterfactualModel:
             )
             _synchronize_pysf_groups(self.sim)
         _restore_behavior_rng_states(self.sim.peds_behaviors, snapshot.behavior_rng_states)
+        _restore_behavior_rng_states([self.sim], snapshot.simulator_rng_states)
         if snapshot.residual_adversary is not None:
             self.sim._residual_adversary = deepcopy(snapshot.residual_adversary)
         elif (

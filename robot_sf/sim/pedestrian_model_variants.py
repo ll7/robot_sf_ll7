@@ -5,6 +5,11 @@ from __future__ import annotations
 from math import atan2
 
 import numpy as np
+from pysocialforce.config import (
+    SOCIAL_FORCE_KERNEL_LEGACY_UNWRAPPED_V1,
+    SOCIAL_FORCE_KERNEL_WRAPPED_V2,
+    resolve_social_force_kernel_version,
+)
 from pysocialforce.scene import EXPLICIT_EULER, normalize_integration_scheme
 
 from robot_sf.common.math_utils import wrap_angle_pi_array
@@ -385,6 +390,7 @@ def _pairwise_social_force_kernel(
     n_prime: int,
     lambda_importance: float,
     gamma: float,
+    kernel_version: str | None = None,
 ) -> np.ndarray:
     """Vectorized NumPy port of PySocialForce's ``social_force_ped_ped`` kernel.
 
@@ -403,10 +409,14 @@ def _pairwise_social_force_kernel(
         n_prime: Angular decay-shape parameter for the velocity-aligned component.
         lambda_importance: Weight of relative velocity in the interaction direction.
         gamma: Scale factor for the interaction range parameter ``B``.
+        kernel_version: Explicit angle-kernel version; missing preserves the
+            historical unwrapped behavior.
 
     Returns:
         Per-pair force array with the same shape as ``pos_diff``.
     """
+    resolved_kernel_version = resolve_social_force_kernel_version(kernel_version)
+
     # norm_vec(pos_diff): unit direction and length, with the zero vector mapped to
     # (itself, 0) exactly as ``pysocialforce.forces.norm_vec`` does (avoids 0/0 -> NaN).
     diff_length = np.sqrt(pos_diff[..., 0] ** 2 + pos_diff[..., 1] ** 2)
@@ -431,6 +441,8 @@ def _pairwise_social_force_kernel(
     theta = np.arctan2(interaction_dir[..., 1], interaction_dir[..., 0]) - np.arctan2(
         diff_dir[..., 1], diff_dir[..., 0]
     )
+    if resolved_kernel_version == SOCIAL_FORCE_KERNEL_WRAPPED_V2:
+        theta = (theta + np.pi) % (2.0 * np.pi) - np.pi
     theta_sign = np.where(theta >= 0.0, 1.0, -1.0)
     b = gamma * interaction_length + 1e-8  # the reference kernel's interaction-range ``B``
 
@@ -450,7 +462,7 @@ def _pairwise_social_force_kernel(
     return force
 
 
-def pairwise_social_force_contributions(
+def pairwise_social_force_contributions(  # noqa: PLR0913
     positions: np.ndarray,
     velocities: np.ndarray,
     *,
@@ -460,6 +472,7 @@ def pairwise_social_force_contributions(
     lambda_importance: float,
     gamma: float,
     factor: float,
+    kernel_version: str | None = None,
 ) -> np.ndarray:
     """Return per-pair pedestrian-pedestrian social-force contributions ``(N, N, 2)``.
 
@@ -497,6 +510,8 @@ def pairwise_social_force_contributions(
         lambda_importance: Weight of relative velocity in the interaction direction.
         gamma: Scale factor for the interaction range parameter.
         factor: Global scaling factor applied to every pairwise contribution.
+        kernel_version: Explicit pair-kernel version; missing preserves the
+            historical unwrapped behavior.
 
     Returns:
         Per-pair force array with shape ``(N, N, 2)``; the diagonal is zero.
@@ -524,6 +539,7 @@ def pairwise_social_force_contributions(
         n_prime=n_prime,
         lambda_importance=lambda_importance,
         gamma=gamma,
+        kernel_version=kernel_version,
     )
 
     # Reproduce the scalar loop's masking exactly: pairs strictly beyond the activation
@@ -988,6 +1004,8 @@ __all__ = [
     "PYSF_POSITION_SLICE",
     "PYSF_VELOCITY_SLICE",
     "SOCIAL_FORCE_DEFAULT",
+    "SOCIAL_FORCE_KERNEL_LEGACY_UNWRAPPED_V1",
+    "SOCIAL_FORCE_KERNEL_WRAPPED_V2",
     "SUPPORTED_PEDESTRIAN_MODELS",
     "anisotropic_fov_total_force",
     "anisotropic_fov_weights",

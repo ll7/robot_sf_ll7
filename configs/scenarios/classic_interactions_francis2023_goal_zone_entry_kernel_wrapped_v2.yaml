@@ -1,0 +1,9 @@
+# Diagnostic successor for issue #9764. The pinned 0.0.7 v1 matrix remains
+# unchanged; this variant changes only the versioned social-force pair kernel.
+includes:
+  - classic_interactions_francis2023_goal_zone_entry_v1.yaml
+map_search_paths:
+  - ../../maps/svg_maps
+scenario_overrides:
+  simulation_config:
+    social_force_kernel_version: wrapped_v2

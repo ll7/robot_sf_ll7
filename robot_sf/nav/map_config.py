@@ -35,6 +35,32 @@ SUPPORTED_GOAL_COMPLETION_POLICIES = frozenset(
     }
 )
 
+# Goal-target sampling is versioned separately from the success predicate. The
+# centre-only default preserves historical maps/configs; the corrected policy
+# rejects target centres whose robot footprint is too close to a wall or bound.
+ROBOT_GOAL_SAMPLING_LEGACY_V1 = "centre_only_v1"
+ROBOT_GOAL_SAMPLING_FOOTPRINT_CLEARANCE_V1 = "footprint_clearance_v1"
+SUPPORTED_ROBOT_GOAL_SAMPLING_POLICIES = frozenset(
+    {ROBOT_GOAL_SAMPLING_LEGACY_V1, ROBOT_GOAL_SAMPLING_FOOTPRINT_CLEARANCE_V1}
+)
+
+
+def normalize_robot_goal_sampling_policy(value: object | None) -> str:
+    """Return a known versioned robot-goal policy, failing closed on unknown values."""
+    if value is None:
+        return ROBOT_GOAL_SAMPLING_LEGACY_V1
+    if not isinstance(value, str):
+        raise ValueError(
+            f"robot_goal_sampling_policy must be a versioned string identifier; got {value!r}"
+        )
+    normalized = value.strip().lower()
+    if normalized not in SUPPORTED_ROBOT_GOAL_SAMPLING_POLICIES:
+        raise ValueError(
+            "Unknown robot_goal_sampling_policy "
+            f"{value!r}; supported policies are {sorted(SUPPORTED_ROBOT_GOAL_SAMPLING_POLICIES)}"
+        )
+    return normalized
+
 
 def normalize_goal_completion_policy(value: object | None) -> str:
     """Validate and normalize a versioned goal-completion policy identifier.
@@ -106,6 +132,10 @@ class SinglePedestrianDefinition:
         role (str | None): Optional runtime behavior role (wait, follow, lead, accompany, join, leave).
         role_target_id (str | None): Optional target identifier for role behaviors (e.g., "robot:0").
         role_offset (Vec2D | None): Optional (forward, lateral) offset for follow/lead/accompany roles.
+        initial_group_id (str | None): Shared initial physics-group label among single pedestrians.
+            Omit to start alone. Unlike social_groups metadata, this controls membership.
+        join_radius_m (float | None): Optional distance to the target group's centroid for joining.
+            Omit to retain the waypoint-arrival threshold.
         hold_until_robot_within_m (float | None): Optional proximity-released hold. When set, the
             pedestrian holds at the trajectory waypoint immediately before ``hold_ref_point`` until
             a robot is within this distance (world units) of ``hold_ref_point`` (or ``hold_timeout_s``
@@ -134,6 +164,8 @@ class SinglePedestrianDefinition:
     hold_ref_point: Vec2D | None = None
     hold_timeout_s: float | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
+    initial_group_id: str | None = None
+    join_radius_m: float | None = None
 
     def __post_init__(self):
         """
@@ -155,6 +187,7 @@ class SinglePedestrianDefinition:
         self._validate_role()
         self._validate_role_target()
         self._validate_role_offset()
+        self._validate_group_behavior()
         self._validate_proximity_hold()
         self._validate_metadata()
         self._warn_if_static()
@@ -163,6 +196,21 @@ class SinglePedestrianDefinition:
         """Validate pedestrian ID is a non-empty string."""
         if not self.id or not isinstance(self.id, str):
             raise ValueError(f"Pedestrian ID must be a non-empty string, got: {self.id!r}")
+
+    def _validate_group_behavior(self) -> None:
+        """Reject ambiguous membership labels and unreachable/invalid join radii."""
+        if self.initial_group_id is not None:
+            if not isinstance(self.initial_group_id, str) or not self.initial_group_id.strip():
+                raise ValueError("initial_group_id must be a non-empty string")
+            self.initial_group_id = self.initial_group_id.strip()
+        if self.join_radius_m is not None:
+            if self.role != "join":
+                raise ValueError("join_radius_m requires role='join'")
+            if isinstance(self.join_radius_m, bool):
+                raise ValueError("join_radius_m must be positive and finite")
+            self.join_radius_m = float(self.join_radius_m)
+            if not isfinite(self.join_radius_m) or self.join_radius_m <= 0:
+                raise ValueError("join_radius_m must be positive and finite")
 
     def _validate_start_position(self):
         """Validate start position is a 2-tuple."""
@@ -1528,6 +1576,8 @@ def _parse_single_pedestrians(
                 hold_ref_point=hold_ref_point,
                 hold_timeout_s=hold_timeout_s,
                 metadata=dict(metadata),
+                initial_group_id=ped_def.get("initial_group_id"),
+                join_radius_m=ped_def.get("join_radius_m"),
             )
         )
     return single_pedestrians
@@ -1688,7 +1738,10 @@ def serialize_map(map_structure: dict) -> MapDefinition:
 __all__ = [
     "GOAL_COMPLETION_POLICY_GOAL_ZONE_ENTRY_V1",
     "GOAL_COMPLETION_POLICY_WAYPOINT_RADIUS_V1",
+    "ROBOT_GOAL_SAMPLING_FOOTPRINT_CLEARANCE_V1",
+    "ROBOT_GOAL_SAMPLING_LEGACY_V1",
     "SUPPORTED_GOAL_COMPLETION_POLICIES",
+    "SUPPORTED_ROBOT_GOAL_SAMPLING_POLICIES",
     "GlobalRoute",
     "InfrastructureZone",
     "MapDefinition",
@@ -1698,6 +1751,7 @@ __all__ = [
     "SinglePedestrianDefinition",
     "SocialGroupDefinition",
     "normalize_goal_completion_policy",
+    "normalize_robot_goal_sampling_policy",
     "parse_social_group_definitions",
     "serialize_map",
 ]

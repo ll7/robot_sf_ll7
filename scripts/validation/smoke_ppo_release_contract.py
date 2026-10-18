@@ -9,6 +9,10 @@ import os
 import subprocess
 from dataclasses import asdict, replace
 from pathlib import Path
+from typing import TYPE_CHECKING, cast
+
+if TYPE_CHECKING:
+    from gymnasium.spaces import Box
 
 # Set before importing Torch/SB3, including on GPU-equipped development machines.
 os.environ["CUDA_VISIBLE_DEVICES"] = ""
@@ -87,8 +91,8 @@ def main() -> int:
                 "steps": 2048,
             },
             "action_space": {
-                "low": env.action_space.low.tolist(),
-                "high": env.action_space.high.tolist(),
+                "low": cast("Box", env.action_space).low.tolist(),
+                "high": cast("Box", env.action_space).high.tolist(),
             },
         }
         (args.output / "receipt.json").write_text(json.dumps(receipt, default=str, indent=2) + "\n")

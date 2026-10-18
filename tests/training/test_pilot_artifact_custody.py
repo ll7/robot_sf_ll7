@@ -81,7 +81,8 @@ def test_optimized_python_still_refuses_unverified_custody(tmp_path, monkeypatch
 
     namespace = {"__name__": "optimized_pilot_custody"}
     source = Path(current.__file__).read_text()
-    exec(compile(source, current.__file__, "exec", optimize=1), namespace)
+    # Execute only this tracked module to verify guards survive optimized Python.
+    exec(compile(source, current.__file__, "exec", optimize=1), namespace)  # noqa: S102
     work, hub = tmp_path / "work", tmp_path / "hub"
     work.mkdir()
     (work / "checkpoint.zip").write_bytes(b"checkpoint")

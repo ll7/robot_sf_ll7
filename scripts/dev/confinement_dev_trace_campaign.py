@@ -21,6 +21,38 @@ import subprocess
 import sys
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
+from typing import TYPE_CHECKING, Protocol, TypedDict, cast
+
+if TYPE_CHECKING:
+    from robot_sf.benchmark.map_runner.map_runner_episode import (
+        _StepLoopConfig,
+        _StepLoopState,
+        _StepSimResult,
+    )
+    from robot_sf.benchmark.types import EpisodeRecordDict
+
+    class _TraceCallback(Protocol):
+        def __call__(
+            self,
+            state: _StepLoopState,
+            slc: _StepLoopConfig,
+            *,
+            step_idx: int,
+            sim: _StepSimResult,
+        ) -> None: ...
+
+    class _TraceModule(Protocol):
+        """Writable callback slot used by the campaign observer."""
+
+        _step_build_simulation_trace: _TraceCallback
+
+    class _SpawnValidity(TypedDict):
+        invalid_run: bool
+
+    class _CampaignEpisodeRecord(EpisodeRecordDict):
+        """Pinned producer fields consumed by this observer-only wrapper."""
+
+        spawn_validity: _SpawnValidity
 
 PRODUCER = "373dbfde4f39667cf9e8732dabe7df5118bdeab1"
 
@@ -69,7 +101,8 @@ def run(task):
     logger.remove()
     pending_rows = set()
     original_respawn = FollowRouteBehavior.respawn_group_at_start
-    original_trace = episode._step_build_simulation_trace
+    trace_module = cast("_TraceModule", episode)
+    original_trace = trace_module._step_build_simulation_trace
     geometry = {}
 
     def respawn(self, gid, *, guard_robot=True):
@@ -79,8 +112,14 @@ def run(task):
             pending_rows.update(rows)
         return result
 
-    def observe(state, slc, **kwargs):
-        result = original_trace(state, slc, **kwargs)
+    def observe(
+        state: episode._StepLoopState,
+        slc: episode._StepLoopConfig,
+        *,
+        step_idx: int,
+        sim: episode._StepSimResult,
+    ) -> None:
+        result = original_trace(state, slc, step_idx=step_idx, sim=sim)
         ids = state.trace_actor_ids
         state.simulation_step_trace[-1]["respawn_actor_ids"] = [
             ids[row] if ids is not None else row for row in sorted(pending_rows)
@@ -98,7 +137,7 @@ def run(task):
         return {"observer": "geometry and respawn boundaries only"}
 
     FollowRouteBehavior.respawn_group_at_start = respawn
-    episode._step_build_simulation_trace = observe
+    trace_module._step_build_simulation_trace = observe
     scenario = copy.deepcopy(cell["scenario"])
     scenario["simulation_config"]["route_spawn_seed"] = seed
     dest = output / "raw" / f"{cell['name']}__{seed}__{policy['key']}.json.gz"
@@ -123,6 +162,8 @@ def run(task):
             observation_level="tracked_agents_no_noise",
             record_simulation_step_trace=True,
         )
+        # The pinned producer emits this block beyond the shared record declaration.
+        record = cast("_CampaignEpisodeRecord", record)
         meta = record["algorithm_metadata"]
         assert record["git_hash"] == PRODUCER
         assert meta.get("status") == "ok" and not meta.get("fallback_triggered")
@@ -152,7 +193,7 @@ def run(task):
         }
     finally:
         FollowRouteBehavior.respawn_group_at_start = original_respawn
-        episode._step_build_simulation_trace = original_trace
+        trace_module._step_build_simulation_trace = original_trace
 
 
 def remaining_identities(expected, completed):

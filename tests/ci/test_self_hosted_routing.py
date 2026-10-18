@@ -687,8 +687,10 @@ def _credential_context_references(value: str) -> tuple[bool, bool, bool]:
             else:
                 normalised.append(tokens[index])
             index += 1
+    # Plain bracket keys are property tokens; dotted names cannot start a context reference.
     unsafe_secrets = any(
         (kind, token) == ("identifier", "secrets")
+        and (index == 0 or normalised[index - 1] != ("symbol", "."))
         and not (
             index + 2 < len(normalised)
             and normalised[index + 1] == ("symbol", ".")
@@ -1123,6 +1125,25 @@ def test_whole_secret_context_cannot_use_location_exemption(site: str) -> None:
 )
 def test_plain_secret_scalar_access_retains_complete_boundary_acceptance(expression: str) -> None:
     """Plain named scalar access and a quoted context name retain existing acceptance."""
+    workflow = yaml.safe_load(CI_WORKFLOW.read_text(encoding="utf-8"))
+    _, probe = _token_steps(workflow)
+    probe.setdefault("env", {})["ROUTER_DEBUG_SNAPSHOT"] = expression
+    _assert_router_app_token_boundary(workflow)
+
+
+@pytest.mark.parametrize(
+    "expression",
+    [
+        "${{ steps.route.outputs.secrets }}",
+        "${{ steps['route']['outputs']['secrets'] }}",
+        "${{ github.event.inputs.secrets }}",
+        "${{ github.event.inputs['secrets'] }}",
+    ],
+)
+def test_scalar_properties_named_secrets_retain_complete_boundary_acceptance(
+    expression: str,
+) -> None:
+    """A property named secrets must not be mistaken for the root credential context."""
     workflow = yaml.safe_load(CI_WORKFLOW.read_text(encoding="utf-8"))
     _, probe = _token_steps(workflow)
     probe.setdefault("env", {})["ROUTER_DEBUG_SNAPSHOT"] = expression

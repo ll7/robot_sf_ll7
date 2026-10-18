@@ -1,0 +1,30 @@
+{
+  "schema": "issue-10318-safety-revision.v1",
+  "base_sha": "53721be3248600e08641a9816d094b605e3c93e4",
+  "reviewed_sha": "2a6afc5e2a67668013c24d3a7fa6d875d7bdd654",
+  "runtime_fix_sha": "df7541979e7437512a3b1d42851029b01ca45919",
+  "safe_surface_margin_m": 0.35,
+  "affected_seeds": [
+    1001,
+    1002,
+    1003
+  ],
+  "empty_seeds": [
+    1001,
+    1002
+  ],
+  "minimum_observed_surface_clearance_m": 0.5170955095566827,
+  "newly_sub_margin_episode_minima": 0,
+  "newly_sub_margin_terminal_gaps": 0,
+  "contacts": 0,
+  "retained_reviewed_completions": 3,
+  "over_capacity_action": "brake",
+  "fallback_or_degraded_rows": 0,
+  "evidence_tier": "diagnostic-only",
+  "artifact_sha256": {
+    "reviewed_crowding_minima.csv": "23f7d4bb474e8aa5fd959e98842bba0d3dc06d7382cc27a1c9f3099a838c0aba",
+    "empty_summary.json": "fe5d8ba19e75bb4478998d8b6b055f29b510ceec99e4b0fcb7adc4689f16c3f1",
+    "empty_world.csv": "1459227e042e7bfd87b88458444d16ef1eca85525afc579fe53b37cce7674b75",
+    "affected.csv": "ca9a47307e9bf83d8b7cbc9370d45f0aafe3bdecda58857d4d07d42f0a086b13"
+  }
+}

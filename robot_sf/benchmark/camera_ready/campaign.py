@@ -2918,7 +2918,7 @@ def _build_campaign_metadata_section(
         **publication_fields,
         **(
             cfg.snqi_v2_spec.provenance()
-            if getattr(cfg, "snqi_v2_spec", None)
+            if cfg.snqi_v2_spec is not None
             else {"snqi_v2": "pending_calibration"}
             if getattr(cfg, "snqi_v2_binding", None) is not None
             else {}

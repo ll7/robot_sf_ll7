@@ -21,7 +21,7 @@ from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from statistics import mean
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 
@@ -807,7 +807,7 @@ def _resolve_release_publication_metadata(  # noqa: C901, PLR0912
             "Release publication metadata is missing required inputs: " + ", ".join(missing)
         )
 
-    zenodo_payload = _read_json_file(metadata_path)  # type: ignore[arg-type]
+    zenodo_payload = _read_json_file(cast("Path", metadata_path))
     campaign_metadata: list[Mapping[str, Any]] = []
     for metadata_name in ("campaign_manifest.json", "manifest.json", "run_meta.json"):
         metadata_candidate = run_root / metadata_name
@@ -825,13 +825,13 @@ def _resolve_release_publication_metadata(  # noqa: C901, PLR0912
     files: dict[str, tuple[Path, Path]] = {
         "release_manifest": (release_manifest_path, Path("release/release_manifest.resolved.json")),
         "release_result": (release_result_path, Path("release/release_result.json")),
-        "citation": (citation_path, Path("release_metadata/CITATION.cff")),  # type: ignore[arg-type]
+        "citation": (cast("Path", citation_path), Path("release_metadata/CITATION.cff")),
         "zenodo_metadata": (
-            metadata_path,  # type: ignore[arg-type]
+            cast("Path", metadata_path),
             Path("release_metadata/zenodo_metadata.json"),
         ),
-        "snqi_weights": (weights_path, _BUNDLED_SNQI_WEIGHTS_RELATIVE),  # type: ignore[arg-type]
-        "snqi_baseline": (baseline_path, _BUNDLED_SNQI_BASELINE_RELATIVE),  # type: ignore[arg-type]
+        "snqi_weights": (cast("Path", weights_path), _BUNDLED_SNQI_WEIGHTS_RELATIVE),
+        "snqi_baseline": (cast("Path", baseline_path), _BUNDLED_SNQI_BASELINE_RELATIVE),
     }
     _add_stage3_metric_assets(files, source_paths, metrics, repo_root)
     files.update(_release_notes_files(run_root, repo_root, resolved_manifest))

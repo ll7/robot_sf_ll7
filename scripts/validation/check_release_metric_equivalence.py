@@ -15,7 +15,7 @@ import json
 import math
 import tarfile
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 SCIENTIFIC_MANIFEST_FIELDS = (
     "matrix",
@@ -363,22 +363,31 @@ def _robot_force_block_problems(metrics: dict[str, Any], prefix: str) -> list[st
     count = metrics.get(f"{prefix}_exposed_ped_count")
     if (
         type(count) not in (int, float)
-        or not math.isfinite(count)
-        or count < 0
-        or not float(count).is_integer()
+        or not math.isfinite(cast("float", count))
+        or cast("float", count) < 0
+        or not float(cast("float", count)).is_integer()
     ):
         problems.append(f"{prefix}_exposed_ped_count")
     for suffix in ROBOT_FORCE_UNCONDITIONAL:
         if suffix == "exposed_ped_count":
             continue
         value = metrics.get(f"{prefix}_{suffix}")
-        if type(value) not in (int, float) or not math.isfinite(value) or value < 0:
+        if (
+            type(value) not in (int, float)
+            or not math.isfinite(cast("float", value))
+            or cast("float", value) < 0
+        ):
             problems.append(f"{prefix}_{suffix}")
     for suffix in ROBOT_FORCE_CONDITIONAL:
         value = metrics.get(f"{prefix}_{suffix}")
         if count == 0 and value is None:
             continue
-        if count == 0 or type(value) not in (int, float) or not math.isfinite(value) or value < 0:
+        if (
+            count == 0
+            or type(value) not in (int, float)
+            or not math.isfinite(cast("float", value))
+            or cast("float", value) < 0
+        ):
             problems.append(f"{prefix}_{suffix}")
     return problems
 

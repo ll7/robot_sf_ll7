@@ -17,7 +17,7 @@ import subprocess
 import sys
 from dataclasses import replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -1145,7 +1145,7 @@ def finalize_pre_doi_candidate(  # noqa: C901, PLR0912, PLR0913, PLR0915
             paths=derivative_stage3_paths,
         )
         _reset_scientific_candidate_to_stage3_pending(candidate_root, expected_source_sha, manifest)
-        resolved = manifest.resolved_manifest_payload
+        resolved = cast("dict[str, Any]", manifest.resolved_manifest_payload)
         _write_json(candidate_root / "release/release_manifest.resolved.json", resolved)
         provenance = build_release_provenance(
             manifest,

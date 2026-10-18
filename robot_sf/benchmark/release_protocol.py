@@ -14,7 +14,7 @@ import tempfile
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import yaml
 
@@ -1644,12 +1644,12 @@ def load_release_manifest(
         snqi_weights_sha256=metrics["snqi_weights_sha256"],
         snqi_baseline_path=metrics["snqi_baseline_path"],
         snqi_baseline_sha256=metrics["snqi_baseline_sha256"],
-        snqi_v2_weights_path=metrics.get("snqi_v2_weights_path"),
-        snqi_v2_weights_sha256=metrics.get("snqi_v2_weights_sha256"),
-        snqi_v2_anchors_path=metrics.get("snqi_v2_anchors_path"),
-        snqi_v2_anchors_sha256=metrics.get("snqi_v2_anchors_sha256"),
-        snqi_v2_family_path=metrics.get("snqi_v2_family_path"),
-        snqi_v2_family_sha256=metrics.get("snqi_v2_family_sha256"),
+        snqi_v2_weights_path=cast("Path | None", metrics.get("snqi_v2_weights_path")),
+        snqi_v2_weights_sha256=cast("str | None", metrics.get("snqi_v2_weights_sha256")),
+        snqi_v2_anchors_path=cast("Path | None", metrics.get("snqi_v2_anchors_path")),
+        snqi_v2_anchors_sha256=cast("str | None", metrics.get("snqi_v2_anchors_sha256")),
+        snqi_v2_family_path=cast("Path | None", metrics.get("snqi_v2_family_path")),
+        snqi_v2_family_sha256=cast("str | None", metrics.get("snqi_v2_family_sha256")),
         planner_keys=planner_keys,
         planner_groups=planner_groups,
         required_artifact_paths=required_artifact_paths,

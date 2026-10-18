@@ -20,7 +20,7 @@ from collections import Counter
 from collections.abc import Callable, Mapping, Sequence
 from decimal import Decimal
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeGuard, cast
 
 import yaml
 
@@ -123,7 +123,7 @@ def _digest(value: Any) -> str:
     ).hexdigest()
 
 
-def _is_sha(value: Any, length: int) -> bool:
+def _is_sha(value: Any, length: int) -> TypeGuard[str]:
     return (
         isinstance(value, str)
         and len(value) == length
@@ -1119,7 +1119,7 @@ def _flatten(value: Mapping[str, Any] | list[Any], prefix: str) -> dict[str, Any
     for key, item in items:
         name = f"{prefix}.{key}"
         if isinstance(item, (Mapping, list)):
-            result.update(_flatten(item, name))
+            result.update(_flatten(cast("Mapping[str, Any] | list[Any]", item), name))
         else:
             result[name] = item
     return result
@@ -1440,7 +1440,7 @@ def load_attribution_ledger(  # noqa: C901 - independent receipt checks stay tog
         if not _is_sha(finding_id, 64) or finding_id in indexed:
             anomalies.append({"kind": "invalid_or_duplicate_finding_id", "index": position})
             continue
-        indexed[finding_id] = dict(entry)
+        indexed[finding_id] = dict(cast("Mapping[str, Any]", entry))
         if not isinstance(change_id, str) or change_id not in declared:
             anomalies.append({"kind": "undeclared_versioned_change", "finding_id": finding_id})
             continue
@@ -1449,6 +1449,7 @@ def load_attribution_ledger(  # noqa: C901 - independent receipt checks stay tog
             receipt_path = _receipt_path(path.parent, relative, label="causal receipt")
             if not _is_sha(expected_sha, 64) or _sha256(receipt_path) != expected_sha:
                 raise ValueError("causal receipt SHA-256 mismatch")
+            relative = cast("str", relative)
             if relative not in receipt_cache:
                 receipt_cache[relative] = _json_object(receipt_path)
             receipt = receipt_cache[relative]

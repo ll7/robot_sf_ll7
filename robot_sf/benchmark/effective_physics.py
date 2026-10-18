@@ -46,12 +46,18 @@ def capture_effective_physics(env: Any) -> dict[str, Any]:
     # overrides backend sampling. A null mean selects spawn-coupled caps.
     sampling = peds.effective_desired_speed_parameters
     mean = sampling.get("mean_m_s")
+    sampling_identity = sampling.get("identity", "clipped_normal_v1")
+    normal_rule = (
+        "reject_normal_outside_[0,high]"
+        if sampling_identity == "rejection_truncated_normal_v1"
+        else "clip_normal_to_[0,high]"
+    )
     speed_model = {
-        "identity": "clipped_normal_v1" if mean is not None else "spawn_coupled_v1",
+        "identity": sampling_identity if mean is not None else "spawn_coupled_v1",
         "mean_m_s": float(mean) if mean is not None else None,
         "sd_m_s": sampling["sd_m_s"] if mean is not None else None,
         "cap_m_s": sampling["cap_m_s"] if mean is not None else None,
-        "cap_rule": "clip_normal_to_[0,high]; velocity_norm<=per_agent_desired_speed"
+        "cap_rule": normal_rule + "; velocity_norm<=per_agent_desired_speed"
         if mean is not None
         else "velocity_norm<=max_speed_multiplier*initial_speed",
         "max_speed_multiplier": float(peds.max_speed_multiplier),

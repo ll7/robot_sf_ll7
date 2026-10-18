@@ -3038,6 +3038,7 @@ _SIMULATION_OVERRIDE_ATTRS = (
     "pedestrian_model",
     "obstacle_force_law",
     "social_force_kernel_version",
+    "obstacle_force_profile",
     "ttc_predictive_force",
     "zanlungo_collision_prediction",
     "anisotropic_fov",

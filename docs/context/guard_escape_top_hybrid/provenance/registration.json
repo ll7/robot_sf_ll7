@@ -1,0 +1,26 @@
+{
+  "registration_commit": "55a98a1e6143a71e18278478ba4d3dff9bbf8bd4",
+  "commit_time_utc": "2026-10-18T07:51:43Z",
+  "push_and_remote_readback_completed_before_utc": "2026-10-18T07:53:55.905240+00:00",
+  "remote_head_readback": "55a98a1e6143a71e18278478ba4d3dff9bbf8bd4",
+  "episodes_started": false,
+  "files": {
+    "PLAN.md": "1cc81966c3c2621e428c1a7fe4fb3738994ba674ce5ab9603106e9f35ce41b6e",
+    "analyze.py": "82d39e20877647fc5d2081fd2f2eb79d84153f994e931db9e422650ba87316a7",
+    "audit_raw.py": "5b7a62c6dcc722fbdd106f8de1888baca23a57350f977276ea502142aa074665",
+    "inputs/G0E0.yaml": "7bfcc5a0e15e1bbbacaf58955d813bbc1b7eece2e8cb87f106e8703461edf432",
+    "inputs/G0E1.yaml": "c003a759a0b5fc120a43c31c0c206ad323794e8f3951fa615cc70877deddd9b5",
+    "inputs/G1E0.yaml": "2ecebfefa89cadee13b017c355dacaf7d7f23bf32bc91b5a308930a079853884",
+    "inputs/G1E1.yaml": "fb9397bc72632d01e3dc28ecd26b21777267065715f41ac59e80d46fe47b76a1",
+    "inputs/full.yaml": "a42fd09eea7dec8d9630d45e3c485e3d188ceaf63c1cb0147e896278fa47f44e",
+    "inputs/full_scenarios.yaml": "0bc092b7235258281728455fe988c37f641d9884faca96d31f7eca32c09f1235",
+    "inputs/groups.yaml": "955d161ae6fa849c2c9cf54d899e0da8fea4e8b5c8a2c254bb93f3c0a624fa16",
+    "inputs/study.yaml": "2592159dab7d7bfcff851be67b64f3780f87d9051d3a480b98621824539bc9b1",
+    "project.py": "a9f9312a9f8ef6333200b7bba15ffde9e96a018cd30a8dd2ce0b398a4ea66659",
+    "provenance/acquisition-source.patch.gz": "1314f3c896c2cb6f45180ba5ffa0c062ab597e329a1b4d6cd58148989a1dfca2",
+    "provenance/config-validation.json": "002b735a75d0d4bc3c0c099b7b04c4589171ba7bc4d6e33588aa824c1cf63a6d",
+    "provenance/controller-selection.json": "df0c56385d94119d731cd76a6236cad02fdb5b09db88d3ffebe050c37c100bcd",
+    "provenance/decision_rule_source.md": "1cb5a065fd5716bde10235b498b716343e5c534b3314def4cc2b155040161f91",
+    "provenance/original_analyze.py.source.txt": "2f7748e476291519da782295a7c459e90ddd19ee3da271c33ca7ea738d045b68"
+  }
+}

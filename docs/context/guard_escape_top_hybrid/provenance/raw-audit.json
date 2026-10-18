@@ -1,0 +1,84 @@
+{
+  "schema": "guard-escape-replication.raw-audit.v1",
+  "passed": true,
+  "episodes": 2160,
+  "complete_seed_cell_blocks": 540,
+  "seed_blocks": 30,
+  "actual_development_seeds": [
+    1061,
+    1062,
+    1063,
+    1064,
+    1065,
+    1066,
+    1067,
+    1068,
+    1069,
+    1070,
+    1071,
+    1072,
+    1073,
+    1074,
+    1075,
+    1076,
+    1077,
+    1078,
+    1079,
+    1080,
+    1081,
+    1082,
+    1083,
+    1084,
+    1085,
+    1086,
+    1087,
+    1088,
+    1089,
+    1090
+  ],
+  "duplicates": 0,
+  "missing_slots": 0,
+  "exclusions": 0,
+  "execution_census": {
+    "adapter": 2160,
+    "native": 0,
+    "fallback": 0,
+    "degraded": 0
+  },
+  "adapter_name": "HybridRuleLocalPlannerAdapter",
+  "robot_kinematics": "differential_drive",
+  "nonfactor_paired_contracts_equal": true,
+  "producer_status_counts": {
+    "success": 1581,
+    "collision": 382,
+    "failure": 197
+  },
+  "raw_success_counts_per_arm": {
+    "G0E0": 311,
+    "G0E1": 306,
+    "G1E0": 485,
+    "G1E1": 479
+  },
+  "producer_files": [
+    {
+      "path": "runs/g0e0__differential_drive/episodes.jsonl",
+      "rows": 540,
+      "sha256": "ffd92f3f986e3ceab9689542a213d20235df3743e77215a99abaa3522334363f"
+    },
+    {
+      "path": "runs/g0e1__differential_drive/episodes.jsonl",
+      "rows": 540,
+      "sha256": "7361388f74474b83db77bb1187f9726c7e69e7c29bfc4a73ae77f097a134e56a"
+    },
+    {
+      "path": "runs/g1e0__differential_drive/episodes.jsonl",
+      "rows": 540,
+      "sha256": "ab1da063ad33a194a1668f7229dae552cc26975f4235859573d12eb537b5c57d"
+    },
+    {
+      "path": "runs/g1e1__differential_drive/episodes.jsonl",
+      "rows": 540,
+      "sha256": "64ced467283200395dac30fdd6c66e3982a69028cc52557df17b8f1aa685a0be"
+    }
+  ]
+}

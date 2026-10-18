@@ -1,0 +1,137 @@
+schema: guardesc.diagnostic.v1
+question: Guard and native escape-bundle effects within the top confinement hybrid
+  configuration
+evidence_tier: development-seed diagnostic
+execution_label: new current-version execution
+release_evidence: false
+repository: ll7/robot_sf_ll7
+release_base_commit: 373dbfde4f39667cf9e8732dabe7df5118bdeab1
+execution_commit: 6a3ac329d25a97202b050edd69190142fd7553e7
+branch: evidence/rq3-top-hybrid-1061-1090
+code_change_reason: Reconstruct byte-identical archived runtime patch on its recorded
+  release base; original commit object unavailable
+controller: configs/policy_search/candidates/hybrid_rule_v4_fast_progress_static_escape_s30_h600_release_0_0_8_frozen.yaml
+controller_sha256: 1329d3934decb0bf50a803071af69b99e3f12e534083fc3d82e20d4706c76811
+guard: Static/dynamic collision and static-clearance candidate rejection plus v4 pedestrian/wall
+  braking vetoes. Speed limits retained.
+escape:
+  bundle_switches:
+  - static_clearance_escape_enabled
+  - static_recenter_enabled
+  - static_corridor_transit_enabled
+  individual_component_attribution: false
+  inactive_original_switches:
+    corridor_subgoal_enabled: false
+groups:
+  static_constriction:
+  - classic_bottleneck_low
+  - classic_bottleneck_medium
+  - classic_bottleneck_high
+  - classic_realworld_double_bottleneck_high
+  - classic_cross_trap_low
+  - classic_cross_trap_medium
+  - classic_cross_trap_high
+  - francis2023_narrow_hallway
+  portal:
+  - classic_doorway_low
+  - classic_doorway_medium
+  - classic_doorway_high
+  - francis2023_entering_room
+  - francis2023_exiting_room
+  - francis2023_entering_elevator
+  - francis2023_exiting_elevator
+  crowding_control:
+  - classic_station_platform_medium
+  - francis2023_crowd_navigation
+  - francis2023_robot_crowding
+portal_role: Tied first among release configurations; source Table 7.2 / Section 7.6
+excluded_cells:
+  francis2023_narrow_doorway: Historical reconstructed mapping excludes infeasible
+    aperture; outside planned execution.
+seeds:
+- 1061
+- 1062
+- 1063
+- 1064
+- 1065
+- 1066
+- 1067
+- 1068
+- 1069
+- 1070
+- 1071
+- 1072
+- 1073
+- 1074
+- 1075
+- 1076
+- 1077
+- 1078
+- 1079
+- 1080
+- 1081
+- 1082
+- 1083
+- 1084
+- 1085
+- 1086
+- 1087
+- 1088
+- 1089
+- 1090
+horizon:
+  mode: authored_per_cell
+  schedule: configs/benchmarks/horizon_schedules/release_0_0_8_authored_v1.yaml
+  sha256: 032bbf8ad354ea9394492659aa50188e2bc40078930975ef30cd3ba77208675e
+  selected_budgets:
+    classic_bottleneck_low: 500
+    classic_bottleneck_medium: 500
+    classic_bottleneck_high: 500
+    classic_realworld_double_bottleneck_high: 700
+    classic_station_platform_medium: 650
+    classic_cross_trap_low: 600
+    classic_cross_trap_medium: 600
+    classic_cross_trap_high: 600
+    classic_doorway_low: 500
+    classic_doorway_medium: 500
+    classic_doorway_high: 500
+    francis2023_narrow_hallway: 400
+    francis2023_entering_room: 400
+    francis2023_exiting_room: 400
+    francis2023_entering_elevator: 400
+    francis2023_exiting_elevator: 400
+    francis2023_crowd_navigation: 400
+    francis2023_robot_crowding: 400
+dt: 0.1
+workers: 4
+planned_full_episodes: 2160
+mode_column:
+- native
+- adapter
+- fallback
+- degraded
+statistics:
+  paired_unit: seed and cell
+  bootstrap_unit: seed block across all cells and arms
+  bootstrap_replicates: 10000
+  bootstrap_rng: 1001
+  interval: percentile 95%
+  main_effects: 'Guard: mean over escape states of on-minus-off; escape: mean over
+    guard states of on-minus-off'
+  interaction: Y11 - Y10 - Y01 + Y00
+  cell_weighting: equal; no outcome-driven exclusions
+  p_values: false
+hard_stops:
+- no dissertation edits
+- no merge or main push
+- no release/tag/publication
+- no frozen input mutation
+- no claim admission
+declared_controller_execution_mode: adapter
+fallback_or_degraded_success_evidence: false
+environment:
+  python: 3.13.14
+  numpy: 2.4.6
+  cpu_only: true
+  uv_lock_sha256: def82098b23281e7c49f1f05e052e412c2de54ae2da53f1708bc0ddc2a30d023
+packet_role: Prospective registration before acquisition

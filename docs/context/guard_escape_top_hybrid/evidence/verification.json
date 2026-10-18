@@ -1,0 +1,14 @@
+{
+  "passed": true,
+  "episodes": 2160,
+  "registered_files_unchanged": true,
+  "byte_identical_recomputation": true,
+  "archived_original_analyzer_csvs_byte_identical": true,
+  "independent_max_absolute_error_proportion": 1.6653345369377348e-16,
+  "registration_precedes_acquisition": true,
+  "actual_seed_range": [
+    1061,
+    1090
+  ],
+  "no_cross_controller_pooling": true
+}

@@ -56,7 +56,7 @@ def _fixture(root: Path, out: Path, *, gap: float) -> tuple[Path, Path]:
     scenario["name"] = f"vv5_doorway_gap_{gap:g}m"
     scenario["map_file"] = str(map_path)
     scenario["single_pedestrians"] = []
-    scenario["seeds"] = [111]
+    scenario["seeds"] = [1001]
     scenario["simulation_config"]["ped_density"] = 0.0
     scenario["robot_config"] = {"radius": 1.0}
     scenario["metadata"] = {"diagnostic_fixture": "issue_9735_throwaway"}
@@ -73,12 +73,12 @@ def _geometry_case(path: Path) -> dict:
         route_gate = "pass"
     except RouteClearanceError:
         route_gate = "blocked"
-    row = _check_release_scenario((dict(scenario), str(path), (111,), 0.1, 1, 0.1, False))["rows"][
+    row = _check_release_scenario((dict(scenario), str(path), (1001,), 0.1, 1, 0.1, False))["rows"][
         0
     ]
     oracle = run_feasibility_oracle(
         make_envelope_scenario(scenario, envelope_radius_m=1.0),
-        config=FeasibilityOracleConfig(scenario_path=path, rollout_seed=111),
+        config=FeasibilityOracleConfig(scenario_path=path, rollout_seed=1001),
         envelope_radius_m=1.0,
     )
     oracle_dict = feasibility_verdict_to_dict(oracle, issue="9735")
@@ -117,7 +117,7 @@ def _radius_case(config_path: Path) -> dict:
     rows = [
         {
             "scenario_id": "vv5_radius_fixture",
-            "seed": 111,
+            "seed": 1001,
             "algo": planner,
             "steps": 100,
             "status": "success",
@@ -177,8 +177,9 @@ def main() -> None:
     fixtures = out / "fixtures"
     fixtures.mkdir(exist_ok=True)
     report = {
-        "schema": "issue_9735_fault_injection_extension.v1",
+        "schema": "issue_9735_fault_injection_extension.dev.v2",
         "evidence_tier": "diagnostic_fixture_only",
+        "seed_policy": "development-only: dev-1001; not a historical replay or release evidence",
         "source_commit": __import__("subprocess")
         .check_output(["git", "-C", str(root), "rev-parse", "HEAD"], text=True)
         .strip(),

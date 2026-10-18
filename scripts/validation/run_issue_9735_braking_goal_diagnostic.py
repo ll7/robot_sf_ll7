@@ -166,9 +166,9 @@ def _trace(planner: str, *, flip_goal: bool = False) -> dict:
 def _row(planner: str, result: dict) -> dict:
     success = result["route_complete"]
     return {
-        "episode_id": f"vv5-goal-flip:111:{planner}",
+        "episode_id": f"vv5-goal-flip:1001:{planner}",
         "scenario_id": "vv5_goal_flip_empty",
-        "seed": 111,
+        "seed": 1001,
         "algo": planner,
         "steps": result["steps"],
         "status": "success" if success else "failure",
@@ -213,7 +213,7 @@ def _goal_case() -> dict:
     return {
         "fault": "planner_goal_direction_flipped",
         "check": "production social_force planner in a 12 s point-robot _trace plus paired pedestrian-free baseline regression anomaly detector",
-        "fixture": "actual goal (8,0), no pedestrians/obstacles, seed identity 111; only social_force perceived goal is reflected across current robot position",
+        "fixture": "actual goal (8,0), no pedestrians/obstacles, seed identity 1001; only social_force perceived goal is reflected across current robot position",
         "baseline_goal": baseline,
         "clean": {
             "_trace": clean_candidate,
@@ -254,8 +254,9 @@ def main() -> None:
         ROOT / "robot_sf/robot/differential_drive.py",
     ]
     report = {
-        "schema_version": "issue_9735_remaining_faults_diagnostic.v1",
+        "schema_version": "issue_9735_remaining_faults_diagnostic.dev.v2",
         "evidence_tier": "diagnostic_fixture_only",
+        "seed_policy": "development-only: dev-1001; not a historical replay or release evidence",
         "head": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
         "script_sha256": _sha(Path(__file__)),
         "source_sha256": {str(path.relative_to(ROOT)): _sha(path) for path in source_paths},

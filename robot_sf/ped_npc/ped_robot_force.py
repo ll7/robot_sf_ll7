@@ -8,6 +8,7 @@ be used for adversarial attraction experiments.
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import cast
 
 import numba
 import numpy as np
@@ -98,8 +99,8 @@ class PedRobotForce:
                 self.peds.vel(),
                 robot_pos,
                 contact_distance,
-                self.config.edge_onset,
-                self.config.steering_factor,
+                cast("PedRobotForceV2Config", self.config).edge_onset,
+                cast("PedRobotForceV2Config", self.config).steering_factor,
             )
         elif law is None:
             ped_robot_force(forces, ped_positions, robot_pos, threshold)

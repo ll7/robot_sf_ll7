@@ -4,6 +4,7 @@ This two-force fixture is not a benchmark or behaviour-gate receipt.
 """
 
 import json
+from typing import cast
 
 import numpy as np
 from pysocialforce.config import DesiredForceConfig, SceneConfig
@@ -61,7 +62,7 @@ def run_probe() -> list[dict]:
                 "contacts": overlaps,
                 "min_clearance": min(clearances),
                 "median_clearance": float(np.median(clearances)),
-                "mean_onset_x": float(np.mean(onsets)),
+                "mean_onset_x": float(np.mean(cast("list[float]", onsets))),
             }
         )
     return results

@@ -460,7 +460,11 @@ def rasterize_circle_fast(
     grid_origin_y: float = 0.0,
     value: float = 1.0,
 ) -> None:
-    """Vectorized circle rasterization for performance-sensitive paths."""
+    """Fill cells whose centres lie inside or on the circle, using a vectorized mask.
+
+    Integer grid indices denote cell corners; sample at index + 0.5 to match
+    polygon filling and grid-to-world centre coordinates.
+    """
     (cx, cy), radius = circle
     res = config.resolution
     if radius <= 0:
@@ -479,7 +483,7 @@ def rasterize_circle_fast(
         return
 
     y_idx, x_idx = np.ogrid[row_min : row_max + 1, col_min : col_max + 1]
-    dist_sq = (y_idx - row_c) ** 2 + (x_idx - col_c) ** 2
+    dist_sq = (y_idx + 0.5 - row_c) ** 2 + (x_idx + 0.5 - col_c) ** 2
     mask = dist_sq <= (radius / res) ** 2
     if not np.any(mask):
         return

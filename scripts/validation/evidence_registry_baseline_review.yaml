@@ -18,6 +18,38 @@ latest_reconciliation_issue: 9645
 latest_reviewed_date: 2026-09-28
 latest_reviewed_by: Codex autonomous lead; exact packet checksums and combined-tree inventory verified; no maintainer sign-off is claimed.
 evidence_tree_refresh_addenda:
+  - issue: 9735
+    pull_request: 9903
+    reviewed_date: 2026-10-18
+    reviewed_by: Codex fixL2b implementing agent; independent exact-head review remains required.
+    previous:
+      count: 3068
+      sha256: 6f360d421036f0644c33f3031fd3bc6adc5c6c8d4efe4b01253b5b0e7803e9f5
+    candidate:
+      count: 3071
+      sha256: 892f36b1d69abcdd45c1f6bc1dd98ee9f88c1fcc057966d7bd66c8df43bcf9b1
+    files_added: 3
+    finding_delta: none
+    files:
+      - path: docs/context/evidence/issue_9735_vv5_full_matrix_2026-09-28.json
+        sha256: 1b9b111a187e523ef98527a28713c11c5dd992b56f1a996ee945832119f7bffb
+      - path: docs/context/evidence/issue_9735_vv5_full_matrix_2026-09-28.json.review.json
+        sha256: 766b692c5ee69a25a35c228eb447584d07fa2f3112de0630be4799c36cf502a5
+      - path: docs/context/evidence/issue_9735_vv5_full_matrix_2026-09-28.md
+        sha256: e619430283836dc54f6a33b2124a1bfbc652f090c0293df9ba9ad69696d1eaba
+    decision: >-
+      Reconcile only the derived inventory for the three historical VV-5 diagnostic
+      members already present at 1d989358154b84c71e81b874a143d1a550dd444f.
+      Inspected the compact ten-class matrix, its exact-byte review sidecar and
+      explanatory report; the sidecar binds the unchanged JSON digest above.
+      The frozen-base pre-write delta has no new, increased, removed or decreased
+      findings, and its prior-baseline companion delta is empty. All 492 findings
+      across 104 files remain identical. Regenerate with the documented ordinary
+      --write-baseline command after this inventory review; no pre-write override,
+      finding allowance or strict-policy change is supplied. Historical evidence
+      bytes and their NEEDS-REVIEW markers remain unchanged. This is inventory
+      bookkeeping only, not human/domain approval, current-source sensitivity,
+      scientific admission, or authorization to execute historical seeds.
   - issue: 10112
     reviewed_date: 2026-10-03
     finding_delta: four diagnostic config-locator bookkeeping findings

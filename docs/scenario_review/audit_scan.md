@@ -46,7 +46,7 @@ explicitly does not claim geometrical impossibility. In particular, a nearby
 wall, force response, or observed limit cycle is diagnostic context rather
 than a reachability proof.
 
-## Scalar and systematic sensitivity (engine v1.5)
+## Scalar and systematic sensitivity (engine v1.6)
 
 Physical scalar measurements cannot be nested objects, booleans, strings or
 non-finite numbers. `extreme_measurements` reports
@@ -83,8 +83,28 @@ in `unbounded_metric_names` and return `unavailable / bounds_not_declared` unles
 another measured violation already flags. They never yield a bounds-confirmed clear.
 Named terminal-outcome and validity booleans are accepted; a
 boolean physical measurement is malformed. The source-admission layer still
-rejects unexpected non-finite raw rows; documented sentinel normalization is
-unchanged.
+rejects unexpected non-finite raw rows. Before validation, the offline adapter
+maps documented metric NaN sentinels to null in `metrics` and
+`operational_metrics`, preserving the source bytes and recording each path,
+`source_token: NaN`, and `reason: documented_undefined_metric` in
+`audit_adapter_missingness`. Its explicit allowlist covers success-only time and
+path metrics (`time_to_goal`, `time_to_goal_norm_success_only`,
+`time_to_goal_ideal_ratio`, `path_efficiency`), `aggregated_time`, the documented
+pedestrian distance/clearance metrics and `time_to_collision_min`, force and
+per-pedestrian force quantiles, `ped_force_mean`, `force_exceed_events`,
+`comfort_exposure`, `force_gradient_norm_mean`, and the optional signal measurements
+`signal_min_distance_to_stop_line_before_crossing_m` and
+`signal_delay_after_green_onset_s`. Signal measurements may be undefined when
+signal metadata or the relevant crossing/phase observation is absent; normalization
+does not change `signal_metrics_evidence` or establish signal availability. The structured
+`force_quantiles.q50/q90/q95` copies, including the supported flattened record,
+use the same rule. Definitions and missing-input conditions remain owned by
+[the metric specification](../dev/issues/social-navigation-benchmark/metrics_spec.md)
+and `benchmark.metrics`; normalization does not establish why a recorded value
+was undefined. Other NaN paths, invalid value types, and positive/negative
+infinity remain errors. Existing context-gated disabled-tracking and
+pedestrian-free predicted-separation rules retain their own reasons.
+Engine v1.7 invalidates prior detector cache entries for this admission change.
 
 All cohort detectors require complete row admission. The scan separately indexes
 rejected observations (invalid, unsupported, duplicate, or missing) before forming
@@ -116,12 +136,29 @@ Within-outcome outliers are accompanied by independent default channels:
 - `outcome_incidence` reports timeout, collision, other failure and total adverse
   rates per planner and exact scenario within a campaign. Its denominator includes
   all terminal outcomes, including successes; missing outcomes make the affected
-  planner denominator unavailable. Equal-weight cross-planner median rates and
-  excess rates are disclosed. An adverse episode remains a flagged candidate
-  above the default absolute failure-rate floor of zero, even with one planner.
-  This intentionally preserves every recorded failure subgroup. An excess above
-  0.1 flags the planner's cell, including its successes. These are descriptive
-  triage signals, not significance tests or proof that a failure is unexpected.
+  planner denominator unavailable. Cross-planner medians remain descriptive;
+  excess rates compare the target with pooled external complete peer cells. An
+  adverse episode remains a flagged candidate above the default absolute
+  failure-rate floor of zero, even with one planner. This preserves every recorded
+  failure subgroup.
+  The relative flag uses one-sided Fisher exact tests for those four outcomes,
+  excluding the target from its controls. Existing seed-set integrity requires
+  equal cell sizes, so each complete peer receives equal weight. Missing peer
+  outcomes exclude that peer without shrinking its denominator. Bonferroni
+  correction covers four outcomes times all planned planner cells, including
+  excluded cells. `family_alpha` defaults to 0.05 and cannot exceed it; the retired
+  `excess_rate_threshold` is rejected. Exact target/peer counts, `peer_sample_size`,
+  `pooled_peer_rates`, `incidence_p_values`, significant outcomes and corrected
+  thresholds are retained. A significant relative flag applies to the whole target
+  cell, including successes. Without complete external controls only the unchanged
+  absolute floor can flag.
+  Nominal scenario-family false positives are at most 5% under independent,
+  exchangeable Bernoulli outcomes within and across planner cells. Shared seeds can
+  induce cross-planner dependence, which invalidates that nominal guarantee; these
+  remain triage signals, not causal evidence or defect probabilities. The synthetic
+  Bernoulli(0.2) regression uses 100 null scenarios, five planners and 30 seeds per
+  cell, with the absolute floor disabled to isolate the relative rule. This
+  calibration does not bound the default absolute-failure flag rate.
 - `planner_cohort_shift` compares unconditioned planner features using paired
   episode differences at the same seeds. It needs at least four
   valid episodes per planner/feature and one external planner control. Each

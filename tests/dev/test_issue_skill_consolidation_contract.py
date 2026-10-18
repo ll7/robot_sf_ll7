@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -32,12 +33,45 @@ def _registry() -> dict[str, object]:
     return data
 
 
+@pytest.mark.parametrize("commits_behind", [0, 1, 3])
 def test_legacy_names_preflight_to_canonical_selected_issue_mode(
-    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    commits_behind: int,
 ) -> None:
-    """All retired issue-to-PR names resolve through the production preflight resolver."""
+    """Retired names resolve even when the hosting detached checkout is behind main."""
+
+    def git(*args: str) -> None:
+        subprocess.run(
+            ["git", "-C", str(tmp_path), *args], check=True, capture_output=True, text=True
+        )
+
+    git("init", "-b", "main")
+    for _ in range(commits_behind + 1):
+        git(
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.com",
+            "commit",
+            "--allow-empty",
+            "-m",
+            "fixture",
+        )
+    git("update-ref", "refs/remotes/origin/main", "HEAD")
+    git("checkout", "--detach", f"HEAD~{commits_behind}")
+    monkeypatch.chdir(tmp_path)
+
     check_skills = _load_check_skills_module()
+    status, detail = check_skills._primary_checkout_doctor()
+    assert status == ("stale" if commits_behind else "ok"), detail
+    if commits_behind:
+        assert f"{commits_behind} commits behind" in detail
     monkeypatch.setattr(check_skills, "_check_command", lambda *_args: (True, "available"))
+    # This contract covers alias routing, not the caller's checkout freshness.
+    # The real doctor above must still reject stale detached checkouts.
+    monkeypatch.setattr(check_skills, "_primary_checkout_doctor", lambda: ("ok", "fixture"))
 
     for alias in ("gh-issue-autopilot", "issue-to-pr", "gh-issue-to-pr"):
         assert check_skills._preflight(alias) == 0

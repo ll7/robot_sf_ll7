@@ -1,0 +1,16 @@
+cell,group,episodes,traversal,traversal_share,stationary,stationary_share,empty_scene,actor_slots,stationary_actor_slots,stationary_actor_share,initial_inside_actor_slots,terminal_inside_actor_slots,unfinished_attempt_actor_slots,shorter_than_stationarity_window,respawn_or_discontinuity_transitions,duration_median_s,duration_min_s,duration_max_s,horizon_hits,timeouts
+classic_bottleneck_low,static constriction,180,0,0.0,0,0.0,180,0,0,,0,0,0,0,0,12.5,10.9,15.4,0,0
+classic_bottleneck_medium,static constriction,180,0,0.0,0,0.0,0,180,0,0.0,0,51,51,0,0,19.400000000000002,14.9,36.0,0,0
+classic_bottleneck_high,static constriction,180,0,0.0,32,0.17777777777777778,0,540,43,0.07962962962962963,0,203,203,0,0,29.8,16.7,50.0,2,2
+classic_realworld_double_bottleneck_high,static constriction,180,180,1.0,180,1.0,0,1440,313,0.21736111111111112,0,0,0,0,0,30.200000000000003,24.400000000000002,70.0,8,8
+classic_cross_trap_low,static constriction,180,146,0.8111111111111111,2,0.011111111111111112,0,540,2,0.003703703703703704,18,24,24,0,185,26.6,14.600000000000001,60.0,3,3
+classic_cross_trap_medium,static constriction,180,179,0.9944444444444445,3,0.016666666666666666,0,1440,4,0.002777777777777778,66,114,114,0,487,33.75,6.2,60.0,4,4
+classic_cross_trap_high,static constriction,180,178,0.9888888888888889,8,0.044444444444444446,0,2160,13,0.0060185185185185185,108,199,197,1,782,35.7,1.4000000000000001,60.0,5,5
+classic_doorway_low,portal,180,18,0.1,6,0.03333333333333333,0,540,12,0.022222222222222223,60,0,0,4,150,9.600000000000001,2.2,50.0,6,6
+classic_doorway_medium,portal,180,6,0.03333333333333333,10,0.05555555555555555,0,1080,11,0.010185185185185186,6,0,0,1,239,11.25,2.0,50.0,1,1
+classic_doorway_high,portal,180,10,0.05555555555555555,21,0.11666666666666667,0,1620,33,0.020370370370370372,150,5,5,2,462,13.650000000000002,2.7,50.0,8,8
+francis2023_narrow_hallway,static constriction,180,0,0.0,0,0.0,0,180,0,0.0,180,180,0,0,0,24.150000000000002,16.8,40.0,66,66
+francis2023_entering_room,portal,180,0,0.0,0,0.0,0,180,0,0.0,0,0,0,0,0,10.0,8.700000000000001,40.0,23,23
+francis2023_exiting_room,portal,180,0,0.0,0,0.0,0,180,0,0.0,0,0,0,0,0,11.05,9.8,13.8,0,0
+francis2023_entering_elevator,portal,180,0,0.0,0,0.0,0,180,0,0.0,0,0,0,0,0,7.2,5.7,40.0,29,29
+francis2023_exiting_elevator,portal,180,0,0.0,0,0.0,0,180,0,0.0,0,0,0,0,0,11.3,7.1000000000000005,13.9,0,0

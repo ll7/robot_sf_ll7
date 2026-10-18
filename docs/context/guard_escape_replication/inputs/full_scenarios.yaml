@@ -1,0 +1,1172 @@
+scenarios:
+- name: classic_bottleneck_low
+  map_file: maps/successor_svg_maps/issue_9762_classic_bottleneck_goal_zone_entry_v2.svg
+  simulation_config:
+    max_episode_steps: 500
+    ped_density: 0.0
+    goal_completion_policy: goal_zone_entry_v1
+    social_force_kernel_version: wrapped_v2
+    robot_goal_sampling_policy: footprint_clearance_v1
+  robot_config: {}
+  metadata:
+    archetype: bottleneck
+    density: low
+    spawn_mode: markers
+    density_advisory: zero_baseline_route_spawn
+    flow: bi
+    groups: 0.0
+    plausibility:
+      status: verified
+      verified_on: '2026-01-29'
+      verified_by: ll7
+      method: null
+      notes: ped_density=0.0; use map single_ped markers to control count.
+      metrics:
+        min_distance: null
+        mean_distance: null
+        robot_ped_within_5m_frac: null
+        ped_force_mean: null
+        force_q95: null
+      metrics_updated_on: '2026-01-30T14:19:28.225110+01:00'
+  seeds:
+  - 1031
+  - 1032
+  - 1033
+  - 1034
+  - 1035
+  - 1036
+  - 1037
+  - 1038
+  - 1039
+  - 1040
+  - 1041
+  - 1042
+  - 1043
+  - 1044
+  - 1045
+  - 1046
+  - 1047
+  - 1048
+  - 1049
+  - 1050
+  - 1051
+  - 1052
+  - 1053
+  - 1054
+  - 1055
+  - 1056
+  - 1057
+  - 1058
+  - 1059
+  - 1060
+  map_id: null
+- name: classic_bottleneck_medium
+  map_file: maps/successor_svg_maps/issue_9762_classic_bottleneck_medium_goal_zone_entry_v2.svg
+  simulation_config:
+    max_episode_steps: 500
+    ped_density: 0.0
+    goal_completion_policy: goal_zone_entry_v1
+    social_force_kernel_version: wrapped_v2
+    robot_goal_sampling_policy: footprint_clearance_v1
+  robot_config: {}
+  metadata:
+    archetype: bottleneck
+    density: medium
+    spawn_mode: markers
+    density_advisory: zero_baseline_route_spawn
+    flow: bi
+    groups: 0.0
+    plausibility:
+      status: verified
+      verified_on: '2026-01-29'
+      verified_by: ll7
+      method: null
+      notes: ped_density=0.0; use map single_ped markers to control count.
+      metrics:
+        min_distance: 1.3568504232890768
+        mean_distance: 10.304393328176037
+        robot_ped_within_5m_frac: 0.20673702551886897
+        ped_force_mean: 0.0977117812274009
+        force_q95: 0.36515309739568574
+      metrics_updated_on: '2026-01-30T14:19:28.225110+01:00'
+  seeds:
+  - 1031
+  - 1032
+  - 1033
+  - 1034
+  - 1035
+  - 1036
+  - 1037
+  - 1038
+  - 1039
+  - 1040
+  - 1041
+  - 1042
+  - 1043
+  - 1044
+  - 1045
+  - 1046
+  - 1047
+  - 1048
+  - 1049
+  - 1050
+  - 1051
+  - 1052
+  - 1053
+  - 1054
+  - 1055
+  - 1056
+  - 1057
+  - 1058
+  - 1059
+  - 1060
+  map_id: null
+- name: classic_bottleneck_high
+  map_file: maps/successor_svg_maps/issue_9762_classic_bottleneck_high_goal_zone_entry_v2.svg
+  simulation_config:
+    max_episode_steps: 500
+    ped_density: 0.0
+    goal_completion_policy: goal_zone_entry_v1
+    social_force_kernel_version: wrapped_v2
+    robot_goal_sampling_policy: footprint_clearance_v1
+  robot_config: {}
+  metadata:
+    archetype: bottleneck
+    density: high
+    spawn_mode: markers
+    density_advisory: zero_baseline_route_spawn
+    flow: bi
+    groups: 0.0
+    plausibility:
+      status: verified
+      verified_on: '2026-01-29'
+      verified_by: ll7
+      method: null
+      notes: ped_density=0.0; use map single_ped markers to control count.
+      metrics:
+        min_distance: 1.3151934686291786
+        mean_distance: 10.098522314775332
+        robot_ped_within_5m_frac: 0.21322846692018266
+        ped_force_mean: 0.08291461806394115
+        force_q95: 0.21743377704570035
+      metrics_updated_on: '2026-01-30T14:19:28.225110+01:00'
+  seeds:
+  - 1031
+  - 1032
+  - 1033
+  - 1034
+  - 1035
+  - 1036
+  - 1037
+  - 1038
+  - 1039
+  - 1040
+  - 1041
+  - 1042
+  - 1043
+  - 1044
+  - 1045
+  - 1046
+  - 1047
+  - 1048
+  - 1049
+  - 1050
+  - 1051
+  - 1052
+  - 1053
+  - 1054
+  - 1055
+  - 1056
+  - 1057
+  - 1058
+  - 1059
+  - 1060
+  map_id: null
+- name: classic_realworld_double_bottleneck_high
+  map_file: maps/successor_svg_maps/issue_9762_classic_realworld_bottleneck_goal_zone_entry_v2.svg
+  simulation_config:
+    max_episode_steps: 700
+    ped_density: 0.0
+    goal_completion_policy: goal_zone_entry_v1
+    social_force_kernel_version: wrapped_v2
+    robot_goal_sampling_policy: footprint_clearance_v1
+  robot_config: {}
+  metadata:
+    archetype: bottleneck
+    label: real-world-inspired double sequential bottleneck
+    density: high
+    spawn_mode: markers
+    density_advisory: zero_baseline_route_spawn
+    flow: bi
+    groups: 0.0
+  single_pedestrians:
+  - id: l1
+    speed_m_s: 0.7
+    start:
+    - 10.0
+    - 9.0
+    goal:
+    - 50.0
+    - 9.0
+  - id: l2
+    speed_m_s: 0.7
+    start:
+    - 10.0
+    - 9.5
+    goal:
+    - 50.0
+    - 9.5
+  - id: l3
+    speed_m_s: 0.7
+    start:
+    - 10.0
+    - 10.0
+    goal:
+    - 50.0
+    - 10.0
+  - id: l4
+    speed_m_s: 0.7
+    start:
+    - 10.0
+    - 10.5
+    goal:
+    - 50.0
+    - 10.5
+  - id: r1
+    speed_m_s: 0.7
+    start:
+    - 50.0
+    - 9.0
+    goal:
+    - 10.0
+    - 9.0
+  - id: r2
+    speed_m_s: 0.7
+    start:
+    - 50.0
+    - 9.5
+    goal:
+    - 10.0
+    - 9.5
+  - id: r3
+    speed_m_s: 0.7
+    start:
+    - 50.0
+    - 10.0
+    goal:
+    - 10.0
+    - 10.0
+  - id: r4
+    speed_m_s: 0.7
+    start:
+    - 50.0
+    - 10.5
+    goal:
+    - 10.0
+    - 10.5
+  seeds:
+  - 1031
+  - 1032
+  - 1033
+  - 1034
+  - 1035
+  - 1036
+  - 1037
+  - 1038
+  - 1039
+  - 1040
+  - 1041
+  - 1042
+  - 1043
+  - 1044
+  - 1045
+  - 1046
+  - 1047
+  - 1048
+  - 1049
+  - 1050
+  - 1051
+  - 1052
+  - 1053
+  - 1054
+  - 1055
+  - 1056
+  - 1057
+  - 1058
+  - 1059
+  - 1060
+  map_id: null
+- name: classic_station_platform_medium
+  map_file: maps/successor_svg_maps/issue_10063_classic_station_platform_safe_spawn_v1.svg
+  simulation_config:
+    max_episode_steps: 650
+    ped_density: 0.05
+    goal_completion_policy: goal_zone_entry_v1
+    social_force_kernel_version: wrapped_v2
+    robot_goal_sampling_policy: footprint_clearance_v1
+  single_pedestrians:
+  - id: p1
+    goal: null
+    trajectory:
+    - - 24.0
+      - 22.0
+    - - 24.0
+      - 18.5
+    - - 38.0
+      - 22.0
+    - - 76.0
+      - 22.0
+    wait_at:
+    - waypoint_index: 1
+      wait_s: 6.0
+      note: wait near the left stair landing before continuing
+    note: left-to-right pause near stair access
+  - id: p3
+    goal: null
+    trajectory:
+    - - 60.0
+      - 4.2
+    - - 60.0
+      - 8.0
+    - - 44.0
+      - 4.2
+    - - 9.0
+      - 4.2
+    wait_at:
+    - waypoint_index: 1
+      wait_s: 5.0
+      note: short dwell near the right stair landing
+    note: right-to-left pause near stair access
+  robot_config: {}
+  metadata:
+    archetype: station_platform
+    label: station hall with stair and elevator cores and a central crossover
+    density: medium
+    flow: bi
+    groups: 0.0
+  seeds:
+  - 1031
+  - 1032
+  - 1033
+  - 1034
+  - 1035
+  - 1036
+  - 1037
+  - 1038
+  - 1039
+  - 1040
+  - 1041
+  - 1042
+  - 1043
+  - 1044
+  - 1045
+  - 1046
+  - 1047
+  - 1048
+  - 1049
+  - 1050
+  - 1051
+  - 1052
+  - 1053
+  - 1054
+  - 1055
+  - 1056
+  - 1057
+  - 1058
+  - 1059
+  - 1060
+  map_id: null
+- name: classic_cross_trap_low
+  map_id: null
+  simulation_config:
+    max_episode_steps: 600
+    ped_density: 0.02
+    goal_completion_policy: goal_zone_entry_v1
+    social_force_kernel_version: wrapped_v2
+    robot_goal_sampling_policy: footprint_clearance_v1
+  robot_config: {}
+  metadata:
+    archetype: cross_trap
+    label: cross-trap local-minimum circulation
+    density: low
+    flow: bi
+    groups: 0.0
+    plausibility:
+      status: verified
+      verified_on: '2026-01-29'
+      verified_by: ll7
+      method: null
+      notes: null
+      metrics:
+        min_distance: 1.8367418245009373
+        mean_distance: 5.9319317460258425
+        robot_ped_within_5m_frac: 0.4599224586174748
+        ped_force_mean: 0.2749112167516942
+        force_q95: 0.9427403086029689
+      metrics_updated_on: '2026-01-30T14:19:28.225110+01:00'
+  seeds:
+  - 1031
+  - 1032
+  - 1033
+  - 1034
+  - 1035
+  - 1036
+  - 1037
+  - 1038
+  - 1039
+  - 1040
+  - 1041
+  - 1042
+  - 1043
+  - 1044
+  - 1045
+  - 1046
+  - 1047
+  - 1048
+  - 1049
+  - 1050
+  - 1051
+  - 1052
+  - 1053
+  - 1054
+  - 1055
+  - 1056
+  - 1057
+  - 1058
+  - 1059
+  - 1060
+  map_file: maps/successor_svg_maps/issue_9762_classic_crossing_goal_zone_entry_v2.svg
+- name: classic_cross_trap_medium
+  map_id: null
+  simulation_config:
+    max_episode_steps: 600
+    ped_density: 0.05
+    goal_completion_policy: goal_zone_entry_v1
+    social_force_kernel_version: wrapped_v2
+    robot_goal_sampling_policy: footprint_clearance_v1
+  robot_config: {}
+  metadata:
+    archetype: cross_trap
+    label: cross-trap local-minimum circulation
+    density: medium
+    flow: bi
+    groups: 0.0
+    plausibility:
+      status: verified
+      verified_on: '2026-01-29'
+      verified_by: ll7
+      method: null
+      notes: null
+      metrics:
+        min_distance: 4.789576152795328
+        mean_distance: 10.950417011157608
+        robot_ped_within_5m_frac: 0.06629362880886427
+        ped_force_mean: 0.18424997393839726
+        force_q95: 0.6445198830160026
+      metrics_updated_on: '2026-01-30T14:19:28.225110+01:00'
+  seeds:
+  - 1031
+  - 1032
+  - 1033
+  - 1034
+  - 1035
+  - 1036
+  - 1037
+  - 1038
+  - 1039
+  - 1040
+  - 1041
+  - 1042
+  - 1043
+  - 1044
+  - 1045
+  - 1046
+  - 1047
+  - 1048
+  - 1049
+  - 1050
+  - 1051
+  - 1052
+  - 1053
+  - 1054
+  - 1055
+  - 1056
+  - 1057
+  - 1058
+  - 1059
+  - 1060
+  map_file: maps/successor_svg_maps/issue_9762_classic_crossing_goal_zone_entry_v2.svg
+- name: classic_cross_trap_high
+  map_id: null
+  simulation_config:
+    max_episode_steps: 600
+    ped_density: 0.08
+    goal_completion_policy: goal_zone_entry_v1
+    social_force_kernel_version: wrapped_v2
+    robot_goal_sampling_policy: footprint_clearance_v1
+  robot_config: {}
+  metadata:
+    archetype: cross_trap
+    label: cross-trap local-minimum circulation
+    density: high
+    flow: bi
+    groups: 0.0
+    plausibility:
+      status: verified
+      verified_on: '2026-01-29'
+      verified_by: ll7
+      method: null
+      notes: null
+      metrics:
+        min_distance: 2.8766785893771702
+        mean_distance: 10.02981557058951
+        robot_ped_within_5m_frac: 0.17466666666666666
+        ped_force_mean: 0.19881092600791625
+        force_q95: 0.739349157779526
+      metrics_updated_on: '2026-01-30T14:19:28.225110+01:00'
+  seeds:
+  - 1031
+  - 1032
+  - 1033
+  - 1034
+  - 1035
+  - 1036
+  - 1037
+  - 1038
+  - 1039
+  - 1040
+  - 1041
+  - 1042
+  - 1043
+  - 1044
+  - 1045
+  - 1046
+  - 1047
+  - 1048
+  - 1049
+  - 1050
+  - 1051
+  - 1052
+  - 1053
+  - 1054
+  - 1055
+  - 1056
+  - 1057
+  - 1058
+  - 1059
+  - 1060
+  map_file: maps/successor_svg_maps/issue_9762_classic_crossing_goal_zone_entry_v2.svg
+- name: classic_doorway_low
+  map_file: maps/successor_svg_maps/issue_9762_classic_doorway_goal_zone_entry_v2.svg
+  simulation_config:
+    max_episode_steps: 500
+    ped_density: 0.02
+    route_spawn_distribution: spread
+    route_spawn_jitter_frac: 0.2
+    max_peds_per_group: 1
+    goal_completion_policy: goal_zone_entry_v1
+    social_force_kernel_version: wrapped_v2
+    robot_goal_sampling_policy: footprint_clearance_v1
+  robot_config: {}
+  metadata:
+    archetype: doorway
+    density: low
+    flow: bi
+    groups: 0.0
+    plausibility:
+      status: unverified
+      verified_on: null
+      verified_by: null
+      method: null
+      notes: null
+      metrics:
+        min_distance: 2.463720507545049
+        mean_distance: 4.816876019796456
+        robot_ped_within_5m_frac: 0.6435411099964484
+        ped_force_mean: 0.3415082177106482
+        force_q95: 1.2272777395106866
+      metrics_updated_on: '2026-01-30T14:19:28.225110+01:00'
+  seeds:
+  - 1031
+  - 1032
+  - 1033
+  - 1034
+  - 1035
+  - 1036
+  - 1037
+  - 1038
+  - 1039
+  - 1040
+  - 1041
+  - 1042
+  - 1043
+  - 1044
+  - 1045
+  - 1046
+  - 1047
+  - 1048
+  - 1049
+  - 1050
+  - 1051
+  - 1052
+  - 1053
+  - 1054
+  - 1055
+  - 1056
+  - 1057
+  - 1058
+  - 1059
+  - 1060
+  map_id: null
+- name: classic_doorway_medium
+  map_file: maps/successor_svg_maps/issue_9762_classic_doorway_goal_zone_entry_v2.svg
+  simulation_config:
+    max_episode_steps: 500
+    ped_density: 0.05
+    route_spawn_distribution: spread
+    route_spawn_jitter_frac: 0.2
+    max_peds_per_group: 1
+    goal_completion_policy: goal_zone_entry_v1
+    social_force_kernel_version: wrapped_v2
+    robot_goal_sampling_policy: footprint_clearance_v1
+  robot_config: {}
+  metadata:
+    archetype: doorway
+    density: medium
+    flow: bi
+    groups: 0.0
+    plausibility:
+      status: unverified
+      verified_on: null
+      verified_by: null
+      method: null
+      notes: null
+      metrics:
+        min_distance: 2.0678184908531962
+        mean_distance: 3.8315920323061348
+        robot_ped_within_5m_frac: 0.7868823705030602
+        ped_force_mean: 0.3252101197691243
+        force_q95: 1.3760223536317078
+      metrics_updated_on: '2026-01-30T14:19:28.225110+01:00'
+  seeds:
+  - 1031
+  - 1032
+  - 1033
+  - 1034
+  - 1035
+  - 1036
+  - 1037
+  - 1038
+  - 1039
+  - 1040
+  - 1041
+  - 1042
+  - 1043
+  - 1044
+  - 1045
+  - 1046
+  - 1047
+  - 1048
+  - 1049
+  - 1050
+  - 1051
+  - 1052
+  - 1053
+  - 1054
+  - 1055
+  - 1056
+  - 1057
+  - 1058
+  - 1059
+  - 1060
+  map_id: null
+- name: classic_doorway_high
+  map_file: maps/successor_svg_maps/issue_9762_classic_doorway_goal_zone_entry_v2.svg
+  simulation_config:
+    max_episode_steps: 500
+    ped_density: 0.08
+    route_spawn_distribution: spread
+    route_spawn_jitter_frac: 0.2
+    max_peds_per_group: 1
+    goal_completion_policy: goal_zone_entry_v1
+    social_force_kernel_version: wrapped_v2
+    robot_goal_sampling_policy: footprint_clearance_v1
+  robot_config: {}
+  metadata:
+    archetype: doorway
+    density: high
+    flow: bi
+    groups: 0.0
+    plausibility:
+      status: unverified
+      verified_on: null
+      verified_by: null
+      method: null
+      notes: null
+      metrics:
+        min_distance: 1.5266752306601346
+        mean_distance: 3.6800348987218063
+        robot_ped_within_5m_frac: 0.8078135977219347
+        ped_force_mean: 0.2870675192361372
+        force_q95: 1.1067593700206833
+      metrics_updated_on: '2026-01-30T14:19:28.225110+01:00'
+  seeds:
+  - 1031
+  - 1032
+  - 1033
+  - 1034
+  - 1035
+  - 1036
+  - 1037
+  - 1038
+  - 1039
+  - 1040
+  - 1041
+  - 1042
+  - 1043
+  - 1044
+  - 1045
+  - 1046
+  - 1047
+  - 1048
+  - 1049
+  - 1050
+  - 1051
+  - 1052
+  - 1053
+  - 1054
+  - 1055
+  - 1056
+  - 1057
+  - 1058
+  - 1059
+  - 1060
+  map_id: null
+- name: francis2023_narrow_hallway
+  map_file: maps/successor_svg_maps/issue_9762_francis2023_narrow_hallway_goal_zone_entry_v2.svg
+  simulation_config:
+    max_episode_steps: 400
+    ped_density: 0.0
+    goal_completion_policy: goal_zone_entry_v1
+    social_force_kernel_version: wrapped_v2
+    robot_goal_sampling_policy: footprint_clearance_v1
+  single_pedestrians:
+  - id: h1
+    goal_poi: poi_h1_goal
+  robot_config: {}
+  metadata:
+    figure: 7j
+    archetype: narrow_hallway
+    flow: bi
+    behavior: none
+    plausibility:
+      status: unverified
+      verified_on: null
+      verified_by: null
+      method: null
+      notes: null
+      metrics:
+        min_distance: 0.9195934368310343
+        mean_distance: 5.6718576032752415
+        robot_ped_within_5m_frac: 0.533601304024786
+        ped_force_mean: 0.5611255939989312
+        force_q95: 1.51429557399116
+      metrics_updated_on: '2026-01-30T14:19:28.225110+01:00'
+  seeds:
+  - 1031
+  - 1032
+  - 1033
+  - 1034
+  - 1035
+  - 1036
+  - 1037
+  - 1038
+  - 1039
+  - 1040
+  - 1041
+  - 1042
+  - 1043
+  - 1044
+  - 1045
+  - 1046
+  - 1047
+  - 1048
+  - 1049
+  - 1050
+  - 1051
+  - 1052
+  - 1053
+  - 1054
+  - 1055
+  - 1056
+  - 1057
+  - 1058
+  - 1059
+  - 1060
+  map_id: null
+- name: francis2023_entering_room
+  map_file: maps/successor_svg_maps/issue_9856_francis2023_entering_room_route_width_v1.svg
+  simulation_config:
+    max_episode_steps: 400
+    ped_density: 0.0
+    goal_completion_policy: goal_zone_entry_v1
+    social_force_kernel_version: wrapped_v2
+    robot_goal_sampling_policy: footprint_clearance_v1
+  single_pedestrians:
+  - id: h1
+    goal_poi: poi_h1_goal
+  robot_config: {}
+  metadata:
+    figure: 7l
+    archetype: entering_room
+    flow: enter
+    behavior: none
+    plausibility:
+      status: unverified
+      verified_on: null
+      verified_by: null
+      method: null
+      notes: null
+      metrics:
+        min_distance: 5.224637284588586
+        mean_distance: 12.197621099343227
+        robot_ped_within_5m_frac: 0.0019801980198019802
+        ped_force_mean: 0.13826993362039994
+        force_q95: 0.4375912615159093
+      metrics_updated_on: '2026-01-30T14:19:28.225110+01:00'
+  seeds:
+  - 1031
+  - 1032
+  - 1033
+  - 1034
+  - 1035
+  - 1036
+  - 1037
+  - 1038
+  - 1039
+  - 1040
+  - 1041
+  - 1042
+  - 1043
+  - 1044
+  - 1045
+  - 1046
+  - 1047
+  - 1048
+  - 1049
+  - 1050
+  - 1051
+  - 1052
+  - 1053
+  - 1054
+  - 1055
+  - 1056
+  - 1057
+  - 1058
+  - 1059
+  - 1060
+  map_id: null
+- name: francis2023_exiting_room
+  map_file: maps/successor_svg_maps/issue_9856_francis2023_exiting_room_route_width_v1.svg
+  simulation_config:
+    max_episode_steps: 400
+    ped_density: 0.0
+    goal_completion_policy: goal_zone_entry_v1
+    social_force_kernel_version: wrapped_v2
+    robot_goal_sampling_policy: footprint_clearance_v1
+  single_pedestrians:
+  - id: h1
+    goal_poi: poi_h1_goal
+  robot_config: {}
+  metadata:
+    figure: 7m
+    archetype: exiting_room
+    flow: exit
+    behavior: none
+    plausibility:
+      status: unverified
+      verified_on: null
+      verified_by: null
+      method: null
+      notes: null
+      metrics:
+        min_distance: 2.5091095140234154
+        mean_distance: 5.040019234532677
+        robot_ped_within_5m_frac: 0.5395195309011214
+        ped_force_mean: 0.18461383289604444
+        force_q95: 0.6888443603726052
+      metrics_updated_on: '2026-01-30T14:19:28.225110+01:00'
+  seeds:
+  - 1031
+  - 1032
+  - 1033
+  - 1034
+  - 1035
+  - 1036
+  - 1037
+  - 1038
+  - 1039
+  - 1040
+  - 1041
+  - 1042
+  - 1043
+  - 1044
+  - 1045
+  - 1046
+  - 1047
+  - 1048
+  - 1049
+  - 1050
+  - 1051
+  - 1052
+  - 1053
+  - 1054
+  - 1055
+  - 1056
+  - 1057
+  - 1058
+  - 1059
+  - 1060
+  map_id: null
+- name: francis2023_entering_elevator
+  map_file: maps/successor_svg_maps/issue_9856_francis2023_entering_elevator_route_width_v1.svg
+  simulation_config:
+    max_episode_steps: 400
+    ped_density: 0.0
+    goal_completion_policy: goal_zone_entry_v1
+    social_force_kernel_version: wrapped_v2
+    robot_goal_sampling_policy: footprint_clearance_v1
+  single_pedestrians:
+  - id: h1
+    goal_poi: poi_h1_goal
+  robot_config: {}
+  metadata:
+    figure: 7n
+    archetype: entering_elevator
+    flow: enter
+    behavior: none
+    plausibility:
+      status: unverified
+      verified_on: null
+      verified_by: null
+      method: null
+      notes: null
+      metrics:
+        min_distance: 2.6329627492537844
+        mean_distance: 7.018890149273052
+        robot_ped_within_5m_frac: 0.27527255921880417
+        ped_force_mean: 0.1626901414381952
+        force_q95: 0.42404303193127524
+      metrics_updated_on: '2026-01-30T14:19:28.225110+01:00'
+  seeds:
+  - 1031
+  - 1032
+  - 1033
+  - 1034
+  - 1035
+  - 1036
+  - 1037
+  - 1038
+  - 1039
+  - 1040
+  - 1041
+  - 1042
+  - 1043
+  - 1044
+  - 1045
+  - 1046
+  - 1047
+  - 1048
+  - 1049
+  - 1050
+  - 1051
+  - 1052
+  - 1053
+  - 1054
+  - 1055
+  - 1056
+  - 1057
+  - 1058
+  - 1059
+  - 1060
+  map_id: null
+- name: francis2023_exiting_elevator
+  map_file: maps/successor_svg_maps/issue_9856_francis2023_exiting_elevator_route_width_v1.svg
+  simulation_config:
+    max_episode_steps: 400
+    ped_density: 0.0
+    goal_completion_policy: goal_zone_entry_v1
+    social_force_kernel_version: wrapped_v2
+    robot_goal_sampling_policy: footprint_clearance_v1
+  single_pedestrians:
+  - id: h1
+    goal_poi: poi_h1_goal
+  robot_config: {}
+  metadata:
+    figure: 7o
+    archetype: exiting_elevator
+    flow: exit
+    behavior: none
+    plausibility:
+      status: unverified
+      verified_on: null
+      verified_by: null
+      method: null
+      notes: null
+      metrics:
+        min_distance: 1.9274021081195187
+        mean_distance: 3.672120444714254
+        robot_ped_within_5m_frac: 0.7592158661361399
+        ped_force_mean: 0.3153608063487094
+        force_q95: 0.7462034994191002
+      metrics_updated_on: '2026-01-30T14:19:28.225110+01:00'
+  seeds:
+  - 1031
+  - 1032
+  - 1033
+  - 1034
+  - 1035
+  - 1036
+  - 1037
+  - 1038
+  - 1039
+  - 1040
+  - 1041
+  - 1042
+  - 1043
+  - 1044
+  - 1045
+  - 1046
+  - 1047
+  - 1048
+  - 1049
+  - 1050
+  - 1051
+  - 1052
+  - 1053
+  - 1054
+  - 1055
+  - 1056
+  - 1057
+  - 1058
+  - 1059
+  - 1060
+  map_id: null
+- name: francis2023_crowd_navigation
+  map_file: maps/successor_svg_maps/issue_9762_francis2023_crowd_navigation_goal_zone_entry_v2.svg
+  simulation_config:
+    max_episode_steps: 400
+    ped_density: 0.08
+    goal_completion_policy: goal_zone_entry_v1
+    social_force_kernel_version: wrapped_v2
+    robot_goal_sampling_policy: footprint_clearance_v1
+  robot_config: {}
+  metadata:
+    figure: 7u
+    archetype: crowd_navigation
+    flow: crowd
+    behavior: crowd
+    plausibility:
+      status: unverified
+      verified_on: null
+      verified_by: null
+      method: null
+      notes: null
+      metrics:
+        min_distance: 1.2872769612936248
+        mean_distance: 4.139879364452325
+        robot_ped_within_5m_frac: 0.7455471256563805
+        ped_force_mean: 1.7455711558688223
+        force_q95: 6.855429594992161
+      metrics_updated_on: '2026-01-30T14:19:28.225110+01:00'
+  seeds:
+  - 1031
+  - 1032
+  - 1033
+  - 1034
+  - 1035
+  - 1036
+  - 1037
+  - 1038
+  - 1039
+  - 1040
+  - 1041
+  - 1042
+  - 1043
+  - 1044
+  - 1045
+  - 1046
+  - 1047
+  - 1048
+  - 1049
+  - 1050
+  - 1051
+  - 1052
+  - 1053
+  - 1054
+  - 1055
+  - 1056
+  - 1057
+  - 1058
+  - 1059
+  - 1060
+  map_id: null
+- name: francis2023_robot_crowding
+  map_file: maps/successor_svg_maps/issue_10063_francis2023_robot_crowding_safe_spawn_v1.svg
+  simulation_config:
+    max_episode_steps: 400
+    ped_density: 0.21
+    goal_completion_policy: goal_zone_entry_v1
+    social_force_kernel_version: wrapped_v2
+    robot_goal_sampling_policy: footprint_clearance_v1
+  robot_config: {}
+  metadata:
+    figure: 7y
+    archetype: robot_crowding
+    flow: crowd
+    behavior: crowding
+    plausibility:
+      status: unverified
+      verified_on: null
+      verified_by: null
+      method: null
+      notes: null
+      metrics:
+        min_distance: 3.045685547216631
+        mean_distance: 4.573849656079643
+        robot_ped_within_5m_frac: 0.6715
+        ped_force_mean: 0.5457873106030219
+        force_q95: 1.6530126353850463
+      metrics_updated_on: '2026-01-30T14:19:28.225110+01:00'
+  seeds:
+  - 1031
+  - 1032
+  - 1033
+  - 1034
+  - 1035
+  - 1036
+  - 1037
+  - 1038
+  - 1039
+  - 1040
+  - 1041
+  - 1042
+  - 1043
+  - 1044
+  - 1045
+  - 1046
+  - 1047
+  - 1048
+  - 1049
+  - 1050
+  - 1051
+  - 1052
+  - 1053
+  - 1054
+  - 1055
+  - 1056
+  - 1057
+  - 1058
+  - 1059
+  - 1060
+  map_id: null

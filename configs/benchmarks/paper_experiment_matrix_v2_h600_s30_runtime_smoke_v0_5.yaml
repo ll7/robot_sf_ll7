@@ -1,9 +1,10 @@
 # Candidate runtime smoke for the current 0.0.8 benchmark-data template.
 # The #9748 frozen v4 slots resolve; runtime and SNQI claims require separate runs.
 name: paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_5
+protocol_version: 0.0.8
 derived_from:
   config: configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml
-  config_sha256: 7ec9112d999e84e73675d7df4501aea0850ba072ab2ffc74943d22ea7d270223
+  config_sha256: 5d805909643f1b6c5e919a891657ec86e6800f2ab602b7cfd70f1af1aec94462
 paper_facing: true
 paper_profile_version: paper-matrix-v1
 scenario_matrix: configs/scenarios/single/francis2023_blind_corner_release_0_0_8_v1.yaml
@@ -25,10 +26,10 @@ seed_policy:
   seeds: [103]
   seed_sets_path: configs/benchmarks/seed_sets_v1.yaml
 
-snqi_weights: configs/benchmarks/snqi_weights_camera_ready_v3.json
-snqi_baseline: configs/benchmarks/snqi_baseline_camera_ready_v3.json
+snqi_weights: null
+snqi_baseline: null
 snqi_contract:
-  enabled: true
+  enabled: false
   enforcement: warn
   rank_alignment_warn_threshold: 0.5
   rank_alignment_fail_threshold: 0.3
@@ -40,7 +41,8 @@ snqi_contract:
   calibration_trials: 600
 
 workers: 32
-horizon: 600
+scenario_horizons: configs/benchmarks/horizon_schedules/release_0_0_8_authored_v1.yaml
+scenario_horizons_sha256: 032bbf8ad354ea9394492659aa50188e2bc40078930975ef30cd3ba77208675e
 dt: 0.1
 record_forces: true
 checkpoint_provenance_enforcement: error
@@ -79,7 +81,7 @@ planners:
   - key: prediction_planner
     algo: prediction_planner
     planner_group: experimental
-    algo_config: configs/algos/prediction_planner_camera_ready.yaml
+    algo_config: configs/algos/prediction_planner_release_v0_0_8.yaml
     benchmark_profile: experimental
   - key: goal
     algo: goal
@@ -88,28 +90,30 @@ planners:
   - key: social_force
     algo: social_force
     planner_group: core
-    algo_config: configs/algos/social_force_resolution_independent_v2_kernel_wrapped_v2.yaml
+    algo_config: configs/algos/social_force_release_v0_0_8.yaml
     benchmark_profile: baseline-safe
   - key: orca
     algo: orca
     planner_group: core
     benchmark_profile: baseline-safe
+    algo_config: configs/algos/orca_release_v0_0_8.yaml
     socnav_missing_prereq_policy: fail-fast
   - key: ppo
     algo: ppo
     planner_group: experimental
-    algo_config: configs/baselines/ppo_issue_791_eval_aligned_large_capacity_cpu.yaml
+    algo_config: configs/baselines/ppo_release_robot_0_0_8_cpu.yaml
     benchmark_profile: experimental
     adapter_impact_eval: true
   - key: socnav_sampling
     algo: socnav_sampling
     planner_group: experimental
-    algo_config: configs/algos/socnav_sampling_bounded_v2.yaml
+    algo_config: configs/algos/socnav_sampling_release_v0_0_8.yaml
     benchmark_profile: experimental
     socnav_missing_prereq_policy: fail-fast
   - key: sacadrl
     algo: sacadrl
     planner_group: experimental
+    algo_config: configs/algos/socnav_release_v0_0_8.yaml
     benchmark_profile: experimental
     socnav_missing_prereq_policy: fail-fast
   - key: scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4
@@ -135,15 +139,15 @@ planners:
   - key: guarded_ppo
     algo: guarded_ppo
     planner_group: experimental
-    algo_config: configs/algos/guarded_ppo_camera_ready_cpu.yaml
+    algo_config: configs/algos/guarded_ppo_release_v0_0_8.yaml
     benchmark_profile: experimental
   - key: predictive_mppi
     algo: predictive_mppi
     planner_group: experimental
-    algo_config: configs/algos/predictive_mppi_camera_ready.yaml
+    algo_config: configs/algos/predictive_mppi_release_v0_0_8.yaml
     benchmark_profile: experimental
   - key: risk_dwa
     algo: risk_dwa
     planner_group: experimental
-    algo_config: configs/algos/risk_dwa_camera_ready.yaml
+    algo_config: configs/algos/risk_dwa_release_v0_0_8.yaml
     benchmark_profile: experimental

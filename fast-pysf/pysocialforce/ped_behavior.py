@@ -12,6 +12,8 @@ from dataclasses import dataclass, field
 from math import dist
 from typing import Protocol
 
+import numpy as np
+
 from pysocialforce.map_config import GlobalRoute, sample_circle, sample_zone
 from pysocialforce.navigation import RouteNavigator
 from pysocialforce.ped_grouping import PedestrianGroupings
@@ -56,6 +58,7 @@ class CrowdedZoneBehavior:
     zone_assignments: dict[int, int]
     crowded_zones: list[Zone]
     goal_proximity_threshold: float = 1
+    rng: np.random.Generator = field(default_factory=np.random.default_rng, repr=False)
 
     def step(self):
         """
@@ -70,7 +73,7 @@ class CrowdedZoneBehavior:
             if dist_to_goal < self.goal_proximity_threshold:
                 any_pid = next(iter(self.groups.groups[gid]))
                 zone = self.crowded_zones[self.zone_assignments[any_pid]]
-                new_goal = sample_zone(zone, 1)[0]
+                new_goal = sample_zone(zone, 1, rng=self.rng)[0]
                 self.groups.redirect_group(gid, new_goal)
 
     def reset(self):
@@ -82,7 +85,7 @@ class CrowdedZoneBehavior:
         for gid in self.groups.group_ids:
             any_pid = next(iter(self.groups.groups[gid]))
             zone = self.crowded_zones[self.zone_assignments[any_pid]]
-            new_goal = sample_zone(zone, 1)[0]
+            new_goal = sample_zone(zone, 1, rng=self.rng)[0]
             self.groups.redirect_group(gid, new_goal)
 
 
@@ -103,6 +106,7 @@ class FollowRouteBehavior:
     route_assignments: dict[int, GlobalRoute]
     initial_sections: list[int]
     goal_proximity_threshold: float = 1
+    rng: np.random.Generator = field(default_factory=np.random.default_rng, repr=False)
     navigators: dict[int, RouteNavigator] = field(init=False)
 
     def __post_init__(self):
@@ -152,7 +156,7 @@ class FollowRouteBehavior:
         nav = self.navigators[gid]
         num_peds = self.groups.group_size(gid)
         circle = self.route_assignments[gid].spawn_circle
-        spawn_positions = sample_circle(circle, num_peds)
+        spawn_positions = sample_circle(circle, num_peds, rng=self.rng)
         self.groups.reposition_group(gid, spawn_positions)
         self.groups.redirect_group(gid, nav.waypoints[0])
         nav.waypoint_id = 0

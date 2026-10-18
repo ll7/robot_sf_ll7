@@ -128,10 +128,10 @@ def test_make_crowd_sim_env_exposes_factory(monkeypatch):
     """Factory should construct the crowd env and preserve the applied seed."""
     monkeypatch.setattr(crowd_sim_env, "Simulator", FakeSimulator)
 
-    env = make_crowd_sim_env(config=_config(), seed=123)
+    env = make_crowd_sim_env(config=_config(), seed=1013)
 
     assert isinstance(env, CrowdSimEnv)
-    assert env.applied_seed == 123
+    assert env.applied_seed == 1013
 
 
 def test_make_crowd_sim_env_seed_controls_constructor_map_selection(monkeypatch):
@@ -167,7 +167,7 @@ def test_make_crowd_sim_env_seed_controls_constructor_map_selection(monkeypatch)
                 env.close()
         return ids
 
-    seed_123_ids = selected_map_ids(123)
+    seed_123_ids = selected_map_ids(1013)
     seed_456_ids = selected_map_ids(456)
 
     assert len(set(seed_123_ids)) == 1

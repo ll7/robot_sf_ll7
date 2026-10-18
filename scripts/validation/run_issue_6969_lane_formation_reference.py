@@ -29,8 +29,8 @@ from robot_sf.research.lane_formation_reference import (
     DEFAULT_REFERENCE_SEEDS,
     DEFAULT_SAMPLING_STRIDES,
     ReferenceProtocol,
-    run_reference_campaign,
 )
+from robot_sf.research.lane_formation_reference_guarded import run_reference_campaign
 
 ISSUE_REF = "robot_sf_ll7#6969"
 DEFAULT_OUTPUT_DIR = Path("output/diagnostics/issue_6969_lane_formation_reference")

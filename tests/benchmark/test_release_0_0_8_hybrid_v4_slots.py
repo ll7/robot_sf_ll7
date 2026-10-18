@@ -175,6 +175,21 @@ def test_0_0_8_roster_has_exactly_fourteen_slot_keys() -> None:
     )
 
 
+def test_0_0_8_release_selects_active_waypoint_for_all_risk_dwa_paths() -> None:
+    """The release template must bind v2 for both arms and guarded PPO fallback."""
+    planners = {row["key"]: row for row in _campaign_planners(CAMPAIGN_TEMPLATE)}
+    expected_paths = {
+        "risk_dwa": "configs/algos/risk_dwa_release_v0_0_8.yaml",
+        "predictive_mppi": "configs/algos/predictive_mppi_release_v0_0_8.yaml",
+        "guarded_ppo": "configs/algos/guarded_ppo_release_v0_0_8.yaml",
+    }
+    for key, path in expected_paths.items():
+        assert planners[key]["algo_config"] == path
+        config = _load_yaml(path)
+        selector = config.get("fallback_risk_dwa", config).get("goal_target_version")
+        assert selector == "active_waypoint_v2", key
+
+
 def test_slot_mapping_replaces_exactly_the_four_hybrid_slots_under_v4_keys() -> None:
     """0.0.7 keys map 1:1 to 0.0.8 keys; only the hybrid slots change, to v4-named keys."""
     frozen_keys = _load_yaml(RELEASE_0_0_7_MANIFEST)["planners"]["keys"]

@@ -1,0 +1,486 @@
+{
+  "seeds": [
+    1001,
+    1002,
+    1003,
+    1004,
+    1005,
+    1006,
+    1007,
+    1008,
+    1009,
+    1010,
+    1011,
+    1012,
+    1013,
+    1014,
+    1015,
+    1016,
+    1017,
+    1018,
+    1019,
+    1020,
+    1021,
+    1022,
+    1023,
+    1024,
+    1025,
+    1026,
+    1027,
+    1028,
+    1029,
+    1030
+  ],
+  "horizon": 600,
+  "dt": 0.1,
+  "planner": "orca",
+  "rows": 1440,
+  "successes": 1227,
+  "outcomes": {
+    "success": 1227,
+    "collision": 174,
+    "max_steps": 1,
+    "terminated": 38
+  },
+  "invalid_runs": 0,
+  "planner_types": {
+    "ORCAPlannerAdapter": 1440
+  },
+  "episode_file_sha256": "6160fc0d4b92a43b15733bcf60938e5ccde337e8b7152bcc61f85657684d304d",
+  "per_scenario": {
+    "classic_bottleneck_high": {
+      "rows": 30,
+      "successes": 18,
+      "outcomes": {
+        "collision": 12,
+        "success": 18
+      }
+    },
+    "classic_bottleneck_low": {
+      "rows": 30,
+      "successes": 27,
+      "outcomes": {
+        "success": 27,
+        "collision": 3
+      }
+    },
+    "classic_bottleneck_medium": {
+      "rows": 30,
+      "successes": 14,
+      "outcomes": {
+        "success": 14,
+        "collision": 16
+      }
+    },
+    "classic_cross_trap_high": {
+      "rows": 30,
+      "successes": 18,
+      "outcomes": {
+        "success": 18,
+        "collision": 11,
+        "terminated": 1
+      }
+    },
+    "classic_cross_trap_low": {
+      "rows": 30,
+      "successes": 27,
+      "outcomes": {
+        "success": 27,
+        "collision": 3
+      }
+    },
+    "classic_cross_trap_medium": {
+      "rows": 30,
+      "successes": 25,
+      "outcomes": {
+        "success": 25,
+        "collision": 5
+      }
+    },
+    "classic_doorway_high": {
+      "rows": 30,
+      "successes": 26,
+      "outcomes": {
+        "success": 26,
+        "terminated": 1,
+        "collision": 3
+      }
+    },
+    "classic_doorway_low": {
+      "rows": 30,
+      "successes": 27,
+      "outcomes": {
+        "success": 27,
+        "terminated": 1,
+        "collision": 2
+      }
+    },
+    "classic_doorway_medium": {
+      "rows": 30,
+      "successes": 25,
+      "outcomes": {
+        "success": 25,
+        "collision": 3,
+        "terminated": 2
+      }
+    },
+    "classic_group_crossing_high": {
+      "rows": 30,
+      "successes": 26,
+      "outcomes": {
+        "success": 26,
+        "collision": 4
+      }
+    },
+    "classic_group_crossing_low": {
+      "rows": 30,
+      "successes": 29,
+      "outcomes": {
+        "success": 29,
+        "collision": 1
+      }
+    },
+    "classic_group_crossing_medium": {
+      "rows": 30,
+      "successes": 27,
+      "outcomes": {
+        "success": 27,
+        "collision": 3
+      }
+    },
+    "classic_head_on_corridor_low": {
+      "rows": 30,
+      "successes": 30,
+      "outcomes": {
+        "success": 30
+      }
+    },
+    "classic_head_on_corridor_medium": {
+      "rows": 30,
+      "successes": 28,
+      "outcomes": {
+        "success": 28,
+        "collision": 2
+      }
+    },
+    "classic_merging_low": {
+      "rows": 30,
+      "successes": 21,
+      "outcomes": {
+        "success": 21,
+        "collision": 8,
+        "terminated": 1
+      }
+    },
+    "classic_merging_medium": {
+      "rows": 30,
+      "successes": 13,
+      "outcomes": {
+        "success": 13,
+        "collision": 15,
+        "terminated": 2
+      }
+    },
+    "classic_overtaking_low": {
+      "rows": 30,
+      "successes": 27,
+      "outcomes": {
+        "collision": 3,
+        "success": 27
+      }
+    },
+    "classic_overtaking_medium": {
+      "rows": 30,
+      "successes": 23,
+      "outcomes": {
+        "collision": 7,
+        "success": 23
+      }
+    },
+    "classic_realworld_double_bottleneck_high": {
+      "rows": 30,
+      "successes": 30,
+      "outcomes": {
+        "success": 30
+      }
+    },
+    "classic_station_platform_medium": {
+      "rows": 30,
+      "successes": 22,
+      "outcomes": {
+        "success": 22,
+        "collision": 7,
+        "max_steps": 1
+      }
+    },
+    "classic_t_intersection_low": {
+      "rows": 30,
+      "successes": 27,
+      "outcomes": {
+        "success": 27,
+        "collision": 3
+      }
+    },
+    "classic_t_intersection_medium": {
+      "rows": 30,
+      "successes": 29,
+      "outcomes": {
+        "success": 29,
+        "collision": 1
+      }
+    },
+    "classic_urban_crossing_medium": {
+      "rows": 30,
+      "successes": 24,
+      "outcomes": {
+        "success": 24,
+        "collision": 6
+      }
+    },
+    "francis2023_accompanying_peer": {
+      "rows": 30,
+      "successes": 30,
+      "outcomes": {
+        "success": 30
+      }
+    },
+    "francis2023_blind_corner": {
+      "rows": 30,
+      "successes": 30,
+      "outcomes": {
+        "success": 30
+      }
+    },
+    "francis2023_circular_crossing": {
+      "rows": 30,
+      "successes": 30,
+      "outcomes": {
+        "success": 30
+      }
+    },
+    "francis2023_crowd_navigation": {
+      "rows": 30,
+      "successes": 25,
+      "outcomes": {
+        "success": 25,
+        "collision": 5
+      }
+    },
+    "francis2023_down_path": {
+      "rows": 30,
+      "successes": 30,
+      "outcomes": {
+        "success": 30
+      }
+    },
+    "francis2023_entering_elevator": {
+      "rows": 30,
+      "successes": 30,
+      "outcomes": {
+        "success": 30
+      }
+    },
+    "francis2023_entering_room": {
+      "rows": 30,
+      "successes": 30,
+      "outcomes": {
+        "success": 30
+      }
+    },
+    "francis2023_exiting_elevator": {
+      "rows": 30,
+      "successes": 29,
+      "outcomes": {
+        "success": 29,
+        "collision": 1
+      }
+    },
+    "francis2023_exiting_room": {
+      "rows": 30,
+      "successes": 30,
+      "outcomes": {
+        "success": 30
+      }
+    },
+    "francis2023_following_human": {
+      "rows": 30,
+      "successes": 27,
+      "outcomes": {
+        "success": 27,
+        "collision": 3
+      }
+    },
+    "francis2023_frontal_approach": {
+      "rows": 30,
+      "successes": 30,
+      "outcomes": {
+        "success": 30
+      }
+    },
+    "francis2023_intersection_no_gesture": {
+      "rows": 30,
+      "successes": 30,
+      "outcomes": {
+        "success": 30
+      }
+    },
+    "francis2023_intersection_proceed": {
+      "rows": 30,
+      "successes": 30,
+      "outcomes": {
+        "success": 30
+      }
+    },
+    "francis2023_intersection_wait": {
+      "rows": 30,
+      "successes": 30,
+      "outcomes": {
+        "success": 30
+      }
+    },
+    "francis2023_join_group": {
+      "rows": 30,
+      "successes": 26,
+      "outcomes": {
+        "collision": 4,
+        "success": 26
+      }
+    },
+    "francis2023_leading_human": {
+      "rows": 30,
+      "successes": 30,
+      "outcomes": {
+        "success": 30
+      }
+    },
+    "francis2023_leave_group": {
+      "rows": 30,
+      "successes": 30,
+      "outcomes": {
+        "success": 30
+      }
+    },
+    "francis2023_narrow_doorway": {
+      "rows": 30,
+      "successes": 0,
+      "outcomes": {
+        "terminated": 30
+      }
+    },
+    "francis2023_narrow_hallway": {
+      "rows": 30,
+      "successes": 17,
+      "outcomes": {
+        "success": 17,
+        "collision": 13
+      }
+    },
+    "francis2023_parallel_traffic": {
+      "rows": 30,
+      "successes": 25,
+      "outcomes": {
+        "success": 25,
+        "collision": 5
+      }
+    },
+    "francis2023_pedestrian_obstruction": {
+      "rows": 30,
+      "successes": 30,
+      "outcomes": {
+        "success": 30
+      }
+    },
+    "francis2023_pedestrian_overtaking": {
+      "rows": 30,
+      "successes": 30,
+      "outcomes": {
+        "success": 30
+      }
+    },
+    "francis2023_perpendicular_traffic": {
+      "rows": 30,
+      "successes": 22,
+      "outcomes": {
+        "success": 22,
+        "collision": 8
+      }
+    },
+    "francis2023_robot_crowding": {
+      "rows": 30,
+      "successes": 13,
+      "outcomes": {
+        "success": 13,
+        "collision": 17
+      }
+    },
+    "francis2023_robot_overtaking": {
+      "rows": 30,
+      "successes": 30,
+      "outcomes": {
+        "success": 30
+      }
+    }
+  },
+  "stationary": {
+    "before": {
+      "francis2023_circular_crossing": {
+        "rows": 30,
+        "contacts": 2,
+        "resets_inside_buffer": 18,
+        "min_surface_gap_m": 0.10000099999999934,
+        "reaction_buffer_m": [
+          0.75
+        ]
+      },
+      "francis2023_robot_crowding": {
+        "rows": 30,
+        "contacts": 9,
+        "resets_inside_buffer": 27,
+        "min_surface_gap_m": 0.10000099999999912,
+        "reaction_buffer_m": [
+          0.75
+        ]
+      }
+    },
+    "fixed": {
+      "francis2023_circular_crossing": {
+        "rows": 30,
+        "contacts": 0,
+        "resets_inside_buffer": 0,
+        "min_surface_gap_m": 0.7500009999999993,
+        "reaction_buffer_m": [
+          0.75
+        ]
+      },
+      "francis2023_robot_crowding": {
+        "rows": 30,
+        "contacts": 0,
+        "resets_inside_buffer": 0,
+        "min_surface_gap_m": 1.1018971595251692,
+        "reaction_buffer_m": [
+          0.75
+        ]
+      }
+    },
+    "combined": {
+      "francis2023_circular_crossing": {
+        "rows": 30,
+        "contacts": 0,
+        "resets_inside_buffer": 0,
+        "min_surface_gap_m": 0.7500009999999993,
+        "reaction_buffer_m": [
+          0.75
+        ]
+      },
+      "francis2023_robot_crowding": {
+        "rows": 30,
+        "contacts": 0,
+        "resets_inside_buffer": 0,
+        "min_surface_gap_m": 0.9359996728513873,
+        "reaction_buffer_m": [
+          0.75
+        ]
+      }
+    }
+  }
+}

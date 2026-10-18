@@ -1,0 +1,7 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/scenario_authoring_0_1_0_bytes.csv",
+  "artifact_sha256": "c44536389d4599eca2d3c8e49881973012dc65b26ef0f06a8c6e06fe5f633feb",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW"
+}

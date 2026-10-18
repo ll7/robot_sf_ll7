@@ -36,7 +36,7 @@ def test_training_release_applied_command_parity(leaf):
     scenario = next(s for s in load_scenarios(path) if s["name"] == "empty_map_8_directions_east")
     overrides = dict(recipe.env_overrides, predictive_foresight_device="cpu")
     training = _make_training_env(
-        1001,
+        100001,
         scenario=scenario,
         scenario_definitions=None,
         scenario_path=path,
@@ -60,15 +60,15 @@ def test_training_release_applied_command_parity(leaf):
     _apply_env_overrides(
         config, {k: v for k, v in algo.items() if k.startswith("predictive_foresight_")}
     )
-    evaluation = make_robot_env(config=config, seed=1001)
+    evaluation = make_robot_env(config=config, seed=100001)
     planner = PPOPlanner(map_runner._ppo_planner_config(algo), defer_model_loading=True)
     kinematics = map_runner.resolve_benchmark_kinematics_model(
         robot_kinematics="differential_drive",
         command_limits=algo,
     )
     try:
-        train_obs, _ = training.reset(seed=1001)
-        eval_obs, _ = evaluation.reset(seed=1001)
+        train_obs, _ = training.reset(seed=100001)
+        eval_obs, _ = evaluation.reset(seed=100001)
         np.testing.assert_array_equal(training.action_space.low, [-2, -1])
         np.testing.assert_array_equal(training.action_space.high, [2, 1])
         assert training.observation_space == evaluation.observation_space

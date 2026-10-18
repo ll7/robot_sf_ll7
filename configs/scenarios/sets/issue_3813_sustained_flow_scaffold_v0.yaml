@@ -15,7 +15,7 @@ scenarios:
       route_spawn_distribution: spread
       route_spawn_jitter_frac: 0.0
       max_peds_per_group: 1
-      robot_config: {}
+    robot_config: {}
     metadata:
       archetype: sustained_flow_t_intersection
       density: light
@@ -68,7 +68,7 @@ scenarios:
       route_spawn_distribution: spread
       route_spawn_jitter_frac: 0.0
       max_peds_per_group: 1
-      robot_config: {}
+    robot_config: {}
     metadata:
       archetype: sustained_flow_t_intersection
       density: medium
@@ -121,7 +121,7 @@ scenarios:
       route_spawn_distribution: spread
       route_spawn_jitter_frac: 0.0
       max_peds_per_group: 1
-      robot_config: {}
+    robot_config: {}
     metadata:
       archetype: sustained_flow_t_intersection
       density: heavy

@@ -127,8 +127,8 @@ def _findings(report: Mapping[str, Any], detector_id: str) -> list[Mapping[str, 
     return [finding for finding in report["findings"] if finding["detector_id"] == detector_id]
 
 
-def test_legacy_default_report_serialization_is_byte_identical() -> None:
-    """Absent 0.0.8 fields retain the pre-gate report and registry bytes."""
+def test_updated_legacy_report_keeps_collision_gate_opt_in() -> None:
+    """The orbit method revision preserves the legacy collision-gate boundary."""
 
     report = analyze_release_rows(
         [
@@ -136,11 +136,12 @@ def test_legacy_default_report_serialization_is_byte_identical() -> None:
             _row("legacy-v1", 1, "social_force", steps=100, collision=True, timeout=False),
         ],
         source=_source("goal", "social_force"),
+        config=release_row_anomalies.DEFAULT_CONFIG,
     )
 
-    # Golden canonical bytes captured from base 9a578901421826c873845952d9418f146d7d3695.
+    # Golden includes detector engine v1.7 provenance; collision opt-in is unchanged.
     assert hashlib.sha256(canonical_json(report).encode()).hexdigest() == (
-        "760dd1e306f99c7b3be13d3c539043a31613be482f71725f0b6a4198d9a8bb74"
+        "8c82b8c37b3d7ec00333743102ff7997de98a1641c89899d9900bfc7e05ffa23"
     )
     assert "collision_metric_contract" not in report["config"]
     assert "collision_metric_inconsistent" not in {
@@ -301,6 +302,10 @@ def test_collision_metric_gate_preserves_large_integer_count_arithmetic(
 
     typed = deepcopy(rows)
     typed[1]["event_ledger"] = {
+        "scenario_id": typed[1]["scenario_id"],
+        "seed": typed[1]["seed"],
+        "planner": typed[1]["algo"],
+        "software_commit": None,
         "schema_version": EPISODE_EVENT_LEDGER_SCHEMA_VERSION,
         "exact_events": {"collision": True, "invalid_run": False},
         "reconciliation": {
@@ -344,6 +349,10 @@ def test_collision_metric_gate_reconciles_typed_ledger_without_counting_events(
 
     row = _row("typed-ledger", 111, "goal", steps=100, collision=True, timeout=False)
     row["event_ledger"] = {
+        "scenario_id": row["scenario_id"],
+        "seed": row["seed"],
+        "planner": row["algo"],
+        "software_commit": None,
         "schema_version": EPISODE_EVENT_LEDGER_SCHEMA_VERSION,
         "exact_events": {"collision": True, "invalid_run": False},
         "collision_events": [{"collision_partner_type": "pedestrian"}] * 2,

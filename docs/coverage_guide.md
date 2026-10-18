@@ -146,7 +146,7 @@ Files with decreased coverage:
 
 Coverage collection and enforcement run automatically in CI (`.github/workflows/ci.yml`) with the following architecture:
 
-1. **Fast-feedback sharding**: The `fast-feedback` job distributes pytest execution across four runners (`PYTEST_SHARD_COUNT: 4`, `PYTEST_SHARD_INDEX: 1..4`).
+1. **Fast-feedback sharding**: The `fast-feedback` job distributes pytest execution across six runners (`PYTEST_SHARD_COUNT: 6`, `PYTEST_SHARD_INDEX: 1..6`).
    - On **pull request** events, coverage is enabled for the exact-head changed-line gate. The trace-based backend (`COVERAGE_CORE: ctrace`) is used because hosted xdist worker propagation must remain trustworthy.
    - On **merge-queue** events, coverage is likewise enabled with `ctrace` for the exact-head gate.
    - On **main** and **manual dispatch** events, coverage is enabled with `ROBOT_SF_SHARD_INCLUDE_SLOW: 1` and the faster CPython 3.12+ `sys.monitoring` backend (`COVERAGE_CORE: sysmon`) for the aggregate floor. Each shard writes to its own database (`output/coverage/.coverage.<shard>`) and uploads an artifact (`coverage-shard-<shard>`).
@@ -475,11 +475,30 @@ branch = true  # Measure if/else branches taken
 
 ```bash
 # Only measure coverage for integration tests
-uv run pytest tests/test_gymnasium_env_contracts.py --cov=robot_sf.gym_env
+uv run pytest tests/test_gymnasium_env_contracts.py --cov=robot_sf/gym_env
 
-# Measure coverage for single module
-uv run pytest tests --cov=robot_sf.benchmark
+# Measure one package directory; run `coverage report -m <file>` to focus the readout
+uv run pytest tests --cov=robot_sf/benchmark
 ```
+
+When the selected module imports a native extension package during initialization (for example,
+NumPy from `tests/conftest.py`), prefer a filesystem directory as the `--cov` source instead of a
+dotted module name. Coverage.py imports dotted source names while resolving their location, as its
+[source selection documentation](https://coverage.readthedocs.io/en/latest/source.html) describes;
+a later import by pytest can then try to initialize the native extension again. A directory source
+avoids that import probe. For a focused branch-coverage run of the GitHub audit module, collect its
+parent directory and report the target file separately:
+
+```bash
+scripts/dev/run_worktree_shared_venv.sh -- uv run pytest -q \
+  tests/analysis_workbench/test_audit_github.py \
+  --cov=robot_sf/analysis_workbench --cov-branch --cov-report=term
+scripts/dev/run_worktree_shared_venv.sh -- uv run coverage report -m \
+  robot_sf/analysis_workbench/audit_github.py
+```
+
+The collection report covers files in `robot_sf/analysis_workbench`; the second command narrows the
+readout to `audit_github.py`.
 
 ### Programmatic access
 

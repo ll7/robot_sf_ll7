@@ -54,8 +54,15 @@ FIXTURE = (
 # connecting to the private bridge preceded the initialize response by 1.70 s
 # in local strace evidence.  Keep both startup and per-request waits finite;
 # hosted xdist contention can delay the source-bound read after initialization.
-EXTERNAL_MCP_STARTUP_TIMEOUT_SECONDS = 10.0
-EXTERNAL_MCP_RESPONSE_TIMEOUT_SECONDS = 10.0
+#
+# All waits below are event based (select on the child's stdout, a blocking
+# socket read, a subprocess pipe).  They return as soon as the event happens.
+# HANG_GUARD_SECONDS only bounds a genuine hang so the test fails instead of
+# blocking CI; it is a hang guard, not a performance assertion.  It equals the
+# default of the sibling ``post`` helper below (60 s).
+HANG_GUARD_SECONDS = 60.0
+EXTERNAL_MCP_STARTUP_TIMEOUT_SECONDS = HANG_GUARD_SECONDS
+EXTERNAL_MCP_RESPONSE_TIMEOUT_SECONDS = HANG_GUARD_SECONDS
 TRACE_FIXTURE = (
     Path(__file__).resolve().parents[1]
     / "fixtures"
@@ -258,7 +265,7 @@ def test_native_launch_runs_selected_campaign_row_over_http_and_rejects_stale_se
         origin = f"{parsed.scheme}://{parsed.netloc}"
 
         def post(
-            operation: str, arguments: dict[str, object], *, timeout: float = 60.0
+            operation: str, arguments: dict[str, object], *, timeout: float = HANG_GUARD_SECONDS
         ) -> dict[str, object]:
             request = Request(
                 origin + "/api/audit",
@@ -746,9 +753,9 @@ def test_launch_opt_in_binds_fake_app_server_and_private_mcp(tmp_path: Path) -> 
         app_server=CodexAppServerConfig(
             executable=str(_fake_app_server(tmp_path)),
             cwd=root,
-            request_timeout_seconds=2.0,
-            startup_timeout_seconds=2.0,
-            lifetime_seconds=10.0,
+            request_timeout_seconds=HANG_GUARD_SECONDS,
+            startup_timeout_seconds=HANG_GUARD_SECONDS,
+            lifetime_seconds=5 * HANG_GUARD_SECONDS,
             close_timeout_seconds=0.5,
         )
     )
@@ -791,7 +798,7 @@ def test_launch_opt_in_binds_fake_app_server_and_private_mcp(tmp_path: Path) -> 
                 },
                 method="POST",
             )
-            with urlopen(request, timeout=10) as response:
+            with urlopen(request, timeout=HANG_GUARD_SECONDS) as response:
                 return json.load(response)
 
         selected = post(

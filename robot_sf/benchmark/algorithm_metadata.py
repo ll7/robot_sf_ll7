@@ -1676,7 +1676,11 @@ def enrich_algorithm_metadata(
     requested = str(algo).strip().lower()
     canonical = canonical_algorithm_name(requested)
 
-    enriched.setdefault("algorithm", requested)
+    # Guarded PPO composes the PPO policy with its declared shield. Match the
+    # underlying policy identity emitted by PPOPlanner.get_metadata(), including
+    # static batch contracts built before a policy is instantiated. Preserve an
+    # explicit producer value so mismatched identities still fail verification.
+    enriched.setdefault("algorithm", "ppo" if canonical == "guarded_ppo" else requested)
     enriched.setdefault("status", "ok")
     enriched["canonical_algorithm"] = canonical
     enriched.setdefault(

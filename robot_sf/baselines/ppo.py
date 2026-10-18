@@ -80,6 +80,7 @@ class PPOPlannerConfig:
     # Device handling: "auto" | "cpu" | "cuda" | "cuda:0" etc.
     device: str = "auto"
     deterministic: bool = True
+    numerical_mode: str | None = None
 
     # Observation handling
     obs_mode: str = "vector"  # "vector" | "image" | "dict"
@@ -175,16 +176,24 @@ class PPOPlanner:
         """Resolve checkpoint declarations before loading or allowing fallback.
 
         Returns:
-            Declared semantics, with the historical absolute default for other policies.
+            Registry-declared semantics, or the historical absolute default when undeclared.
         """
         semantics = config.action_semantics
+        declared = None
+        if config.model_id:
+            try:
+                declared = get_registry_entry(config.model_id).get("action_semantics")
+            except KeyError:
+                # Unknown IDs still fail at model resolution; deferred loading keeps its API.
+                if config.model_id in self.DELTA_CHECKPOINT_IDS:
+                    raise
         if config.model_id in self.DELTA_CHECKPOINT_IDS:
-            declared = get_registry_entry(config.model_id).get("action_semantics")
             if declared != "velocity_delta":
                 raise ValueError(
                     f"Checkpoint {config.model_id} requires registry "
                     "action_semantics: velocity_delta"
                 )
+        if declared is not None:
             if semantics is not None and semantics != declared:
                 raise ValueError("action_semantics conflicts with checkpoint registry declaration")
             semantics = declared
@@ -226,7 +235,7 @@ class PPOPlanner:
                 else Path(self.config.model_path)
             )
         except (KeyError, RuntimeError, ValueError) as exc:
-            if self.config.fallback_to_goal:
+            if self.config.fallback_to_goal and self.config.numerical_mode is None:
                 warn_soft_degrade(
                     "PPO model",
                     f"Failed to resolve model: {exc}",
@@ -238,7 +247,7 @@ class PPOPlanner:
                 return
             raise
         if not mp.exists():
-            if self.config.fallback_to_goal:
+            if self.config.fallback_to_goal and self.config.numerical_mode is None:
                 warn_soft_degrade(
                     "PPO model",
                     f"Model not found at {mp}",
@@ -254,7 +263,7 @@ class PPOPlanner:
                 "Download from releases or train with scripts/training/train_ppo.py --config ...",
             )
         if PPO is None:  # pragma: no cover - missing sb3 at runtime
-            if self.config.fallback_to_goal:
+            if self.config.fallback_to_goal and self.config.numerical_mode is None:
                 warn_soft_degrade(
                     "PPO",
                     "stable_baselines3 not installed",
@@ -275,8 +284,9 @@ class PPOPlanner:
             self._model = PPO.load(str(mp), device=self.config.device, print_system_info=False)
             self._status = "ok"
             self._fallback_reason = None
+            self._configure_pinned_actor()
         except (RuntimeError, ValueError, OSError) as e:
-            if self.config.fallback_to_goal:
+            if self.config.fallback_to_goal and self.config.numerical_mode is None:
                 warn_soft_degrade(
                     "PPO model",
                     f"Failed to load model: {e}",
@@ -291,6 +301,34 @@ class PPOPlanner:
                 "Check model compatibility with current stable_baselines3 version. "
                 "Re-train if needed using scripts/training/train_ppo.py --config ...",
             )
+
+    def _configure_pinned_actor(self) -> None:
+        """Validate kernel initialization and compile the opted-in float64 actor."""
+        from robot_sf._numerical_mode import (  # noqa: PLC0415
+            PINNED_MODE,
+            effective_numerical_mode,
+            initialize_pinned_torch,
+            validate_numerical_mode,
+        )
+        from robot_sf.baselines.pinned_actor import PinnedActor  # noqa: PLC0415
+
+        self._pinned_actor = None
+        if self.config.numerical_mode is None:
+            return
+        if self.config.numerical_mode != PINNED_MODE or not self.config.deterministic:
+            raise ValueError(
+                "Pinned inference requires pinned_float64_v1 and deterministic actions"
+            )
+        if self._model is None:
+            raise ValueError("Pinned inference requires a loaded policy")
+        if str(self._model.device) != "cpu":
+            raise ValueError("Pinned inference requires CPU")
+        initialize_pinned_torch()
+        validate_numerical_mode(
+            {"mode": PINNED_MODE, "inference_dtype": "float64"},
+            {**effective_numerical_mode(), "inference_dtype": "float64"},
+        )
+        self._pinned_actor = PinnedActor(self._model)
 
     def reset(self, *, seed: int | None = None) -> None:
         # No RNN state; just update seed and keep model
@@ -380,7 +418,7 @@ class PPOPlanner:
             return self._action_vec_to_dict(action_vec, obs)
         except (RuntimeError, ValueError, OSError):
             # Fallback for robustness on common prediction errors
-            if self.config.fallback_to_goal:
+            if self.config.fallback_to_goal and self.config.numerical_mode is None:
                 if self._status != "fallback":
                     self._status = "fallback"
                 if self._fallback_reason is None:
@@ -407,7 +445,7 @@ class PPOPlanner:
                 raise RuntimeError("PPO model unavailable or prediction failed")
             return self._action_vec_to_dict_from_array(action_vec, current_speed)
         except (RuntimeError, ValueError, OSError):
-            if self.config.fallback_to_goal:
+            if self.config.fallback_to_goal and self.config.numerical_mode is None:
                 if self._status != "fallback":
                     self._status = "fallback"
                 if self._fallback_reason is None:
@@ -488,7 +526,12 @@ class PPOPlanner:
         else:
             model_obs_in = model_obs
         try:
-            act, _ = self._model.predict(model_obs_in, deterministic=self.config.deterministic)
+            if self.config.numerical_mode is not None:
+                if self._pinned_actor is None:
+                    raise RuntimeError("Pinned inference requires the compiled float64 actor")
+                act = self._pinned_actor.predict(model_obs_in)
+            else:
+                act, _ = self._model.predict(model_obs_in, deterministic=self.config.deterministic)
             act = np.asarray(act, dtype=float).squeeze()
             return act
         except (
@@ -497,6 +540,8 @@ class PPOPlanner:
             OSError,
             IndexError,
         ) as exc:  # predict-time errors we can recover from
+            if self.config.numerical_mode is not None:
+                raise
             # Log at debug level for diagnostics; fall back to goal if enabled
             logger.opt(exception=True).debug("PPO model prediction failed: {}", exc)
             return None
@@ -1015,6 +1060,12 @@ class PPOPlanner:
             "action_semantics": self._action_semantics,
             "action_adapter_version": "ppo-target-velocity.v2",
         }
+        if self.config.numerical_mode is None:
+            cfg.pop("numerical_mode", None)
+        elif getattr(self, "_pinned_actor", None) is not None:
+            from robot_sf._numerical_mode import effective_numerical_mode  # noqa: PLC0415
+
+            meta["numerical_mode"] = {**effective_numerical_mode(), "inference_dtype": "float64"}
         if self._fallback_reason:
             meta["fallback_reason"] = self._fallback_reason
         return meta

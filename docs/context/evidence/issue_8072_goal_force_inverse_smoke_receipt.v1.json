@@ -6,8 +6,8 @@
   "result_classification": "implementation_integrity_smoke_pass",
   "fixture_id": "constant_acceleration_with_public_force_roster",
   "seed": 8072,
-  "command": "python scripts/validation/run_goal_force_inverse_smoke.py --config configs/validation/goal_force_inverse_smoke.yaml --output output/validation/goal_force_inverse_smoke.json",
-  "checker_command": "python scripts/validation/check_goal_force_inverse_smoke.py --input output/validation/goal_force_inverse_smoke.json",
+  "command": "python scripts/validation/run_goal_force_inverse_smoke.py --config configs/validation/goal_force_inverse_smoke.yaml --output <scratch-root>/validation/goal_force_inverse_smoke.json",
+  "checker_command": "python scripts/validation/check_goal_force_inverse_smoke.py --input <scratch-root>/validation/goal_force_inverse_smoke.json",
   "source_hashes": {
     "robot_sf/prediction/goal_candidate_provider.py": "02acada6acabfa0f8ca3e8505effbdc9352a641a502fa5a4da756b2ab2e334d6",
     "robot_sf/prediction/goal_force_inverse_dynamics.py": "8cb8f1b54ee4133b631ab3cb979f036c76b10ccaa3e0d3ebeb4c1cf659baf249",
@@ -90,11 +90,13 @@
     }
   },
   "full_report_digest": "4118c96e250e709b18ee994c3ad2d793aec2ce8a53dc8b2f7239ccd95d975851",
-  "full_report_pointer": "output/validation/goal_force_inverse_smoke.json",
-  "full_report_status": "ignored_worktree_local",
+  "full_report_pointer": "<scratch-root>/validation/goal_force_inverse_smoke.json (disposable; unavailable)",
+  "full_report_status": "ignored_worktree_local_not_retained",
   "limitations": [
     "One deterministic synthetic fixture; no simulator campaign or held-out episode evaluation.",
     "The result is implementation-integrity smoke evidence, not calibrated prediction or planner evidence.",
     "H=1 force error is intentionally unavailable; oracle and actor arms use separate information sources and denominators."
-  ]
+  ],
+  "commands_are_reproduction_templates": true,
+  "full_report_durable_retrieval_pointer": null
 }

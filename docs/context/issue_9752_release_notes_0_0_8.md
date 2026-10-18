@@ -32,8 +32,8 @@ Before any hybrid v4 tuning, the four pre-registered development-only scenario
 parameter variants in
 `configs/scenarios/sets/issue_9748_hybrid_v4_dev_variants_v1.yaml` are frozen
 under distinct `issue_9748_dev_*` identities. The tuning config uses only seeds
-1001–1030. Release seeds 111–140 and the frozen release scenario identities are
-held out. The existing v4 fast-progress and continuous candidate configs are
+1001–1030. The sealed 0.0.8 seeds (D-049), retired seeds 111–140, and
+frozen release scenario identities are held out. The existing v4 fast-progress and continuous candidate configs are
 inputs to this development split; the eventual release roster remains pending
 the #9751 decision.
 

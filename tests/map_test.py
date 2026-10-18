@@ -2,6 +2,7 @@
 
 from math import dist, pi
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -179,7 +180,7 @@ def test_proximity_point_resamples_when_candidate_hits_obstacle(monkeypatch):
     fixed_point = (5.0, 1.0)
     draws = iter([pi / 2.0, 3.0, 0.0, 1.0])
 
-    monkeypatch.setattr("robot_sf.sim.simulator.uniform", lambda _low, _high: next(draws))
+    monkeypatch.setattr(sim, "_ego_rng", SimpleNamespace(uniform=lambda _low, _high: next(draws)))
 
     point = sim.get_proximity_point(fixed_point, lower_bound=1.0, upper_bound=3.0)
 

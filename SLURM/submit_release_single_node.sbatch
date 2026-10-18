@@ -47,4 +47,18 @@ runner_args=(
 if [[ -n "$RESUME_RECEIPT" ]]; then
   runner_args+=(--resume-receipt "$RESUME_RECEIPT")
 fi
+if [[ "${ROBOT_SF_DEVELOPMENT_RUNTIME_SMOKE:-0}" == "1" ]]; then
+  if [[ "$RUNTIME_SMOKE_RECEIPT" != "-" || -n "$RESUME_RECEIPT" ]]; then
+    echo "Development smoke requires '-' as its receipt argument and a fresh campaign." >&2
+    exit 2
+  fi
+  runner_args+=(--development-runtime-smoke)
+fi
+if [[ -n "${ROBOT_SF_SNQI_V2_ANCHORS:-}" ]]; then
+  runner_args+=(--snqi-v2-anchors "$ROBOT_SF_SNQI_V2_ANCHORS")
+fi
+if [[ -n "${ROBOT_SF_SNQI_V2_CALIBRATION_ROOT:-}" ]]; then
+  [[ -n "${ROBOT_SF_SNQI_V2_ANCHORS:-}" ]] || { echo "SNQI-v2 custody requires anchors" >&2; exit 2; }
+  runner_args+=(--snqi-v2-calibration-root "$ROBOT_SF_SNQI_V2_CALIBRATION_ROOT")
+fi
 exec .venv/bin/python scripts/tools/run_benchmark_release.py "${runner_args[@]}"

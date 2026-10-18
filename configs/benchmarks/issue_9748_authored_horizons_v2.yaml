@@ -1,0 +1,18 @@
+schema_version: scenario-horizon-schedule.v1
+scenarios:
+  issue_9748_dev_classic_doorway_medium:
+    recommended_horizon_steps: 500
+    status: authored
+    rationale: Preserve the source scenario budget for 0.0.8 development parity.
+  issue_9748_dev_classic_group_crossing_medium:
+    recommended_horizon_steps: 500
+    status: authored
+    rationale: Preserve the source scenario budget for 0.0.8 development parity.
+  issue_9748_dev_francis2023_perpendicular_traffic:
+    recommended_horizon_steps: 400
+    status: authored
+    rationale: Preserve the source scenario budget for 0.0.8 development parity.
+  issue_9748_dev_francis2023_crowd_navigation:
+    recommended_horizon_steps: 400
+    status: authored
+    rationale: Preserve the source scenario budget for 0.0.8 development parity.

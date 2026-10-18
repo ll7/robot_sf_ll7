@@ -15,6 +15,7 @@ from robot_sf.analysis_workbench.review_contracts import (
     component_request_from_dict,
 )
 from robot_sf.render import review_workbench
+from tests.support.browser_runtime import require_node_runtime
 
 _EPISODE_REF = {
     "artifact_id": "trace-0000",
@@ -194,6 +195,7 @@ def test_canonical_launch_mounts_diagnostic_audit_extension_and_browser_runtime(
     assert all((output / artifact).is_file() for artifact in expected_assets)
 
     runtime = Path(__file__).parent / "render" / "review_workbench_runtime.mjs"
+    require_node_runtime()
     completed = subprocess.run(
         ["node", str(runtime), str(output)],
         check=False,

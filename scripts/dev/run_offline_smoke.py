@@ -6,8 +6,9 @@ task-owned root, an allowlisted environment, a controlled ``PATH``, and an
 in-process plus child-process network guard.  Optional institutional features
 are reported as unavailable instead of being inferred from the host.
 
-The receipt contains no paths, timestamps, host metadata, exception text, or
-real-episode metrics.  Stable unavailable reason codes are exposed through
+The receipt contains no paths, timestamps, host metadata, or real-episode metrics.
+Child failures include elapsed seconds and path-redacted stderr/error diagnostics.
+Stable unavailable reason codes are exposed through
 ``REASONS`` and in every optional capability row.
 
 Example::
@@ -30,6 +31,7 @@ import socket
 import subprocess
 import sys
 import tempfile
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -54,6 +56,7 @@ REASONS = dict(
         strict=True,
     )
 )
+REASONS.update(child_timeout="CHILD_TIMEOUT", child_oserror="CHILD_OSERROR")
 CORE_CAPABILITIES = "package_import cli_help cli_discovery environment_doctor config_resolution headless_episode artifact_verification lineage_verification report_metric_fixture example_discovery model_registry isolation_policy path_containment network_isolation".split()
 OPTIONAL_CAPABILITIES = (
     "scheduler gpu carla private_data institutional_context model_cache network".split()
@@ -97,30 +100,48 @@ _socket.getaddrinfo = _deny
 
 @dataclass(frozen=True)
 class Capability:
-    """One deterministic capability receipt row."""
+    """One capability receipt row with optional child failure diagnostics."""
 
     capability_id: str
     required: bool
     status: str
     reason_code: str
+    elapsed_seconds: float | None = None
+    stderr: str | None = None
+    errno: int | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Return the stable JSON row."""
-        return {
+        row = {
             "id": self.capability_id,
             "required": self.required,
             "status": self.status,
             "reason_code": self.reason_code,
         }
+        for name in ("elapsed_seconds", "stderr", "errno"):
+            value = getattr(self, name)
+            if value is not None:
+                row[name] = value
+        return row
 
 
 class SmokeFailure(RuntimeError):
-    """Internal failure carrying only a stable public reason code."""
+    """Internal failure carrying a reason and optional child diagnostics."""
 
-    def __init__(self, reason_code: str) -> None:
-        """Store the reason without exposing runtime details."""
+    def __init__(
+        self,
+        reason_code: str,
+        *,
+        elapsed_seconds: float | None = None,
+        stderr: str | None = None,
+        errno: int | None = None,
+    ) -> None:
+        """Store stable reasons and already sanitized child diagnostics."""
         super().__init__(reason_code)
         self.reason_code = reason_code
+        self.elapsed_seconds = elapsed_seconds
+        self.stderr = stderr
+        self.errno = errno
 
 
 def _compact_json(payload: Mapping[str, Any]) -> str:
@@ -266,6 +287,14 @@ def _network_denied() -> Iterator[None]:
         )  # type: ignore[assignment]
 
 
+def _child_diagnostic(text: str | bytes | None) -> str:
+    """Keep useful child errors while preserving the receipt's path boundary."""
+    if isinstance(text, bytes):
+        text = text.decode("utf-8", errors="replace")
+    diagnostic = ABSOLUTE_PATH_PATTERN.sub("[redacted-path]", text or "")
+    return diagnostic[:4096]
+
+
 def _run_child(
     repo_root: Path,
     environment: Mapping[str, str],
@@ -273,6 +302,7 @@ def _run_child(
     args: Sequence[str] = (),
     cwd: Path | None = None,
 ) -> subprocess.CompletedProcess[str]:
+    started = time.monotonic()
     try:
         return subprocess.run(
             [sys.executable, "-c", code, *args],
@@ -283,8 +313,20 @@ def _run_child(
             timeout=CHILD_TIMEOUT_SECONDS,
             check=False,
         )
-    except (OSError, subprocess.TimeoutExpired) as exc:
-        raise SmokeFailure(REASONS["isolation"]) from exc
+    except subprocess.TimeoutExpired as exc:
+        raise SmokeFailure(
+            REASONS["child_timeout"],
+            elapsed_seconds=round(time.monotonic() - started, 6),
+            stderr=_child_diagnostic(exc.stderr),
+        ) from exc
+    except OSError as exc:
+        # A failed spawn has no child stderr; retain the OS diagnostic instead.
+        raise SmokeFailure(
+            REASONS["child_oserror"],
+            elapsed_seconds=round(time.monotonic() - started, 6),
+            stderr=_child_diagnostic(str(exc)),
+            errno=exc.errno,
+        ) from exc
 
 
 def _run_cli(
@@ -304,7 +346,15 @@ def _stage(capability_id: str, callback: Callable[[], Any], reason_code: str) ->
     try:
         _require(callback() is not False, reason_code)
     except SmokeFailure as exc:
-        return Capability(capability_id, True, STATUS_FAILED, exc.reason_code)
+        return Capability(
+            capability_id,
+            True,
+            STATUS_FAILED,
+            exc.reason_code,
+            exc.elapsed_seconds,
+            exc.stderr,
+            exc.errno,
+        )
     except (OSError, RuntimeError, TypeError, ValueError, ImportError, AttributeError, LookupError):
         return Capability(capability_id, True, STATUS_FAILED, reason_code)
     return Capability(capability_id, True, STATUS_PASSED, REASONS["ok"])
@@ -670,7 +720,7 @@ def _optional_capabilities(environment: Mapping[str, str], root: Path) -> list[C
 
 
 def run_smoke(*, repo_root: Path | None = None, output_root: Path | None = None) -> dict[str, Any]:
-    """Run the bounded smoke and return its deterministic receipt."""
+    """Run the bounded smoke and return its capability receipt."""
     resolved_repo = (repo_root or Path(__file__).resolve().parents[2]).resolve()
     root, manager = _prepare_root(resolved_repo, output_root)
     environment, targets = _controlled_environment(root, resolved_repo)

@@ -372,3 +372,54 @@ Every native-command episode record includes additive fields:
 - `metrics.deadlock_stall`: A detailed diagnostic block detailing the parameters and statistics of the deadlock check.
 - `algorithm_metadata.planner_diagnostics`: High-resolution stats detailing subprocess runtimes (`planner_step_runtime_seconds`), exit codes (`exit_codes` / `last_exit_code`), timeouts (`runtime_bound_exits`), and fallbacks (`fallback_count`). This is the canonical location consumed by the issue #5416 analyzer.
 - `algorithm_metadata.native_command`: Subprocess launch configuration, invocation provenance, and the resolved binary path/content hash when readable. The map-runner compatibility arm records both the canonical names (`argv`, `timeout_s`, `persistent`) and its legacy aliases.
+
+
+## Runtime physics in campaign manifests
+
+Main's campaign writer emits `benchmark-camera-ready-campaign.v2` when runtime
+witnesses exist, or v1 when none exist (including resumed pre-change campaigns). Preflight
+metadata describes intended execution; the final `campaign_manifest.json` adds
+`effective_physics.v1` witnesses captured from the running map environment before
+teardown. Publication bundles preserve that campaign manifest and episode records.
+Historical v1 manifests remain readable and are not rewritten.
+
+Each native episode carries `effective_physics` and the dissertation intake's
+`release_design_parameters` mapping. The snapshot records contact, force, metric,
+placement and occupancy-grid radius roles; the sampler's actual distribution
+inputs and per-agent speed caps; active wall, social and group force parameters;
+robot interaction and effective reverse cap; plant identity; pedestrian timestep
+and integrator; and executing metric definitions for TTC and surface clearance.
+The absence of a separate robot-steering force is recorded explicitly. Heading
+model variants are identified separately from that force graph.
+
+The final manifest retains each distinct full snapshot within a scenario/configuration,
+identified by its source episode and seed. Identical snapshots can share a representative;
+differences in kinematics, integration, radius roles, model/force parameters or per-agent
+speed caps are preserved even when the configuration hash is the same. Every recorded
+episode is validated; only equal, non-null intake fields across every episode appear in
+the global mapping. Scenario-dependent values stay in witnesses and episode mappings.
+
+A campaign with no runtime witnesses emits v1 with no physics block. A mixed campaign
+emits v2 with explicit source-identified `physics_witness: "missing"` markers,
+`effective_physics_status: "incomplete"`, total/witnessed/missing episode counts and an
+empty global intake mapping. Missing rows carry no invented physics. This permits
+completion of interrupted campaigns while making their incomplete physics coverage
+visible. Malformed snapshots and contradictory declarations still block writing.
+
+For the legacy spawn-coupled speed model, normal mean/spread and a scalar global
+cap do not exist. These three snapshot fields are null, the cap rule and per-agent
+caps are explicit, and the fields are omitted from the global intake mapping.
+The dissertation intake will keep them unverified until its consumer supports this
+model's definition or uses a reviewed source witness. For the clipped-normal model,
+all 15 intake fields are recorded with usable values; fields that differ across
+scenarios are verified through the episode mappings rather than global defaults.
+
+`robot_sf.benchmark.effective_physics.validate_effective_physics(snapshot, env=env)`
+checks the JSON schema and equality with live objects. Without `env`, it checks
+schema and finite JSON values.
+`validate_campaign_physics(manifest)` checks version, coverage, sample identities,
+snapshot schemas and consistency of global fields with the runtime samples. It returns
+a complete/incomplete report (including missing markers), or unavailable for v1;
+incomplete coverage does not raise, while malformed or contradictory claims do.
+Neither validator treats a planner's configuration or observed velocity as proof
+of a pedestrian-model parameter.

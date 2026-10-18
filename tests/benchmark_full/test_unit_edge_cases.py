@@ -11,8 +11,11 @@ These are focused fast tests using the existing aggregation & effects modules.
 from __future__ import annotations
 
 import math
+from types import SimpleNamespace
 
-from robot_sf.benchmark.full_classic.aggregation import aggregate_metrics
+import pytest
+
+from robot_sf.benchmark.full_classic.aggregation import _bootstrap_params, aggregate_metrics
 from robot_sf.benchmark.full_classic.effects import compute_effect_sizes
 
 
@@ -131,3 +134,50 @@ def test_all_nan_metric_samples_produces_nan_stats():
     assert math.isnan(path_eff.p95)
     assert all(math.isnan(v) for v in path_eff.mean_ci)
     assert all(math.isnan(v) for v in path_eff.median_ci)
+
+
+@pytest.mark.parametrize(
+    ("samples", "confidence", "expected"),
+    [
+        (0, 0.95, (0, 0.95, 1001, "flat", "scenario_id")),
+        (1000, 0.0, (1000, 0.0, 1001, "flat", "scenario_id")),
+    ],
+)
+def test_explicit_zero_bootstrap_parameters_are_not_defaults(samples, confidence, expected):
+    """Explicit zero is preserved; only missing parameters receive the documented defaults."""
+    config = SimpleNamespace(
+        bootstrap_samples=samples, bootstrap_confidence=confidence, master_seed=1001
+    )
+    assert _bootstrap_params(config) == expected
+    defaults = SimpleNamespace(bootstrap_samples=None, bootstrap_confidence=None, master_seed=1001)
+    assert _bootstrap_params(defaults) == (1000, 0.95, 1001, "flat", "scenario_id")
+
+
+@pytest.mark.parametrize("mode", ["flat", "hierarchical"])
+@pytest.mark.parametrize("count", [1, 2])
+def test_zero_bootstrap_keeps_statistics_without_resampling_intervals(mode, count):
+    """A disabled bootstrap keeps point estimates and analytic rate intervals."""
+    records = [
+        {
+            "archetype": "crossing",
+            "density": "low",
+            "scenario_id": f"scenario-{index}",
+            "seed": 1001 + index,
+            "metrics": {"time_to_goal": value, "success_rate": 1.0},
+        }
+        for index, value in enumerate([2.0, 4.0][:count])
+    ]
+    config = SimpleNamespace(bootstrap_samples=0, bootstrap_mode=mode, master_seed=1001)
+
+    group = aggregate_metrics(records, config)[0]
+
+    duration = group.metrics["time_to_goal"]
+    assert duration.mean == (2.0 if count == 1 else 3.0)
+    assert duration.median == (2.0 if count == 1 else 3.0)
+    assert duration.p95 == pytest.approx(2.0 if count == 1 else 3.9)
+    assert all(math.isnan(value) for value in duration.mean_ci)
+    assert all(math.isnan(value) for value in duration.median_ci)
+    rate = group.metrics["success_rate"]
+    assert rate.mean == 1.0
+    assert all(math.isfinite(value) for value in rate.mean_ci)
+    assert all(math.isnan(value) for value in rate.median_ci)

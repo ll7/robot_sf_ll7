@@ -723,6 +723,10 @@ def _normalize_scenario_rows(
             "scenario_id": scenario_id,
             "scenario_family": family,
             "episodes": int(_safe_float(raw_row.get("episodes")) or 0),
+            "episodes_total": int(
+                _safe_float(raw_row.get("episodes_total", raw_row.get("episodes"))) or 0
+            ),
+            "episodes_excluded": int(_safe_float(raw_row.get("episodes_excluded")) or 0),
             "success_mean": _safe_float(raw_row.get("success_mean")),
             "collisions_mean": _safe_float(raw_row.get("collisions_mean")),
             "near_misses_mean": _safe_float(raw_row.get("near_misses_mean")),

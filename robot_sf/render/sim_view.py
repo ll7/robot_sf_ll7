@@ -36,7 +36,9 @@ try:
     from moviepy import ImageSequenceClip
 
     MOVIEPY_AVAILABLE = True
-except ImportError:
+except (ImportError, PermissionError):
+    # MoviePy loads a discovered .env while importing. An unreadable optional
+    # configuration must not break CLI help or users who do not record video.
     MOVIEPY_AVAILABLE = False
     logger.warning(
         "MoviePy is not available. Video recording is disabled. Have you installed ffmpeg?",
@@ -695,7 +697,7 @@ class SimulationView:
             logger.debug("Returning intermediate frames.")
             return intermediate_frames
 
-    def _handle_quit(self):
+    def _handle_quit(self, _event=None):
         """Handle the quit event of the pygame window."""
         self.is_exit_requested = True
         self.is_abortion_requested = True
@@ -780,7 +782,7 @@ class SimulationView:
             for e in pygame.event.get():
                 handler = event_handler_map.get(e.type)
                 if handler:
-                    handler(e)  # type: ignore[call-arg]  # handler signature varies
+                    handler(e)
 
             # Limit this loop to 30 event checks per second (sufficient for UI interaction)
             self.clock.tick(30)

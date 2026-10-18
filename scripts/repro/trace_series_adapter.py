@@ -55,6 +55,8 @@ from typing import Any
 
 # Schema contract this adapter understands. It is intentionally narrow: the
 # issue asks for a fail-closed adapter, not a permissive one.
+from robot_sf.benchmark.metric_definitions import require_uniform_trace_schema
+
 SUPPORTED_TRACE_SCHEMA: str = "simulation-step-trace.v1"
 
 # Top-level bundle container tag. Distinct from the issue-4891 reference tag and
@@ -500,11 +502,15 @@ def build_bundle(
     trace = _trace_from_row(row)
     if trace is None:
         raise TraceSeriesAdapterError("episode row has no simulation_step_trace to adapt")
-    if trace.get("schema_version") != SUPPORTED_TRACE_SCHEMA:
+    if trace.get("schema_version") not in {SUPPORTED_TRACE_SCHEMA, "simulation-step-trace.v2"}:
         raise TraceSeriesAdapterError(
             f"unsupported simulation_step_trace schema_version: "
             f"{trace.get('schema_version')!r} (expected {SUPPORTED_TRACE_SCHEMA!r})"
         )
+    try:
+        require_uniform_trace_schema([row])
+    except ValueError as exc:
+        raise TraceSeriesAdapterError(str(exc)) from exc
     frames = trace.get("steps")
     if not isinstance(frames, list) or not frames:
         raise TraceSeriesAdapterError("simulation_step_trace.steps must be a non-empty array")
@@ -512,6 +518,7 @@ def build_bundle(
     _validate_actor_set(frames)
     derived_rows = _build_derived_rows(frames)
     metadata = _build_metadata(row, identity, provenance, derived_rows)
+    metadata["source_trace_schema_version"] = trace["schema_version"]
     metadata["source_file"] = str(episodes_jsonl)
 
     trace_series = {

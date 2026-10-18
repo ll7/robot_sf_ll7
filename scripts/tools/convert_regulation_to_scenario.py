@@ -164,14 +164,16 @@ def _map_file_for_output(template: str, *, output_path: Path | None = None) -> s
     repo_rel = TEMPLATE_TO_MAP.get(template, TEMPLATE_TO_MAP["shared_space"])
     if output_path is None:
         return repo_rel.as_posix()
-    return os.path.relpath(_REPO_ROOT / repo_rel, start=output_path.parent)
+    # Count parent traversal from physical paths on both sides. A lexical
+    # output alias (e.g. macOS /var -> /private/var) can have a different depth.
+    return os.path.relpath((_REPO_ROOT / repo_rel).resolve(), start=output_path.parent.resolve())
 
 
 def _resolve_generated_map_file(generated_yaml: Path, map_file: str) -> Path:
     """Resolve a ``map_file`` value against the scenario YAML location."""
     candidate = Path(map_file)
     if not candidate.is_absolute():
-        candidate = generated_yaml.parent / candidate
+        candidate = generated_yaml.parent.resolve() / candidate
     return candidate.resolve()
 
 

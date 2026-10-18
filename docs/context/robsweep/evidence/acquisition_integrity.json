@@ -1,0 +1,7 @@
+{
+  "records_checked": 21900,
+  "radius_preferred_speed_drive_mismatches": [],
+  "native_success_metric_disagreements": 0,
+  "success_and_collision_together": 0,
+  "source_scope": "All 73 canonical batches; metadata binding and native outcome consistency, not empirical validity."
+}

@@ -20,6 +20,11 @@ from typing import TYPE_CHECKING, Any
 
 import yaml
 
+from robot_sf.benchmark.metric_definitions import (
+    metric_schema_version,
+    require_anchor_compatibility,
+    require_uniform_metric_schema,
+)
 from robot_sf.benchmark.rank_metrics import kendall_tau, spearman_from_order
 from robot_sf.benchmark.snqi.compute import WEIGHT_NAMES, compute_snqi, normalize_metric
 
@@ -484,6 +489,9 @@ def build_scalarization_sensitivity_report(
         dominance, and Pareto-front rows.
     """
 
+    require_uniform_metric_schema(records)
+    for record in records:
+        require_anchor_compatibility(record, baseline)
     _validate_export_required_terms(records, weights)
     grouped = _group_records(records, planner_key, fallback_planner_key)
     if len(grouped) < 2:
@@ -982,7 +990,13 @@ def load_baseline_mapping(path: Path | None) -> dict[str, dict[str, float]]:
     for metric in ("collisions", "near_misses", "force_exceed_events", "jerk_mean"):
         if metric not in raw:
             raise ValueError(f"baseline file missing required normalized metric {metric!r}")
-    for metric, entry in raw.items():
+    baseline.update(
+        {"_metadata": {"metric_schema_version": metric_schema_version(raw)}}
+        if "_metadata" in raw or "metric_schema_version" in raw
+        else {}
+    )
+    entries = {k: v for k, v in raw.items() if k not in ("_metadata", "metric_schema_version")}
+    for metric, entry in entries.items():
         if not isinstance(entry, Mapping):
             raise ValueError(f"baseline metric {metric!r} must provide med/p95 mapping")
         try:
@@ -1505,6 +1519,7 @@ def _constraints_first_endpoint(rows: Sequence[Mapping[str, Any]]) -> dict[str, 
     n = len(rows)
     if n == 0:
         raise ValueError("planner must have at least one episode")
+    require_uniform_metric_schema(rows)
     metrics = [_metrics(row) for row in rows]
     success_rate = _mean(_metric_float(row, "success", 0.0) for row in metrics)
     collision_rate = _mean(

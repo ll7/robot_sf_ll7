@@ -18,6 +18,8 @@ from robot_sf.benchmark.metric_layers import (
 
 EXPECTED_METRICS = {
     "collision_rate",
+    "robot_force_invalid_present_samples",
+    "robot_force_pp_equiv_invalid_present_samples",
     "robot_force_impulse_total",
     "robot_force_impulse_per_exposed_ped",
     "robot_force_peak",

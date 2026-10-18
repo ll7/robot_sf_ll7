@@ -117,9 +117,10 @@ def _bootstrap_ci(
     """Bootstrap mean/median confidence intervals for values.
 
     Returns:
-        Tuple of (mean_ci, median_ci).
+        Tuple of (mean_ci, median_ci). Disabled resampling (samples <= 0)
+        returns NaN pairs; analytic rate intervals are computed by the caller.
     """
-    if not values:
+    if not values or samples <= 0:
         nan_pair = (math.nan, math.nan)
         return nan_pair, nan_pair
     n = len(values)
@@ -203,12 +204,13 @@ def hierarchical_bootstrap_ci(
 
     Returns:
         Tuple of ``(mean_ci, median_ci)`` as ``(low, high)`` tuples. Returns
-        ``(nan, nan)`` pairs when there is no data and collapses to the single
-        value when there is exactly one episode overall.
+        ``(nan, nan)`` pairs when there is no data or resampling is disabled,
+        and collapses to the single value when there is exactly one episode
+        overall and resampling is enabled.
     """
     nan_pair = (math.nan, math.nan)
     cells = [c for c in clustered_values if c]
-    if not cells:
+    if not cells or samples <= 0:
         return nan_pair, nan_pair
     total = sum(len(c) for c in cells)
     if total == 1:  # degenerate: CI collapses to the single observed value
@@ -365,10 +367,12 @@ def _bootstrap_params(cfg) -> tuple[int, float, int, str, str]:
         ``"hierarchical"``; ``cluster_field`` is the record key used as the
         cluster identifier in hierarchical mode.
     """
-    samples = int(getattr(cfg, "bootstrap_samples", 1000) or 1000)
+    configured_samples = getattr(cfg, "bootstrap_samples", None)
+    samples = int(1000 if configured_samples is None else configured_samples)
     if getattr(cfg, "smoke", False):
         samples = min(samples, 300)
-    conf = float(getattr(cfg, "bootstrap_confidence", 0.95) or 0.95)
+    configured_confidence = getattr(cfg, "bootstrap_confidence", None)
+    conf = float(0.95 if configured_confidence is None else configured_confidence)
     seed = int(getattr(cfg, "master_seed", 0) or 0)
     mode = str(getattr(cfg, "bootstrap_mode", "flat") or "flat").lower()
     if mode not in {"flat", "hierarchical"}:

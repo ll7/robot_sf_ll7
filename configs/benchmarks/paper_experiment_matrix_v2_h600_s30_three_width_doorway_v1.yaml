@@ -1,5 +1,6 @@
 # Preregistered 2.2/2.8/3.6 m full-roster doorway width slice.
 name: paper_experiment_matrix_v2_h600_s30_three_width_doorway_v1
+protocol_version: 0.0.8
 paper_facing: true
 paper_profile_version: paper-matrix-v1
 scenario_matrix: configs/scenarios/francis2023_narrow_doorway_three_width_release_0_0_8_v1.yaml
@@ -25,8 +26,8 @@ amv_profile:
     - bottleneck
 seed_policy:
   mode: seed-set
-  seed_set: paper_eval_s30
-  seed_sets_path: configs/benchmarks/seed_sets_v1.yaml
+  seed_set: release_eval_0_0_8
+  seed_sets_path: configs/benchmarks/seed_sets_0_0_8.yaml
 snqi_weights: configs/benchmarks/snqi_weights_camera_ready_v3.json
 snqi_baseline: configs/benchmarks/snqi_baseline_camera_ready_v3.json
 snqi_contract:
@@ -41,7 +42,8 @@ snqi_contract:
   calibration_seed: 123
   calibration_trials: 6000
 workers: 32
-horizon: 600
+scenario_horizons: configs/benchmarks/horizon_schedules/three_width_doorway_release_0_0_8_authored_v1.yaml
+scenario_horizons_sha256: e420f41636e59dd1169bf2da048c482ec78ba9ccf8ec5dc2721534c61c8191c9
 dt: 0.1
 record_forces: true
 checkpoint_provenance_enforcement: error
@@ -82,7 +84,7 @@ planners:
 - key: ppo
   algo: ppo
   planner_group: experimental
-  algo_config: configs/baselines/ppo_issue_791_eval_aligned_large_capacity_cpu.yaml
+  algo_config: configs/baselines/ppo_release_robot_0_0_8_cpu.yaml
   benchmark_profile: experimental
   adapter_impact_eval: true
 - key: socnav_sampling

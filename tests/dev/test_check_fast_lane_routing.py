@@ -203,19 +203,27 @@ def test_release_checkpoint_producer_tests_are_registered_in_fast_lane() -> None
     """Release-smoke producer coverage must reach the hosted changed-line combiner."""
     policy = load_fast_lane_policy(Path("tests/conftest.py").read_text(encoding="utf-8"))
 
-    assert {
-        "test_checkpoint_provenance_issue_4970.py",
-        "test_post_execution_release_doctor.py",
-        "test_predictive_mppi_planner.py",
-        "test_runtime_smoke_admission.py",
-    } <= policy.fast_files
+    assert policy.fast_by_default
+    assert all(
+        policy.is_fast(path)
+        for path in (
+            "tests/benchmark/test_checkpoint_provenance_issue_4970.py",
+            "tests/benchmark/test_post_execution_release_doctor.py",
+            "tests/planner/test_predictive_mppi_planner.py",
+            "tests/benchmark/test_runtime_smoke_admission.py",
+        )
+    )
 
 
 def test_doctor_producer_tests_are_registered_in_fast_lane() -> None:
     """Doctor source-adjacent and top-level CLI contracts stay in fast shards."""
     policy = load_fast_lane_policy(Path("tests/conftest.py").read_text(encoding="utf-8"))
 
-    assert {"test_doctor.py", "test_cli_doctor.py"} <= policy.fast_files
+    assert policy.fast_by_default
+    assert all(
+        policy.is_fast(path)
+        for path in ("tests/benchmark/test_doctor.py", "tests/cli/test_cli_doctor.py")
+    )
 
 
 def test_simulation_and_campaign_tests_remain_slow() -> None:

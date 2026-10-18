@@ -126,3 +126,77 @@ def test_negative_path_root_and_network_fixtures(tmp_path: Path) -> None:
     assert ownership.value.reason_code == smoke.REASONS["root_not_owned"]
     with smoke._network_denied(), pytest.raises(OSError, match="network disabled"):
         socket.create_connection(("127.0.0.1", 9), timeout=0.1)
+
+
+def test_cli_help_keeps_heavy_modules_unloaded(tmp_path: Path) -> None:
+    """Exercise the installed CLI entry path with the smoke's isolated environment."""
+    root, manager = smoke._prepare_root(REPO_ROOT, tmp_path / "help-root")
+    try:
+        environment, _ = smoke._controlled_environment(root, REPO_ROOT)
+        result = smoke._run_child(
+            REPO_ROOT,
+            environment,
+            """
+import sys
+from robot_sf.cli import main
+try:
+    main(['--help'])
+except SystemExit as exc:
+    assert exc.code == 0
+heavy = ('torch', 'stable_baselines3', 'tensorflow', 'pygame',
+         'robot_sf.sim', 'robot_sf.gym_env', 'robot_sf.render')
+loaded = sorted(name for name in sys.modules
+                if any(name == prefix or name.startswith(prefix + '.') for prefix in heavy))
+assert not loaded, 'Help imported heavy modules: ' + ', '.join(loaded)
+""",
+        )
+        assert result.returncode == 0, result.stderr
+        assert "usage: robot-sf" in result.stdout
+    finally:
+        if manager is not None:
+            manager.cleanup()
+
+
+def test_child_timeout_receipt_has_elapsed_and_partial_stderr(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A real hung child remains required and records its timeout evidence."""
+    monkeypatch.setattr(smoke, "CHILD_TIMEOUT_SECONDS", 1.0)
+    row = smoke._stage(
+        "cli_help",
+        lambda: smoke._run_child(
+            REPO_ROOT,
+            {},
+            "import sys, time; print('starting help', file=sys.stderr, flush=True); time.sleep(5)",
+        ),
+        smoke.REASONS["cli_help"],
+    ).to_dict()
+    assert row["required"] is True
+    assert row["status"] == "failed"
+    assert row["reason_code"] == "CHILD_TIMEOUT"
+    assert row["elapsed_seconds"] >= 1.0
+    assert row["stderr"] == "starting help\n"
+
+
+def test_child_oserror_receipt_preserves_diagnostic_without_paths(
+    tmp_path: Path,
+) -> None:
+    """An actual failed spawn records errno and sanitized error text in JSON."""
+    capability = smoke._stage(
+        "cli_help",
+        lambda: smoke._run_child(REPO_ROOT, {}, "pass", cwd=tmp_path / "missing"),
+        smoke.REASONS["cli_help"],
+    )
+    row = capability.to_dict()
+    assert row["reason_code"] == "CHILD_OSERROR"
+    assert row["required"] is True
+    assert row["status"] == "failed"
+    assert row["elapsed_seconds"] >= 0
+    assert row["errno"] == 2
+    assert "No such file or directory" in row["stderr"]
+    assert str(tmp_path) not in json.dumps(row)
+    rows = [smoke.Capability(name, True, "passed", "OK") for name in smoke.ALL_CAPABILITIES]
+    rows[1] = capability
+    receipt = smoke._build_receipt(rows)
+    assert receipt["capabilities"][1] == row
+    assert receipt["status"] == "failed"

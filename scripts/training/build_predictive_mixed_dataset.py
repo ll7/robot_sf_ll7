@@ -17,6 +17,10 @@ from robot_sf.planner.obstacle_features import (
     PREDICTIVE_OBSTACLE_FEATURE_DIM,
     predictive_ego_motion_channel_producer_key,
 )
+from robot_sf.training.predictive_supervision import (
+    compatible_mixed_supervision,
+    validate_supervision_metadata,
+)
 
 DEFAULT_HARDCASE_REPEAT = 2
 DEFAULT_SHUFFLE_SEED = 42
@@ -40,9 +44,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--output",
         type=Path,
-        default=Path("output/tmp/predictive_planner/datasets/predictive_rollouts_mixed_v1.npz"),
+        default=Path(
+            "output/tmp/predictive_planner/datasets/predictive_rollouts_mixed_identity_v2.npz"
+        ),
     )
     parser.add_argument("--shuffle-seed", type=int)
+    parser.add_argument(
+        "--allow-legacy-supervision",
+        action="store_true",
+        help="Historical reproduction only: permit legacy+legacy; never mix legacy with corrected.",
+    )
     return parser.parse_args()
 
 
@@ -245,7 +256,16 @@ def _resolve_mixed_feature_schema(
 
 def _load_npz(
     path: Path,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, dict[str, Any] | None]:
+    *,
+    allow_legacy_supervision: bool = False,
+) -> tuple[
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    dict[str, Any] | None,
+    dict[str, Any] | None,
+]:
     """Load arrays plus optional feature-schema metadata from a dataset NPZ."""
     with np.load(path) as raw:
         state = np.asarray(raw["state"], dtype=np.float32)
@@ -257,7 +277,10 @@ def _load_npz(
             else np.repeat(mask[:, :, None], target.shape[2], axis=2).astype(np.float32)
         )
         feature_schema = _load_optional_feature_schema_metadata(raw, path=path)
-    return state, target, mask, target_mask, feature_schema
+        supervision = validate_supervision_metadata(
+            raw, path=path, allow_legacy=allow_legacy_supervision
+        )
+    return state, target, mask, target_mask, feature_schema, supervision
 
 
 def main() -> int:
@@ -265,11 +288,15 @@ def main() -> int:
     args = parse_args()
     weighting_profile = _resolve_weighting_profile(args)
 
-    base_state, base_target, base_mask, base_target_mask, base_feature_schema = _load_npz(
-        args.base_dataset
+    allow_legacy = bool(getattr(args, "allow_legacy_supervision", False))
+    base_state, base_target, base_mask, base_target_mask, base_feature_schema, base_supervision = (
+        _load_npz(args.base_dataset, allow_legacy_supervision=allow_legacy)
     )
-    hard_state, hard_target, hard_mask, hard_target_mask, hard_feature_schema = _load_npz(
-        args.hardcase_dataset
+    hard_state, hard_target, hard_mask, hard_target_mask, hard_feature_schema, hard_supervision = (
+        _load_npz(args.hardcase_dataset, allow_legacy_supervision=allow_legacy)
+    )
+    mixed_supervision = compatible_mixed_supervision(
+        base_supervision, hard_supervision, allow_legacy=allow_legacy
     )
 
     for arr_base, arr_hard, name in [
@@ -345,12 +372,19 @@ def main() -> int:
     }
     if feature_schema_json is not None:
         payload["feature_schema_json"] = feature_schema_json
+    if mixed_supervision is not None:
+        payload["supervision_metadata_json"] = json.dumps(mixed_supervision, sort_keys=True)
+    if args.output.exists():
+        raise FileExistsError(f"Refusing to overwrite predictive dataset artifact: {args.output}")
     np.savez_compressed(
         args.output,
         **payload,
     )
 
     summary = {
+        **(mixed_supervision or {}),
+        "supervision_metadata": mixed_supervision,
+        "supervision_status": "identity_corrected" if mixed_supervision else "legacy_unverified",
         "base_dataset": str(args.base_dataset),
         "hardcase_dataset": str(args.hardcase_dataset),
         "base_count": int(base_state.shape[0]),
@@ -373,6 +407,22 @@ def main() -> int:
     }
     summary_path = args.output.with_suffix(".json")
     summary_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
+    if mixed_supervision is not None:
+        manifest_path = args.output.with_suffix(args.output.suffix + ".manifest.json")
+        manifest_path.write_text(
+            json.dumps(
+                {
+                    "dataset_id": args.output.stem,
+                    "dataset_schema": mixed_supervision["dataset_schema"],
+                    "feature_schema": mixed_feature_schema,
+                    "supervision_metadata": mixed_supervision,
+                    "source_datasets": [str(args.base_dataset), str(args.hardcase_dataset)],
+                },
+                indent=2,
+                sort_keys=True,
+            ),
+            encoding="utf-8",
+        )
     print(json.dumps(summary, indent=2))
     return 0
 

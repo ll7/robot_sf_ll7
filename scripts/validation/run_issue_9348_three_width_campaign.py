@@ -254,7 +254,8 @@ def _valid_action_trace(trace: Any, row: dict[str, Any] | None) -> bool:
     """Require one finite selected and applied planner action per executed step."""
     if (
         not isinstance(trace, dict)
-        or trace.get("schema_version") != "simulation-step-trace.v1"
+        or trace.get("schema_version")
+        not in {"simulation-step-trace.v1", "simulation-step-trace.v2"}
         or not isinstance(trace.get("dt"), (int, float))
         or isinstance(trace["dt"], bool)
         or not math.isclose(trace["dt"], _DT, rel_tol=0.0, abs_tol=1.0e-12)

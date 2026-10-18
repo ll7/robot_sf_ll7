@@ -1,0 +1,89 @@
+{
+  "pairs": 1500,
+  "matched_fields": [
+    "route_complete",
+    "collision_event"
+  ],
+  "rows": [
+    {
+      "planner": "orca",
+      "pairs": 300,
+      "success_collision_mismatches": [],
+      "step_mismatches": 0,
+      "artifacts": [
+        {
+          "artifact_path": "docs/context/robsweep/evidence/episodes/legacy_orca.jsonl.gz",
+          "sha256": "90a97f0169fe7cbc903f795712d5f8f4d652da01b29f91bab097706fbc2282ee"
+        },
+        {
+          "artifact_path": "docs/context/robsweep/evidence/episodes/r1_v0.65_orca.jsonl.gz",
+          "sha256": "b21f18900924057cf02a44ec0be7c55c53781fad02d098b3dd5790b2341a7ef4"
+        }
+      ]
+    },
+    {
+      "planner": "social_force",
+      "pairs": 300,
+      "success_collision_mismatches": [],
+      "step_mismatches": 0,
+      "artifacts": [
+        {
+          "artifact_path": "docs/context/robsweep/evidence/episodes/legacy_social_force.jsonl.gz",
+          "sha256": "8efc9d3515b1b51363ca4a46c1e112a7747114127a10c32ded3db0143441f1d5"
+        },
+        {
+          "artifact_path": "docs/context/robsweep/evidence/episodes/r1_v0.65_social_force.jsonl.gz",
+          "sha256": "24348b6338038a918a1478e1ac00b8dd49223a245e5bb3e980b328b47807a567"
+        }
+      ]
+    },
+    {
+      "planner": "hybrid_rule_v4_fast_progress_static_escape",
+      "pairs": 300,
+      "success_collision_mismatches": [],
+      "step_mismatches": 0,
+      "artifacts": [
+        {
+          "artifact_path": "docs/context/robsweep/evidence/episodes/legacy_hybrid_rule_v4_fast_progress_static_escape.jsonl.gz",
+          "sha256": "e92006fb54d4d993893faca2f8ba4f0040e06842b4803f8e9b81e02ca1379194"
+        },
+        {
+          "artifact_path": "docs/context/robsweep/evidence/episodes/r1_v0.65_hybrid_rule_v4_fast_progress_static_escape.jsonl.gz",
+          "sha256": "24bcc3abbb823db2f06f5b4740623ff30b910119758023645511551177c71db3"
+        }
+      ]
+    },
+    {
+      "planner": "goal",
+      "pairs": 300,
+      "success_collision_mismatches": [],
+      "step_mismatches": 0,
+      "artifacts": [
+        {
+          "artifact_path": "docs/context/robsweep/evidence/episodes/legacy_goal.jsonl.gz",
+          "sha256": "17a5bcf0f172bb01764cec5d2446f729ceb8eddf4aa71058a1c883f1b9a61c84"
+        },
+        {
+          "artifact_path": "docs/context/robsweep/evidence/episodes/r1_v0.65_goal.jsonl.gz",
+          "sha256": "86ae7e302b6bf7bd204d80f9a9ab7b217c60a56bc6a5cd1979ca1b589e9eec08"
+        }
+      ]
+    },
+    {
+      "planner": "ppo",
+      "pairs": 300,
+      "success_collision_mismatches": [],
+      "step_mismatches": 0,
+      "artifacts": [
+        {
+          "artifact_path": "docs/context/robsweep/evidence/episodes/legacy_ppo.jsonl.gz",
+          "sha256": "b02febe1dc1f4701b55335e179ebff20e81211a10bb9b10b7724b46b5d7c9381"
+        },
+        {
+          "artifact_path": "docs/context/robsweep/evidence/episodes/r1_v0.65_ppo.jsonl.gz",
+          "sha256": "edbae6bc027f8bcfc3ff632eed75d6a09cb0b70f0c03fe1e945de4d73353f9bc"
+        }
+      ]
+    }
+  ]
+}

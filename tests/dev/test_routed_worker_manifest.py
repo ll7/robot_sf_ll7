@@ -302,6 +302,202 @@ def test_build_manifest_records_terminal_state_per_attempt(tmp_path: Path) -> No
     assert data["attempted_routes"][2]["terminal_state"] == "none"
 
 
+@pytest.mark.parametrize(
+    ("http_status", "has_run_dir"),
+    [(401, True), (403, False)],
+)
+def test_classify_terminal_state_authentication_failed_on_http_status(
+    http_status: int, has_run_dir: bool
+) -> None:
+    """Explicit 401/403 metadata is a distinct auth terminal state with or without a run dir."""
+    state = manifest.classify_terminal_state(
+        returncode=1,
+        http_status=http_status,
+        has_run_dir=has_run_dir,
+    )
+    assert state == "authentication_failed"
+
+
+@pytest.mark.parametrize(
+    "failure_class", ["authentication_error", "credential_error", "auth_failure"]
+)
+def test_classify_terminal_state_authentication_failed_on_failure_class(failure_class: str) -> None:
+    """An explicit auth failure class is not pooled with a generic non-zero exit."""
+    state = manifest.classify_terminal_state(returncode=1, failure_class=failure_class)
+
+    assert state == "authentication_failed"
+
+
+def test_build_manifest_records_authentication_failed_without_run_dir(tmp_path: Path) -> None:
+    """An auth-blocked dispatch that never started carries the distinct auth terminal state."""
+    repo = _init_repo(tmp_path / "repo")
+    attempts = [
+        {
+            "route": {"provider": "codex"},
+            "worker_started": False,
+            "run_dir": None,
+            "returncode": 1,
+            "http_status": 401,
+        }
+    ]
+
+    data = manifest.build_routing_manifest(attempts, chosen_index=0, target_repo=repo)
+
+    attempt = data["attempted_routes"][0]
+    assert attempt["terminal_state"] == "authentication_failed"
+    assert data["chosen_terminal_state"] == "authentication_failed"
+    assert attempt["delegation"]["classification"] == "authentication_failed"
+    assert attempt["delegation"]["retryable"] is False
+    assert attempt["delegation"]["review_evidence_status"] == "none"
+    assert data["recovery"]["retry_recommended"] is False
+    assert data["recovery"]["fallback"]["independent_review_authorized"] is False
+    assert data["aggregation"] == "inconclusive"
+    assert data["chosen_output_contract"]["status"] == "inconclusive"
+
+
+def test_build_manifest_records_authentication_failed_with_run_dir(tmp_path: Path) -> None:
+    """An auth failure class after startup is not relabeled as missing-artifact success."""
+    repo = _init_repo(tmp_path / "repo")
+    run_dir = repo / ".git" / "codex-agent-runs" / "run-auth"
+    _write_artifacts(run_dir, ALL_ARTIFACTS)
+    attempts = [
+        {
+            "route": {"provider": "codex"},
+            "worker_started": True,
+            "run_dir": ".git/codex-agent-runs/run-auth",
+            "returncode": 1,
+            "failure_class": "credential_error",
+        }
+    ]
+
+    data = manifest.build_routing_manifest(attempts, chosen_index=0, target_repo=repo)
+
+    attempt = data["attempted_routes"][0]
+    assert attempt["terminal_state"] == "authentication_failed"
+    assert data["chosen_terminal_state"] == "authentication_failed"
+    assert attempt["delegation"]["classification"] == "authentication_failed"
+    assert attempt["delegation"]["phase"] == "worker_task"
+    assert attempt["delegation"]["review_evidence_status"] == "none"
+    assert data["aggregation"] == "inconclusive"
+    assert attempt["compact_artifacts"]["result_json"]["present"] is True
+
+
+def test_build_manifest_scope_violation_precedes_authentication_metadata(tmp_path: Path) -> None:
+    """An out-of-scope run dir still fails as a scope violation, never as an auth outcome."""
+    repo = _init_repo(tmp_path / "repo")
+    attempts = [
+        {
+            "route": {"provider": "codex"},
+            "run_dir": "../escape-run",
+            "returncode": 1,
+            "http_status": 403,
+        }
+    ]
+
+    data = manifest.build_routing_manifest(attempts, chosen_index=0, target_repo=repo)
+
+    assert data["attempted_routes"][0]["terminal_state"] == "scope_violation"
+    assert data["attempted_routes"][0]["scope_check"]["ok"] is False
+    for entry in data["attempted_routes"][0]["compact_artifacts"].values():
+        assert entry["reason"] == "scope_violation"
+
+
+def test_classify_delegation_attempt_authentication_failed_keeps_phase() -> None:
+    """Explicit auth metadata outranks the generic startup and task failure fallbacks."""
+    startup = manifest.classify_delegation_attempt(
+        {"worker_started": False, "run_dir": None, "returncode": 1, "http_status": 401}
+    )
+    task = manifest.classify_delegation_attempt(
+        {"worker_started": True, "run_dir": "run-auth", "returncode": 1, "http_status": 403}
+    )
+
+    assert startup["phase"] == "worker_startup"
+    assert startup["classification"] == "authentication_failed"
+    assert startup["retryable"] is False
+    assert startup["review_evidence_status"] == "none"
+    assert task["phase"] == "worker_task"
+    assert task["classification"] == "authentication_failed"
+    assert task["retryable"] is False
+    assert task["review_evidence_status"] == "none"
+
+
+def test_classify_delegation_attempt_authentication_failed_from_failure_class() -> None:
+    """An auth failure class without an HTTP status is still an explicit auth blocker."""
+    result = manifest.classify_delegation_attempt(
+        {"worker_started": False, "run_dir": None, "failure_class": "auth_failure"}
+    )
+
+    assert result["classification"] == "authentication_failed"
+    assert result["retryable"] is False
+
+
+def test_classify_delegation_attempt_malformed_start_state_precedes_authentication() -> None:
+    """A non-boolean worker_started value stays unknown instead of becoming an auth verdict."""
+    result = manifest.classify_delegation_attempt(
+        {"worker_started": "yes", "run_dir": None, "http_status": 401}
+    )
+
+    assert result["phase"] == "unknown"
+    assert result["classification"] == "unavailable"
+    assert result["review_evidence_status"] == "unavailable"
+
+
+def test_build_delegation_recovery_does_not_retry_authentication_failure() -> None:
+    """An auth blocker earns no bounded retry and never authorizes independent review."""
+    recovery = manifest.build_delegation_recovery(
+        [{"worker_started": False, "run_dir": None, "returncode": 1, "http_status": 401}],
+        max_attempts=2,
+    )
+
+    assert recovery["retry_recommended"] is False
+    assert recovery["next_action"] == "manual_or_local_review_required"
+    assert recovery["fallback"] == {
+        "required": True,
+        "mode": "manual_or_local_review",
+        "aggregation": "inconclusive",
+        "independent_review_authorized": False,
+    }
+
+
+@pytest.mark.parametrize("http_status", [429, 503])
+def test_transient_startup_statuses_keep_bounded_retry(http_status: int) -> None:
+    """A legitimate transient startup status stays retryable after the auth classification."""
+    classification = manifest.classify_delegation_attempt(
+        {"worker_started": False, "run_dir": None, "http_status": http_status}
+    )
+    recovery = manifest.build_delegation_recovery(
+        [{"worker_started": False, "run_dir": None, "http_status": http_status}],
+        max_attempts=2,
+    )
+
+    assert classification["classification"] == "startup_transient"
+    assert classification["retryable"] is True
+    assert recovery["retry_recommended"] is True
+    assert recovery["next_action"] == "retry_worker_start_once"
+
+
+def test_metadata_free_failures_keep_generic_classifications() -> None:
+    """Without auth metadata the generic terminal and startup states are unchanged."""
+    assert manifest.classify_terminal_state(returncode=1) == manifest.TerminalFailure.NON_ZERO_EXIT
+    assert (
+        manifest.classify_terminal_state(has_run_dir=False)
+        == manifest.TerminalFailure.ROUTE_NOT_STARTED
+    )
+    assert manifest.classify_terminal_state() == manifest.TerminalFailure.UNAVAILABLE
+
+    startup = manifest.classify_delegation_attempt(
+        {"worker_started": False, "run_dir": None, "returncode": 1}
+    )
+    task = manifest.classify_delegation_attempt(
+        {"worker_started": True, "run_dir": "run-generic", "returncode": 1}
+    )
+
+    assert startup["classification"] == "startup_failure"
+    assert startup["retryable"] is False
+    assert task["classification"] == "worker_task_failure"
+    assert task["retryable"] is False
+
+
 # --- Delegation startup recovery tests ---
 
 

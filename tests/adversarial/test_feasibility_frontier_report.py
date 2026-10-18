@@ -1950,6 +1950,94 @@ def test_frontier_report_uses_later_historical_rows_to_guard_case_identity(
         build_frontier_report(payload, evidence_root=tmp_path)
 
 
+@pytest.mark.parametrize("location", ["outer", "persisted", "both"])
+@pytest.mark.parametrize("number_type", [int, float], ids=["integer", "float"])
+@pytest.mark.parametrize(
+    ("field", "row_index"),
+    [
+        ("success", 0),
+        ("success", 1),
+        ("collision", 0),
+        ("collision", 1),
+        ("eligible", 1),
+        ("eligible", 2),
+    ],
+)
+def test_frontier_report_rejects_numeric_evaluation_booleans(
+    tmp_path: Path, location: str, number_type: type, field: str, row_index: int
+) -> None:
+    """Boolean-equivalent numbers cannot alter outcomes or bypass source binding."""
+    payload = _evidence(tmp_path)
+    evaluation = payload["rounds"][0]["evaluation_sets"]["held_out"]
+    row = evaluation["episodes"][row_index]
+    replacement = number_type(row[field])
+    if location in {"outer", "both"}:
+        row[field] = replacement
+    if location in {"persisted", "both"}:
+        ref = evaluation["artifact"]
+        source = json.loads((tmp_path / ref["path"]).read_text(encoding="utf-8"))
+        source["episodes"][row_index][field] = replacement
+        _write_source_artifact(tmp_path, ref, source, schema_version=ref["schema_version"])
+
+    with pytest.raises(FrontierReportError, match=rf"{field} must be boolean or null"):
+        build_frontier_report(payload, evidence_root=tmp_path)
+
+
+@pytest.mark.parametrize("location", ["outer", "persisted", "both"])
+@pytest.mark.parametrize("replacement", [0, 1, 0.0, 1.0])
+def test_frontier_report_rejects_numeric_candidate_booleans(
+    tmp_path: Path, location: str, replacement: int | float
+) -> None:
+    """Candidate flags require the same strict types in both evidence surfaces."""
+    payload = _evidence(tmp_path)
+    falsification = payload["rounds"][1]["falsification"]
+    candidate = falsification["candidates"][2]
+    candidate["target_failure_observed"] = bool(replacement)
+    _refresh_source_artifacts(payload, tmp_path)
+    build_frontier_report(payload, evidence_root=tmp_path)
+    if location in {"outer", "both"}:
+        candidate["target_failure_observed"] = replacement
+    if location in {"persisted", "both"}:
+        ref = falsification["artifact"]
+        source = json.loads((tmp_path / ref["path"]).read_text(encoding="utf-8"))
+        source["candidate_records"][2]["target_failure_observed"] = replacement
+        _write_source_artifact(tmp_path, ref, source, schema_version=ref["schema_version"])
+
+    with pytest.raises(
+        FrontierReportError, match="target_failure_observed must be boolean or null"
+    ):
+        build_frontier_report(payload, evidence_root=tmp_path)
+
+
+def test_frontier_cli_refuses_numeric_boolean_without_publishing(tmp_path: Path) -> None:
+    """A malformed outer flag must not produce a published report bundle."""
+    payload = _evidence(tmp_path)
+    payload["rounds"][0]["evaluation_sets"]["held_out"]["episodes"][1]["success"] = 0
+    input_path = tmp_path / "input.json"
+    input_path.write_text(json.dumps(payload), encoding="utf-8")
+    output_dir = tmp_path / "report"
+    script_path = (
+        Path(__file__).resolve().parents[2]
+        / "scripts/tools/build_adversarial_feasibility_frontier_report.py"
+    )
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(script_path),
+            "--input",
+            str(input_path),
+            "--out-dir",
+            str(output_dir),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 2, result.stdout
+    assert "success must be boolean or null" in result.stderr
+    assert not output_dir.exists() or not any(output_dir.iterdir())
+
+
 def test_frontier_report_rejects_missing_provenance_and_artifact_digest_mismatch(
     tmp_path: Path,
 ) -> None:

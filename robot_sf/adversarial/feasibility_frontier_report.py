@@ -1543,7 +1543,7 @@ def _validate_round(  # noqa: C901, PLR0912, PLR0915 - retain every round-local 
             errors.append(f"{candidate_prefix}.evaluation_status is unsupported")
         if not _is_allowed(candidate.get("admissibility_verdict"), _ADMISSIBILITY_VERDICTS):
             errors.append(f"{candidate_prefix}.admissibility_verdict is unsupported")
-        if candidate.get("target_failure_observed") not in (True, False, None):
+        if not _is_boolean_or_null(candidate.get("target_failure_observed")):
             errors.append(f"{candidate_prefix}.target_failure_observed must be boolean or null")
         if not _is_allowed(
             candidate.get("replay_status"),
@@ -1686,6 +1686,13 @@ def _validate_round(  # noqa: C901, PLR0912, PLR0915 - retain every round-local 
                 f"{prefix}.falsification candidate records ({len(candidates)}) do not match "
                 f"completed evaluations ({budget['candidates_completed']})"
             )
+    if isinstance(falsification_source, dict):
+        _validate_boolean_source_fields(
+            falsification_source.get("candidate_records"),
+            ("target_failure_observed",),
+            f"{prefix}.falsification.artifact.candidate_records",
+            errors,
+        )
     if isinstance(falsification_source, dict) and falsification_source.get(
         "candidate_records"
     ) != _source_projection(candidates, _SEARCH_CANDIDATE_SOURCE_FIELDS):
@@ -1990,10 +1997,8 @@ def _validate_evaluation_set(  # noqa: C901, PLR0912, PLR0915 - report all indep
             errors.append(f"{row_prefix}.readiness_status is unsupported")
         if not _is_allowed(episode.get("availability_status"), _AVAILABILITY_STATUSES):
             errors.append(f"{row_prefix}.availability_status is unsupported")
-        if episode.get("eligible") not in (True, False, None):
-            errors.append(f"{row_prefix}.eligible must be boolean or null")
-        for field in ("success", "collision"):
-            if episode.get(field) not in (True, False, None):
+        for field in ("eligible", "success", "collision"):
+            if not _is_boolean_or_null(episode.get(field)):
                 errors.append(f"{row_prefix}.{field} must be boolean or null")
         if episode.get("success") is True and episode.get("collision") is True:
             errors.append(
@@ -2093,6 +2098,9 @@ def _validate_evaluation_source_rows(
             f"{prefix} scenario/seed manifest does not match the checksummed evaluation source"
         )
     source_rows = source.get("episodes")
+    _validate_boolean_source_fields(
+        source_rows, ("eligible", "success", "collision"), f"{prefix}.artifact.episodes", errors
+    )
     row_projection = _source_projection(episodes, _EVALUATION_ROW_SOURCE_FIELDS)
     if source_rows != row_projection:
         errors.append(f"{prefix} rows do not match the checksummed evaluation source")
@@ -2349,6 +2357,24 @@ def _validate_seeds(value: Any, prefix: str, errors: list[str]) -> None:
         errors.append(f"{prefix} must contain only integer seeds")
     elif len(value) != len(set(value)):
         errors.append(f"{prefix} must not contain duplicate seeds")
+
+
+def _is_boolean_or_null(value: Any) -> bool:
+    """JSON booleans are distinct from equal-valued integers and floats."""
+    return value is None or isinstance(value, bool)
+
+
+def _validate_boolean_source_fields(
+    rows: Any, fields: tuple[str, ...], prefix: str, errors: list[str]
+) -> None:
+    """Reject numeric boolean aliases before comparing checksummed source rows."""
+    if not isinstance(rows, list):
+        return  # The source projection comparison reports malformed row containers.
+    for idx, row in enumerate(rows):
+        if isinstance(row, dict):
+            for field in fields:
+                if not _is_boolean_or_null(row.get(field)):
+                    errors.append(f"{prefix}[{idx}].{field} must be boolean or null")
 
 
 def _source_projection(rows: Any, fields: tuple[str, ...]) -> list[dict[str, Any]] | None:

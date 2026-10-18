@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from typing import Any
 
 import pytest
 
@@ -95,7 +96,7 @@ def test_jsonl_refuses_to_erase_contradictory_positive_fallback() -> None:
         False,
     ],
 )
-def test_builder_rejects_conflicting_aliases_and_malformed_containers(fallback: object) -> None:
+def test_builder_rejects_conflicting_aliases_and_malformed_containers(fallback: Any) -> None:
     """Every supplied alias and container is checked before destructive projection."""
     from robot_sf.benchmark.obstacle_force_diagnostic_receipt import (
         ObstacleForceDiagnosticReceiptError,

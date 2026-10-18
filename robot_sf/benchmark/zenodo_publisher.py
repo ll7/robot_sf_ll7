@@ -14,7 +14,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 from urllib.parse import quote, unquote, urlsplit
 
 from robot_sf.benchmark.release_tag_identity import (
@@ -784,12 +784,8 @@ def _release_manifest_schema_version(binding: Any) -> str | None:
     return schema_version
 
 
-def _normalize_release_binding(binding: Any) -> dict[str, Any]:
-    """Normalize and validate the public fields needed to bind a Zenodo release.
-
-    Returns:
-        Normalized release identity and metadata path fields.
-    """
+def _require_publishable_binding(binding: Any) -> None:
+    """Reject missing or development-only identity before normalizing release fields."""
     # Local import: release_protocol also imports the generic publisher.
     from robot_sf.benchmark.release_protocol import DEVELOPMENT_REHEARSAL_KIND  # noqa: PLC0415
 
@@ -801,6 +797,15 @@ def _normalize_release_binding(binding: Any) -> dict[str, Any]:
         raise ZenodoPublisherError(
             "development rehearsal cannot be published as a release or reserve a DOI"
         )
+
+
+def _normalize_release_binding(binding: Any) -> dict[str, Any]:
+    """Normalize and validate the public fields needed to bind a Zenodo release.
+
+    Returns:
+        Normalized release identity and metadata path fields.
+    """
+    _require_publishable_binding(binding)
     metadata_path_value = _binding_value(binding, "metadata_path")
     if metadata_path_value is None:
         raise ZenodoPublisherError("Zenodo release binding metadata_path is missing")
@@ -4075,7 +4080,7 @@ def verify(  # noqa: C901, PLR0912, PLR0915
         ) != _canonical_metadata_value_for_comparison(key, value):
             problems.append(f"metadata.{key} does not match requested metadata")
     for key, value in operational_metadata.items():
-        if remote_metadata.get(key) != value:
+        if cast("Mapping[str, Any]", remote_metadata).get(key) != value:
             problems.append(f"metadata.{key} does not match Zenodo-only publication fields")
     try:
         source_tag = _source_tag(normalized_metadata)

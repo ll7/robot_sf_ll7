@@ -6,7 +6,7 @@ import hashlib
 import json
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypedDict, cast
 
 from robot_sf.benchmark import published_release_audit, zenodo_publisher
 from robot_sf.benchmark.release_erratum import (
@@ -398,7 +398,14 @@ def _load_release_binding(args: argparse.Namespace) -> tuple[Any, dict[str, Any]
     return manifest, binding
 
 
-def _release_metadata_kwargs(binding: dict[str, Any] | None) -> dict[str, str]:
+class _ReleaseMetadataKwargs(TypedDict, total=False):
+    """Exact keyword pins accepted by the metadata loader."""
+
+    expected_source_tag: str
+    expected_metadata_sha256: str
+
+
+def _release_metadata_kwargs(binding: dict[str, Any] | None) -> _ReleaseMetadataKwargs:
     """Return the metadata pins shared by both supported release contracts."""
     if binding is None:
         return {}
@@ -462,7 +469,7 @@ def _handle_repair_draft_metadata(
             ) from exc
         bootstrap_metadata = zenodo_publisher.load_dataset_metadata(
             bootstrap_path,
-            expected_source_tag=str(release_binding["release_tag"]),
+            expected_source_tag=str(cast("dict[str, Any]", release_binding)["release_tag"]),
             expected_metadata_sha256=bootstrap_metadata_sha256,
         )
     report = zenodo_publisher.repair_draft_metadata(

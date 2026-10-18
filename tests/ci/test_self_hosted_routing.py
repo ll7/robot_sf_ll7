@@ -687,14 +687,15 @@ def _credential_context_references(value: str) -> tuple[bool, bool, bool]:
             else:
                 normalised.append(tokens[index])
             index += 1
-    unsafe_secrets = False
-    for index, (kind, token) in enumerate(normalised):
-        if (kind, token) == ("identifier", "secrets"):
-            unsafe_secrets |= not (
-                index + 2 < len(normalised)
-                and normalised[index + 1] == ("symbol", ".")
-                and normalised[index + 2][0] in {"identifier", "property"}
-            )
+    unsafe_secrets = any(
+        (kind, token) == ("identifier", "secrets")
+        and not (
+            index + 2 < len(normalised)
+            and normalised[index + 1] == ("symbol", ".")
+            and normalised[index + 2][0] in {"identifier", "property"}
+        )
+        for index, (kind, token) in enumerate(normalised)
+    )
     # Retain the existing parenthesis-free view and all its step refusals.
     normalised = [item for item in normalised if item not in {("symbol", "("), ("symbol", ")")}]
     broad = False

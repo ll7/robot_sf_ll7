@@ -954,6 +954,131 @@ def test_evaluate_merge_gate_does_not_trust_unproven_not_required_status() -> No
     assert "changed_coverage_proof_unknown" in audit.reasons
 
 
+@pytest.mark.parametrize(
+    ("conclusion", "expected_status"),
+    [
+        ("skipped", "skipped"),
+        ("SKIPPED", "skipped"),
+        ("failure", "failure"),
+        ("cancelled", "failure"),
+        ("timed_out", "failure"),
+        ("success", "success"),
+    ],
+)
+def test_classify_changed_coverage_checks_keeps_skipped_distinct(
+    conclusion: str, expected_status: str
+) -> None:
+    """Skipped means not-applicable; only real negative outcomes are failure (issue #10412)."""
+    check_runs = [
+        {
+            "id": 7001,
+            "name": "changed-coverage-gate",
+            "head_sha": FULL_SHA,
+            "status": "completed",
+            "conclusion": conclusion,
+            "started_at": "2026-08-18T01:00:00Z",
+            "completed_at": "2026-08-18T01:01:00Z",
+        }
+    ]
+
+    result = merge_queue_gate_module._classify_changed_coverage_checks(
+        check_runs, head_sha=FULL_SHA
+    )
+
+    assert result["status"] == expected_status
+    assert result["head_sha"] == FULL_SHA
+
+
+def test_fetch_pr_snapshot_accepts_skipped_coverage_with_docs_only_proof() -> None:
+    """A path-filtered skipped lane with proven docs-only scope merges (issue #10412)."""
+    gate_verdict = f"gate-verdict: accepted @ {FULL_SHA}"
+    with patch("scripts.dev.merge_queue_gate._gh") as mock_gh:
+        mock_gh.side_effect = [
+            _gh_response(stdout=json.dumps(_raw_pr(body=gate_verdict))),
+            _gh_response(stdout=json.dumps({"base": {"sha": "base_sha"}})),
+            _gh_response(
+                stdout=json.dumps(
+                    {
+                        "total_count": 1,
+                        "check_runs": [
+                            {
+                                "id": 7001,
+                                "name": "changed-coverage-gate",
+                                "head_sha": FULL_SHA,
+                                "status": "completed",
+                                "conclusion": "skipped",
+                                "started_at": "2026-08-18T01:00:00Z",
+                                "completed_at": "2026-08-18T01:01:00Z",
+                            }
+                        ],
+                    }
+                )
+            ),
+            _changed_files_response(
+                "README.md",
+                "docs/dev_guide.md",
+                ".agents/skills/example/SKILL.md",
+            ),
+        ]
+        snapshot, error = fetch_pr_snapshot(42, repo="owner/repo")
+
+    assert error is None
+    audit = evaluate_merge_gate(
+        snapshot,
+        main_sha="base_sha",
+        threads_resolved=True,
+        reviewers_requested=False,
+    )
+    assert audit.passed is True
+    assert audit.changed_coverage_status == "not_required"
+    assert audit.changed_coverage_head_sha == ""
+
+
+def test_fetch_pr_snapshot_refuses_skipped_coverage_without_docs_only_proof() -> None:
+    """A skipped lane on a source-changing PR stays blocking (issue #10412)."""
+    gate_verdict = f"gate-verdict: accepted @ {FULL_SHA}"
+    with patch("scripts.dev.merge_queue_gate._gh") as mock_gh:
+        mock_gh.side_effect = [
+            _gh_response(stdout=json.dumps(_raw_pr(body=gate_verdict))),
+            _gh_response(stdout=json.dumps({"base": {"sha": "base_sha"}})),
+            _gh_response(
+                stdout=json.dumps(
+                    {
+                        "total_count": 1,
+                        "check_runs": [
+                            {
+                                "id": 7001,
+                                "name": "changed-coverage-gate",
+                                "head_sha": FULL_SHA,
+                                "status": "completed",
+                                "conclusion": "skipped",
+                                "started_at": "2026-08-18T01:00:00Z",
+                                "completed_at": "2026-08-18T01:01:00Z",
+                            }
+                        ],
+                    }
+                )
+            ),
+            _changed_files_response(
+                "docs/dev_guide.md",
+                "scripts/dev/merge_queue_gate.py",
+            ),
+        ]
+        snapshot, error = fetch_pr_snapshot(42, repo="owner/repo")
+
+    assert error is None
+    assert snapshot["changed_coverage"]["status"] == "skipped"
+    audit = evaluate_merge_gate(
+        snapshot,
+        main_sha="base_sha",
+        threads_resolved=True,
+        reviewers_requested=False,
+    )
+    assert audit.passed is False
+    assert audit.changed_coverage_status == "skipped"
+    assert "changed_coverage_proof_failed" in audit.reasons
+
+
 def test_fetch_pr_snapshot_rejects_incomplete_exact_head_check_runs() -> None:
     """A paginated check-run response cannot silently omit a newer proof."""
     with patch("scripts.dev.merge_queue_gate._gh") as mock_gh:

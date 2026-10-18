@@ -9,6 +9,8 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
+import stat
 import subprocess
 from collections.abc import Mapping, Sequence
 from pathlib import Path
@@ -52,6 +54,9 @@ EXPECTED_PACKET_ID = "issue_8891_temporal_robustness_matched_budget_v1"
 EXPECTED_PACKET_STATUS = "diagnostic_only_preflight"
 EXPECTED_EVIDENCE_TIER = "preflight_valid"
 CONFIRMATION_THRESHOLD = 3
+
+_PINNED_PATH_MAX_BYTES = 4096
+_PINNED_SEGMENT_MAX_BYTES = 255
 
 _REQUIRED_INPUTS = set(
     "parent_manifest scenario_template search_space objective_registry robustness samplers runner benchmark_runner certification replay confirmation".split()
@@ -338,12 +343,104 @@ def canonical_sha256(value: Any) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
-def _repo_file(root: Path, value: Any, name: str) -> Path:
-    _require(isinstance(value, str) and value.strip(), f"{name} must be a path")
-    path = (root / value).resolve()
-    _require(path.is_relative_to(root.resolve()), f"{name} must be repo-relative")
-    _require(path.is_file(), f"{name} not found: {value}")
-    return path
+def _pinned_path(value: Any, name: str) -> str:
+    """Validate canonical Git tree paths lexically, without consulting the checkout."""
+    _require(isinstance(value, str) and bool(value), f"{name} must be a path")
+    encoded = value.encode("utf-8")
+    _require(
+        len(encoded) <= _PINNED_PATH_MAX_BYTES,
+        f"{name} path exceeds {_PINNED_PATH_MAX_BYTES} bytes",
+    )
+    _require(
+        all(len(segment) <= _PINNED_SEGMENT_MAX_BYTES for segment in encoded.split(b"/")),
+        f"{name} path segment exceeds {_PINNED_SEGMENT_MAX_BYTES} bytes",
+    )
+    _require(
+        not value.startswith("/")
+        and "\\" not in value
+        and "\0" not in value
+        and all(segment not in {"", ".", ".."} for segment in value.split("/")),
+        f"{name} must be a canonical repo-relative path",
+    )
+    return value
+
+
+def _input_paths(packet: Mapping[str, Any]) -> dict[str, str]:
+    """Reject every malformed pin before performing any Git or current-tree lookup."""
+    inputs = _mapping(_mapping(packet.get("source"), "source").get("inputs"), "source.inputs")
+    paths = {}
+    for input_id, raw in inputs.items():
+        item = _mapping(raw, f"source.inputs.{input_id}")
+        _reject_unknown_keys(item, _INPUT_ALLOWED_KEYS, f"source.inputs.{input_id}")
+        paths[str(input_id)] = _pinned_path(item.get("path"), f"source.inputs.{input_id}.path")
+    return paths
+
+
+def _current_source_digest(root: Path, relative_path: str) -> str | None:
+    """Best-effort drift only: never open special files or follow an escaping symlink."""
+    try:
+        path = root / relative_path
+        mode = path.lstat().st_mode
+        if not (stat.S_ISREG(mode) or stat.S_ISLNK(mode)):
+            return None
+        resolved_root = root.resolve(strict=True)
+        resolved = path.resolve(strict=True)
+        if not resolved.is_relative_to(resolved_root):
+            return None
+        if not stat.S_ISREG(resolved.lstat().st_mode):
+            return None
+        # Without descriptor-relative, no-follow opens we cannot safely inspect
+        # current bytes. Unavailable drift is informational on these platforms.
+        if os.open not in os.supports_dir_fd or os.stat not in os.supports_dir_fd:
+            return None
+        directory_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_NONBLOCK
+        directory_fd = os.open(resolved_root, directory_flags)
+        try:
+            parts = resolved.relative_to(resolved_root).parts
+            # Walk resolved components without following links introduced after
+            # containment checking; nonblocking opens also cover a FIFO swap.
+            for component in parts[:-1]:
+                next_fd = os.open(component, directory_flags, dir_fd=directory_fd)
+                os.close(directory_fd)
+                directory_fd = next_fd
+            mode = os.stat(parts[-1], dir_fd=directory_fd, follow_symlinks=False).st_mode
+            if not stat.S_ISREG(mode):
+                return None
+            fd = os.open(
+                parts[-1], os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory_fd
+            )
+            with os.fdopen(fd, "rb") as stream:
+                if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+                    return None
+                return hashlib.sha256(stream.read()).hexdigest()
+        finally:
+            os.close(directory_fd)
+    except (OSError, RuntimeError):
+        return None
+
+
+def _source_staleness(
+    root: Path, paths: Mapping[str, str], snapshots: Mapping[str, bytes], *, source_commit: str
+) -> list[dict[str, str]]:
+    """Inspect the current tree only after the historical audit has passed all gates."""
+    entries = []
+    for input_id, relative_path in paths.items():
+        try:
+            current_digest = _current_source_digest(root, relative_path)
+        except OSError:
+            current_digest = None
+        if current_digest == hashlib.sha256(snapshots[input_id]).hexdigest():
+            continue
+        state = "unreadable" if current_digest is None else "stale"
+        entries.append(
+            {
+                "input_id": input_id,
+                "path": relative_path,
+                "source_commit": source_commit,
+                "message": f"{state} since {source_commit}",
+            }
+        )
+    return entries
 
 
 def _forbid_outcomes(value: Any) -> None:
@@ -405,23 +502,46 @@ def _resolve_source_commit(packet: Mapping[str, Any], root: Path) -> str:
     return commit
 
 
-def _input_paths(packet: Mapping[str, Any], root: Path, *, source_commit: str) -> dict[str, Path]:
+def _input_snapshots(
+    packet: Mapping[str, Any], root: Path, *, source_commit: str
+) -> dict[str, bytes]:
+    """Read and verify historical inputs exclusively through immutable Git objects."""
     inputs = _mapping(_mapping(packet.get("source"), "source").get("inputs"), "source.inputs")
-    paths = {}
+    snapshots = {}
     for input_id, raw in inputs.items():
         item = _mapping(raw, f"source.inputs.{input_id}")
         _reject_unknown_keys(item, _INPUT_ALLOWED_KEYS, f"source.inputs.{input_id}")
-        path = _repo_file(root, item.get("path"), f"source.inputs.{input_id}.path")
+        relative_path = _pinned_path(item.get("path"), f"source.inputs.{input_id}.path")
         digest = str(item.get("sha256", "")).lower()
         _require(
             len(digest) == 64 and not set(digest) - set("0123456789abcdef"),
             f"source hash {input_id} must be SHA-256",
         )
-        relative_path = path.relative_to(root.resolve()).as_posix()
         try:
-            immutable_bytes = _git_output(root, "show", f"{source_commit}:{relative_path}")
+            entry = _git_output(
+                root,
+                "--literal-pathspecs",
+                "ls-tree",
+                "-z",
+                "--full-tree",
+                source_commit,
+                "--",
+                relative_path,
+            )
+            metadata = entry.split(b"\t", 1)[0].split()
+            _require(
+                entry.count(b"\0") == 1
+                and len(metadata) == 3
+                and metadata[0] in {b"100644", b"100755"}
+                and metadata[1] == b"blob"
+                and entry.split(b"\t", 1)[1] == relative_path.encode("utf-8") + b"\0",
+                f"immutable source path must be a regular file blob: {relative_path}",
+            )
+            immutable_bytes = _git_output(root, "cat-file", "blob", metadata[2].decode("ascii"))
         except PacketError as exc:
-            raise PacketError(f"immutable source path cannot be resolved: {relative_path}") from exc
+            raise PacketError(
+                f"immutable source path cannot be resolved as a regular file blob: {relative_path}"
+            ) from exc
         _expect(
             hashlib.sha256(immutable_bytes).hexdigest(),
             digest,
@@ -435,13 +555,8 @@ def _input_paths(packet: Mapping[str, Any], root: Path, *, source_commit: str) -
             and not set(working_tree_digest) - set("0123456789abcdef"),
             f"working-tree source hash {input_id} must be SHA-256",
         )
-        _expect(
-            hashlib.sha256(path.read_bytes()).hexdigest(),
-            working_tree_digest,
-            f"working-tree source hash {input_id}",
-        )
-        paths[str(input_id)] = path
-    return paths
+        snapshots[str(input_id)] = immutable_bytes
+    return snapshots
 
 
 def _parameter_signature(value: Any) -> list[tuple[str, Any, Any]]:
@@ -451,7 +566,7 @@ def _parameter_signature(value: Any) -> list[tuple[str, Any, Any]]:
     ]
 
 
-def _validate_source_semantics(packet: Mapping[str, Any], paths: Mapping[str, Path]) -> None:
+def _validate_source_semantics(packet: Mapping[str, Any], snapshots: Mapping[str, bytes]) -> None:
     source = _mapping(packet["source"], "source")
     commit = str(source.get("base_commit", ""))
     _require(
@@ -460,18 +575,14 @@ def _validate_source_semantics(packet: Mapping[str, Any], paths: Mapping[str, Pa
     )
     _expect(source.get("base_ref"), "origin/main", "source.base_ref")
     scenario = _mapping(packet["scenario"], "scenario")
-    space = _mapping(
-        yaml.safe_load(paths["search_space"].read_text(encoding="utf-8")), "search space"
-    )
+    space = _mapping(yaml.safe_load(snapshots["search_space"]), "search space")
     variables = _mapping(space.get("variables"), "search_space.variables")
     expected = [(name, item.get("min"), item.get("max")) for name, item in variables.items()]
     _expect(_parameter_signature(scenario.get("parameters")), expected, "scenario parameters")
     expected_order = tuple(variables)
     _expect(tuple(scenario.get("parameter_order", ())), expected_order, "parameter order")
     _check(scenario, ("policy", "horizon_steps", "dt_s"), ("goal", 100, 0.1), "scenario")
-    template = _mapping(
-        yaml.safe_load(paths["scenario_template"].read_text(encoding="utf-8")), "scenario template"
-    )
+    template = _mapping(yaml.safe_load(snapshots["scenario_template"]), "scenario template")
     first = _mapping(_list(template.get("scenarios"), "scenario_template.scenarios")[0], "scenario")
     simulation = _mapping(first.get("simulation_config"), "scenario_template.simulation_config")
     _expect(
@@ -610,10 +721,11 @@ def validate_packet(packet: Mapping[str, Any], *, repo_root: Path) -> dict[str, 
     _check_values(execution, dict.fromkeys(_EXECUTION_KEYS, False), "execution boundary")
     source = _mapping(packet.get("source"), "source")
     _reject_unknown_keys(source, _SOURCE_ALLOWED_KEYS, "source")
+    paths = _input_paths(packet)
     source_commit = _resolve_source_commit(packet, repo_root)
-    paths = _input_paths(packet, repo_root, source_commit=source_commit)
-    _require(_REQUIRED_INPUTS.issubset(paths), "source inputs are incomplete")
-    _validate_source_semantics(packet, paths)
+    snapshots = _input_snapshots(packet, repo_root, source_commit=source_commit)
+    _require(_REQUIRED_INPUTS.issubset(snapshots), "source inputs are incomplete")
+    _validate_source_semantics(packet, snapshots)
     _validate_packet_nested_keys(packet)
     _expect(
         (
@@ -773,6 +885,9 @@ def validate_packet(packet: Mapping[str, Any], *, repo_root: Path) -> dict[str, 
         "simulator_call_budget": SIMULATOR_CALL_BUDGET,
         "claim_eligible": False,
         "campaign_execution_allowed": False,
+        "source_staleness": _source_staleness(
+            repo_root, paths, snapshots, source_commit=source_commit
+        ),
     }
 
 

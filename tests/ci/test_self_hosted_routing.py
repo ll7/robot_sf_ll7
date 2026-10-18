@@ -608,22 +608,28 @@ def _scan_expression_number(value: str, index: int) -> int:
     return index
 
 
-def _credential_reference_tokens(value: str) -> Iterator[tuple[str, str]]:
-    """Tokenize expressions and raw references with a forward-only, bounded cursor.
+def _credential_reference_tokens(
+    value: str, *, implicit_expression: bool = False
+) -> Iterator[tuple[str, str]]:
+    """Tokenize only expression text with a forward-only, bounded cursor.
 
-    Only expression strings treat quotes as delimiters. Doubled quotes escape a
-    quote, and closing braces inside a string cannot end the expression. An
+    Unwrapped if values are implicit expressions; other raw text yields no tokens.
+    Doubled quotes escape a quote; closing braces inside a string cannot end it. An
     unterminated string consumes the remaining input once, without retrying it.
     """
     index = 0
-    in_expression = False
+    implicit_expression = implicit_expression and "${{" not in value
+    in_expression = implicit_expression
     while index < len(value):
-        if not in_expression and value.startswith("${{", index):
+        if not in_expression:
+            start = value.find("${{", index)
+            if start == -1:
+                break
             in_expression = True
-            index += 3
+            index = start + 3
             yield "boundary", "${{"
             continue
-        if in_expression and value.startswith("}}", index):
+        if in_expression and not implicit_expression and value.startswith("}}", index):
             in_expression = False
             index += 2
             yield "boundary", "}}"
@@ -663,7 +669,9 @@ def _root_references(tokens: list[tuple[str, str]]) -> list[tuple[str, int]]:
     ]
 
 
-def _credential_context_references(value: str) -> tuple[bool, bool, bool]:
+def _credential_context_references(
+    value: str, *, implicit_expression: bool = False
+) -> tuple[bool, bool, bool]:
     """Match case-folded credentials and contexts with bounded token lookahead.
 
     Normalize plain bracket properties before discarding grouping parentheses,
@@ -672,8 +680,9 @@ def _credential_context_references(value: str) -> tuple[bool, bool, bool]:
     Keep function-call delimiters so a property on the result cannot disguise a
     whole secrets argument as scalar access. Only plain secret properties pass.
     """
-    tokens = list(_credential_reference_tokens(value))
-    direct = any(
+    tokens = list(_credential_reference_tokens(value, implicit_expression=implicit_expression))
+    # Literal credential names remain forbidden anywhere, including outside expressions.
+    direct = "robot_sf_router_app_" in value.casefold() or any(
         "robot_sf_router_app_" in text for kind, text in tokens if kind in {"identifier", "string"}
     )
     normalised: list[tuple[str, str]] = []
@@ -754,7 +763,9 @@ def _assert_token_references(workflow: dict[str, Any]) -> None:
             for index, child in enumerate(value):
                 inspect(child, (*path, index))
         elif isinstance(value, str):
-            broad, direct, unsafe_secrets = _credential_context_references(value)
+            broad, direct, unsafe_secrets = _credential_context_references(
+                value, implicit_expression=bool(path) and path[-1] == "if"
+            )
             assert not unsafe_secrets, (
                 "App credential must not escape through whole or computed secrets access"
             )
@@ -1219,19 +1230,36 @@ def test_scalar_properties_named_secrets_retain_complete_boundary_acceptance(
 @pytest.mark.parametrize("context", ["steps", "secrets"])
 @pytest.mark.parametrize("mixed_case", [False, True], ids=["lower", "mixed"])
 @pytest.mark.parametrize(
-    ("expression", "should_reject"),
+    ("expression", "should_reject", "site"),
     [
-        ("${{ steps.route.outputs.CONTEXT }}", False),
-        ("${{ steps['route']['outputs']['CONTEXT'] }}", False),
-        ("${{ github.event.inputs.CONTEXT }}", False),
-        ("${{ github.event.inputs['CONTEXT'] }}", False),
-        ("${{ format('a''}}{0}', format('{0}', github.event.inputs.CONTEXT)) }}", False),
-        ("${{ format('a''}}{0}', format('{0}', github.event.inputs['CONTEXT'])) }}", False),
-        ("${{ format('CONTEXT', 'safe') }}", False),
-        ("${{ CONTEXT }}", True),
-        ("${{ CONTEXT.* }}", True),
-        ("${{ CONTEXT[format('OTHER_{0}', 'KEY')] }}", True),
-        ("${{ toJSON(CONTEXT) }}", True),
+        ("${{ steps.route.outputs.CONTEXT }}", False, "env"),
+        ("${{ steps['route']['outputs']['CONTEXT'] }}", False, "env"),
+        ("${{ github.event.inputs.CONTEXT }}", False, "env"),
+        ("${{ github.event.inputs['CONTEXT'] }}", False, "env"),
+        ("${{ format('a''}}{0}', format('{0}', github.event.inputs.CONTEXT)) }}", False, "env"),
+        ("${{ format('a''}}{0}', format('{0}', github.event.inputs['CONTEXT'])) }}", False, "env"),
+        ("${{ format('CONTEXT', 'safe') }}", False, "env"),
+        ("${{ CONTEXT }}", True, "env"),
+        ("${{ CONTEXT.* }}", True, "env"),
+        ("${{ CONTEXT[format('OTHER_{0}', 'KEY')] }}", True, "env"),
+        ("${{ toJSON(CONTEXT) }}", True, "env"),
+        ("Next CONTEXT: inspect CI output", False, "env"),
+        ("No CONTEXT are printed", False, "env"),
+        ("CONTEXT", False, "env"),
+        ("Next CONTEXT: inspect CI output", False, "name"),
+        ("No CONTEXT are printed", False, "name"),
+        ("CONTEXT", False, "name"),
+        ("CONTEXT ${{ github.event.inputs.CONTEXT }} CONTEXT", False, "env"),
+        ("CONTEXT ${{ github.event.inputs.CONTEXT }} CONTEXT", False, "name"),
+        ("format('CONTEXT', 'safe')", False, "if"),
+        ("CONTEXT.OTHER_KEY", False, "if"),
+        ("CONTEXT", True, "if"),
+        ("toJSON(CONTEXT)", True, "if"),
+        ("CONTEXT ${{ true }} CONTEXT", False, "if"),
+        ("CONTEXT ${{ toJSON(CONTEXT) }} CONTEXT", True, "env"),
+        ("CONTEXT ${{ toJSON(CONTEXT) }} CONTEXT", True, "name"),
+        ("Literal ROBOT_SF_ROUTER_APP_KEY", True, "env"),
+        ("Literal robot_sf_router_app_key", True, "name"),
     ],
     ids=[
         "output-dot",
@@ -1245,6 +1273,23 @@ def test_scalar_properties_named_secrets_retain_complete_boundary_acceptance(
         "wildcard",
         "computed",
         "serialised",
+        "literal-env-next",
+        "literal-env-no",
+        "literal-env-bare",
+        "literal-name-next",
+        "literal-name-no",
+        "literal-name-bare",
+        "mixed-env",
+        "mixed-name",
+        "implicit-if-literal",
+        "implicit-if-scalar",
+        "implicit-if-whole",
+        "implicit-if-serialised",
+        "wrapped-if-text",
+        "mixed-env-unsafe",
+        "mixed-name-unsafe",
+        "raw-credential-env",
+        "raw-credential-name",
     ],
 )
 def test_context_root_and_scalar_property_boundary_matrix(
@@ -1252,13 +1297,20 @@ def test_context_root_and_scalar_property_boundary_matrix(
     mixed_case: bool,
     expression: str,
     should_reject: bool,
+    site: str,
 ) -> None:
     """Every inspected context distinguishes scalar property names from unsafe roots."""
     if mixed_case:
         context = "".join(char.upper() if index % 2 else char for index, char in enumerate(context))
     workflow = yaml.safe_load(CI_WORKFLOW.read_text(encoding="utf-8"))
     _, probe = _token_steps(workflow)
-    probe.setdefault("env", {})["ROUTER_DEBUG_SNAPSHOT"] = expression.replace("CONTEXT", context)
+    value = expression.replace("CONTEXT", context)
+    if site == "env":
+        probe.setdefault("env", {})["ROUTER_DEBUG_SNAPSHOT"] = value
+    elif site == "if":
+        workflow["jobs"]["runner-availability"][site] = value
+    else:
+        probe[site] = value
     if should_reject:
         with pytest.raises(AssertionError, match="must not escape"):
             _assert_router_app_token_boundary(workflow)

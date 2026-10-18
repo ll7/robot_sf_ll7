@@ -1,0 +1,7 @@
+{
+  "artifact_path": "docs/validation/bicycle_probe_failures.csv",
+  "artifact_sha256": "f0a4d161e3db4711cf11e2f69f5a9e131761638c4c1b203416113f9c13416fef",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "evidence-review-marker.v1"
+}

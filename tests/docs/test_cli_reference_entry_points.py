@@ -7,12 +7,16 @@ import importlib.util
 import os
 import re
 import socket
+import subprocess
+import sys
 import textwrap
 import tomllib
 from pathlib import Path
 
 import pytest
 import yaml
+
+from robot_sf.evidence.writers import write_text
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PYPROJECT = REPO_ROOT / "pyproject.toml"
@@ -174,6 +178,64 @@ def test_entry_point_sphinx_index_links_cli_reference() -> None:
     """The Sphinx navigation layer exposes the generated reference."""
     text = INDEX_RST.read_text(encoding="utf-8")
     assert "CLI Reference <cli_reference>" in text
+
+
+@pytest.fixture(autouse=True)
+def isolated_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep CLI discovery independent of the invoking user's configuration."""
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+
+
+@pytest.mark.parametrize("module", ("robot_sf.cli", "robot_sf.benchmark.cli"))
+def test_cli_help_tolerates_unreadable_dotenv(module: str, tmp_path: Path) -> None:
+    """Help remains usable with unreadable configuration above the working directory."""
+    ancestor = tmp_path / "dotenv-parent"
+    cwd = ancestor / "nested" / "work"
+    cwd.mkdir(parents=True)
+    env_path = ancestor / ".env"
+    write_text(env_path, "# AI-GENERATED NEEDS-REVIEW: unreadable dotenv fixture\n")
+    env_path.chmod(0)
+    script = textwrap.dedent(
+        """
+        import importlib
+        from pathlib import Path
+        import sys
+        import dotenv
+        import dotenv.main
+
+        module, env_path = sys.argv[1], Path(sys.argv[2])
+        assert env_path.is_file() and env_path.stat().st_mode & 0o444 == 0
+        assert Path(dotenv.find_dotenv()).resolve() == env_path.resolve()
+        original_open = open
+
+        def denied_open(path, *args, **kwargs):
+            if Path(path).resolve() == env_path.resolve():
+                raise PermissionError(13, "Permission denied", str(path))
+            return original_open(path, *args, **kwargs)
+
+        # Make permission denial deterministic even on privileged test hosts.
+        dotenv.main.open = denied_open
+        sys.argv = [module, "--help"]
+        importlib.import_module(module).main()
+        """
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", script, module, str(env_path)],
+        cwd=cwd,
+        env={
+            **os.environ,
+            "PYTHONPATH": os.pathsep.join((str(REPO_ROOT), os.environ.get("PYTHONPATH", ""))),
+        },
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "usage:" in result.stdout
+    assert "--help" in result.stdout
 
 
 def test_entry_point_help_smoke_and_byte_stable_render() -> None:

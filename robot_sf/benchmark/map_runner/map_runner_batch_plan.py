@@ -8,6 +8,7 @@ from robot_sf.benchmark.map_runner.map_runner_identity import _select_seeds
 from robot_sf.benchmark.map_runner_policies.map_runner_actions import (
     scenario_robot_kinematics_label,
 )
+from robot_sf.benchmark.runtime_seed_guard import check_simulation_seed
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -40,6 +41,7 @@ def build_seed_jobs(
     for scenario in scenarios:
         seeds = _select_seeds(scenario, suite_seeds=suite_seeds, suite_key=suite_key)
         for seed in seeds:
+            check_simulation_seed(seed, boundary="map seed dispatch")
             jobs.append((scenario, int(seed)))
     return jobs
 

@@ -1,0 +1,49 @@
+{
+  "metadata": {
+    "title": "Robot SF 14-planner S30 authored-budget benchmark dataset",
+    "upload_type": "dataset",
+    "access_right": "open",
+    "license": "GPL-3.0-only",
+    "description": "Benchmark-data snapshot for Robot SF covering 14 planner arms, 48 social-navigation scenarios, and 30 seeds with independently pinned authored horizons (400/500/600/650/700), dt=0.1 and differential-drive kinematics (20,160 expected episode identities). The archive preserves raw episode and component-metric evidence with exact source provenance: source commit {{source_sha}}, freeze-branch base (first parent of the source commit) {{latest_main_base_commit}}, release tag {{release_tag}}, concept DOI {{concept_doi}}, and version DOI {{version_doi}}. SNQI v2 scores are computed with anchors calibrated on development seeds 1001/1002, disjoint from the 30 sealed evaluation seeds, and are reported as advisory only; this release makes no SNQI ranking claim. Metadata-only erratum: scientific episode rows and component metrics are unchanged; no simulation rerun occurred.",
+    "creators": [
+      {
+        "name": "Luttkus, Lennart"
+      },
+      {
+        "name": "Tröster, Marco"
+      }
+    ],
+    "keywords": [
+      "social navigation",
+      "robotics",
+      "benchmark dataset",
+      "motion planning",
+      "simulation"
+    ],
+    "related_identifiers": [
+      {
+        "identifier": "https://github.com/ll7/robot_sf_ll7/releases/tag/{{release_tag}}",
+        "relation": "isSupplementTo",
+        "scheme": "url"
+      },
+      {
+        "identifier": "https://github.com/ll7/robot_sf_ll7/commit/{{source_sha}}",
+        "relation": "isDerivedFrom",
+        "scheme": "url"
+      },
+      {
+        "identifier": "10.5281/zenodo.23150472",
+        "relation": "isNewVersionOf",
+        "scheme": "doi"
+      }
+    ]
+  },
+  "status": "planned-not-published",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "correction_scope": "derived_publication_metadata_only",
+  "scientific_source_sha": "66f402ba176b13e45210d0da0b2cf20fcdc0cc02",
+  "concept_doi": "10.5281/zenodo.23150471",
+  "predecessor_version_doi": "10.5281/zenodo.23150472",
+  "snqi_claim_policy": "advisory_no_ranking",
+  "publication_role": "only-main-is-put"
+}

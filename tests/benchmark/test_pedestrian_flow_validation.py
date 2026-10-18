@@ -1,5 +1,7 @@
 """Tests for issue #3971 pedestrian flow validation harness."""
 
+# robot-sf-test-lane: simulation
+
 from __future__ import annotations
 
 import json

@@ -1,0 +1,538 @@
+{
+  "treatment": "r0.3_v0.65",
+  "planner": "social_force",
+  "requested": 300,
+  "elapsed_s": 367.827511260999,
+  "result": {
+    "total_jobs": 300,
+    "workers": 1,
+    "parallel_execution": false,
+    "batch_runtime_sec": 367.7882212599943,
+    "written": 300,
+    "successful_jobs": 300,
+    "failed_jobs": 0,
+    "skipped_jobs": 0,
+    "failures": [],
+    "out_path": "docs/context/robsweep/evidence/episodes/r0.3_v0.65_social_force.jsonl",
+    "algorithm_readiness": {
+      "name": "social_force",
+      "tier": "baseline-ready",
+      "profile": "baseline-safe"
+    },
+    "algorithm_metadata_contract": {
+      "algorithm": "social_force",
+      "status": "ok",
+      "canonical_algorithm": "social_force",
+      "baseline_category": "classical",
+      "policy_semantics": "social_force_adapter",
+      "observation_spec": {
+        "default_mode": "socnav_state",
+        "supported_modes": [
+          "socnav_state"
+        ],
+        "inputs": [
+          "robot_state",
+          "goal",
+          "pedestrians"
+        ],
+        "notes": "Structured Robot SF social-navigation state: robot pose/velocity, route goal, and pedestrian state when present.",
+        "active_mode": "socnav_state",
+        "observation_level": "tracked_agents_no_noise",
+        "override_applied": false
+      },
+      "observation_level": {
+        "key": "tracked_agents_no_noise",
+        "display_name": "Perfect tracked agents",
+        "perception_assumption": "perfect_tracking_without_noise",
+        "active_observation_mode": "socnav_state",
+        "compatible_observation_modes": [
+          "socnav_state",
+          "headed_socnav_state",
+          "gst_human_state"
+        ],
+        "required_inputs": [
+          "robot_state",
+          "goal",
+          "tracked_agents"
+        ],
+        "noise_policy": "none",
+        "occlusion_policy": "none",
+        "interpretation": "benchmark_metadata_not_sensor_certification"
+      },
+      "planner_kinematics": {
+        "robot_kinematics": "differential_drive",
+        "planner_command_space": "unicycle_vw",
+        "supports_native_commands": false,
+        "supports_adapter_commands": true,
+        "execution_mode": "adapter",
+        "adapter_name": "SocialForcePlannerAdapter",
+        "upstream_command_space": "velocity_vector_xy",
+        "benchmark_command_space": "unicycle_vw",
+        "projection_policy": "heading_safe_velocity_to_unicycle_vw",
+        "projection_documented": true,
+        "adapter_active": true,
+        "scenario_kinematics": [
+          "differential_drive"
+        ]
+      },
+      "planner_contract": {
+        "planner_id": "social_force",
+        "observation_contract": {
+          "mode": "socnav_state",
+          "active_mode": "socnav_state",
+          "observation_level": "tracked_agents_no_noise",
+          "perception_assumption": "perfect_tracking_without_noise",
+          "supported_modes": [
+            "socnav_state"
+          ],
+          "required_inputs": [
+            "robot_state",
+            "goal",
+            "pedestrians"
+          ],
+          "frame": "world",
+          "normalization": "raw",
+          "pedestrian_ordering": "distance_ascending",
+          "missing_value": null,
+          "notes": "Structured Robot SF social-navigation state: robot pose/velocity, route goal, and pedestrian state when present."
+        },
+        "action_contract": {
+          "command_space": "unicycle_vw",
+          "output_keys": [
+            "v",
+            "omega"
+          ],
+          "frame": "robot",
+          "normalization": "raw",
+          "units": "mps_radps",
+          "scaling": "none",
+          "compatible_robot_kinematics": [
+            "differential_drive"
+          ],
+          "active_robot_kinematics": "differential_drive",
+          "bounds": {},
+          "notes": "heading_safe_velocity_to_unicycle_vw"
+        },
+        "reset_contract": "seeded_reset",
+        "scenario_requirements": [],
+        "compatibility_scope": "metadata_only",
+        "notes": "Compatibility metadata only; not a benchmark quality claim."
+      },
+      "adapter_impact": {
+        "requested": false,
+        "native_steps": 0,
+        "adapted_steps": 0,
+        "status": "disabled"
+      },
+      "learned_checkpoint_observation_contract": {
+        "status": "not_applicable",
+        "metadata_source": "algorithm_default",
+        "active_observation_mode": "socnav_state",
+        "observation_level": "tracked_agents_no_noise",
+        "observation_level_key": "tracked_agents_no_noise",
+        "planner_observation_mode": null
+      },
+      "planner_runtime": {
+        "simulation_timestep": {
+          "seconds": 0.10000000149011612,
+          "source": "observation.sim_timestep"
+        },
+        "planner_type": "SocialForcePlannerAdapter",
+        "planner_version": "resolution_independent_v2",
+        "ped_version": "surface_v3",
+        "obstacle_force_law": {
+          "schema_version": "obstacle_force_law_metadata.v2",
+          "law_version": "legacy_shifted_gradient_v1",
+          "site": "socnav_social_force",
+          "geometry_convention": "occupancy_visible_nearest_points",
+          "radius_convention": "robot_radius_surface_distance",
+          "compatibility_mode": "legacy_compatible",
+          "enabled": true,
+          "applied": true,
+          "resolution_mode": "historical_unversioned",
+          "parameters": {
+            "force_factor": 10.0,
+            "obstacle_threshold": 0.5,
+            "obstacle_range": 6.0,
+            "obstacle_max_points": 80,
+            "radius_scale": 1.0,
+            "distance_floor": 1e-05,
+            "planner_version": "resolution_independent_v2",
+            "v2_strength": 5.0,
+            "v2_length": 0.6,
+            "v2_max_terms": 8,
+            "v2_min_separation_deg": 30.0,
+            "grid_resolution": 0.20000000298023224,
+            "grid_origin": [
+              -16.0,
+              -16.0
+            ],
+            "grid_frame": "ego",
+            "obstacle_channel_index": 0,
+            "robot_radius": 0.30000001192092896,
+            "visible_obstacle_terms": 1
+          },
+          "parameters_sha256": "65c904b6d68d32773c80fd13291296a96408c850addd924d5e5e020a01678884"
+        },
+        "goal_approach": {
+          "schema_version": "social_force_goal_approach_metadata.v1",
+          "version": "legacy_v1",
+          "enabled": false,
+          "applied": false,
+          "resolution_mode": "defaulted_missing",
+          "parameters": {
+            "approach_radius_m": 4.0,
+            "stop_distance_m": 1.75,
+            "max_speed_mps": 0.75,
+            "corridor_clearance_m": 0.25
+          }
+        },
+        "kernel_version": "wrapped_v2",
+        "kernel_resolution_mode": "explicit",
+        "social_force_kernel": {
+          "schema_version": "social_force_kernel_metadata.v1",
+          "site": "socnav_social_force",
+          "kernel_version": "wrapped_v2",
+          "resolution_mode": "explicit",
+          "angle_wrap": true
+        }
+      },
+      "kinematics_feasibility": {
+        "commands_evaluated": 76321,
+        "infeasible_native_count": 0,
+        "projected_count": 0,
+        "projection_rate": 0.0,
+        "infeasible_rate": 0.0,
+        "mean_abs_delta_linear": 0.0,
+        "mean_abs_delta_angular": 0.0,
+        "max_abs_delta_linear": 0.0,
+        "max_abs_delta_angular": 0.0
+      },
+      "ammv_feasibility": {
+        "schema_version": "ammv_feasibility.v1",
+        "evidence_kind": "diagnostic_proxy",
+        "proxy_kind": "internal_non_hardware",
+        "status": "available",
+        "episode_count": 300,
+        "commands_evaluated": 76321,
+        "min_stability_margin": 0.8826962866599469,
+        "tip_over_violation": false,
+        "n_curvature_violations": 3100,
+        "feasible": false
+      }
+    },
+    "preflight": {
+      "status": "ok",
+      "learned_policy_contract": {
+        "status": "not_applicable"
+      },
+      "algorithm_metadata_contract": {
+        "algorithm": "social_force",
+        "status": "ok",
+        "canonical_algorithm": "social_force",
+        "baseline_category": "classical",
+        "policy_semantics": "social_force_adapter",
+        "observation_spec": {
+          "default_mode": "socnav_state",
+          "supported_modes": [
+            "socnav_state"
+          ],
+          "inputs": [
+            "robot_state",
+            "goal",
+            "pedestrians"
+          ],
+          "notes": "Structured Robot SF social-navigation state: robot pose/velocity, route goal, and pedestrian state when present.",
+          "active_mode": "socnav_state",
+          "observation_level": "tracked_agents_no_noise",
+          "override_applied": false
+        },
+        "observation_level": {
+          "key": "tracked_agents_no_noise",
+          "display_name": "Perfect tracked agents",
+          "perception_assumption": "perfect_tracking_without_noise",
+          "active_observation_mode": "socnav_state",
+          "compatible_observation_modes": [
+            "socnav_state",
+            "headed_socnav_state",
+            "gst_human_state"
+          ],
+          "required_inputs": [
+            "robot_state",
+            "goal",
+            "tracked_agents"
+          ],
+          "noise_policy": "none",
+          "occlusion_policy": "none",
+          "interpretation": "benchmark_metadata_not_sensor_certification"
+        },
+        "planner_kinematics": {
+          "robot_kinematics": "differential_drive",
+          "planner_command_space": "unicycle_vw",
+          "supports_native_commands": false,
+          "supports_adapter_commands": true,
+          "execution_mode": "adapter",
+          "adapter_name": "SocialForcePlannerAdapter",
+          "upstream_command_space": "velocity_vector_xy",
+          "benchmark_command_space": "unicycle_vw",
+          "projection_policy": "heading_safe_velocity_to_unicycle_vw",
+          "projection_documented": true,
+          "adapter_active": true,
+          "scenario_kinematics": [
+            "differential_drive"
+          ]
+        },
+        "planner_contract": {
+          "planner_id": "social_force",
+          "observation_contract": {
+            "mode": "socnav_state",
+            "active_mode": "socnav_state",
+            "observation_level": "tracked_agents_no_noise",
+            "perception_assumption": "perfect_tracking_without_noise",
+            "supported_modes": [
+              "socnav_state"
+            ],
+            "required_inputs": [
+              "robot_state",
+              "goal",
+              "pedestrians"
+            ],
+            "frame": "world",
+            "normalization": "raw",
+            "pedestrian_ordering": "distance_ascending",
+            "missing_value": null,
+            "notes": "Structured Robot SF social-navigation state: robot pose/velocity, route goal, and pedestrian state when present."
+          },
+          "action_contract": {
+            "command_space": "unicycle_vw",
+            "output_keys": [
+              "v",
+              "omega"
+            ],
+            "frame": "robot",
+            "normalization": "raw",
+            "units": "mps_radps",
+            "scaling": "none",
+            "compatible_robot_kinematics": [
+              "differential_drive"
+            ],
+            "active_robot_kinematics": "differential_drive",
+            "bounds": {},
+            "notes": "heading_safe_velocity_to_unicycle_vw"
+          },
+          "reset_contract": "seeded_reset",
+          "scenario_requirements": [],
+          "compatibility_scope": "metadata_only",
+          "notes": "Compatibility metadata only; not a benchmark quality claim."
+        },
+        "adapter_impact": {
+          "requested": false,
+          "native_steps": 0,
+          "adapted_steps": 0,
+          "status": "disabled"
+        },
+        "learned_checkpoint_observation_contract": {
+          "status": "not_applicable",
+          "metadata_source": "algorithm_default",
+          "active_observation_mode": "socnav_state",
+          "observation_level": "tracked_agents_no_noise",
+          "observation_level_key": "tracked_agents_no_noise",
+          "planner_observation_mode": null
+        },
+        "planner_runtime": {
+          "simulation_timestep": {
+            "seconds": 0.10000000149011612,
+            "source": "observation.sim_timestep"
+          },
+          "planner_type": "SocialForcePlannerAdapter",
+          "planner_version": "resolution_independent_v2",
+          "ped_version": "surface_v3",
+          "obstacle_force_law": {
+            "schema_version": "obstacle_force_law_metadata.v2",
+            "law_version": "legacy_shifted_gradient_v1",
+            "site": "socnav_social_force",
+            "geometry_convention": "occupancy_visible_nearest_points",
+            "radius_convention": "robot_radius_surface_distance",
+            "compatibility_mode": "legacy_compatible",
+            "enabled": true,
+            "applied": true,
+            "resolution_mode": "historical_unversioned",
+            "parameters": {
+              "force_factor": 10.0,
+              "obstacle_threshold": 0.5,
+              "obstacle_range": 6.0,
+              "obstacle_max_points": 80,
+              "radius_scale": 1.0,
+              "distance_floor": 1e-05,
+              "planner_version": "resolution_independent_v2",
+              "v2_strength": 5.0,
+              "v2_length": 0.6,
+              "v2_max_terms": 8,
+              "v2_min_separation_deg": 30.0,
+              "grid_resolution": 0.20000000298023224,
+              "grid_origin": [
+                -16.0,
+                -16.0
+              ],
+              "grid_frame": "ego",
+              "obstacle_channel_index": 0,
+              "robot_radius": 0.30000001192092896,
+              "visible_obstacle_terms": 1
+            },
+            "parameters_sha256": "65c904b6d68d32773c80fd13291296a96408c850addd924d5e5e020a01678884"
+          },
+          "goal_approach": {
+            "schema_version": "social_force_goal_approach_metadata.v1",
+            "version": "legacy_v1",
+            "enabled": false,
+            "applied": false,
+            "resolution_mode": "defaulted_missing",
+            "parameters": {
+              "approach_radius_m": 4.0,
+              "stop_distance_m": 1.75,
+              "max_speed_mps": 0.75,
+              "corridor_clearance_m": 0.25
+            }
+          },
+          "kernel_version": "wrapped_v2",
+          "kernel_resolution_mode": "explicit",
+          "social_force_kernel": {
+            "schema_version": "social_force_kernel_metadata.v1",
+            "site": "socnav_social_force",
+            "kernel_version": "wrapped_v2",
+            "resolution_mode": "explicit",
+            "angle_wrap": true
+          }
+        },
+        "kinematics_feasibility": {
+          "commands_evaluated": 76321,
+          "infeasible_native_count": 0,
+          "projected_count": 0,
+          "projection_rate": 0.0,
+          "infeasible_rate": 0.0,
+          "mean_abs_delta_linear": 0.0,
+          "mean_abs_delta_angular": 0.0,
+          "max_abs_delta_linear": 0.0,
+          "max_abs_delta_angular": 0.0
+        },
+        "ammv_feasibility": {
+          "schema_version": "ammv_feasibility.v1",
+          "evidence_kind": "diagnostic_proxy",
+          "proxy_kind": "internal_non_hardware",
+          "status": "available",
+          "episode_count": 300,
+          "commands_evaluated": 76321,
+          "min_stability_margin": 0.8826962866599469,
+          "tip_over_violation": false,
+          "n_curvature_violations": 3100,
+          "feasible": false
+        }
+      }
+    },
+    "observation_noise": {
+      "enabled": false,
+      "profile": "none",
+      "seed": null,
+      "pose_noise_std_m": 0.0,
+      "heading_noise_std_rad": 0.0,
+      "lidar_dropout_prob": 0.0,
+      "lidar_dropout_value": 0.0,
+      "pedestrian_position_noise_std_m": 0.0,
+      "pedestrian_false_negative_prob": 0.0,
+      "pedestrian_occlusion_max_range_m": null,
+      "observation_delay_steps": 0,
+      "pedestrian_false_positive_prob": 0.0,
+      "pedestrian_false_positive_radius_m": 4.0,
+      "pedestrian_false_positive_radius": 0.35,
+      "interpretation": "non_calibrated_benchmark_robustness_noise_not_a_real_sensor_model"
+    },
+    "observation_noise_hash": "0a5609f0b2b1",
+    "tracking_precision": {
+      "enabled": false,
+      "target_motp_m": 0.0,
+      "speed_contract": {
+        "threshold_m": 2.5,
+        "default_speed": 2.0,
+        "defensive_speed": 0.5,
+        "mode": "diagnostic"
+      },
+      "seed_salt": 0,
+      "schema_version": "tracking_precision_contract.v1",
+      "interpretation": "internal_non_hardware_tracking_precision_proxy_not_a_real_sensor_model"
+    },
+    "tracking_precision_hash": "d06cee655fee",
+    "observation_level": "tracked_agents_no_noise",
+    "metrics": {
+      "collision": 0.0,
+      "collision_count": 0.0,
+      "collision_rate": 0.0,
+      "collision_status": {
+        "status": "available",
+        "reason": null,
+        "denominator": 300,
+        "source": "episode.metrics.collisions"
+      }
+    },
+    "synthetic_actuation_profile": null,
+    "latency_stress_profile": null,
+    "latency_stress_metrics": null,
+    "provenance": {
+      "protocol_version": "0.1.0",
+      "commit_hash": "22172f6cacc8b3e63825793db604c820ff21080a",
+      "run_id": "82b7415aea754cb9819121eb1f622a1e",
+      "python_version": "3.13.14",
+      "artifact_pointer_status": "local_jsonl_present",
+      "config_identity": {
+        "schema_path": "robot_sf/benchmark/schemas/episode.schema.v1.json",
+        "scenario_path": "docs/context/robsweep/inputs/r0.3_v0.65.yaml",
+        "scenario_count": 10,
+        "scenario_matrix_hash": "0d08684eebd80b12",
+        "algo": "social_force",
+        "algo_config_path": "docs/context/robsweep/inputs/social_force_legacy.yaml",
+        "benchmark_profile": "baseline-safe",
+        "metric_affecting_config": {
+          "schema": "metric_affecting_run_config.v1",
+          "sensor_noise": {
+            "scan_noise": [
+              0.005,
+              0.002
+            ],
+            "scan_noise_enabled": true
+          },
+          "collision_regime": {
+            "regime": "terminate_on_contact",
+            "peds_have_static_obstacle_forces": true,
+            "peds_have_robot_repulsion": true
+          },
+          "interpretation": "metric_affecting_run_config: run settings that change what reported metrics mean; two result sets are only directly comparable when these settings match",
+          "actuation_envelope": {
+            "schema": "actuation_envelope.v1",
+            "drive_model": "differential_drive",
+            "max_forward_accel_m_s2": 1.0,
+            "max_braking_decel_m_s2": 1.0,
+            "braking_distinct_from_accel": false,
+            "stopping_distance_envelope_m": 2.0,
+            "envelope_formula": "v^2 / (2a) at peak forward speed and max braking deceleration",
+            "peak_forward_speed_m_s": 2.0,
+            "interpretation": "actuation_envelope: enforced acceleration/braking authority and the resulting worst-case stopping distance v^2/(2a); near-miss / TTC readings must be interpreted against this braking capability, not in isolation"
+          }
+        }
+      },
+      "seed_identity": {
+        "suite_key": "default",
+        "total_jobs": 300,
+        "written": 300
+      },
+      "invocation": "scripts/validation/examiner_robustness_20261012.py sweep --workers 8",
+      "result_manifest_path": "docs/context/robsweep/evidence/episodes/r0.3_v0.65_social_force.jsonl.provenance.json",
+      "result_manifest_status": "available"
+    },
+    "benchmark_availability": {
+      "execution_mode": "adapter",
+      "readiness_status": "adapter",
+      "availability_status": "available",
+      "benchmark_success": true,
+      "availability_reason": null
+    }
+  }
+}

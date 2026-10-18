@@ -61,9 +61,13 @@ def test_order_correlations_match_prior_order_index_helpers() -> None:
     assert kendall_tau(["a"], ["a"], degenerate=1.0) == 1.0
 
 
-def test_rank_map_spearman_preserves_absolute_rank_position_contract() -> None:
-    """Rank-map Spearman keeps scenario-difficulty's prior non-renormalized overlap behavior."""
-    assert spearman_from_rank_maps({"b": 2, "c": 3}, {"b": 1, "c": 2}, degenerate=None) == -1.0
+def test_rank_map_spearman_uses_common_cohort_and_minimum_size() -> None:
+    """Offsets do not imply reversal; two common planners cannot support assessment."""
+    # The old -1 characterized a defective absolute-rank shortcut, not Spearman.
+    assert spearman_from_rank_maps({"b": 2, "c": 3}, {"b": 1, "c": 2}, degenerate=None) is None
+    assert spearman_from_rank_maps(
+        {"a": 1, "b": 2, "c": 3, "d": 4}, {"b": 1, "c": 2, "d": 3}, degenerate=None
+    ) == pytest.approx(1.0)
     assert spearman_from_rank_maps({"only": 1}, {"only": 1}, degenerate=None) is None
 
 

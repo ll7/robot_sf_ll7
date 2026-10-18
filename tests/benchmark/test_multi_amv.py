@@ -373,6 +373,19 @@ def test_paired_actuation_feasibility_ranking_keeps_diagnostic_boundary() -> Non
     assert summary["pairs"][0]["disagreement_cases"][0]["type"] == "feasibility_success_divergence"
 
 
+def test_paired_actuation_feasibility_ranking_rejects_duplicate_cells() -> None:
+    """Repeated variants in the same scenario/seed must not select the last row."""
+    from robot_sf.benchmark.multi_amv import paired_actuation_feasibility_ranking
+
+    row = _actuation_record(scenario_id="s", seed=101, variant="baseline", clip=0.3)
+    with pytest.raises(ValueError, match="duplicate.*scenario_id.*seed"):
+        paired_actuation_feasibility_ranking(
+            [row, {**row, "metrics": {**row["metrics"], "command_clip_fraction": 0.1}}],
+            baseline_variant="baseline",
+            intervention_variant="intervention",
+        )
+
+
 def test_paired_actuation_feasibility_ranking_excludes_fallback_rows() -> None:
     """Fallback/degraded rows should fail closed and keep the result inconclusive."""
     from robot_sf.benchmark.multi_amv import paired_actuation_feasibility_ranking

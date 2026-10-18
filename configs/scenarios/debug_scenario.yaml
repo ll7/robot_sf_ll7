@@ -1,6 +1,6 @@
 scenarios:
   - name: debug_05
-    map_file: "maps/svg_maps/debug_05.svg"
+    map_file: "../../maps/svg_maps/debug_05.svg"
     robot_config:
       max_robot_speed: 1.2
       robot_radius: 0.3

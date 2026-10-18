@@ -33,7 +33,8 @@ if TYPE_CHECKING:
 
 try:  # Lazy import moviepy components
     from moviepy.video.io.ImageSequenceClip import ImageSequenceClip  # type: ignore
-except ImportError:
+except (ImportError, PermissionError):
+    # MoviePy's import-time dotenv discovery may encounter unreadable config.
     ImageSequenceClip = None  # type: ignore
 
 

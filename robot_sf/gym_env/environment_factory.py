@@ -46,6 +46,8 @@ from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
+from robot_sf.benchmark.runtime_seed_guard import check_seed_config, check_simulation_seed
+
 # Hoisted imports (avoid per-call import overhead for performance regression guard)
 try:  # pragma: no cover - import errors would surface in tests
     from robot_sf.gym_env.robot_env import RobotEnv  # type: ignore
@@ -205,6 +207,7 @@ class EnvironmentFactory:
         jsonl_recording_options: JsonlRecordingOptions | None = None,
         telemetry_options: TelemetryOptions | None = None,
         asymmetric_critic: bool = False,
+        seed: int | None = None,
     ) -> SingleAgentEnv:
         """Construct a robot environment with specified observation and recording configuration.
 
@@ -214,6 +217,7 @@ class EnvironmentFactory:
 
         Args:
             config: RobotSimulationConfig instance defining physics, maps, and sensors.
+            seed: Episode seed for the private pedestrian generator.
             use_image_obs: If True, select image-capable environment; else standard lidar-only.
             peds_have_obstacle_forces: (Deprecated) Controls static obstacle forces for pedestrians.
             reward_func: Custom reward function; falls back to internal default if None.
@@ -233,8 +237,12 @@ class EnvironmentFactory:
         Raises:
             RuntimeError: If environment class import fails.
         """
+        check_simulation_seed(seed, boundary="create_robot_env")
+        check_seed_config(config, boundary="create_robot_env")
         if config is None:
             config = ImageRobotConfig() if use_image_obs else RobotSimulationConfig()
+        if seed is not None:
+            config.sim_config.pedestrian_seed = seed
         config.use_image_obs = use_image_obs
         legacy_override = None if peds_have_obstacle_forces is True else peds_have_obstacle_forces
         sync_pedestrian_obstacle_force_alias(config, legacy_override)
@@ -286,6 +294,7 @@ class EnvironmentFactory:
         video_path: str | None = None,
         video_fps: float | None = None,
         peds_have_obstacle_forces: bool = True,
+        seed: int | None = None,
     ) -> SingleAgentEnv:
         """Construct a pedestrian (adversarial) environment.
 
@@ -293,6 +302,7 @@ class EnvironmentFactory:
         agent navigating among crowds controlled by a provided robot policy.
 
         Args:
+            seed: Episode seed for private pedestrian sampling.
             robot_model: Trained policy or model providing robot actions in the scene.
             config: PedestrianSimulationConfig instance; defaults to standard if None.
             reward_func: Custom reward function for pedestrian agent; uses canonical
@@ -307,8 +317,12 @@ class EnvironmentFactory:
         Returns:
             SingleAgentEnv: Initialized pedestrian environment for training/evaluation.
         """
+        check_simulation_seed(seed, boundary="create_pedestrian_env")
+        check_seed_config(config, boundary="create_pedestrian_env")
         if config is None:
             config = PedestrianSimulationConfig()
+        if seed is not None:
+            config.sim_config.pedestrian_seed = seed
         PedestrianEnv = _load_pedestrian_env()
 
         # Allow None to be passed through from ergonomic factories and
@@ -363,8 +377,12 @@ class EnvironmentFactory:
         Returns:
             MultiAgentEnv: Initialized multi-agent environment instance.
         """
+        check_simulation_seed(seed, boundary="create_multi_robot_env")
+        check_seed_config(config, boundary="create_multi_robot_env")
         if config is None:
             config = MultiRobotConfig()
+        if seed is not None:
+            config.sim_config.pedestrian_seed = seed
         if config.num_robots != num_robots:
             config.num_robots = num_robots
         _apply_global_seed(seed)
@@ -595,6 +613,8 @@ def make_robot_env(  # noqa: PLR0913
         Side-effects: seeds RNGs (idempotent for same seed), logs creation line.
         Performance: heavy image rendering imports are avoided along this path.
     """
+    check_simulation_seed(seed, boundary="make_robot_env")
+    check_seed_config(config, boundary="make_robot_env")
     if reward_func is None:
         reward_name = reward_name or "route_completion_v2"
         if reward_curriculum is not None:
@@ -662,6 +682,7 @@ def make_robot_env(  # noqa: PLR0913
         jsonl_recording_options=jsonl_recording_options,
         telemetry_options=telemetry_options,
         asymmetric_critic=asymmetric_critic,
+        seed=seed,
     )
     env.applied_seed = seed
     return env
@@ -701,6 +722,8 @@ def make_image_robot_env(  # noqa: PLR0913
     Returns:
         Initialized SingleAgentEnv with image observation capabilities.
     """
+    check_simulation_seed(seed, boundary="make_image_robot_env")
+    check_seed_config(config, boundary="make_image_robot_env")
     if reward_func is None:
         reward_name = reward_name or "route_completion_v2"
         if reward_curriculum is not None:
@@ -757,6 +780,7 @@ def make_image_robot_env(  # noqa: PLR0913
         video_fps=eff_video_fps,
         jsonl_recording_options=jsonl_recording_options,
         asymmetric_critic=asymmetric_critic,
+        seed=seed,
     )
     env.applied_seed = seed
     return env
@@ -797,6 +821,8 @@ def make_pedestrian_env(  # noqa: PLR0913
     Returns:
         Initialized SingleAgentEnv for adversarial pedestrian training.
     """
+    check_simulation_seed(seed, boundary="make_pedestrian_env")
+    check_seed_config(config, boundary="make_pedestrian_env")
     # Capture explicit override intent BEFORE normalization mutates structures.
     _apply_global_seed(seed)
 
@@ -852,6 +878,7 @@ def make_pedestrian_env(  # noqa: PLR0913
         video_path=eff_video_path,
         video_fps=eff_video_fps,
         peds_have_obstacle_forces=peds_have_obstacle_forces,
+        seed=seed,
     )
     env.applied_seed = seed
     return env
@@ -879,6 +906,8 @@ def make_crowd_sim_env(  # noqa: PLR0913
     Returns:
         CrowdSimEnv: Configured crowd-only Gymnasium environment.
     """
+    check_simulation_seed(seed, boundary="make_crowd_sim_env")
+    check_seed_config(config, boundary="make_crowd_sim_env")
     _apply_global_seed(seed)
     CrowdSimEnv, CrowdSimulationConfig = _load_crowd_sim_env()
     if config is None:
@@ -926,6 +955,7 @@ def _apply_global_seed(seed: int | None) -> None:
         Positioned at end of module to keep import block contiguous (PEP8).
         Silent failures for optional dependencies keep the factory lightweight.
     """
+    check_simulation_seed(seed, boundary="environment_factory")
     if seed is None:
         return
     random.seed(seed)
@@ -985,6 +1015,8 @@ def make_multi_robot_env(  # noqa: PLR0913
     MultiAgentEnv
         Configured multi-agent environment ready for training/evaluation.
     """
+    check_simulation_seed(seed, boundary="make_multi_robot_env")
+    check_seed_config(config, boundary="make_multi_robot_env")
     return EnvironmentFactory.create_multi_robot_env(
         config=config,
         num_robots=num_robots,

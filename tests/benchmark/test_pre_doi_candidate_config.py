@@ -23,6 +23,8 @@ def test_default_campaign_hash_payload_is_byte_compatible() -> None:
     prior = asdict(cfg)
     prior.pop("publication_identity_mode")
     prior.pop("tuning_run_provenance")
+    for absent_field in ("snqi_v2_spec", "snqi_v2_binding", "numerical_mode"):
+        prior.pop(absent_field)
     assert _config_hash_payload(cfg) == _jsonable_repo_relative(prior)
 
 

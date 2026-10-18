@@ -244,7 +244,7 @@ def test_exact_repeat_near_miss_is_deterministic_on_smoke_scenario():
     genuine fastmath-driven divergence, this test becomes the detector (mirrors
     issue #4978's exact-repeat determinism contract).
     """
-    report = measure_exact_repeat_nondeterminism(SMOKE_SCENARIO, seed=123, n_repeats=5, horizon=30)
+    report = measure_exact_repeat_nondeterminism(SMOKE_SCENARIO, seed=1013, n_repeats=5, horizon=30)
     assert report["exact_repeat"]["near_misses"]["bit_identical"] is True
     assert report["summary"]["near_misses_max_deviation"] == 0.0
 

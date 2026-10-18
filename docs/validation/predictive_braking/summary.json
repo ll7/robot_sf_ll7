@@ -1,0 +1,140 @@
+{
+  "schema_version": "predictive-braking-diagnostics.v1",
+  "status": "diagnostic-only",
+  "claim_boundary": "Paired development diagnostics only; no release admission or unconditional pedestrian-reactivity guarantee. Minimum separation is measured at executed step endpoints. The stopping proof is conditional on the error tube; observed tube violations invalidate its unconditional application.",
+  "base": "53f8f2666e98d00b70a8ef5376790be474a743aa",
+  "predictive_source": "77669076f261c1e4c9dae94b913f3f1397d745cb",
+  "station_seeds": [
+    1001,
+    1002,
+    1003,
+    1004,
+    1005,
+    1006,
+    1007,
+    1008,
+    1009,
+    1010,
+    1011,
+    1012,
+    1013,
+    1014,
+    1015,
+    1016,
+    1017,
+    1018,
+    1019,
+    1020,
+    1021,
+    1022,
+    1023,
+    1024,
+    1025,
+    1026,
+    1027,
+    1028,
+    1029,
+    1030
+  ],
+  "station_horizon_steps": 600,
+  "empty_seeds": [
+    1001,
+    1002
+  ],
+  "empty_scenarios": 48,
+  "station_before": {
+    "n": 30,
+    "outcomes": {
+      "timeout": 30
+    },
+    "success_wilson_95": [
+      0,
+      0.11351339317396876
+    ],
+    "collision_wilson_95": [
+      0,
+      0.11351339317396876
+    ],
+    "minimum_executed_center_separation_m": 1.596504699626014,
+    "near_miss_events": 102,
+    "near_miss_exposure_s": 233.50000000000003,
+    "duration_s": 1800.0,
+    "mean_current_waypoint_distance_m": 10.496187533587188,
+    "tube_checks": 0,
+    "tube_violations": 0,
+    "maximum_one_step_prediction_error_m_s": 0.0
+  },
+  "station_after": {
+    "n": 30,
+    "outcomes": {
+      "timeout": 15,
+      "success": 15
+    },
+    "success_wilson_95": [
+      0.33154125640533766,
+      0.6684587435946623
+    ],
+    "collision_wilson_95": [
+      0,
+      0.11351339317396876
+    ],
+    "minimum_executed_center_separation_m": 1.6175942803437156,
+    "near_miss_events": 200,
+    "near_miss_exposure_s": 330.1,
+    "duration_s": 1767.4,
+    "mean_current_waypoint_distance_m": 4.516508236183327,
+    "tube_checks": 477198,
+    "tube_violations": 834,
+    "maximum_one_step_prediction_error_m_s": 755.1022092025773
+  },
+  "empty_before": {
+    "n": 96,
+    "outcomes": {
+      "success": 84,
+      "timeout": 12
+    },
+    "success_wilson_95": [
+      0.794115318705986,
+      0.9270279904007575
+    ],
+    "collision_wilson_95": [
+      3.469446951953614e-18,
+      0.038475587857675686
+    ],
+    "minimum_executed_center_separation_m": null,
+    "near_miss_events": 0,
+    "near_miss_exposure_s": 0.0,
+    "duration_s": 1958.2,
+    "mean_current_waypoint_distance_m": 1.587499033640514,
+    "tube_checks": 0,
+    "tube_violations": 0,
+    "maximum_one_step_prediction_error_m_s": 0.0
+  },
+  "empty_after": {
+    "n": 96,
+    "outcomes": {
+      "success": 84,
+      "timeout": 12
+    },
+    "success_wilson_95": [
+      0.794115318705986,
+      0.9270279904007575
+    ],
+    "collision_wilson_95": [
+      3.469446951953614e-18,
+      0.038475587857675686
+    ],
+    "minimum_executed_center_separation_m": null,
+    "near_miss_events": 0,
+    "near_miss_exposure_s": 0.0,
+    "duration_s": 1958.2,
+    "mean_current_waypoint_distance_m": 1.587499033640514,
+    "tube_checks": 0,
+    "tube_violations": 0,
+    "maximum_one_step_prediction_error_m_s": 0.0
+  },
+  "empty_executed_metric_changes": [],
+  "excluded_or_missing_episodes": 0,
+  "fallback_or_degraded_episodes": 0,
+  "empty_failure_classification": "All non-successes are inherited actor-free timeouts if executed metrics match; their root causes are not established by this braking experiment."
+}

@@ -85,19 +85,55 @@ def _select_seeds(
     suite_seeds: dict[str, list[int]],
     suite_key: str,
 ) -> list[int]:
-    """Resolve per-scenario seeds with suite and default fallbacks.
+    """Resolve per-scenario inventory for dispatch and historical identity readers.
 
     Returns:
         list[int]: Seeds to run for the scenario.
     """
     seeds = scenario.get("seeds")
     if isinstance(seeds, list) and seeds:
-        return [int(s) for s in seeds]
-    if suite_seeds.get(suite_key):
-        return list(suite_seeds[suite_key])
-    if suite_seeds.get("default"):
-        return list(suite_seeds["default"])
-    return [0]
+        resolved = list(seeds)
+    elif suite_seeds.get(suite_key):
+        resolved = list(suite_seeds[suite_key])
+    elif suite_seeds.get("default"):
+        resolved = list(suite_seeds["default"])
+    else:
+        raise ValueError("map seed dispatch requires an explicit seed inventory")
+    return resolved
+
+
+def _has_authored_horizon_schedule(scenario: dict[str, Any]) -> bool:
+    """Recognize reserved schedule provenance minted only for explicit 0.0.8+ configs.
+
+    Returns:
+        Whether the runner should enforce the admitted authored schedule.
+    """
+    binding = scenario.get("metadata", {}).get("scenario_horizon", {})
+    return bool(binding.get("sha256")) and "authored_max_episode_steps" in binding
+
+
+def _historical_authored_identity(payload: dict[str, Any]) -> dict[str, Any]:
+    """Keep legacy accounting annotations out of the published input identity.
+
+    Returns:
+        Authored scenario payload used by the historical episode identity contract.
+    """
+    horizon_metadata = payload.get("metadata", {}).get("scenario_horizon", {})
+    if horizon_metadata.get("policy") == "legacy_runner_cap":
+        # Historical IDs describe the authored input plus run_horizon. Keep the
+        # new accounting annotation in row provenance without changing that ID.
+        metadata = dict(payload.get("metadata", {}))
+        metadata.pop("scenario_horizon", None)
+        metadata.pop("campaign_horizon", None)
+        payload["metadata"] = metadata
+        simulation = dict(payload.get("simulation_config", {}))
+        authored = horizon_metadata.get("authored_max_episode_steps")
+        if authored is None:
+            simulation.pop("max_episode_steps", None)
+        else:
+            simulation["max_episode_steps"] = authored
+        payload["simulation_config"] = simulation
+    return payload
 
 
 def _scenario_identity_payload(  # noqa: C901,PLR0913
@@ -130,6 +166,7 @@ def _scenario_identity_payload(  # noqa: C901,PLR0913
         dict[str, Any]: Identity payload consumed by ``compute_map_episode_id``.
     """
     payload = {key: value for key, value in scenario.items() if key not in {"seed", "seeds"}}
+    payload = _historical_authored_identity(payload)
     scenario_id = (
         scenario.get("name") or scenario.get("scenario_id") or scenario.get("id") or "unknown"
     )
@@ -169,6 +206,10 @@ def _scenario_identity_payload(  # noqa: C901,PLR0913
     payload["record_simulation_step_trace"] = bool(record_simulation_step_trace)
     if horizon is not None and int(horizon) > 0:
         payload["run_horizon"] = int(horizon)
+    elif _has_authored_horizon_schedule(scenario):
+        # Scheduled callers have no fixed horizon. Use the resolved integer budget
+        # at both write-time and resume-time so existing consumers see the same field.
+        payload["run_horizon"] = int(scenario["simulation_config"]["max_episode_steps"])
     if dt is not None and float(dt) > 0.0:
         payload["run_dt"] = float(dt)
     return payload
@@ -200,11 +241,20 @@ def _scenario_with_episode_seed_defaults(
     Some scenario-level generators use their own NumPy ``default_rng`` instances. When those
     fields are left unset they bypass the episode seed and make benchmark rows depend on process
     history. Fill only missing values here so explicit scenario provenance remains unchanged.
+
+    ``archetype_seed`` is filled only when the scenario opts into ``archetype_composition``;
+    scenarios without archetypes keep their identity payload unchanged.
     """
     updated = deepcopy(scenario)
     sim_config = updated.setdefault("simulation_config", {})
     if isinstance(sim_config, dict) and sim_config.get("route_spawn_seed") is None:
         sim_config["route_spawn_seed"] = int(seed)
+    if (
+        isinstance(sim_config, dict)
+        and sim_config.get("archetype_composition") is not None
+        and sim_config.get("archetype_seed") is None
+    ):
+        sim_config["archetype_seed"] = int(seed)
     return updated
 
 

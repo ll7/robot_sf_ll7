@@ -1,0 +1,48 @@
+{
+  "_metadata": {
+    "metric_schema_version": "robot-sf-metrics.v2",
+    "source_commit": "0553767a2a348274ece18d694d7c6a7dea1d3fe8",
+    "source_rows_path": "tests/data/snqi/resume_metric_v2_rows.json",
+    "source_rows_sha256": "ae0d3819027b4daca4e10d674622999a058757d2be389f5eb95d86c25c8b60a6",
+    "scope": "development-seed resume test fixture; no scientific calibration claim",
+    "undefined_metrics": [
+      "path_efficiency"
+    ]
+  },
+  "time_to_goal_norm": {
+    "med": 1.0,
+    "p95": 1.0
+  },
+  "collisions": {
+    "med": 0.0,
+    "p95": 0.0
+  },
+  "near_misses": {
+    "med": 0.0,
+    "p95": 0.0
+  },
+  "min_distance": {
+    "med": 19.14297425692327,
+    "p95": 31.396963078804955
+  },
+  "force_exceed_events": {
+    "med": 0.0,
+    "p95": 0.0
+  },
+  "comfort_exposure": {
+    "med": 0.0,
+    "p95": 0.0
+  },
+  "jerk_mean": {
+    "med": 0.0,
+    "p95": 0.0
+  },
+  "curvature_mean": {
+    "med": 0.0,
+    "p95": 0.0
+  },
+  "energy": {
+    "med": 0.0,
+    "p95": 0.0
+  }
+}

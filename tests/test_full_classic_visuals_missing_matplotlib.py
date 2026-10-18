@@ -31,7 +31,7 @@ class _Cfg:
         self.batch_size = 1
         self.algo = "ppo"
         self.workers = 1
-        self.master_seed = 123
+        self.master_seed = 1013
         self.smoke = True  # ensure videos skipped
         self.disable_videos = False
         self.max_videos = 1

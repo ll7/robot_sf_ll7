@@ -64,6 +64,7 @@ ARTIFACT_PATH_KEYS = {
     "file",
     "filename",
     "path",
+    "resolved_path",
     "source_path",
 }
 CH7_PORTFOLIO_COMPANION_BINDING = Path(
@@ -260,9 +261,9 @@ def _repository_file_bytes(
 def _resolve_repo_path(repo_root: Path, value: str) -> tuple[str, Path] | None:
     """Normalize a repository-root-relative path, rejecting URLs and escapes.
 
-    Manifest path fields are never relative to the manifest or its evidence bundle.
-    A sibling artifact must therefore use its full repository path, such as
-    ``docs/context/evidence/<bundle>/README.md``.
+    Artifact references are repository-root-relative unless a schema explicitly
+    defines a local root. ``evidence_bundle.v1`` paths are combined with their
+    declared repository-relative ``source_root`` before reaching this function.
     """
     if "://" in value or value.startswith("urn:"):
         return None
@@ -683,7 +684,7 @@ def _synthetic_commit_findings(display_path: Path, value: Any) -> list[dict[str,
 def _artifact_path(
     mapping: Mapping[str, Any], ancestors: tuple[Mapping[str, Any], ...]
 ) -> str | None:
-    """Find a neighboring artifact path, including ``reports_dir`` filename manifests."""
+    """Find an artifact path, including candidate configs and evidence-bundle source roots."""
     if any(
         isinstance(candidates := parent.get("candidate_configs"), Mapping)
         and any(candidate is mapping for candidate in candidates.values())
@@ -694,7 +695,22 @@ def _artifact_path(
             return candidate_paths[0]
     paths = _string_values(mapping, ARTIFACT_PATH_KEYS)
     for value in paths:
-        if value and not value.startswith("configs/"):
+        if value and (not value.startswith("configs/") or value == mapping.get("resolved_path")):
+            evidence_bundle = next(
+                (
+                    parent
+                    for parent in reversed(ancestors)
+                    if parent.get("schema_version") == "evidence_bundle.v1"
+                ),
+                None,
+            )
+            source_root = (
+                _string_values(evidence_bundle, {"source_root"})
+                if evidence_bundle is not None
+                else []
+            )
+            if source_root and value == mapping.get("path"):
+                return (Path(source_root[0]) / value).as_posix()
             return value
     filename = next(
         (

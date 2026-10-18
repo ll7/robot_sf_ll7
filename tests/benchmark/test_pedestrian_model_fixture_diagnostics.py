@@ -1,5 +1,7 @@
 """Tests for the issue #3481 pedestrian-model fixture diagnostics harness."""
 
+# robot-sf-test-lane: simulation
+
 from __future__ import annotations
 
 import json

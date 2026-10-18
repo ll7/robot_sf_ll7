@@ -14,6 +14,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import asdict, dataclass
 from typing import Any
 
+from robot_sf.benchmark.metric_definitions import METRIC_SCHEMA_VERSION
 from robot_sf.benchmark.metrics import (
     EpisodeData,
     distance_to_human_min,
@@ -257,6 +258,7 @@ def build_cross_benchmark_metric_report(
     rows = compute_cross_benchmark_metric_rows(data, horizon=horizon)
     return {
         "schema_version": CROSS_BENCHMARK_METRIC_REPORT_SCHEMA_VERSION,
+        "metric_schema_version": METRIC_SCHEMA_VERSION,
         "mapping_version": CROSS_BENCHMARK_METRIC_MAPPING_VERSION,
         "claim_boundary": CROSS_BENCHMARK_CLAIM_BOUNDARY,
         "rows": [row.to_dict() for row in rows],

@@ -48,10 +48,23 @@ from scripts.analysis.compare_issue_9431_release import (
     EXPECTED_SEEDS,
     _execution_audit,
 )
-from scripts.analysis.compare_release_0_0_7_to_0_0_8 import (
-    _matches_config_path,
-    _runtime_successor_identity,
-)
+from scripts.analysis.compare_release_0_0_7_to_0_0_8 import _runtime_successor_identity
+
+
+def _matches_config_path(observed: Any, expected: str | None) -> bool:
+    """Match a source-pinned relative config path against the runner path.
+
+    Returns:
+        Whether the observed path has the expected repository-relative suffix.
+    """
+    if expected is None:
+        return observed is None
+    if not isinstance(observed, str) or not observed:
+        return False
+    observed_parts = Path(observed).parts
+    expected_parts = Path(expected).parts
+    return observed_parts[-len(expected_parts) :] == expected_parts
+
 
 REPORT_SCHEMA = "release_007_008_comparison.v1"
 CANDIDATE_SCHEMA = "release_007_008_candidate_identity.v1"

@@ -25,6 +25,12 @@ from robot_sf.planner.obstacle_features import (
     obstacle_lines_from_map,
     predictive_feature_schema_metadata,
 )
+from robot_sf.training.predictive_supervision import (
+    PREDICTIVE_DATASET_SCHEMA,
+    identity_match_indices,
+    observation_episode_ids,
+    supervision_metadata,
+)
 
 
 @dataclass
@@ -37,8 +43,9 @@ class Frame:
     robot_velocity_xy: np.ndarray
     goal_current: np.ndarray
     ped_positions_world: np.ndarray
-    ped_velocities_world: np.ndarray
+    ped_velocities_ego: np.ndarray
     ped_count: int
+    ped_ids: tuple[str, ...] = ()
 
 
 def _effective_predictive_feature_schema(
@@ -83,7 +90,7 @@ def _extract_socnav_blocks(obs: dict) -> tuple[dict, dict, dict]:
     return robot, goal, peds
 
 
-def _extract_frame(obs: dict, max_agents: int) -> Frame:
+def _extract_frame(obs: dict, max_agents: int, *, ped_ids: tuple[str, ...] | None = None) -> Frame:
     """Convert observation payload to a compact frame container."""
     robot, goal, peds = _extract_socnav_blocks(obs)
     robot_pos = np.asarray(robot.get("position", [0.0, 0.0]), dtype=np.float32)[:2]
@@ -112,7 +119,7 @@ def _extract_frame(obs: dict, max_agents: int) -> Frame:
         )
 
     ped_count = int(ped_count_raw[0]) if ped_count_raw.size > 0 else 0
-    if ped_count <= 0 and ped_positions.shape[0] > 0:
+    if "count" not in peds and ped_count <= 0 and ped_positions.shape[0] > 0:
         # Some observation payloads omit/zero pedestrian count; infer from positions.
         ped_count = int(ped_positions.shape[0])
     ped_count = max(0, min(ped_count, ped_positions.shape[0], max_agents))
@@ -120,6 +127,8 @@ def _extract_frame(obs: dict, max_agents: int) -> Frame:
     if ped_velocities.shape[0] < ped_count:
         ped_velocities = np.pad(ped_velocities, ((0, ped_count - ped_velocities.shape[0]), (0, 0)))
     ped_velocities = ped_velocities[:ped_count]
+    if ped_ids is None or len(ped_ids) < ped_count:
+        raise ValueError("Predictive frame requires observation-aligned pedestrian identities")
 
     return Frame(
         robot_pos=robot_pos,
@@ -128,8 +137,9 @@ def _extract_frame(obs: dict, max_agents: int) -> Frame:
         robot_velocity_xy=robot_velocity_xy,
         goal_current=goal_current,
         ped_positions_world=ped_positions,
-        ped_velocities_world=ped_velocities,
+        ped_velocities_ego=ped_velocities,
         ped_count=ped_count,
+        ped_ids=tuple(ped_ids[:ped_count]),
     )
 
 
@@ -165,44 +175,7 @@ def _world_to_ego(
     return np.stack([x_ego, y_ego], axis=1).astype(np.float32)
 
 
-def _vel_world_to_ego(vectors_world: np.ndarray, robot_heading: float) -> np.ndarray:
-    """Rotate world-frame vectors to ego frame (no translation)."""
-    if vectors_world.size == 0:
-        return np.zeros((0, 2), dtype=np.float32)
-    cos_h = float(np.cos(robot_heading))
-    sin_h = float(np.sin(robot_heading))
-    vx_ego = cos_h * vectors_world[:, 0] + sin_h * vectors_world[:, 1]
-    vy_ego = -sin_h * vectors_world[:, 0] + cos_h * vectors_world[:, 1]
-    return np.stack([vx_ego, vy_ego], axis=1).astype(np.float32)
-
-
-def _nearest_match_indices(
-    source_positions: np.ndarray,
-    target_positions: np.ndarray,
-    *,
-    max_match_distance: float = 1.5,
-) -> dict[int, int]:
-    """Match source pedestrians to target pedestrians by nearest neighbor."""
-    if source_positions.size == 0 or target_positions.size == 0:
-        return {}
-    matches: dict[int, int] = {}
-    taken_targets: set[int] = set()
-    for src_idx in range(source_positions.shape[0]):
-        distances = np.linalg.norm(target_positions - source_positions[src_idx], axis=1)
-        sorted_target = np.argsort(distances)
-        for tgt_idx in sorted_target:
-            tgt_i = int(tgt_idx)
-            if tgt_i in taken_targets:
-                continue
-            if float(distances[tgt_i]) > max_match_distance:
-                break
-            matches[src_idx] = tgt_i
-            taken_targets.add(tgt_i)
-            break
-    return matches
-
-
-def _frames_to_samples(
+def _frames_to_samples(  # noqa: C901
     frames: list[Frame],
     *,
     max_agents: int,
@@ -235,6 +208,8 @@ def _frames_to_samples(
     for t in range(0, len(frames) - horizon_steps):
         frame_t = frames[t]
         c = min(frame_t.ped_count, max_agents)
+        if len(frame_t.ped_ids) != frame_t.ped_count:
+            raise ValueError("Predictive source frame has missing pedestrian identities")
         state_base = np.zeros((max_agents, base_dim), dtype=np.float32)
         target = np.zeros((max_agents, horizon_steps, 2), dtype=np.float32)
         mask = np.zeros((max_agents,), dtype=np.float32)
@@ -247,10 +222,9 @@ def _frames_to_samples(
                 frame_t.robot_heading,
             )
             state_base[:c, 0:2] = pos_rel
-            state_base[:c, 2:4] = _vel_world_to_ego(
-                frame_t.ped_velocities_world[:c],
-                frame_t.robot_heading,
-            )
+            # SOCNAV observations already rotate velocities by -robot_heading.
+            # Positions remain world-frame; velocity features are already ego-frame.
+            state_base[:c, 2:4] = frame_t.ped_velocities_ego[:c]
             if base_dim >= 9:
                 goal_rel = _world_to_ego(
                     frame_t.goal_current.reshape(1, 2),
@@ -281,10 +255,9 @@ def _frames_to_samples(
                 ck = min(frame_k.ped_count, max_agents)
                 if ck <= 0:
                     continue
-                matches = _nearest_match_indices(
-                    frame_t.ped_positions_world[:c],
-                    frame_k.ped_positions_world[:ck],
-                )
+                if len(frame_k.ped_ids) != frame_k.ped_count:
+                    raise ValueError("Predictive future frame has missing pedestrian identities")
+                matches = identity_match_indices(frame_t.ped_ids[:c], frame_k.ped_ids[:ck])
                 if not matches:
                     continue
                 for src_idx, tgt_idx in matches.items():
@@ -369,7 +342,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--output",
         type=Path,
-        default=Path("output/tmp/predictive_planner/datasets/predictive_rollouts.npz"),
+        default=Path("output/tmp/predictive_planner/datasets/predictive_rollouts_identity_v2.npz"),
     )
     return parser.parse_args()
 
@@ -408,7 +381,7 @@ def _reset_with_min_goal(
     return obs, skipped
 
 
-def main() -> int:
+def main() -> int:  # noqa: C901
     """Collect dataset and persist ``.npz`` + metadata sidecar."""
     args = parse_args()
     logger.remove()
@@ -445,9 +418,16 @@ def main() -> int:
         if obs is None:
             continue
         episode_frames: list[Frame] = []
+        episode_id = f"base-episode-{episode}"
 
         for _step in range(args.max_steps):
-            episode_frames.append(_extract_frame(obs, args.max_agents))
+            episode_frames.append(
+                _extract_frame(
+                    obs,
+                    args.max_agents,
+                    ped_ids=observation_episode_ids(env, episode_id=episode_id),
+                )
+            )
             action = _goal_policy(obs, max_speed=args.max_speed)
             obs, _reward, terminated, truncated, _meta = env.step(action)
             if terminated or truncated:
@@ -481,12 +461,15 @@ def main() -> int:
     target_masks_cat = np.concatenate(all_target_masks, axis=0)
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
+    if args.output.exists():
+        raise FileExistsError(f"Refusing to overwrite predictive dataset artifact: {args.output}")
     np.savez_compressed(
         args.output,
         state=states_cat,
         target=targets_cat,
         mask=masks_cat,
         target_mask=target_masks_cat,
+        supervision_metadata_json=json.dumps(supervision_metadata("base"), sort_keys=True),
         feature_schema_json=json.dumps(
             _effective_predictive_feature_schema(
                 model_family=str(args.model_family),
@@ -497,6 +480,8 @@ def main() -> int:
     )
 
     summary = {
+        **supervision_metadata("base"),
+        "supervision_metadata": supervision_metadata("base"),
         "episodes": int(args.episodes),
         "max_steps": int(args.max_steps),
         "max_agents": int(args.max_agents),
@@ -524,7 +509,8 @@ def main() -> int:
         json.dumps(
             {
                 "dataset_id": args.output.stem,
-                "dataset_schema": "predictive_planner_dataset_v1",
+                "dataset_schema": PREDICTIVE_DATASET_SCHEMA,
+                "supervision_metadata": supervision_metadata("base"),
                 "model_family": str(args.model_family),
                 "feature_schema": summary["feature_schema"],
                 "obstacle_feature_source": summary.get("obstacle_feature_source"),

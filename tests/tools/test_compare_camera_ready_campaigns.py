@@ -335,7 +335,7 @@ def test_build_markdown_keeps_planners_without_numeric_metrics() -> None:
     assert "base_status" in markdown
     assert "candidate_status" in markdown
     assert (
-        "| prediction_planner | partial-failure | ok | 0 | 135 | no | N/A | N/A | N/A | N/A |"
+        "| prediction_planner | partial-failure | ok | 0 | 135 | 0 | 135 | 0 | 0 | no | N/A | N/A | N/A | N/A |"
         in markdown
     )
 

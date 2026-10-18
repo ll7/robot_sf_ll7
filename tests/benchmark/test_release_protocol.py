@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import os
+from hashlib import sha256
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -19,10 +20,37 @@ from robot_sf.benchmark.release_protocol import (
     load_release_manifest,
     validate_release_manifest,
 )
+from tests.support.pin_inventory import required_pin_inventory
+
+ROOT = Path(__file__).resolve().parents[2]
 
 STRESS_MANIFEST = Path(
     "configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_hybrid_stress_smoke_v0_1.yaml"
 )
+
+
+@pytest.mark.parametrize(
+    "manifest_path",
+    required_pin_inventory(
+        [
+            path
+            for path in sorted((ROOT / "configs/benchmarks/releases").glob("*.yaml"))
+            if str(yaml.safe_load(path.read_text()).get("schema_version", "")).startswith(
+                "benchmark-release-manifest."
+            )
+        ],
+        name="release manifests",
+    ),
+    ids=lambda path: path.name,
+)
+def test_every_release_manifest_campaign_digest_matches_disk(manifest_path: Path) -> None:
+    """Concrete and template release manifests must pin their actual campaign bytes."""
+    payload = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+    campaign_path = manifest_path.parent / payload["canonical_campaign_config"]
+    actual = sha256(campaign_path.read_bytes()).hexdigest()
+    assert actual == payload["campaign_config_sha256"], (
+        f"{manifest_path}: campaign_config_sha256 does not match {campaign_path}: {actual}"
+    )
 
 
 def _stress_manifest_payload() -> dict[str, object]:
@@ -49,8 +77,8 @@ def test_smoke_release_manifest_validates_against_campaign_config() -> None:
     assert not any(key.startswith("snqi_v2_") for key in resolved["metrics"])
 
 
-def test_v008_campaign_matches_corrected_live_science_and_defers_publication() -> None:
-    """The dedicated campaign carries current fixes and adds only candidate controls."""
+def test_legacy_stage3_campaign_retains_candidate_controls() -> None:
+    """The legacy diagnostic template stays distinct from the authored release campaign."""
     root = Path("configs/benchmarks")
     predecessor = yaml.safe_load(
         (root / "paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml").read_text(
@@ -99,7 +127,10 @@ def test_v008_campaign_matches_corrected_live_science_and_defers_publication() -
         ),
     }
     assert len(candidate["planners"]) == 14
-    assert candidate == predecessor
+    # Main now has the authored release campaign; this earlier diagnostic template
+    # must not be mistaken for its release identity.
+    assert candidate["scenario_matrix"] != predecessor["scenario_matrix"]
+    assert candidate["seed_policy"] != predecessor["seed_policy"]
 
 
 def test_v008_release_manifest_binds_candidate_and_snqi_v2_assets() -> None:
@@ -107,14 +138,12 @@ def test_v008_release_manifest_binds_candidate_and_snqi_v2_assets() -> None:
     release_path = Path("configs/benchmarks/releases/benchmark_data_release_s30_h600.template.yaml")
     release_template = yaml.safe_load(release_path.read_text(encoding="utf-8"))
     candidate_path = Path(
-        "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_template.yaml"
+        "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate_authored.yaml"
     )
     candidate_payload = yaml.safe_load(candidate_path.read_text(encoding="utf-8"))
     assert isinstance(candidate_payload, dict)
     snqi_v2_spec = candidate_payload["snqi_v2_spec"]
     assert isinstance(snqi_v2_spec, dict)
-    with pytest.raises(ValueError, match="calibration anchors are not frozen"):
-        release_protocol.load_campaign_config(candidate_path)
     assert (
         release_path.parent / release_template["canonical_campaign_config"]
     ).resolve() == candidate_path.resolve()
@@ -122,16 +151,15 @@ def test_v008_release_manifest_binds_candidate_and_snqi_v2_assets() -> None:
         release_template["campaign_config_sha256"]
         == hashlib.sha256(candidate_path.read_bytes()).hexdigest()
     )
-    for role in ("weights", "anchors", "family"):
+    binding = release_template["metrics"]["snqi_v2_binding"]
+    assert set(binding) == {"weights", "anchors", "family", "acquisition_config"}
+    for role, declaration in binding.items():
         asset = (Path.cwd() / snqi_v2_spec[f"{role}_path"]).resolve()
         assert (
-            release_template["metrics"][f"snqi_v2_{role}_path"]
+            declaration["path"]
             == Path(os.path.relpath(asset, release_path.parent.resolve())).as_posix()
         )
-        assert (
-            release_template["metrics"][f"snqi_v2_{role}_sha256"]
-            == hashlib.sha256(asset.read_bytes()).hexdigest()
-        )
+        assert declaration["sha256"] == hashlib.sha256(asset.read_bytes()).hexdigest()
 
 
 def test_snqi_v2_manifest_assets_are_complete_and_hash_bound(tmp_path: Path) -> None:
@@ -212,7 +240,7 @@ def test_release_campaign_config_runs_single_worker() -> None:
 def test_diagnostic_trace_pin_validates_against_non_paper_config() -> None:
     """The #7086 trace pin validates without admitting a paper-facing release."""
     manifest = load_release_manifest(
-        Path("configs/benchmarks/releases/issue_7086_trace_dossier_diagnostic_v0_1.yaml")
+        Path("tests/fixtures/trace_dossier_retained_release/release.yaml")
     )
 
     validation = validate_release_manifest(manifest)

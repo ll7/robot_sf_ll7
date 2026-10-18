@@ -1,0 +1,435 @@
+{
+  "checks": [
+    {
+      "artifact_path": "docs/context/robsweep/evidence/canary/legacy_goal.json.gz",
+      "sha256": "d5411225122be18d06b86645c45462fd0c3024d72388b1513e00eb552201eb9a",
+      "radius_m": 1.0,
+      "preferred_caps_m_s": [
+        0.65,
+        0.6499999999999999,
+        0.65,
+        0.65
+      ],
+      "view_degraded": false,
+      "native_outcome_available": true
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/canary/legacy_guarded_ppo.json.gz",
+      "sha256": "846db39fa0c60b6da2f22d17b0b1fd55b5362c3cdf1244f07816fe69d09478da",
+      "radius_m": 1.0,
+      "preferred_caps_m_s": [
+        0.65,
+        0.6499999999999999,
+        0.65,
+        0.65
+      ],
+      "view_degraded": false,
+      "native_outcome_available": true
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/canary/legacy_hybrid_rule_v4_fast_progress_static_escape.json.gz",
+      "sha256": "22af9e5535beed3828cd9d08413dfd4be9bd0723676009f2183fe4f208e69e83",
+      "radius_m": 1.0,
+      "preferred_caps_m_s": [
+        0.65,
+        0.6499999999999999,
+        0.65,
+        0.65
+      ],
+      "view_degraded": false,
+      "native_outcome_available": true
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/canary/legacy_hybrid_rule_v4_fast_progress_static_escape_continuous.json.gz",
+      "sha256": "846facf974a87ab57ef8a013dd51c5190f6878a02fd3f5aa4c668645eaf32b74",
+      "radius_m": 1.0,
+      "preferred_caps_m_s": [
+        0.65,
+        0.6499999999999999,
+        0.65,
+        0.65
+      ],
+      "view_degraded": false,
+      "native_outcome_available": true
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/canary/legacy_orca.json.gz",
+      "sha256": "53e1db6d709c26d65f1d7624a0920c35777ed9dd13626193ef0490dae1ebcd27",
+      "radius_m": 1.0,
+      "preferred_caps_m_s": [
+        0.65,
+        0.6499999999999999,
+        0.65,
+        0.65
+      ],
+      "view_degraded": false,
+      "native_outcome_available": true
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/canary/legacy_ppo.json.gz",
+      "sha256": "b49b776758bf1094fc8de2ec5844c8ff416a6f02f09a3ebc8bbc772b419ab1b1",
+      "radius_m": 1.0,
+      "preferred_caps_m_s": [
+        0.65,
+        0.6499999999999999,
+        0.65,
+        0.65
+      ],
+      "view_degraded": false,
+      "native_outcome_available": true
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/canary/legacy_prediction_planner.json.gz",
+      "sha256": "32626a9ad1dba9ec8cddd86caf32bffe526f71df64f3106200e9cdad9cafbc4a",
+      "radius_m": 1.0,
+      "preferred_caps_m_s": [
+        0.65,
+        0.6499999999999999,
+        0.65,
+        0.65
+      ],
+      "view_degraded": false,
+      "native_outcome_available": true
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/canary/legacy_predictive_mppi.json.gz",
+      "sha256": "444d4d3f18fc266df11a905e271fb5d69d2732c221432000c5c627bfdbb40fdb",
+      "radius_m": 1.0,
+      "preferred_caps_m_s": [
+        0.65,
+        0.6499999999999999,
+        0.65,
+        0.65
+      ],
+      "view_degraded": false,
+      "native_outcome_available": true
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/canary/legacy_risk_dwa.json.gz",
+      "sha256": "e6a159d51acd105dc047b6c137cca39970d27238c2adfd1167af2d9b33f211d2",
+      "radius_m": 1.0,
+      "preferred_caps_m_s": [
+        0.65,
+        0.6499999999999999,
+        0.65,
+        0.65
+      ],
+      "view_degraded": false,
+      "native_outcome_available": true
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/canary/legacy_sacadrl.json.gz",
+      "sha256": "1671268b8124444b069a46f476f774a74466dda7d59b7a768d66ce00dcf46f76",
+      "radius_m": 1.0,
+      "preferred_caps_m_s": [
+        0.65,
+        0.6499999999999999,
+        0.65,
+        0.65
+      ],
+      "view_degraded": false,
+      "native_outcome_available": true
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/canary/legacy_scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4.json.gz",
+      "sha256": "6a7eaffeb4707a9cb41b20e3c2ecaf08038f0b590737b67458deff692357e9a8",
+      "radius_m": 1.0,
+      "preferred_caps_m_s": [
+        0.65,
+        0.6499999999999999,
+        0.65,
+        0.65
+      ],
+      "view_degraded": false,
+      "native_outcome_available": true
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/canary/legacy_scenario_adaptive_hybrid_orca_v2_collision_guard_v4.json.gz",
+      "sha256": "cf53fe492df1d0ce2f7a167b78ab150a1bf5358f1526587a18eafc5e89992a8c",
+      "radius_m": 1.0,
+      "preferred_caps_m_s": [
+        0.65,
+        0.6499999999999999,
+        0.65,
+        0.65
+      ],
+      "view_degraded": false,
+      "native_outcome_available": true
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/canary/legacy_social_force.json.gz",
+      "sha256": "7f46ee3fdb9f63662182e19816bee488386d8c25d9612ab1a458963793b0baae",
+      "radius_m": 1.0,
+      "preferred_caps_m_s": [
+        0.65,
+        0.6499999999999999,
+        0.65,
+        0.65
+      ],
+      "view_degraded": false,
+      "native_outcome_available": true
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/canary/legacy_socnav_sampling.json.gz",
+      "sha256": "873b990879b73cee86f12b2d8811e018c81c48ab803c3d21585bf52d416c70ae",
+      "radius_m": 1.0,
+      "preferred_caps_m_s": [
+        0.65,
+        0.6499999999999999,
+        0.65,
+        0.65
+      ],
+      "view_degraded": false,
+      "native_outcome_available": true
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/canary/r0.3_v1.3_goal.json.gz",
+      "sha256": "ca6759c3b1b7f9b1ad37da25c259e70ae8b9df40c6ecb1f3b7fb7bf924e23bf9",
+      "radius_m": 0.3,
+      "preferred_caps_m_s": [
+        1.3,
+        1.3,
+        1.3,
+        1.3
+      ],
+      "view_degraded": false,
+      "native_outcome_available": true
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/canary/r0.3_v1.3_hybrid_rule_v4_fast_progress_static_escape.json.gz",
+      "sha256": "969dd459bca6785f0cb26f207c557ca19cade132ea99baebff6c98298301f053",
+      "radius_m": 0.3,
+      "preferred_caps_m_s": [
+        1.3,
+        1.3,
+        1.3,
+        1.3
+      ],
+      "view_degraded": false,
+      "native_outcome_available": true
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/canary/r0.3_v1.3_orca.json.gz",
+      "sha256": "bed46433bf9f33f68f22d0f3dff06cda97f00fccf52b2e83655f5ac1080e2806",
+      "radius_m": 0.3,
+      "preferred_caps_m_s": [
+        1.3,
+        1.3,
+        1.3,
+        1.3
+      ],
+      "view_degraded": false,
+      "native_outcome_available": true
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/canary/r0.3_v1.3_ppo.json.gz",
+      "sha256": "11e5abdeaa9272b10059252ac7bd56e78862cc52b62a89e08bbf2a62124b1e2c",
+      "radius_m": 0.3,
+      "preferred_caps_m_s": [
+        1.3,
+        1.3,
+        1.3,
+        1.3
+      ],
+      "view_degraded": false,
+      "native_outcome_available": true
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/canary/r0.3_v1.3_social_force.json.gz",
+      "sha256": "9f65ebea9e456d9d87398c46604760bf373446d91661be828de960ff7733926b",
+      "radius_m": 0.3,
+      "preferred_caps_m_s": [
+        1.3,
+        1.3,
+        1.3,
+        1.3
+      ],
+      "view_degraded": false,
+      "native_outcome_available": true
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/canary/swap_goal.json.gz",
+      "sha256": "4b63a5729d337d115f16ea6a3675dbb854d3e005331f42bf2cd7d4e3d3deab63",
+      "radius_m": 1.0,
+      "preferred_caps_m_s": [
+        0.65,
+        0.6499999999999999,
+        0.65,
+        0.65
+      ],
+      "view_degraded": false,
+      "native_outcome_available": true
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/canary/swap_guarded_ppo.json.gz",
+      "sha256": "88d9bad0561d993f4a8f6ee846acd5405003939c703564761e004276669327cf",
+      "radius_m": 1.0,
+      "preferred_caps_m_s": [
+        0.65,
+        0.6499999999999999,
+        0.65,
+        0.65
+      ],
+      "view_degraded": false,
+      "native_outcome_available": true
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/canary/swap_hybrid_rule_v4_fast_progress_static_escape.json.gz",
+      "sha256": "80cf0c4a9d92fe2ab1ebc7cc0a7d59c3be48cb02c6df860eea1023cbcb79bebf",
+      "radius_m": 1.0,
+      "preferred_caps_m_s": [
+        0.65,
+        0.6499999999999999,
+        0.65,
+        0.65
+      ],
+      "view_degraded": false,
+      "native_outcome_available": true
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/canary/swap_hybrid_rule_v4_fast_progress_static_escape_continuous.json.gz",
+      "sha256": "d15f4bf5f2426a21f6f714cb54f1fcff37d61aa730a0971baf5c6ad81490c9c2",
+      "radius_m": 1.0,
+      "preferred_caps_m_s": [
+        0.65,
+        0.6499999999999999,
+        0.65,
+        0.65
+      ],
+      "view_degraded": false,
+      "native_outcome_available": true
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/canary/swap_orca.json.gz",
+      "sha256": "99f61bbdd91f3d8bfbd3134288852abe1368041e9dc30592fd87b489f07e2db8",
+      "radius_m": 1.0,
+      "preferred_caps_m_s": [
+        0.65,
+        0.6499999999999999,
+        0.65,
+        0.65
+      ],
+      "view_degraded": false,
+      "native_outcome_available": true
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/canary/swap_ppo.json.gz",
+      "sha256": "32217afcda33af8f00822b086449bad123233491ca1483e7ab1c45eff008cb45",
+      "radius_m": 1.0,
+      "preferred_caps_m_s": [
+        0.65,
+        0.6499999999999999,
+        0.65,
+        0.65
+      ],
+      "view_degraded": false,
+      "native_outcome_available": true
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/canary/swap_prediction_planner.json.gz",
+      "sha256": "42298b5475d2f266e96bc2eae0278e658ca9de462007a907185f03c762b61590",
+      "radius_m": 1.0,
+      "preferred_caps_m_s": [
+        0.65,
+        0.6499999999999999,
+        0.65,
+        0.65
+      ],
+      "view_degraded": false,
+      "native_outcome_available": true
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/canary/swap_predictive_mppi.json.gz",
+      "sha256": "3684fa66d0137377ba85c73bc63cbb7b66ce8ab178ff33ff05ff763433a5cb1a",
+      "radius_m": 1.0,
+      "preferred_caps_m_s": [
+        0.65,
+        0.6499999999999999,
+        0.65,
+        0.65
+      ],
+      "view_degraded": false,
+      "native_outcome_available": true
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/canary/swap_risk_dwa.json.gz",
+      "sha256": "0117b00661264d1baedfd60183603ed6eeee6320025d6ccc9c037290c3855673",
+      "radius_m": 1.0,
+      "preferred_caps_m_s": [
+        0.65,
+        0.6499999999999999,
+        0.65,
+        0.65
+      ],
+      "view_degraded": false,
+      "native_outcome_available": true
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/canary/swap_sacadrl.json.gz",
+      "sha256": "00120019104b1b39b51b15ae2acbe581f1a4783f0c8c32437cc5e5d6cc517ec9",
+      "radius_m": 1.0,
+      "preferred_caps_m_s": [
+        0.65,
+        0.6499999999999999,
+        0.65,
+        0.65
+      ],
+      "view_degraded": false,
+      "native_outcome_available": true
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/canary/swap_scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4.json.gz",
+      "sha256": "c17119cc0a614629c80aa047ff8c4a409ea9b41780ee8d4d4ba3d26ae7e53993",
+      "radius_m": 1.0,
+      "preferred_caps_m_s": [
+        0.65,
+        0.6499999999999999,
+        0.65,
+        0.65
+      ],
+      "view_degraded": false,
+      "native_outcome_available": true
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/canary/swap_scenario_adaptive_hybrid_orca_v2_collision_guard_v4.json.gz",
+      "sha256": "38de6273224f5fe61197b9ed2684aaae9db3590954c8e98b55216516d4410f6f",
+      "radius_m": 1.0,
+      "preferred_caps_m_s": [
+        0.65,
+        0.6499999999999999,
+        0.65,
+        0.65
+      ],
+      "view_degraded": false,
+      "native_outcome_available": true
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/canary/swap_social_force.json.gz",
+      "sha256": "96b9f412d996cbc6e62df8a8adb59907d7dc44034ac909b7ee37662de1bedcae",
+      "radius_m": 1.0,
+      "preferred_caps_m_s": [
+        0.65,
+        0.6499999999999999,
+        0.65,
+        0.65
+      ],
+      "view_degraded": false,
+      "native_outcome_available": true
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/canary/swap_socnav_sampling.json.gz",
+      "sha256": "6eac22290f83831e6f8d5293b927fa8970646c5da36ded9a1b63f03d5b9a3ecc",
+      "radius_m": 1.0,
+      "preferred_caps_m_s": [
+        0.65,
+        0.6499999999999999,
+        0.65,
+        0.65
+      ],
+      "view_degraded": false,
+      "native_outcome_available": true
+    }
+  ],
+  "passed": true,
+  "scope": "33 five-step CPU canaries; physical/metric radius and effective preferred-speed binding, native outcome presence and no degraded view. Does not imply goal success or validate arbitrary scenario geometry."
+}

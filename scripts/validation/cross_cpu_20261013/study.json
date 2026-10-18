@@ -1,0 +1,27 @@
+{
+  "schema": "cross_cpu_diagnostic.v1",
+  "source_comment": "https://github.com/ll7/robot_sf_ll7/issues/10211#issuecomment-6056176084",
+  "base_config": "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate_authored.yaml",
+  "scenarios": ["classic_bottleneck_medium", "classic_cross_trap_medium", "classic_doorway_medium", "classic_group_crossing_medium", "classic_head_on_corridor_medium", "classic_overtaking_medium", "francis2023_frontal_approach", "francis2023_blind_corner", "francis2023_narrow_doorway", "francis2023_circular_crossing"],
+  "arms": ["goal", "social_force", "orca", "ppo", "guarded_ppo"],
+  "seed_start": 1001,
+  "seed_stop": 1030,
+  "campaigns": ["default-r1", "default-r2", "pinned-r1", "float64-r1"],
+  "workers": 4,
+  "campaign_timeout_seconds": 14400,
+  "cpu_hour_cap": 150,
+  "common_env": {
+    "CUDA_VISIBLE_DEVICES": "", "DISPLAY": "", "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8",
+    "MPLBACKEND": "Agg", "SDL_VIDEODRIVER": "dummy", "TORCH_COMPILE_DISABLE": "1",
+    "OMP_NUM_THREADS": "1", "MKL_NUM_THREADS": "1", "OPENBLAS_NUM_THREADS": "1",
+    "NUMEXPR_NUM_THREADS": "1", "TF_NUM_INTRAOP_THREADS": "1", "TF_NUM_INTEROP_THREADS": "1"
+  },
+  "pinned_env": {
+    "ATEN_CPU_CAPABILITY": "default", "MKL_CBWR": "COMPATIBLE",
+    "OPENBLAS_CORETYPE": "Haswell", "ONEDNN_MAX_CPU_ISA": "AVX2"
+  },
+  "checkpoint_sha256": {
+    "ppo_release_robot_b1002_last_20261001": "764a7d88f5b608237641d973634899e05a67b25e65f8b1607cfca025459824bc",
+    "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200": "8367af109a27e8879ced0c8913f6eff26df7ec59c31ea88f9a297bb2c141eb09"
+  }
+}

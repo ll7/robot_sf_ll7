@@ -1,0 +1,7 @@
+{
+  "artifact_path": "docs/validation/bicycle_probe_comparison.csv",
+  "artifact_sha256": "4dd5c5777aad9c9457a3230420aee69079518ab594fecebde5f1420fa94f32b7",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "evidence-review-marker.v1"
+}

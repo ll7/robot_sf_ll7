@@ -1,0 +1,7 @@
+{
+  "artifact_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/smoke/initial_invalid_smoke/failure_attribution.json",
+  "artifact_sha256": "78e88b9eb6346e7a9195e70c70199127769dba742c0aef8b430318860b751bbd",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "evidence-review-marker.v1"
+}

@@ -118,6 +118,8 @@ def _config_hash_payload(cfg: Any) -> dict[str, Any]:
     """
     spec = getattr(cfg, "snqi_v2_spec", None)
     payload = asdict(replace(cfg, snqi_v2_spec=None)) if spec is not None else asdict(cfg)
+    if payload.get("numerical_mode") is None:
+        payload.pop("numerical_mode", None)
     payload.pop("snqi_v2_spec", None)
     mode = payload.pop("publication_identity_mode", "bound")
     if mode == "scientific_candidate":
@@ -125,6 +127,8 @@ def _config_hash_payload(cfg: Any) -> dict[str, Any]:
         payload.pop("doi", None)
     elif mode != "bound":
         raise ValueError(f"unsupported publication identity mode: {mode}")
+    if getattr(cfg, "snqi_v2_binding", None) is None:
+        payload.pop("snqi_v2_binding", None)
     if spec is not None:
         payload["snqi_v2_spec"] = {
             key: value for key, value in spec.provenance().items() if not key.endswith("_path")

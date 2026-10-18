@@ -7,6 +7,10 @@ campaign root, pairs rows by planner/scenario/seed, and emits a compact JSON and
 Markdown diff.  Trace-dependent goal-adjacent labels remain ``unavailable`` when
 the input row did not record a simulation trace; a missing label is never
 silently treated as ``false``.
+
+Metric-definition compatibility: these outcome-only contrasts retain their meaning
+across robot-sf-metrics.v1/v2. Changed path, time, deadlock, jerk and SNQI fields
+require the version-aware compare_release_0_0_7_to_0_0_8 audit.
 """
 
 from __future__ import annotations

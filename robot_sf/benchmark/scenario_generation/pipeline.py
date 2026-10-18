@@ -12,6 +12,7 @@ from typing import Any
 import yaml
 
 from robot_sf.benchmark.map_runner.map_runner import run_map_batch
+from robot_sf.benchmark.metric_definitions import require_uniform_trace_schema
 from robot_sf.benchmark.scenario_generation.catalog_writer import (
     deduplicate_catalog_entries,
     write_generated_catalog,
@@ -319,6 +320,7 @@ def _load_jsonl(path: Path) -> list[dict[str, Any]]:
         if not isinstance(record, dict):
             raise ValueError(f"{path}:{line_number} must contain a JSON object")
         records.append(record)
+    require_uniform_trace_schema(records)
     return records
 
 
@@ -334,13 +336,16 @@ def _write_jsonl(path: Path, records: Sequence[Mapping[str, Any]]) -> None:
 def _distiller_episode(record: Mapping[str, Any], sample: SampledEpisode) -> dict[str, Any]:
     """Return the simulation-step trace and identity fields needed for segment distillation.
 
-    Fails closed if the ``simulation-step-trace.v1`` trace or its steps are absent.
+    Accepts simulation-step-trace v1/v2 and preserves identity; missing steps fail closed.
     """
 
     metadata = record.get("algorithm_metadata")
     trace = metadata.get("simulation_step_trace") if isinstance(metadata, Mapping) else None
-    if not isinstance(trace, Mapping) or trace.get("schema_version") != "simulation-step-trace.v1":
-        raise ValueError("episode record is missing simulation-step-trace.v1")
+    if not isinstance(trace, Mapping) or trace.get("schema_version") not in {
+        "simulation-step-trace.v1",
+        "simulation-step-trace.v2",
+    }:
+        raise ValueError("episode record is missing a supported simulation-step trace")
     steps = trace.get("steps")
     if not isinstance(steps, list) or not steps:
         raise ValueError("episode record has no simulation trace steps")
@@ -348,6 +353,7 @@ def _distiller_episode(record: Mapping[str, Any], sample: SampledEpisode) -> dic
         "episode_id": _required_string(record, "episode_id"),
         "seed": int(record["seed"]),
         "source_map": sample.source_map,
+        "schema_version": trace["schema_version"],
         "steps": steps,
     }
 

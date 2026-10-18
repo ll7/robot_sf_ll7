@@ -21,7 +21,7 @@ source:
   base_ref: origin/main
   base_commit: 1bb17787b6000a2aa7b5149d201a408e3eedcef5
   inventory: configs/training/comparison_matrix/issue_7849_ppo_rppo_source_inventory_v1.yaml
-  inventory_sha256: 9f28e83f8d92d73eb078b7a23b0c09f7788e3c13a3f6c30e88fc3648fec5e962
+  inventory_sha256: bf7c92c6b0619b164bccd7dbf677161621a6926d124a62036dffe5c787905234
   binding_rule: >-
     The submit host must use one clean exact-head public worktree. Rehash the
     inventory, every listed source/config/scenario/map input, and the resolved

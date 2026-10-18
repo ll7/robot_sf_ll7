@@ -1,0 +1,9 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/issue_9952_auditor/parent-failures-final.txt",
+  "artifact_sha256": "3f56728356c531dd33397565fee182726fd9d2a0dd0d1d7f5fa26afc4a67103d",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "preserved_exact_bytes": true,
+  "source_artifact_sha256": "25eec6520fc2ecf92e44c2115d97735fcd70cae9448a8b1b9dbbbe353c3f9e38",
+  "presentation_normalization": "LF line endings and removal of trailing whitespace; values and failure text preserved"
+}

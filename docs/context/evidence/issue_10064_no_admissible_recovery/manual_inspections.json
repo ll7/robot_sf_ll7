@@ -1,0 +1,128 @@
+{
+  "claim_boundary": "Paired trace association; native route_complete supplies success. Active-waypoint distance may jump at route transitions and is not terminal goal remaining.",
+  "clearance_convention": "surface_clearance",
+  "distance_convention": "center_center",
+  "inspections": [
+    {
+      "arm": "guarded_ppo",
+      "note": "At step302 brake changes to near-zero linear motion with -0.1 yaw; later recovery turns replace the baseline PPO acceleration. PR then freezes 197 consecutive steps versus17 on base and times out. A small clearance-driven turn changes the future guard/PPO interaction into a persistent stall.",
+      "outcome": "S->T",
+      "scenario": "classic_group_crossing_high",
+      "seed": 1003
+    },
+    {
+      "arm": "guarded_ppo",
+      "note": "At step129 brake changes to (0.2,-0.3). Both next brake twice before PPO resumes, but ensuing path differs. Both longest freezes are3steps; PR is still moving near the budget endpoint and misses completion. Regression is path/timing sensitivity rather than longer stasis.",
+      "outcome": "S->T",
+      "scenario": "classic_group_crossing_high",
+      "seed": 1005
+    },
+    {
+      "arm": "guarded_ppo",
+      "note": "At step181 base moves (0.7875,0.4); PR brakes. Recorded rollout margins: moving min(0.70062-0.58,0.34759-0.30)=0.04759; brake min(0.68552-0.58,0.99602-0.30)=0.10552. New combined ranking prefers better static margin despite lower pedestrian clearance; first-step clearance veto still rejects both. PR later moves but misses budget. Ranking uses rollout hard-clearance margins, not first-step or TTC margins.",
+      "outcome": "S->T",
+      "scenario": "classic_group_crossing_low",
+      "seed": 1003
+    },
+    {
+      "arm": "guarded_ppo",
+      "note": "At step92 PR selects (1.5,-0.3) over brake, with predicted minimum pedestrian clearance0.479m versus0.347m; both below0.58. Subsequent curved braking changes later path. Longest stasis improves16->10steps, yet completion becomes a timeout.",
+      "outcome": "S->T",
+      "scenario": "classic_head_on_corridor_medium",
+      "seed": 1004
+    },
+    {
+      "arm": "guarded_ppo",
+      "note": "At step26 the guard calls both selections fallback_safe: yaw changes -0.7->-0.9 with the same1.83665m/s speed. Base next chooses stop_safe; PR continues curved fallback commands. Inner RiskDWA infeasibility verified by the identical-observation checkpoint replay. Longest freeze31->38; later route misses completion.",
+      "outcome": "S->T",
+      "scenario": "francis2023_robot_crowding",
+      "seed": 1004
+    },
+    {
+      "arm": "guarded_ppo",
+      "note": "At step138 yaw0->0.1724 while braking at1.8m/s; both top labels fallback_safe. PR interleaves turns and stops then completes; baseline ends a343step stall, PR longest104. Inner RiskDWA infeasibility verified by identical-observation replay.",
+      "outcome": "T->S",
+      "scenario": "classic_bottleneck_medium",
+      "seed": 1004
+    },
+    {
+      "arm": "guarded_ppo",
+      "note": "At step63 base brake has minimum obstacle clearance0.072m<0.30. PR selects(1.7,-0.6) with0.344m and fallback_safe, then below-margin best-effort commands through deceleration. Baseline freezes419steps; PR has no frozen steps and completes151steps.",
+      "outcome": "T->S",
+      "scenario": "classic_doorway_low",
+      "seed": 1001
+    },
+    {
+      "arm": "guarded_ppo",
+      "note": "Initial obstacle clearance0.237m is below0.30 without penetration. PR(0.1,0.1) starts a bound-geometry recovery; by step4 PPO resumes. Base stays motionless all500steps; PR longest freeze0 and completes177steps.",
+      "outcome": "T->S",
+      "scenario": "classic_head_on_corridor_low",
+      "seed": 1003
+    },
+    {
+      "arm": "guarded_ppo",
+      "note": "Same initial below-margin clearance and first recovery sequence as low density. Base freezes500steps; PR longest60 and completes346steps. This is a real static freeze escape, rather than a claim about pedestrian safety.",
+      "outcome": "T->S",
+      "scenario": "classic_head_on_corridor_medium",
+      "seed": 1003
+    },
+    {
+      "arm": "guarded_ppo",
+      "note": "At step68 yaw0.064->0.264 with speed1.9m/s. PR follows a turning/slowing fallback sequence while baseline switches to stops. Longest freeze246->12; PR completes302steps versus baseline600step timeout. Both top labels fallback_safe; inner infeasibility verified by identical-observation replay.",
+      "outcome": "T->S",
+      "scenario": "classic_urban_crossing_medium",
+      "seed": 1004
+    },
+    {
+      "arm": "guarded_ppo",
+      "note": "Baseline is stationary and collides after3steps while two nearby pedestrians start at0.100001m surface clearance. PR starts(0.1,0.1), breaks initial stasis and completes without collision. Minimum recorded center distance and first-step traces were checked directly; this is an actual collision-to-success recovery on identical reset geometry.",
+      "outcome": "C->S",
+      "scenario": "francis2023_circular_crossing",
+      "seed": 1001
+    },
+    {
+      "arm": "risk_dwa",
+      "note": "Identical initial two-nearby-pedestrian geometry to the guarded-PPO case. At step0 base brakes while PR selects(0.1,0.1) and then accelerates through the first5steps. Minimum recorded center distance stays above the1.4m summed footprint radius in PR, whereas baseline falls below it and collides after3steps. PR completes within the400step budget. No other RiskDWA outcomes change; all36 baseline timeouts remain.",
+      "outcome": "C->S",
+      "scenario": "francis2023_circular_crossing",
+      "seed": 1001
+    },
+    {
+      "arm": "predictive_mppi",
+      "note": "At step 87 the baseline reachable brake command coasts at 0.8231 m/s while PR selects (0.5198,0.4917), followed by two more infeasible recovery turns. The trajectories then diverge. Base never physically freezes and succeeds at 320 steps; PR freezes 299/600 steps overall, including the final 116 consecutive steps at (32.9947,19.5554), and times out. Those final zero commands have no_admissible=False: the changed trajectory reaches a later finite-score stasis state in the otherwise unchanged MPPI arbitration. This is a real individual regression; fewer no-admissible steps do not guarantee less freezing.",
+      "outcome": "S->T",
+      "scenario": "classic_overtaking_low",
+      "seed": 1003
+    },
+    {
+      "arm": "predictive_mppi",
+      "note": "At step 121 moving PR selects progress_escape (0.55,-0.2694) where base commands zero and decelerates from 1.5 m/s. PR records two escape recoveries and one least-bad command, never reaches physical stasis and completes. Base stalls for 364 consecutive steps and times out. This native trace verifies escape reachability during moving infeasibility, rather than relying only on the unit witness.",
+      "outcome": "T->S",
+      "scenario": "classic_bottleneck_low",
+      "seed": 1005
+    },
+    {
+      "arm": "predictive_mppi",
+      "note": "At the same near-pedestrian reset where base collides after 3 stationary steps, MPPI PR selects (0.975,0.5489), physically accelerates, stays moving and completes without any collision counter. This is a native collision-to-success witness on identical reset geometry.",
+      "outcome": "C->S",
+      "scenario": "francis2023_circular_crossing",
+      "seed": 1001
+    },
+    {
+      "arm": "predictive_mppi",
+      "note": "At step 154 base selects zero and later remains frozen for 236 consecutive steps. PR selects (0.6206,0.9633), then another least-bad command and progress_escape (0.55,0.2478). Its speed stays positive, ordinary finite commands resume at step 157, and it succeeds at step 353 without physical frozen steps.",
+      "outcome": "T->S",
+      "scenario": "francis2023_pedestrian_overtaking",
+      "seed": 1005
+    },
+    {
+      "arm": "predictive_mppi",
+      "note": "At step 77 base zero command decelerates to rest by step 86, then stalls for 314 consecutive steps with 277 infeasible steps overall. PR selects (0.6149,0.5745) and a second recovery turn; ordinary finite commands resume at step 79. It never physically freezes and succeeds at step 262. The observed recovery prevents a long baseline stasis state.",
+      "outcome": "T->S",
+      "scenario": "francis2023_accompanying_peer",
+      "seed": 1001
+    }
+  ],
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "source": "Paired native traces from the recorded ablation; first-divergence and terminal windows directly inspected"
+}

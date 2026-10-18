@@ -1,0 +1,6 @@
+{
+  "distance_convention": "surface_clearance",
+  "scope": "Underlying near-miss predicate; close_clearance_fraction is dimensionless count/steps",
+  "source_commit": "66f402ba176b13e45210d0da0b2cf20fcdc0cc02",
+  "scalar_file": "calibration-scalars.csv"
+}

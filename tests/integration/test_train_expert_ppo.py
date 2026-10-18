@@ -58,6 +58,7 @@ def test_expert_training_dry_run(tmp_path, monkeypatch):
     monkeypatch.setenv("ROBOT_SF_ARTIFACT_ROOT", str(tmp_path))
     config_path = Path("configs/training/ppo_imitation/expert_ppo.yaml").resolve()
     config = load_expert_training_config(config_path)
+    config.seeds = (1013,)
 
     result = run_expert_training(config, config_path=config_path, dry_run=True)
 
@@ -537,7 +538,7 @@ def test_issue_857_horizon100_surface_truncates_empty_map_at_step_100() -> None:
     _apply_env_overrides(env_config, config.env_overrides)
     env = make_robot_env(
         config=env_config,
-        seed=config.seeds[0],
+        seed=1013,
         suite_name="issue857_smoke",
         scenario_name="empty_map_8_directions_east",
         algorithm_name=config.policy_id,
@@ -580,7 +581,7 @@ def test_issue_708_predictive_foresight_override_enables_predictive_observation(
 
     env = make_robot_env(
         config=env_config,
-        seed=config.seeds[0],
+        seed=1013,
         suite_name="ppo_issue738_smoke",
         scenario_name="issue738_smoke",
         algorithm_name=config.policy_id,

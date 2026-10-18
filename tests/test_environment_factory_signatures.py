@@ -415,14 +415,14 @@ def test_multi_robot_factory_applies_seed(monkeypatch):
     env = EnvironmentFactory.create_multi_robot_env(
         config=config,
         num_robots=2,
-        seed=123,
+        seed=1001,
         reward_func=None,
         debug=False,
     )
 
     assert isinstance(env, FakeMultiRobotEnv)
-    assert applied["seed"] == 123
-    assert env.applied_seed == 123
+    assert applied["seed"] == 1001
+    assert env.applied_seed == 1001
     assert env.kwargs["env_config"] is config
 
 
@@ -444,7 +444,7 @@ def test_global_seed_does_not_mutate_pythonhashseed(monkeypatch):
     monkeypatch.setattr(environment_factory_module.random, "seed", lambda _seed: None)
     monkeypatch.setattr(environment_factory_module, "_optional_import", lambda _name: None)
 
-    environment_factory_module._apply_global_seed(123)
+    environment_factory_module._apply_global_seed(1013)
 
     assert os.environ["PYTHONHASHSEED"] == "caller-value"
 
@@ -561,7 +561,7 @@ def test_make_crowd_sim_env_applies_explicit_overrides(monkeypatch):
     )
 
     env = make_crowd_sim_env(
-        seed=123,
+        seed=1001,
         map_id="fake",
         peds_have_obstacle_forces=False,
         render_mode="rgb_array",
@@ -573,9 +573,9 @@ def test_make_crowd_sim_env_applies_explicit_overrides(monkeypatch):
     )
 
     assert isinstance(env, FakeCrowdEnv)
-    assert applied["seed"] == 123
-    assert env.seed == 123
-    assert env.applied_seed == 123
+    assert applied["seed"] == 1001
+    assert env.seed == 1001
+    assert env.applied_seed == 1001
     assert env.config.map_id == "fake"
     assert env.config.peds_have_obstacle_forces is False
     assert env.config.render_mode == "rgb_array"

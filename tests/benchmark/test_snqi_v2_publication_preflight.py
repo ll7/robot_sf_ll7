@@ -23,6 +23,34 @@ def _write_json(path: Path, payload: object) -> None:
     path.write_text(json.dumps(payload) + "\n", encoding="utf-8")
 
 
+def _force_metadata(**overrides):
+    """Return a synthetic recorded-force declaration accepted by SNQI-v2."""
+    from robot_sf.benchmark.metrics import robot_force_reference
+
+    social_force_config = {
+        "lambda_importance": 1.0,
+        "gamma": 1.0,
+        "n_prime": 1.0,
+        "n": 1.0,
+        "factor": 1.0,
+        "activation_threshold": 10.0,
+    }
+    return {
+        "source": "recorded_robot_pedestrian_social_force",
+        "sample_timing": "pre_integration",
+        "reference_rule": "social_force_head_on_contact_relative_speed_1m_s_v1",
+        "reference_m_s2": robot_force_reference(social_force_config, 0.35),
+        "quantity": "model acceleration, not measured human discomfort",
+        "prf_active": True,
+        "prf_robot_radius_m": 0.5,
+        "prf_ped_radius_m": 0.35,
+        "prf_multiplier": 4.0,
+        "prf_activation_m": 1.0,
+        "social_force_config": social_force_config,
+        **overrides,
+    }
+
+
 def _v2_payload(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """Create a small, internally consistent v2 bundle with a frozen synthetic spec."""
     from robot_sf.benchmark.snqi.compute import compute_snqi_v2, normalize_snqi_v2_terms
@@ -84,6 +112,8 @@ def _v2_payload(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         "time_to_goal_ideal_ratio": 1.2,
         "near_misses": 1,
         "robot_force_impulse_total": 0.5,
+        "robot_force_invalid_present_samples": 0,
+        "robot_force_metadata": _force_metadata(),
         "jerk_mean": 0.1,
         "curvature_mean": 0.1,
     }

@@ -1,0 +1,7 @@
+{
+  "artifact_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/candidate_evaluations.csv",
+  "artifact_sha256": "70881dee87b8f903b98b6a0fd5c153f4685ee4c5534bd667af5061528463b6fe",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "evidence-review-marker.v1"
+}

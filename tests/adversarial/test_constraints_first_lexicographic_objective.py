@@ -3,11 +3,22 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 
+import pytest
+
+from robot_sf.adversarial.attribution import FailureAttribution
 from robot_sf.adversarial.certification import passed_status
 from robot_sf.adversarial.config import CandidateEvaluation, CandidateSpec, Pose2D
-from robot_sf.adversarial.objectives import constraints_first_lexicographic_v1, get_objective
+from robot_sf.adversarial.objectives import (
+    constraints_first_lexicographic_v1,
+    get_objective,
+)
+from robot_sf.adversarial.objectives_v2 import (
+    constraints_first_lexicographic_v2,
+    constraints_first_outcome_projection_v2,
+)
 
 
 def _evaluation(tmp_path: Path, name: str, record: dict[str, object]) -> CandidateEvaluation:
@@ -24,7 +35,16 @@ def _evaluation(tmp_path: Path, name: str, record: dict[str, object]) -> Candida
         ),
         certification_status=passed_status(),
         objective_value=None,
-        failure_attribution=None,
+        failure_attribution=FailureAttribution(
+            status="attributed",
+            primary_failure="success",
+            reasons=[],
+            details={
+                "execution_mode": "native",
+                "readiness_status": "native",
+                "availability_status": "available",
+            },
+        ),
         episode_record_path=episode_path,
         trajectory_csv_path=None,
         scenario_yaml_path=None,
@@ -119,6 +139,7 @@ def test_constraints_first_objective_accepts_canonical_boolean_success_metric(
             "outcome": {
                 "route_complete": True,
                 "collision_event": False,
+                "severe_intrusion_event": False,
                 "timeout_event": False,
             },
             "metrics": {"success": True, "collisions": 0, "near_misses": 0},
@@ -129,6 +150,579 @@ def test_constraints_first_objective_accepts_canonical_boolean_success_metric(
 
     assert score is not None
     assert 0.0 <= score < 1.0
+
+
+def test_constraints_first_v2_keeps_partial_negative_safety_evidence_unknown(
+    tmp_path: Path,
+) -> None:
+    """The #9645-shaped row cannot score as safe when intrusion evidence is absent."""
+    evaluation = _evaluation(
+        tmp_path,
+        "partial_safety_evidence",
+        {
+            "outcome": {
+                "route_complete": True,
+                "collision_event": False,
+                "timeout_event": False,
+            },
+            "metrics": {"success": True, "collisions": 0, "near_misses": 0},
+        },
+    )
+    record = json.loads(evaluation.episode_record_path.read_text(encoding="utf-8"))
+
+    assert get_objective("constraints_first_lexicographic_v2") is constraints_first_lexicographic_v2
+    assert constraints_first_outcome_projection_v2(record)["status"] == "not_available"
+    assert constraints_first_lexicographic_v2(evaluation) is None
+    # V1 is retained unchanged for byte-bound historical contracts; new work uses v2.
+    assert constraints_first_lexicographic_v1(evaluation) is not None
+
+
+def test_constraints_first_v2_orders_path_efficiency_within_soft_tier(tmp_path: Path) -> None:
+    """Lower path efficiency raises soft criticality when higher tiers are equal."""
+    record: dict[str, object] = {
+        "outcome": {
+            "route_complete": True,
+            "collision_event": False,
+            "severe_intrusion_event": False,
+            "timeout_event": False,
+        },
+        "metrics": {
+            "success": True,
+            "collisions": 0,
+            "near_misses": 0,
+            "snqi": 1.0,
+            "path_efficiency": 0.2,
+        },
+    }
+    low_efficiency = _evaluation(tmp_path, "low_efficiency", record)
+    metrics = record["metrics"]
+    assert isinstance(metrics, dict)
+    metrics["path_efficiency"] = 0.9
+    high_efficiency = _evaluation(tmp_path, "high_efficiency", record)
+
+    low_score = constraints_first_lexicographic_v2(low_efficiency)
+    high_score = constraints_first_lexicographic_v2(high_efficiency)
+
+    assert low_score is not None and high_score is not None
+    assert 0.0 <= high_score < low_score < 1.0
+
+
+def test_constraints_first_v2_preserves_disjoint_failure_tiers(tmp_path: Path) -> None:
+    metrics = {
+        "success": False,
+        "collisions": 0,
+        "near_misses": 0,
+        "snqi": 1.0,
+        "path_efficiency": 0.9,
+    }
+    collision = _evaluation(
+        tmp_path,
+        "safety_failure",
+        {
+            "outcome": {
+                "route_complete": False,
+                "collision_event": True,
+                "severe_intrusion_event": False,
+                "timeout_event": False,
+            },
+            "metrics": {**metrics, "collisions": 1},
+        },
+    )
+    liveness = _evaluation(
+        tmp_path,
+        "liveness_failure",
+        {
+            "outcome": {
+                "route_complete": False,
+                "collision_event": False,
+                "severe_intrusion_event": False,
+                "timeout_event": True,
+            },
+            "metrics": metrics,
+        },
+    )
+    clean = _evaluation(
+        tmp_path,
+        "clean",
+        {
+            "outcome": {
+                "route_complete": True,
+                "collision_event": False,
+                "severe_intrusion_event": False,
+                "timeout_event": False,
+            },
+            "metrics": {**metrics, "success": True},
+        },
+    )
+
+    safety_score = constraints_first_lexicographic_v2(collision)
+    liveness_score = constraints_first_lexicographic_v2(liveness)
+    clean_score = constraints_first_lexicographic_v2(clean)
+
+    assert safety_score is not None and 4.0 <= safety_score < 5.0
+    assert liveness_score is not None and 2.0 <= liveness_score < 3.0
+    assert clean_score is not None and 0.0 <= clean_score < 1.0
+    assert safety_score > liveness_score > clean_score
+
+
+@pytest.mark.parametrize(
+    "record",
+    (
+        None,
+        {"outcome": [], "metrics": {}},
+        {
+            "outcome": {"route_complete": True, "timeout": False},
+            "metrics": {"success": True, "collisions": 0},
+        },
+        {
+            "outcome": {
+                "route_complete": True,
+                "collision_event": False,
+                "severe_intrusion_event": False,
+                "timeout": False,
+                "timeout_event": True,
+            },
+            "metrics": {"success": True, "collisions": 0, "near_misses": 0},
+        },
+        {
+            "outcome": {
+                "route_complete": True,
+                "collision_event": False,
+                "severe_intrusion_event": False,
+                "timeout_event": False,
+            },
+            "metrics": {"success": False, "collisions": 0, "near_misses": 0},
+        },
+    ),
+    ids=(
+        "non-object",
+        "malformed-fields",
+        "missing-route",
+        "conflicting-timeout",
+        "success-mismatch",
+    ),
+)
+def test_constraints_first_v2_projection_rejects_incomplete_records(record: object) -> None:
+    """Malformed and contradictory episode rows stay unavailable to the objective."""
+    assert constraints_first_outcome_projection_v2(record) == {
+        "status": "not_available",
+        "collision_or_severe_intrusion": None,
+        "liveness_or_goal_completion": None,
+        "comfort_and_efficiency": None,
+    }
+
+
+@pytest.mark.parametrize(
+    ("metric_name", "metric_value"),
+    (("collisions", -1), ("near_misses", -1), ("snqi", "invalid"), ("path_efficiency", 1.1)),
+)
+def test_constraints_first_v2_projection_rejects_invalid_metrics(
+    metric_name: str, metric_value: object
+) -> None:
+    """Invalid criticality or comfort values cannot silently become planner scores."""
+    record: dict[str, object] = {
+        "outcome": {
+            "route_complete": True,
+            "collision_event": False,
+            "severe_intrusion_event": False,
+            "timeout_event": False,
+        },
+        "metrics": {
+            "success": True,
+            "collisions": 0,
+            "severe_intrusion": False,
+            "near_misses": 0,
+            "snqi": 0.0,
+            "path_efficiency": 1.0,
+        },
+    }
+    metrics = record["metrics"]
+    assert isinstance(metrics, dict)
+    metrics[metric_name] = metric_value
+
+    assert constraints_first_outcome_projection_v2(record)["status"] == "not_available"
+
+
+def test_constraints_first_v2_projection_rejects_conflicting_safety_sources() -> None:
+    """Outcome aliases and independent safety metrics must agree when both exist."""
+    records = (
+        {
+            "outcome": {
+                "route_complete": True,
+                "collision_event": False,
+                "severe_intrusion_event": False,
+                "timeout_event": False,
+            },
+            "metrics": {"success": True, "collisions": 1, "severe_intrusion": False},
+        },
+        {
+            "outcome": {
+                "route_complete": True,
+                "collision_event": False,
+                "severe_intrusion_event": False,
+                "timeout_event": False,
+            },
+            "metrics": {
+                "success": True,
+                "collisions": 0,
+                "severe_intrusion": False,
+                "severe_intrusion_event": True,
+            },
+        },
+        {
+            "outcome": {
+                "route_complete": True,
+                "collision_event": False,
+                "severe_intrusion_event": False,
+                "timeout_event": False,
+            },
+            "metrics": {
+                "success": True,
+                "collisions": 0,
+                "severe_intrusion": "false",
+            },
+        },
+        {
+            "outcome": {
+                "route_complete": True,
+                "collision_event": False,
+                "severe_intrusion_event": False,
+                "timeout_event": False,
+            },
+            "metrics": {
+                "success": True,
+                "collisions": 0,
+                "severe_intrusion": True,
+            },
+        },
+    )
+
+    assert all(
+        constraints_first_outcome_projection_v2(record)["status"] == "not_available"
+        for record in records
+    )
+
+
+def test_constraints_first_v2_requires_both_negative_safety_components(
+    tmp_path: Path,
+) -> None:
+    """Either missing component keeps a negative safety conclusion unavailable."""
+    intrusion_only = _evaluation(
+        tmp_path,
+        "intrusion_only_negative",
+        {
+            "outcome": {
+                "route_complete": True,
+                "severe_intrusion_event": False,
+                "timeout_event": False,
+            },
+            "metrics": {"success": True, "near_misses": 0},
+        },
+    )
+    fully_observed_clear = _evaluation(
+        tmp_path,
+        "fully_observed_clear",
+        {
+            "outcome": {
+                "route_complete": True,
+                "collision_event": False,
+                "severe_intrusion_event": False,
+                "timeout_event": False,
+            },
+            "metrics": {"success": True, "collisions": 0, "near_misses": 0},
+        },
+    )
+
+    assert constraints_first_lexicographic_v2(intrusion_only) is None
+    clear_score = constraints_first_lexicographic_v2(fully_observed_clear)
+    assert clear_score is not None
+    assert 0.0 <= clear_score < 1.0
+
+
+def test_constraints_first_v2_keeps_known_positive_safety_evidence_critical(
+    tmp_path: Path,
+) -> None:
+    """A confirmed safety failure remains critical if the other component is unknown."""
+    collision = _evaluation(
+        tmp_path,
+        "collision_intrusion_unknown",
+        {
+            "outcome": {
+                "route_complete": False,
+                "collision_event": True,
+                "timeout_event": False,
+            },
+            "metrics": {"success": False, "collisions": 1, "near_misses": 0},
+        },
+    )
+    intrusion = _evaluation(
+        tmp_path,
+        "intrusion_collision_unknown",
+        {
+            "outcome": {
+                "route_complete": False,
+                "severe_intrusion_event": True,
+                "timeout_event": False,
+            },
+            "metrics": {"success": False, "severe_intrusion": True, "near_misses": 1},
+        },
+    )
+
+    collision_score = constraints_first_lexicographic_v2(collision)
+    intrusion_score = constraints_first_lexicographic_v2(intrusion)
+
+    assert collision_score is not None and 4.0 <= collision_score < 5.0
+    assert intrusion_score is not None and 4.0 <= intrusion_score < 5.0
+
+
+@pytest.mark.parametrize(
+    "details",
+    (
+        {
+            "execution_mode": "native",
+            "readiness_status": "fallback",
+            "availability_status": "not_available",
+        },
+        {
+            "execution_mode": "adapter",
+            "readiness_status": "degraded",
+            "availability_status": "not_available",
+        },
+        {
+            "execution_mode": "unknown",
+            "readiness_status": "degraded",
+            "availability_status": "failed",
+        },
+        {"execution_mode": "native", "readiness_status": "native"},
+    ),
+    ids=("fallback", "degraded", "unknown", "missing-availability"),
+)
+def test_constraints_first_v2_does_not_score_fallback_or_unavailable_execution(
+    tmp_path: Path,
+    details: dict[str, str],
+) -> None:
+    """Episode failures cannot steer search when planner execution is not eligible."""
+    evaluation = _evaluation(
+        tmp_path,
+        "fallback_collision",
+        {
+            "outcome": {
+                "route_complete": False,
+                "collision_event": True,
+                "timeout_event": False,
+            },
+            "metrics": {"success": False, "collisions": 1, "near_misses": 0},
+        },
+    )
+    evaluation = replace(
+        evaluation,
+        failure_attribution=FailureAttribution(
+            status="attributed",
+            primary_failure="collision",
+            reasons=["episode reports a collision"],
+            details=details,
+        ),
+    )
+
+    assert constraints_first_lexicographic_v2(evaluation) is None
+
+
+@pytest.mark.parametrize(
+    ("execution_mode", "readiness_status"),
+    (("adapter", "adapter"), ("mixed", "native")),
+)
+def test_constraints_first_v2_accepts_available_adapter_or_mixed_execution(
+    tmp_path: Path, execution_mode: str, readiness_status: str
+) -> None:
+    """Declared adapter or mixed executions remain eligible when available."""
+    evaluation = _evaluation(
+        tmp_path,
+        "adapter_collision",
+        {
+            "outcome": {
+                "route_complete": False,
+                "collision_event": True,
+                "timeout_event": False,
+            },
+            "metrics": {"success": False, "collisions": 1, "near_misses": 0},
+        },
+    )
+    evaluation = replace(
+        evaluation,
+        failure_attribution=FailureAttribution(
+            status="attributed",
+            primary_failure="collision",
+            reasons=["episode reports a collision"],
+            details={
+                "execution_mode": execution_mode,
+                "readiness_status": readiness_status,
+                "availability_status": "available",
+            },
+        ),
+    )
+
+    score = constraints_first_lexicographic_v2(evaluation)
+
+    assert score is not None and 4.0 <= score < 5.0
+
+
+@pytest.mark.parametrize(
+    "failure_kind",
+    ("error", "missing-attribution", "wrong-status", "malformed-details", "missing-record"),
+)
+def test_constraints_first_v2_skips_failed_or_unbound_evaluations(
+    tmp_path: Path, failure_kind: str
+) -> None:
+    """Failed or provenance-incomplete evaluation rows are preserved without a score."""
+    evaluation = _evaluation(
+        tmp_path,
+        f"ineligible_{failure_kind}",
+        {
+            "outcome": {
+                "route_complete": True,
+                "collision_event": False,
+                "severe_intrusion_event": False,
+                "timeout_event": False,
+            },
+            "metrics": {
+                "success": True,
+                "collisions": 0,
+                "near_misses": 0,
+                "snqi": 0.0,
+                "path_efficiency": 1.0,
+            },
+        },
+    )
+    if failure_kind == "error":
+        evaluation = replace(evaluation, error="simulator error")
+    elif failure_kind == "missing-attribution":
+        evaluation = replace(evaluation, failure_attribution=None)
+    elif failure_kind == "wrong-status":
+        evaluation = replace(
+            evaluation,
+            failure_attribution=FailureAttribution(
+                status="unattributed", primary_failure=None, reasons=[], details={}
+            ),
+        )
+    elif failure_kind == "malformed-details":
+        evaluation = replace(
+            evaluation,
+            failure_attribution=FailureAttribution(
+                status="attributed",
+                primary_failure=None,
+                reasons=[],
+                details=[],  # type: ignore[arg-type]
+            ),
+        )
+    elif failure_kind == "missing-record":
+        evaluation = replace(evaluation, episode_record_path=None)
+
+    assert constraints_first_lexicographic_v2(evaluation) is None
+
+
+def test_constraints_first_v2_positive_component_survives_other_component_conflict(
+    tmp_path: Path,
+) -> None:
+    """A conflict local to one component cannot hide independent positive evidence."""
+    confirmed_collision = _evaluation(
+        tmp_path,
+        "collision_with_malformed_intrusion",
+        {
+            "outcome": {
+                "route_complete": False,
+                "collision_event": True,
+                "severe_intrusion": False,
+                "severe_intrusion_event": True,
+                "timeout_event": False,
+            },
+            "metrics": {
+                "success": False,
+                "collisions": 1,
+                "severe_intrusion": False,
+                "near_misses": 1,
+            },
+        },
+    )
+    confirmed_intrusion = _evaluation(
+        tmp_path,
+        "intrusion_with_conflicting_collision",
+        {
+            "outcome": {
+                "route_complete": False,
+                "collision": False,
+                "collision_event": True,
+                "severe_intrusion_event": True,
+                "timeout_event": False,
+            },
+            "metrics": {
+                "success": False,
+                "collisions": 0,
+                "severe_intrusion": True,
+                "near_misses": 1,
+            },
+        },
+    )
+
+    collision_score = constraints_first_lexicographic_v2(confirmed_collision)
+    intrusion_score = constraints_first_lexicographic_v2(confirmed_intrusion)
+
+    assert collision_score is not None and 4.0 <= collision_score < 5.0
+    assert intrusion_score is not None and 4.0 <= intrusion_score < 5.0
+
+
+def test_constraints_first_v2_alias_conflicts_cannot_fall_back_to_negative_metrics(
+    tmp_path: Path,
+) -> None:
+    """A metric cannot turn contradictory aliases into a known negative component."""
+    cases = (
+        (
+            "conflicting_collision_aliases_with_zero_metric",
+            {
+                "route_complete": True,
+                "collision": False,
+                "collision_event": True,
+                "severe_intrusion_event": False,
+                "timeout_event": False,
+            },
+            {"success": True, "collisions": 0, "severe_intrusion": False, "near_misses": 0},
+        ),
+        (
+            "conflicting_intrusion_aliases_with_false_metric",
+            {
+                "route_complete": True,
+                "collision_event": False,
+                "severe_intrusion": False,
+                "severe_intrusion_event": True,
+                "timeout_event": False,
+            },
+            {"success": True, "collisions": 0, "severe_intrusion": False, "near_misses": 0},
+        ),
+    )
+
+    for name, outcome, metrics in cases:
+        evaluation = _evaluation(tmp_path, name, {"outcome": outcome, "metrics": metrics})
+        assert constraints_first_lexicographic_v2(evaluation) is None
+
+
+def test_constraints_first_v2_same_component_source_conflict_stays_unknown(
+    tmp_path: Path,
+) -> None:
+    """A collision flag that conflicts with its metric is not treated as confirmed."""
+    evaluation = _evaluation(
+        tmp_path,
+        "collision_source_conflict_no_intrusion",
+        {
+            "outcome": {
+                "route_complete": True,
+                "collision_event": False,
+                "severe_intrusion_event": False,
+                "timeout_event": False,
+            },
+            "metrics": {"success": True, "collisions": 1, "severe_intrusion": False},
+        },
+    )
+
+    assert constraints_first_lexicographic_v2(evaluation) is None
 
 
 def test_constraints_first_objective_rejects_success_metric_conflicting_with_outcome(

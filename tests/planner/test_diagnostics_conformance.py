@@ -106,5 +106,36 @@ def test_protocol_member_diagnostics_payload(module_name: str, cls_name: str) ->
     cls = getattr(import_module(module_name), cls_name)
     planner = cls.__new__(cls)
 
+    # These adapters now report decision state initialized by their constructors.
+    # Compare this minimal protocol fixture with real, unstepped constructor state.
+    if cls_name in {"GuardedPPOAdapter", "PredictiveMPPIAdapter", "RiskDWAPlannerAdapter"}:
+        planner._no_admissible_command = False
+        planner._no_admissible_command_count = 0
+        planner._recovery_command_count = 0
+        if cls_name == "GuardedPPOAdapter":
+            from robot_sf.planner.risk_dwa import RiskDWAPlannerAdapter
+
+            planner.fallback_adapter = RiskDWAPlannerAdapter()
+        else:
+            planner._recovery_command = False
+
+        if cls_name == "PredictiveMPPIAdapter":
+            from robot_sf.planner.predictive_mppi import PredictiveMPPIConfig
+            from robot_sf.planner.socnav import SocNavPlannerConfig
+
+            constructed = cls(PredictiveMPPIConfig(socnav=SocNavPlannerConfig(), random_seed=1001))
+        else:
+            constructed = cls()
+        for field in vars(planner):
+            if field == "fallback_adapter":
+                assert type(planner.fallback_adapter) is type(constructed.fallback_adapter)
+                continue
+            assert getattr(planner, field) == getattr(constructed, field), (
+                f"{cls_name} fixture drifted from constructor state for {field}"
+            )
+        assert planner.diagnostics() == constructed.diagnostics(), (
+            f"{cls_name} fixture diagnostics drifted from constructor state"
+        )
+
     diagnostics = planner.diagnostics()
     assert diagnostics["planner_type"] == cls_name

@@ -1,0 +1,36 @@
+{
+  "metadata": {
+    "access_right": "open",
+    "creators": [
+      {
+        "name": "Luttkus, Lennart"
+      },
+      {
+        "name": "Tröster, Marco"
+      }
+    ],
+    "description": "Benchmark-data snapshot for Robot SF covering 14 planner arms, 48 social-navigation scenarios, and 30 seeds with independently pinned authored horizons (400/500/600/650/700), dt=0.1 and differential-drive kinematics (20,160 expected episode identities). The archive preserves raw episode and component-metric evidence with exact source provenance: source commit 66f402ba176b13e45210d0da0b2cf20fcdc0cc02, mainline base 1261295887901e566a93da87a4559ea1040808a7, release tag paper-matrix-v2-h600-s30-2026-10-66f402ba176b13e45210d0da0b2cf20fcdc0cc02, concept DOI 10.5281/zenodo.23150471, and version DOI 10.5281/zenodo.23150472. The Social Navigation Quality Index (SNQI) is advisory only because calibration failed; this release makes no SNQI ranking claim.",
+    "keywords": [
+      "social navigation",
+      "robotics",
+      "benchmark dataset",
+      "motion planning",
+      "simulation"
+    ],
+    "license": "GPL-3.0-only",
+    "related_identifiers": [
+      {
+        "identifier": "https://github.com/ll7/robot_sf_ll7/releases/tag/paper-matrix-v2-h600-s30-2026-10-66f402ba176b13e45210d0da0b2cf20fcdc0cc02",
+        "relation": "isSupplementTo",
+        "scheme": "url"
+      },
+      {
+        "identifier": "https://github.com/ll7/robot_sf_ll7/commit/66f402ba176b13e45210d0da0b2cf20fcdc0cc02",
+        "relation": "isDerivedFrom",
+        "scheme": "url"
+      }
+    ],
+    "title": "Robot SF 14-planner S30 authored-budget benchmark dataset",
+    "upload_type": "dataset"
+  }
+}

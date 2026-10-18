@@ -36,21 +36,22 @@ def load_analyzer(packet):
     return module
 
 
-def reproduce(packet, output, crosscheck=False):
+def reproduce(packet, output, crosscheck=False, acquisition_seed_start=1031):
     """Apply registered index labels and correct only output identity metadata."""
     packet, output = packet.resolve(), output.resolve()
     if output.is_relative_to(packet):
         raise ValueError("Write reproduction outside the immutable packet")
     analyzer = load_analyzer(packet)
     study = yaml.safe_load((packet / "inputs/study.yaml").read_text())
-    assert study["seeds"] == list(range(1031, 1061))
+    assert study["seeds"] == list(range(acquisition_seed_start, acquisition_seed_start + 30))
+    seed_offset = acquisition_seed_start - 1001
     with gzip.open(packet / "evidence/episodes.jsonl.gz", "rt") as stream:
         records = [json.loads(line) for line in stream if line.strip()]
     assert len(records) == 2160
     aliases = []
     for row in records:
         assert type(row["seed"]) is int and row["seed"] in study["seeds"]
-        alias = dict(row, seed=row["seed"] - 30, acquisition_seed=row["seed"])
+        alias = dict(row, seed=row["seed"] - seed_offset, acquisition_seed=row["seed"])
         aliases.append(alias)
     payload = "".join(
         json.dumps(r, sort_keys=True, separators=(",", ":")) + "\n" for r in aliases
@@ -85,7 +86,10 @@ def reproduce(packet, output, crosscheck=False):
             for name in ("figure_data.csv", "paired_effects.csv"):
                 assert (view / "out" / name).read_bytes() == (output / name).read_bytes(), name
     summary["schema"] = "guard-escape-replication.summary.v1"
-    summary["development_seeds"] = {"first": 1031, "last": 1060}
+    summary["development_seeds"] = {
+        "first": acquisition_seed_start,
+        "last": acquisition_seed_start + 29,
+    }
     summary["input_sha256"] = hashlib.sha256(
         (packet / "evidence/episodes.jsonl.gz").read_bytes()
     ).hexdigest()
@@ -96,9 +100,9 @@ def reproduce(packet, output, crosscheck=False):
     (output / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
     receipt = {
         "schema": "guard-escape-replication.analysis-view.v1",
-        "actual_seeds": {"first": 1031, "last": 1060},
+        "actual_seeds": {"first": acquisition_seed_start, "last": acquisition_seed_start + 29},
         "analysis_alias_seeds": {"first": 1001, "last": 1030},
-        "mapping": "analysis_alias_seed = acquisition_seed - 30; one-to-one, order preserving",
+        "mapping": f"analysis_alias_seed = acquisition_seed - {seed_offset}; one-to-one, order preserving",
         "rows": len(records),
         "alias_jsonl_sha256": hashlib.sha256(payload).hexdigest(),
         "alias_gzip_sha256": hashlib.sha256(alias_gzip).hexdigest(),
@@ -124,9 +128,10 @@ def main():
     parser.add_argument("--packet", type=Path, default=PACKET)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--verify", action="store_true")
+    parser.add_argument("--acquisition-seed-start", type=int, default=1031)
     parser.add_argument("--crosscheck-original", action="store_true")
     args = parser.parse_args()
-    reproduce(args.packet, args.output, args.crosscheck_original)
+    reproduce(args.packet, args.output, args.crosscheck_original, args.acquisition_seed_start)
     if args.verify:
         for name in ("summary.json", "paired_effects.csv", "figure_data.csv"):
             assert (args.output / name).read_bytes() == (

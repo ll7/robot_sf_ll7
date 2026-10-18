@@ -1,0 +1,78 @@
+{
+  "diss_commit": "fcb5e2aaa61d65ce6c3e51f429b472ab45d43b57",
+  "diss_dirty": false,
+  "table_source": "diss/chapters/ceiling/rq3_structure_crosscut.tex:214-217",
+  "table_label": "tab:rq3-predicate-classification",
+  "numeric_source": "docs/reports/release_group_success.json",
+  "numeric_source_sha256": "259f6fca95b02d038b38fd899850a5a46e9657c5da958e12da28206f6e5c5dce",
+  "evidence": {
+    "artifact": "payload/reports/seed_episode_rows.csv",
+    "pin_commit": "373dbfde4f39667cf9e8732dabe7df5118bdeab1",
+    "pin_id": "release-paper-matrix-v2-h600-s30-373dbfde",
+    "sha256": "4085026d4a16694234d645c1c102ae7a2d488e454b977f59e37c9cba3a863bde",
+    "sha256_source": "equal to the bundle's own checksums.sha256 entry and to this script's constant"
+  },
+  "hybrids": [
+    {
+      "planner_key": "hybrid_rule_v4_fast_progress_static_escape",
+      "static": {
+        "episodes": 240,
+        "rank": 1.0,
+        "success_rate": 0.975,
+        "successes": 234.0
+      },
+      "portal": {
+        "episodes": 210,
+        "rank": 2.0,
+        "success_rate": 0.980952,
+        "successes": 206.0
+      }
+    },
+    {
+      "planner_key": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+      "static": {
+        "episodes": 240,
+        "rank": 4.0,
+        "success_rate": 0.958333,
+        "successes": 230.0
+      },
+      "portal": {
+        "episodes": 210,
+        "rank": 4.0,
+        "success_rate": 0.97619,
+        "successes": 205.0
+      }
+    },
+    {
+      "planner_key": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+      "static": {
+        "episodes": 240,
+        "rank": 2.5,
+        "success_rate": 0.970833,
+        "successes": 233.0
+      },
+      "portal": {
+        "episodes": 210,
+        "rank": 2.0,
+        "success_rate": 0.980952,
+        "successes": 206.0
+      }
+    },
+    {
+      "planner_key": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+      "static": {
+        "episodes": 240,
+        "rank": 2.5,
+        "success_rate": 0.970833,
+        "successes": 233.0
+      },
+      "portal": {
+        "episodes": 210,
+        "rank": 2.0,
+        "success_rate": 0.980952,
+        "successes": 206.0
+      }
+    }
+  ],
+  "selection": "hybrid v4: unique static leader, tied portal leader; all original factor controls supported; retain native corridor_subgoal false"
+}

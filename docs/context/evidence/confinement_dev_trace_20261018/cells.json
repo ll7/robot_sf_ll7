@@ -1,0 +1,1086 @@
+[
+  {
+    "name": "classic_bottleneck_low",
+    "group": "static constriction",
+    "scenario": {
+      "name": "classic_bottleneck_low",
+      "map_file": "../../maps/successor_svg_maps/issue_9762_classic_bottleneck_goal_zone_entry_v2.svg",
+      "simulation_config": {
+        "max_episode_steps": 500,
+        "ped_density": 0.0,
+        "goal_completion_policy": "goal_zone_entry_v1",
+        "social_force_kernel_version": "wrapped_v2",
+        "robot_goal_sampling_policy": "footprint_clearance_v1"
+      },
+      "robot_config": {
+        "type": "differential_drive"
+      },
+      "metadata": {
+        "archetype": "bottleneck",
+        "density": "low",
+        "spawn_mode": "markers",
+        "density_advisory": "zero_baseline_route_spawn",
+        "flow": "bi",
+        "groups": 0.0,
+        "plausibility": {
+          "status": "verified",
+          "verified_on": "2026-01-29",
+          "verified_by": "ll7",
+          "method": null,
+          "notes": "ped_density=0.0; use map single_ped markers to control count.",
+          "metrics": {
+            "min_distance": null,
+            "mean_distance": null,
+            "robot_ped_within_5m_frac": null,
+            "ped_force_mean": null,
+            "force_q95": null
+          },
+          "metrics_updated_on": "2026-01-30T14:19:28.225110+01:00"
+        }
+      },
+      "seeds": [
+        131,
+        132,
+        133
+      ],
+      "map_id": null
+    },
+    "horizon": 500,
+    "map_file": "maps/successor_svg_maps/issue_9762_classic_bottleneck_goal_zone_entry_v2.svg",
+    "passages": [
+      {
+        "name": "neck",
+        "axis": 1,
+        "entry": 12.079367,
+        "exit": 28.079367,
+        "lateral_min": 17.785749,
+        "lateral_max": 22.095201
+      }
+    ],
+    "map_sha256": "6a6e6c9936608a8d62c6ef1f11301159f2015a61d37a97ff72ba6e34e2cafcb5"
+  },
+  {
+    "name": "classic_bottleneck_medium",
+    "group": "static constriction",
+    "scenario": {
+      "name": "classic_bottleneck_medium",
+      "map_file": "../../maps/successor_svg_maps/issue_9762_classic_bottleneck_medium_goal_zone_entry_v2.svg",
+      "simulation_config": {
+        "max_episode_steps": 500,
+        "ped_density": 0.0,
+        "goal_completion_policy": "goal_zone_entry_v1",
+        "social_force_kernel_version": "wrapped_v2",
+        "robot_goal_sampling_policy": "footprint_clearance_v1"
+      },
+      "robot_config": {
+        "type": "differential_drive"
+      },
+      "metadata": {
+        "archetype": "bottleneck",
+        "density": "medium",
+        "spawn_mode": "markers",
+        "density_advisory": "zero_baseline_route_spawn",
+        "flow": "bi",
+        "groups": 0.0,
+        "plausibility": {
+          "status": "verified",
+          "verified_on": "2026-01-29",
+          "verified_by": "ll7",
+          "method": null,
+          "notes": "ped_density=0.0; use map single_ped markers to control count.",
+          "metrics": {
+            "min_distance": 1.3568504232890768,
+            "mean_distance": 10.304393328176037,
+            "robot_ped_within_5m_frac": 0.20673702551886897,
+            "ped_force_mean": 0.0977117812274009,
+            "force_q95": 0.36515309739568574
+          },
+          "metrics_updated_on": "2026-01-30T14:19:28.225110+01:00"
+        }
+      },
+      "seeds": [
+        131,
+        132,
+        133
+      ],
+      "map_id": null
+    },
+    "horizon": 500,
+    "map_file": "maps/successor_svg_maps/issue_9762_classic_bottleneck_medium_goal_zone_entry_v2.svg",
+    "passages": [
+      {
+        "name": "neck",
+        "axis": 1,
+        "entry": 12.079367,
+        "exit": 28.079367,
+        "lateral_min": 17.785749,
+        "lateral_max": 22.095201
+      }
+    ],
+    "map_sha256": "0e5acaff4e020b802828365658127b96748441a12da1da08e4538faa7a1be4ad"
+  },
+  {
+    "name": "classic_bottleneck_high",
+    "group": "static constriction",
+    "scenario": {
+      "name": "classic_bottleneck_high",
+      "map_file": "../../maps/successor_svg_maps/issue_9762_classic_bottleneck_high_goal_zone_entry_v2.svg",
+      "simulation_config": {
+        "max_episode_steps": 500,
+        "ped_density": 0.0,
+        "goal_completion_policy": "goal_zone_entry_v1",
+        "social_force_kernel_version": "wrapped_v2",
+        "robot_goal_sampling_policy": "footprint_clearance_v1"
+      },
+      "robot_config": {
+        "type": "differential_drive"
+      },
+      "metadata": {
+        "archetype": "bottleneck",
+        "density": "high",
+        "spawn_mode": "markers",
+        "density_advisory": "zero_baseline_route_spawn",
+        "flow": "bi",
+        "groups": 0.0,
+        "plausibility": {
+          "status": "verified",
+          "verified_on": "2026-01-29",
+          "verified_by": "ll7",
+          "method": null,
+          "notes": "ped_density=0.0; use map single_ped markers to control count.",
+          "metrics": {
+            "min_distance": 1.3151934686291786,
+            "mean_distance": 10.098522314775332,
+            "robot_ped_within_5m_frac": 0.21322846692018266,
+            "ped_force_mean": 0.08291461806394115,
+            "force_q95": 0.21743377704570035
+          },
+          "metrics_updated_on": "2026-01-30T14:19:28.225110+01:00"
+        }
+      },
+      "seeds": [
+        131,
+        132,
+        133
+      ],
+      "map_id": null
+    },
+    "horizon": 500,
+    "map_file": "maps/successor_svg_maps/issue_9762_classic_bottleneck_high_goal_zone_entry_v2.svg",
+    "passages": [
+      {
+        "name": "neck",
+        "axis": 1,
+        "entry": 12.079367,
+        "exit": 28.079367,
+        "lateral_min": 17.785749,
+        "lateral_max": 22.095201
+      }
+    ],
+    "map_sha256": "08df3c25d6371a7b4202d0f6b678d16266fbb7e0411e9eaf0e0f967ab4229768"
+  },
+  {
+    "name": "classic_realworld_double_bottleneck_high",
+    "group": "static constriction",
+    "scenario": {
+      "name": "classic_realworld_double_bottleneck_high",
+      "map_file": "../../maps/successor_svg_maps/issue_9762_classic_realworld_bottleneck_goal_zone_entry_v2.svg",
+      "simulation_config": {
+        "max_episode_steps": 700,
+        "ped_density": 0.0,
+        "goal_completion_policy": "goal_zone_entry_v1",
+        "social_force_kernel_version": "wrapped_v2",
+        "robot_goal_sampling_policy": "footprint_clearance_v1"
+      },
+      "robot_config": {
+        "type": "differential_drive"
+      },
+      "metadata": {
+        "archetype": "bottleneck",
+        "label": "real-world-inspired double sequential bottleneck",
+        "density": "high",
+        "spawn_mode": "markers",
+        "density_advisory": "zero_baseline_route_spawn",
+        "flow": "bi",
+        "groups": 0.0
+      },
+      "single_pedestrians": [
+        {
+          "id": "l1",
+          "speed_m_s": 0.7,
+          "start": [
+            10.0,
+            9.0
+          ],
+          "goal": [
+            50.0,
+            9.0
+          ]
+        },
+        {
+          "id": "l2",
+          "speed_m_s": 0.7,
+          "start": [
+            10.0,
+            9.5
+          ],
+          "goal": [
+            50.0,
+            9.5
+          ]
+        },
+        {
+          "id": "l3",
+          "speed_m_s": 0.7,
+          "start": [
+            10.0,
+            10.0
+          ],
+          "goal": [
+            50.0,
+            10.0
+          ]
+        },
+        {
+          "id": "l4",
+          "speed_m_s": 0.7,
+          "start": [
+            10.0,
+            10.5
+          ],
+          "goal": [
+            50.0,
+            10.5
+          ]
+        },
+        {
+          "id": "r1",
+          "speed_m_s": 0.7,
+          "start": [
+            50.0,
+            9.0
+          ],
+          "goal": [
+            10.0,
+            9.0
+          ]
+        },
+        {
+          "id": "r2",
+          "speed_m_s": 0.7,
+          "start": [
+            50.0,
+            9.5
+          ],
+          "goal": [
+            10.0,
+            9.5
+          ]
+        },
+        {
+          "id": "r3",
+          "speed_m_s": 0.7,
+          "start": [
+            50.0,
+            10.0
+          ],
+          "goal": [
+            10.0,
+            10.0
+          ]
+        },
+        {
+          "id": "r4",
+          "speed_m_s": 0.7,
+          "start": [
+            50.0,
+            10.5
+          ],
+          "goal": [
+            10.0,
+            10.5
+          ]
+        }
+      ],
+      "seeds": [
+        201,
+        202,
+        203
+      ],
+      "map_id": null
+    },
+    "horizon": 700,
+    "map_file": "maps/successor_svg_maps/issue_9762_classic_realworld_bottleneck_goal_zone_entry_v2.svg",
+    "passages": [
+      {
+        "name": "west_neck",
+        "axis": 0,
+        "entry": 18,
+        "exit": 22,
+        "lateral_min": 13,
+        "lateral_max": 17
+      },
+      {
+        "name": "east_neck",
+        "axis": 0,
+        "entry": 38,
+        "exit": 42,
+        "lateral_min": 12,
+        "lateral_max": 17
+      }
+    ],
+    "map_sha256": "4de3404105d3cb5748992e0eeff2bf8478100db51eb47ee6938f0e1249fae6e4"
+  },
+  {
+    "name": "classic_cross_trap_low",
+    "group": "static constriction",
+    "scenario": {
+      "name": "classic_cross_trap_low",
+      "map_id": null,
+      "simulation_config": {
+        "max_episode_steps": 600,
+        "ped_density": 0.02,
+        "goal_completion_policy": "goal_zone_entry_v1",
+        "social_force_kernel_version": "wrapped_v2",
+        "robot_goal_sampling_policy": "footprint_clearance_v1"
+      },
+      "robot_config": {
+        "type": "differential_drive"
+      },
+      "metadata": {
+        "archetype": "cross_trap",
+        "label": "cross-trap local-minimum circulation",
+        "density": "low",
+        "flow": "bi",
+        "groups": 0.0,
+        "plausibility": {
+          "status": "verified",
+          "verified_on": "2026-01-29",
+          "verified_by": "ll7",
+          "method": null,
+          "notes": null,
+          "metrics": {
+            "min_distance": 1.8367418245009373,
+            "mean_distance": 5.9319317460258425,
+            "robot_ped_within_5m_frac": 0.4599224586174748,
+            "ped_force_mean": 0.2749112167516942,
+            "force_q95": 0.9427403086029689
+          },
+          "metrics_updated_on": "2026-01-30T14:19:28.225110+01:00"
+        }
+      },
+      "seeds": [
+        101,
+        102,
+        103
+      ],
+      "map_file": "../../maps/successor_svg_maps/issue_9762_classic_crossing_goal_zone_entry_v2.svg"
+    },
+    "horizon": 600,
+    "map_file": "maps/successor_svg_maps/issue_9762_classic_crossing_goal_zone_entry_v2.svg",
+    "passages": [
+      {
+        "name": "west",
+        "axis": 1,
+        "entry": 19,
+        "exit": 21,
+        "lateral_min": 1,
+        "lateral_max": 12
+      },
+      {
+        "name": "east",
+        "axis": 1,
+        "entry": 19,
+        "exit": 21,
+        "lateral_min": 28,
+        "lateral_max": 39
+      },
+      {
+        "name": "north",
+        "axis": 0,
+        "entry": 19,
+        "exit": 21,
+        "lateral_min": 1,
+        "lateral_max": 12
+      },
+      {
+        "name": "south",
+        "axis": 0,
+        "entry": 19,
+        "exit": 21,
+        "lateral_min": 28,
+        "lateral_max": 39
+      }
+    ],
+    "map_sha256": "d3bc9ad6205108a480469338282611730410787cc897abd4d71f3f0fbd47d6a8"
+  },
+  {
+    "name": "classic_cross_trap_medium",
+    "group": "static constriction",
+    "scenario": {
+      "name": "classic_cross_trap_medium",
+      "map_id": null,
+      "simulation_config": {
+        "max_episode_steps": 600,
+        "ped_density": 0.05,
+        "goal_completion_policy": "goal_zone_entry_v1",
+        "social_force_kernel_version": "wrapped_v2",
+        "robot_goal_sampling_policy": "footprint_clearance_v1"
+      },
+      "robot_config": {
+        "type": "differential_drive"
+      },
+      "metadata": {
+        "archetype": "cross_trap",
+        "label": "cross-trap local-minimum circulation",
+        "density": "medium",
+        "flow": "bi",
+        "groups": 0.0,
+        "plausibility": {
+          "status": "verified",
+          "verified_on": "2026-01-29",
+          "verified_by": "ll7",
+          "method": null,
+          "notes": null,
+          "metrics": {
+            "min_distance": 4.789576152795328,
+            "mean_distance": 10.950417011157608,
+            "robot_ped_within_5m_frac": 0.06629362880886427,
+            "ped_force_mean": 0.18424997393839726,
+            "force_q95": 0.6445198830160026
+          },
+          "metrics_updated_on": "2026-01-30T14:19:28.225110+01:00"
+        }
+      },
+      "seeds": [
+        101,
+        102,
+        103
+      ],
+      "map_file": "../../maps/successor_svg_maps/issue_9762_classic_crossing_goal_zone_entry_v2.svg"
+    },
+    "horizon": 600,
+    "map_file": "maps/successor_svg_maps/issue_9762_classic_crossing_goal_zone_entry_v2.svg",
+    "passages": [
+      {
+        "name": "west",
+        "axis": 1,
+        "entry": 19,
+        "exit": 21,
+        "lateral_min": 1,
+        "lateral_max": 12
+      },
+      {
+        "name": "east",
+        "axis": 1,
+        "entry": 19,
+        "exit": 21,
+        "lateral_min": 28,
+        "lateral_max": 39
+      },
+      {
+        "name": "north",
+        "axis": 0,
+        "entry": 19,
+        "exit": 21,
+        "lateral_min": 1,
+        "lateral_max": 12
+      },
+      {
+        "name": "south",
+        "axis": 0,
+        "entry": 19,
+        "exit": 21,
+        "lateral_min": 28,
+        "lateral_max": 39
+      }
+    ],
+    "map_sha256": "d3bc9ad6205108a480469338282611730410787cc897abd4d71f3f0fbd47d6a8"
+  },
+  {
+    "name": "classic_cross_trap_high",
+    "group": "static constriction",
+    "scenario": {
+      "name": "classic_cross_trap_high",
+      "map_id": null,
+      "simulation_config": {
+        "max_episode_steps": 600,
+        "ped_density": 0.08,
+        "goal_completion_policy": "goal_zone_entry_v1",
+        "social_force_kernel_version": "wrapped_v2",
+        "robot_goal_sampling_policy": "footprint_clearance_v1"
+      },
+      "robot_config": {
+        "type": "differential_drive"
+      },
+      "metadata": {
+        "archetype": "cross_trap",
+        "label": "cross-trap local-minimum circulation",
+        "density": "high",
+        "flow": "bi",
+        "groups": 0.0,
+        "plausibility": {
+          "status": "verified",
+          "verified_on": "2026-01-29",
+          "verified_by": "ll7",
+          "method": null,
+          "notes": null,
+          "metrics": {
+            "min_distance": 2.8766785893771702,
+            "mean_distance": 10.02981557058951,
+            "robot_ped_within_5m_frac": 0.17466666666666666,
+            "ped_force_mean": 0.19881092600791625,
+            "force_q95": 0.739349157779526
+          },
+          "metrics_updated_on": "2026-01-30T14:19:28.225110+01:00"
+        }
+      },
+      "seeds": [
+        101,
+        102,
+        103
+      ],
+      "map_file": "../../maps/successor_svg_maps/issue_9762_classic_crossing_goal_zone_entry_v2.svg"
+    },
+    "horizon": 600,
+    "map_file": "maps/successor_svg_maps/issue_9762_classic_crossing_goal_zone_entry_v2.svg",
+    "passages": [
+      {
+        "name": "west",
+        "axis": 1,
+        "entry": 19,
+        "exit": 21,
+        "lateral_min": 1,
+        "lateral_max": 12
+      },
+      {
+        "name": "east",
+        "axis": 1,
+        "entry": 19,
+        "exit": 21,
+        "lateral_min": 28,
+        "lateral_max": 39
+      },
+      {
+        "name": "north",
+        "axis": 0,
+        "entry": 19,
+        "exit": 21,
+        "lateral_min": 1,
+        "lateral_max": 12
+      },
+      {
+        "name": "south",
+        "axis": 0,
+        "entry": 19,
+        "exit": 21,
+        "lateral_min": 28,
+        "lateral_max": 39
+      }
+    ],
+    "map_sha256": "d3bc9ad6205108a480469338282611730410787cc897abd4d71f3f0fbd47d6a8"
+  },
+  {
+    "name": "classic_doorway_low",
+    "group": "portal",
+    "scenario": {
+      "name": "classic_doorway_low",
+      "map_file": "../../maps/successor_svg_maps/issue_9762_classic_doorway_goal_zone_entry_v2.svg",
+      "simulation_config": {
+        "max_episode_steps": 500,
+        "ped_density": 0.02,
+        "route_spawn_distribution": "spread",
+        "route_spawn_jitter_frac": 0.2,
+        "max_peds_per_group": 1,
+        "goal_completion_policy": "goal_zone_entry_v1",
+        "social_force_kernel_version": "wrapped_v2",
+        "robot_goal_sampling_policy": "footprint_clearance_v1"
+      },
+      "robot_config": {
+        "type": "differential_drive"
+      },
+      "metadata": {
+        "archetype": "doorway",
+        "density": "low",
+        "flow": "bi",
+        "groups": 0.0,
+        "plausibility": {
+          "status": "unverified",
+          "verified_on": null,
+          "verified_by": null,
+          "method": null,
+          "notes": null,
+          "metrics": {
+            "min_distance": 2.463720507545049,
+            "mean_distance": 4.816876019796456,
+            "robot_ped_within_5m_frac": 0.6435411099964484,
+            "ped_force_mean": 0.3415082177106482,
+            "force_q95": 1.2272777395106866
+          },
+          "metrics_updated_on": "2026-01-30T14:19:28.225110+01:00"
+        }
+      },
+      "seeds": [
+        141,
+        142,
+        143
+      ],
+      "map_id": null
+    },
+    "horizon": 500,
+    "map_file": "maps/successor_svg_maps/issue_9762_classic_doorway_goal_zone_entry_v2.svg",
+    "passages": [
+      {
+        "name": "door",
+        "axis": 0,
+        "entry": 21,
+        "exit": 23,
+        "lateral_min": 12.240171,
+        "lateral_max": 15.537233
+      }
+    ],
+    "map_sha256": "81f9bba890418075d0801b4463bef4c2f72a812dd81ab4d3d4d1900e16827897"
+  },
+  {
+    "name": "classic_doorway_medium",
+    "group": "portal",
+    "scenario": {
+      "name": "classic_doorway_medium",
+      "map_file": "../../maps/successor_svg_maps/issue_9762_classic_doorway_goal_zone_entry_v2.svg",
+      "simulation_config": {
+        "max_episode_steps": 500,
+        "ped_density": 0.05,
+        "route_spawn_distribution": "spread",
+        "route_spawn_jitter_frac": 0.2,
+        "max_peds_per_group": 1,
+        "goal_completion_policy": "goal_zone_entry_v1",
+        "social_force_kernel_version": "wrapped_v2",
+        "robot_goal_sampling_policy": "footprint_clearance_v1"
+      },
+      "robot_config": {
+        "type": "differential_drive"
+      },
+      "metadata": {
+        "archetype": "doorway",
+        "density": "medium",
+        "flow": "bi",
+        "groups": 0.0,
+        "plausibility": {
+          "status": "unverified",
+          "verified_on": null,
+          "verified_by": null,
+          "method": null,
+          "notes": null,
+          "metrics": {
+            "min_distance": 2.0678184908531962,
+            "mean_distance": 3.8315920323061348,
+            "robot_ped_within_5m_frac": 0.7868823705030602,
+            "ped_force_mean": 0.3252101197691243,
+            "force_q95": 1.3760223536317078
+          },
+          "metrics_updated_on": "2026-01-30T14:19:28.225110+01:00"
+        }
+      },
+      "seeds": [
+        141,
+        142,
+        143
+      ],
+      "map_id": null
+    },
+    "horizon": 500,
+    "map_file": "maps/successor_svg_maps/issue_9762_classic_doorway_goal_zone_entry_v2.svg",
+    "passages": [
+      {
+        "name": "door",
+        "axis": 0,
+        "entry": 21,
+        "exit": 23,
+        "lateral_min": 12.240171,
+        "lateral_max": 15.537233
+      }
+    ],
+    "map_sha256": "81f9bba890418075d0801b4463bef4c2f72a812dd81ab4d3d4d1900e16827897"
+  },
+  {
+    "name": "classic_doorway_high",
+    "group": "portal",
+    "scenario": {
+      "name": "classic_doorway_high",
+      "map_file": "../../maps/successor_svg_maps/issue_9762_classic_doorway_goal_zone_entry_v2.svg",
+      "simulation_config": {
+        "max_episode_steps": 500,
+        "ped_density": 0.08,
+        "route_spawn_distribution": "spread",
+        "route_spawn_jitter_frac": 0.2,
+        "max_peds_per_group": 1,
+        "goal_completion_policy": "goal_zone_entry_v1",
+        "social_force_kernel_version": "wrapped_v2",
+        "robot_goal_sampling_policy": "footprint_clearance_v1"
+      },
+      "robot_config": {
+        "type": "differential_drive"
+      },
+      "metadata": {
+        "archetype": "doorway",
+        "density": "high",
+        "flow": "bi",
+        "groups": 0.0,
+        "plausibility": {
+          "status": "unverified",
+          "verified_on": null,
+          "verified_by": null,
+          "method": null,
+          "notes": null,
+          "metrics": {
+            "min_distance": 1.5266752306601346,
+            "mean_distance": 3.6800348987218063,
+            "robot_ped_within_5m_frac": 0.8078135977219347,
+            "ped_force_mean": 0.2870675192361372,
+            "force_q95": 1.1067593700206833
+          },
+          "metrics_updated_on": "2026-01-30T14:19:28.225110+01:00"
+        }
+      },
+      "seeds": [
+        141,
+        142,
+        143
+      ],
+      "map_id": null
+    },
+    "horizon": 500,
+    "map_file": "maps/successor_svg_maps/issue_9762_classic_doorway_goal_zone_entry_v2.svg",
+    "passages": [
+      {
+        "name": "door",
+        "axis": 0,
+        "entry": 21,
+        "exit": 23,
+        "lateral_min": 12.240171,
+        "lateral_max": 15.537233
+      }
+    ],
+    "map_sha256": "81f9bba890418075d0801b4463bef4c2f72a812dd81ab4d3d4d1900e16827897"
+  },
+  {
+    "name": "francis2023_narrow_hallway",
+    "group": "static constriction",
+    "scenario": {
+      "name": "francis2023_narrow_hallway",
+      "map_file": "../../maps/successor_svg_maps/issue_9762_francis2023_narrow_hallway_goal_zone_entry_v2.svg",
+      "simulation_config": {
+        "max_episode_steps": 400,
+        "ped_density": 0.0,
+        "goal_completion_policy": "goal_zone_entry_v1",
+        "social_force_kernel_version": "wrapped_v2",
+        "robot_goal_sampling_policy": "footprint_clearance_v1"
+      },
+      "single_pedestrians": [
+        {
+          "id": "h1",
+          "goal_poi": "poi_h1_goal"
+        }
+      ],
+      "robot_config": {
+        "type": "differential_drive"
+      },
+      "metadata": {
+        "figure": "7j",
+        "archetype": "narrow_hallway",
+        "flow": "bi",
+        "behavior": "none",
+        "plausibility": {
+          "status": "unverified",
+          "verified_on": null,
+          "verified_by": null,
+          "method": null,
+          "notes": null,
+          "metrics": {
+            "min_distance": 0.9195934368310343,
+            "mean_distance": 5.6718576032752415,
+            "robot_ped_within_5m_frac": 0.533601304024786,
+            "ped_force_mean": 0.5611255939989312,
+            "force_q95": 1.51429557399116
+          },
+          "metrics_updated_on": "2026-01-30T14:19:28.225110+01:00"
+        }
+      },
+      "seeds": [
+        222,
+        223,
+        224
+      ],
+      "map_id": null
+    },
+    "horizon": 400,
+    "map_file": "maps/successor_svg_maps/issue_9762_francis2023_narrow_hallway_goal_zone_entry_v2.svg",
+    "passages": [
+      {
+        "name": "hallway",
+        "axis": 0,
+        "entry": 1,
+        "exit": 29,
+        "lateral_min": 1,
+        "lateral_max": 5
+      }
+    ],
+    "map_sha256": "d4016dc32bc4a2715dc088f510da92a6e7739513d5971022bd18478e3181cb8a"
+  },
+  {
+    "name": "francis2023_entering_room",
+    "group": "portal",
+    "scenario": {
+      "name": "francis2023_entering_room",
+      "map_file": "../../maps/successor_svg_maps/issue_9856_francis2023_entering_room_route_width_v1.svg",
+      "simulation_config": {
+        "max_episode_steps": 400,
+        "ped_density": 0.0,
+        "goal_completion_policy": "goal_zone_entry_v1",
+        "social_force_kernel_version": "wrapped_v2",
+        "robot_goal_sampling_policy": "footprint_clearance_v1"
+      },
+      "single_pedestrians": [
+        {
+          "id": "h1",
+          "goal_poi": "poi_h1_goal"
+        }
+      ],
+      "robot_config": {
+        "type": "differential_drive"
+      },
+      "metadata": {
+        "figure": "7l",
+        "archetype": "entering_room",
+        "flow": "enter",
+        "behavior": "none",
+        "plausibility": {
+          "status": "unverified",
+          "verified_on": null,
+          "verified_by": null,
+          "method": null,
+          "notes": null,
+          "metrics": {
+            "min_distance": 5.224637284588586,
+            "mean_distance": 12.197621099343227,
+            "robot_ped_within_5m_frac": 0.0019801980198019802,
+            "ped_force_mean": 0.13826993362039994,
+            "force_q95": 0.4375912615159093
+          },
+          "metrics_updated_on": "2026-01-30T14:19:28.225110+01:00"
+        }
+      },
+      "seeds": [
+        228,
+        229,
+        230
+      ],
+      "map_id": null
+    },
+    "horizon": 400,
+    "map_file": "maps/successor_svg_maps/issue_9856_francis2023_entering_room_route_width_v1.svg",
+    "passages": [
+      {
+        "name": "door",
+        "axis": 0,
+        "entry": 14,
+        "exit": 15,
+        "lateral_min": 7,
+        "lateral_max": 11
+      }
+    ],
+    "map_sha256": "1506b9ddbee141c7256c92802cb6513d3add4cf5a270a9bad3dd197ec7a69166"
+  },
+  {
+    "name": "francis2023_exiting_room",
+    "group": "portal",
+    "scenario": {
+      "name": "francis2023_exiting_room",
+      "map_file": "../../maps/successor_svg_maps/issue_9856_francis2023_exiting_room_route_width_v1.svg",
+      "simulation_config": {
+        "max_episode_steps": 400,
+        "ped_density": 0.0,
+        "goal_completion_policy": "goal_zone_entry_v1",
+        "social_force_kernel_version": "wrapped_v2",
+        "robot_goal_sampling_policy": "footprint_clearance_v1"
+      },
+      "single_pedestrians": [
+        {
+          "id": "h1",
+          "goal_poi": "poi_h1_goal"
+        }
+      ],
+      "robot_config": {
+        "type": "differential_drive"
+      },
+      "metadata": {
+        "figure": "7m",
+        "archetype": "exiting_room",
+        "flow": "exit",
+        "behavior": "none",
+        "plausibility": {
+          "status": "unverified",
+          "verified_on": null,
+          "verified_by": null,
+          "method": null,
+          "notes": null,
+          "metrics": {
+            "min_distance": 2.5091095140234154,
+            "mean_distance": 5.040019234532677,
+            "robot_ped_within_5m_frac": 0.5395195309011214,
+            "ped_force_mean": 0.18461383289604444,
+            "force_q95": 0.6888443603726052
+          },
+          "metrics_updated_on": "2026-01-30T14:19:28.225110+01:00"
+        }
+      },
+      "seeds": [
+        231,
+        232,
+        233
+      ],
+      "map_id": null
+    },
+    "horizon": 400,
+    "map_file": "maps/successor_svg_maps/issue_9856_francis2023_exiting_room_route_width_v1.svg",
+    "passages": [
+      {
+        "name": "door",
+        "axis": 0,
+        "entry": 14,
+        "exit": 15,
+        "lateral_min": 7,
+        "lateral_max": 11
+      }
+    ],
+    "map_sha256": "cfd25fa09fd2a315f84f39408e57c0ec59bff14ea86d6020a07b93d75a3e434c"
+  },
+  {
+    "name": "francis2023_entering_elevator",
+    "group": "portal",
+    "scenario": {
+      "name": "francis2023_entering_elevator",
+      "map_file": "../../maps/successor_svg_maps/issue_9856_francis2023_entering_elevator_route_width_v1.svg",
+      "simulation_config": {
+        "max_episode_steps": 400,
+        "ped_density": 0.0,
+        "goal_completion_policy": "goal_zone_entry_v1",
+        "social_force_kernel_version": "wrapped_v2",
+        "robot_goal_sampling_policy": "footprint_clearance_v1"
+      },
+      "single_pedestrians": [
+        {
+          "id": "h1",
+          "goal_poi": "poi_h1_goal"
+        }
+      ],
+      "robot_config": {
+        "type": "differential_drive"
+      },
+      "metadata": {
+        "figure": "7n",
+        "archetype": "entering_elevator",
+        "flow": "enter",
+        "behavior": "none",
+        "plausibility": {
+          "status": "unverified",
+          "verified_on": null,
+          "verified_by": null,
+          "method": null,
+          "notes": null,
+          "metrics": {
+            "min_distance": 2.6329627492537844,
+            "mean_distance": 7.018890149273052,
+            "robot_ped_within_5m_frac": 0.27527255921880417,
+            "ped_force_mean": 0.1626901414381952,
+            "force_q95": 0.42404303193127524
+          },
+          "metrics_updated_on": "2026-01-30T14:19:28.225110+01:00"
+        }
+      },
+      "seeds": [
+        234,
+        235,
+        236
+      ],
+      "map_id": null
+    },
+    "horizon": 400,
+    "map_file": "maps/successor_svg_maps/issue_9856_francis2023_entering_elevator_route_width_v1.svg",
+    "passages": [
+      {
+        "name": "door",
+        "axis": 0,
+        "entry": 12,
+        "exit": 13,
+        "lateral_min": 7.6,
+        "lateral_max": 12.4
+      }
+    ],
+    "map_sha256": "1b486a22cbd1ee1677732bd9d3086892e83d7c6e86f6ad380db921c621597563"
+  },
+  {
+    "name": "francis2023_exiting_elevator",
+    "group": "portal",
+    "scenario": {
+      "name": "francis2023_exiting_elevator",
+      "map_file": "../../maps/successor_svg_maps/issue_9856_francis2023_exiting_elevator_route_width_v1.svg",
+      "simulation_config": {
+        "max_episode_steps": 400,
+        "ped_density": 0.0,
+        "goal_completion_policy": "goal_zone_entry_v1",
+        "social_force_kernel_version": "wrapped_v2",
+        "robot_goal_sampling_policy": "footprint_clearance_v1"
+      },
+      "single_pedestrians": [
+        {
+          "id": "h1",
+          "goal_poi": "poi_h1_goal"
+        }
+      ],
+      "robot_config": {
+        "type": "differential_drive"
+      },
+      "metadata": {
+        "figure": "7o",
+        "archetype": "exiting_elevator",
+        "flow": "exit",
+        "behavior": "none",
+        "plausibility": {
+          "status": "unverified",
+          "verified_on": null,
+          "verified_by": null,
+          "method": null,
+          "notes": null,
+          "metrics": {
+            "min_distance": 1.9274021081195187,
+            "mean_distance": 3.672120444714254,
+            "robot_ped_within_5m_frac": 0.7592158661361399,
+            "ped_force_mean": 0.3153608063487094,
+            "force_q95": 0.7462034994191002
+          },
+          "metrics_updated_on": "2026-01-30T14:19:28.225110+01:00"
+        }
+      },
+      "seeds": [
+        237,
+        238,
+        239
+      ],
+      "map_id": null
+    },
+    "horizon": 400,
+    "map_file": "maps/successor_svg_maps/issue_9856_francis2023_exiting_elevator_route_width_v1.svg",
+    "passages": [
+      {
+        "name": "door",
+        "axis": 0,
+        "entry": 12,
+        "exit": 13,
+        "lateral_min": 7.6,
+        "lateral_max": 12.4
+      }
+    ],
+    "map_sha256": "4d176eca64ea8528f5eabd9df4e0314a4a3b0b7ba615736933cd3a5697d3eb1d"
+  }
+]

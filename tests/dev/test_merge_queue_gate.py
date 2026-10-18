@@ -258,6 +258,55 @@ def test_fetch_pr_snapshot_uses_supported_gh_fields_and_rest_base_sha() -> None:
     assert mock_gh.call_args_list[1].args[0] == ["api", "repos/owner/repo/pulls/42"]
 
 
+@pytest.mark.parametrize(
+    "rest_head,rest_base,expected_status",
+    [
+        ("b" * 40, FULL_SHA, "unknown"),
+        (FULL_SHA, "b" * 40, "unknown"),
+        (None, FULL_SHA, "unknown"),
+        (FULL_SHA, None, "unknown"),
+        (FULL_SHA, FULL_SHA, "mergeable"),
+    ],
+)
+def test_snapshot_mergeability_reread_requires_same_head_and_base(
+    rest_head: str | None, rest_base: str | None, expected_status: str
+) -> None:
+    """A real snapshot cannot certify A using a REST calculation for another identity."""
+    raw_pr = _raw_pr(body=f"gate-verdict: accepted @ {FULL_SHA}")
+    raw_pr.update(mergeable="UNKNOWN", mergeStateStatus="UNKNOWN")
+    reread = {
+        "head": {"sha": rest_head},
+        "base": {"sha": rest_base},
+        "mergeable": True,
+        "mergeable_state": "clean",
+    }
+    with patch("scripts.dev.merge_queue_gate._gh") as mock_gh:
+        pull_reads = iter([{"base": {"sha": FULL_SHA}}, reread])
+
+        def respond(args, **_kwargs):
+            if args[:2] == ["pr", "view"]:
+                return _gh_response(stdout=json.dumps(raw_pr))
+            if args == ["api", "repos/owner/repo/pulls/42"]:
+                return _gh_response(stdout=json.dumps(next(pull_reads)))
+            assert args[:2] == [
+                "api",
+                f"repos/owner/repo/commits/{FULL_SHA}/check-runs?per_page=100",
+            ]
+            return _exact_changed_coverage_response()
+
+        mock_gh.side_effect = respond
+        snapshot, error = fetch_pr_snapshot(42, repo="owner/repo")
+
+    assert error is None
+    assert snapshot["head_sha"] == FULL_SHA
+    assert snapshot["base_sha"] == FULL_SHA
+    audit = evaluate_merge_gate(snapshot, main_sha=FULL_SHA, threads_resolved=True)
+    assert audit.passed is (expected_status == "mergeable")
+    assert audit.mergeable_status == expected_status
+    assert audit.reasons == ([] if expected_status == "mergeable" else ["mergeable_unknown"])
+    assert mock_gh.call_args_list[2].args[0] == ["api", "repos/owner/repo/pulls/42"]
+
+
 def test_fetch_pr_snapshot_refreshes_graphql_evidence_status_by_exact_head() -> None:
     """GraphQL rollup evidence is rebound through REST before gate consumption."""
     raw_pr = _raw_pr()

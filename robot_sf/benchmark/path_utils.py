@@ -117,7 +117,12 @@ def _zone_reference_cached(
     obstacles = from_wkb(obstacles_wkb)
     if clip_obstacles:
         obstacles = obstacles.intersection(domain)
-    zone = from_wkb(zone_wkb).intersection(domain).difference(obstacles)
+    zone = from_wkb(zone_wkb).intersection(domain)
+    if physical_contract is None:
+        zone = zone.difference(obstacles)
+    # The circumscribed buffer supplies conservative path vertices, not the
+    # physical goal set. Keep clear endpoints in its approximation band; starts
+    # and candidate segments are checked against exact disc clearance below.
     start_point = Point(start)
     physical = from_wkb(physical_contract[0]) if physical_contract is not None else None
     robot_radius = physical_contract[1] if physical_contract is not None else 0.0

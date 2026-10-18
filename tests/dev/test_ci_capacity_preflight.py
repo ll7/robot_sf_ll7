@@ -1719,10 +1719,25 @@ def test_run_worktree_shared_venv_fails_before_uv_on_incomplete_dependency_profi
     assert not capture.exists()
 
 
-def test_docs_proof_fails_before_uv_on_incomplete_dependency_profile(tmp_path: Path) -> None:
+@pytest.mark.parametrize("ambient_override", [False, True])
+def test_docs_proof_fails_before_uv_on_incomplete_dependency_profile(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, ambient_override: bool
+) -> None:
     """Docs proof must reject a partial current-worktree environment before invoking uv."""
+    carriers = ("VIRTUAL_ENV", "UV_PROJECT_ENVIRONMENT", "ROBOT_SF_EXPLICIT_VENV_OVERRIDE")
+    for name in carriers:
+        monkeypatch.delenv(name, raising=False)
+    if ambient_override:
+        host_venv = tmp_path / "complete-parent-venv"
+        (host_venv / "bin").mkdir(parents=True)
+        _write_executable(host_venv / "bin" / "python", "#!/usr/bin/env bash\nexit 0\n")
+        for name in carriers:
+            monkeypatch.setenv(name, str(host_venv))
+
     repo, fake_bin, capture = _docs_proof_fixture(tmp_path)
     env = _env_with_fake_bin(fake_bin)
+    for name in carriers:
+        env.pop(name, None)
     env["BASE_REF"] = "HEAD"
 
     result = subprocess.run(

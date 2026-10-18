@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from robot_sf.analysis_workbench.audit_detectors import detect
+from robot_sf.analysis_workbench.audit_detectors import detect, normalize_recorded_undefined
 from robot_sf.analysis_workbench.audit_scan import scan_campaign
 
 
@@ -134,11 +134,35 @@ def test_published_unresolved_candidate_exposes_runner_simulator_horizon_mismatc
 @pytest.mark.parametrize(
     "metric", ["clearance_m", "time_to_collision_min", "ped_force_mean", "total_collision_count"]
 )
-@pytest.mark.parametrize("value", [math.nan, math.inf, -math.inf])
-def test_nonfinite_physical_scalar_has_measurement_error(metric, value):
+@pytest.mark.parametrize("value", [math.inf, -math.inf])
+def test_infinite_physical_scalar_has_measurement_error(metric, value):
     s = detect("extreme_measurements", {"episode_id": "corrupt", "metrics": {metric: value}})
     assert s.status == "error"
     assert s.reason_code == "nonfinite_or_malformed_measurement"
+
+
+@pytest.mark.parametrize("metric", ["clearance_m", "total_collision_count"])
+def test_nan_always_defined_physical_scalar_has_measurement_error(metric):
+    s = detect("extreme_measurements", {"episode_id": "corrupt", "metrics": {metric: math.nan}})
+    assert s.status == "error"
+    assert s.reason_code == "nonfinite_or_malformed_measurement"
+
+
+@pytest.mark.parametrize("metric", ["time_to_collision_min", "ped_force_mean"])
+def test_documented_nan_physical_scalar_is_unavailable_with_missingness(metric):
+    r = {"episode_id": "undefined", "metrics": {metric: math.nan}}
+    projected = normalize_recorded_undefined(r)
+    assert projected["metrics"][metric] is None
+    assert projected["audit_adapter_missingness"] == [
+        {
+            "path": f"metrics.{metric}",
+            "source_token": "NaN",
+            "reason": "documented_undefined_metric",
+        }
+    ]
+    assert math.isnan(r["metrics"][metric])
+    s = detect("extreme_measurements", r)
+    assert (s.status, s.reason_code) == ("unavailable", "measurements_not_recorded")
 
 
 def test_only_named_structured_diagnostics_may_bypass_scalar_validation():

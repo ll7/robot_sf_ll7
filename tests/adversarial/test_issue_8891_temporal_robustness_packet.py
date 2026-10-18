@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -11,6 +13,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+import robot_sf.adversarial.matched_budget_packet as packet_module
 from robot_sf.adversarial.matched_budget_packet import (
     SIMULATOR_INVOCATIONS_PER_SLOT,
     TEMPORAL_SIDECAR_SCHEMA_VERSION,
@@ -51,12 +54,377 @@ def test_packet_separates_immutable_and_working_tree_source_hashes(packet: dict)
         assert source_input["sha256"] != source_input["working_tree_sha256"]
 
 
-def test_missing_working_tree_refresh_hash_keeps_exact_binding_fail_closed(packet: dict) -> None:
-    del packet["source"]["inputs"]["robustness"]["working_tree_sha256"]
-    _bad(
-        lambda: validate_packet(packet, repo_root=ROOT),
-        "working-tree source hash robustness",
+def test_historical_packet_does_not_require_working_tree_refresh_hashes(packet: dict) -> None:
+    """Historical provenance survives source evolution without pretending evidence was rerun."""
+    for source_input in packet["source"]["inputs"].values():
+        source_input.pop("working_tree_sha256", None)
+    result = validate_packet(packet, repo_root=ROOT)
+    assert result["status"] == "ok"
+    assert result["campaign_execution_allowed"] is False
+    assert any(item["input_id"] == "robustness" for item in result["source_staleness"])
+
+
+def _historical_checkout(packet: dict, root: Path) -> Path:
+    """Build a tiny Git fixture borrowing objects, without cloning the repository."""
+    subprocess.run(["git", "init", "-q", str(root)], check=True)
+    common = subprocess.run(
+        ["git", "-C", str(ROOT), "rev-parse", "--path-format=absolute", "--git-common-dir"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    (root / ".git/objects/info/alternates").write_text(
+        str(Path(common) / "objects") + "\n", encoding="utf-8"
     )
+    commit = packet["source"]["base_commit"]
+    subprocess.run(
+        ["git", "-C", str(root), "update-ref", "refs/remotes/origin/main", commit], check=True
+    )
+    for item in packet["source"]["inputs"].values():
+        target = root / item["path"]
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(
+            subprocess.run(
+                ["git", "-C", str(root), "show", f"{commit}:{item['path']}"],
+                capture_output=True,
+                check=True,
+            ).stdout
+        )
+        item.pop("working_tree_sha256", None)
+    return root
+
+
+@pytest.mark.parametrize("input_id", ["runner", "search_space", "scenario_template"])
+@pytest.mark.parametrize("change", ["modified", "deleted"])
+def test_historical_validation_uses_committed_inputs(
+    packet: dict, tmp_path: Path, input_id: str, change: str
+) -> None:
+    """Current edits/deletions cannot invalidate or redefine a historical planning audit."""
+    root = _historical_checkout(packet, tmp_path)
+    assert validate_packet(packet, repo_root=root).get("source_staleness", []) == []
+    item = packet["source"]["inputs"][input_id]
+    path = root / item["path"]
+    if change == "deleted":
+        path.unlink()
+    else:
+        path.write_text("current: unrelated implementation\n", encoding="utf-8")
+        # Repinning current bytes must not redefine the historical semantics.
+        item["working_tree_sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+    result = validate_packet(packet, repo_root=root)
+    assert result["status"] == "ok"
+    assert result["claim_eligible"] is False
+    assert result["campaign_execution_allowed"] is False
+    assert result.get("source_staleness") == [
+        {
+            "input_id": input_id,
+            "path": item["path"],
+            "source_commit": packet["source"]["base_commit"],
+            "message": f"{'unreadable' if change == 'deleted' else 'stale'} "
+            f"since {packet['source']['base_commit']}",
+        }
+    ]
+
+
+@pytest.mark.parametrize(
+    "prefix", ["", "/", "../", "./", "scripts/../", "escape/../", "scripts//", "scripts/./"]
+)
+def test_pinned_path_rejects_unsafe_segments(packet: dict, tmp_path: Path, prefix: str) -> None:
+    """Reject traversal before normalization, including the review's symlink/.. escape."""
+    root = _historical_checkout(packet, tmp_path / "repo")
+    outside = tmp_path / "outside/nested"
+    outside.mkdir(parents=True)
+    (root / "escape").symlink_to(outside, target_is_directory=True)
+    item = packet["source"]["inputs"]["runner"]
+    original = item["path"]
+    item["path"] = prefix + original if prefix else str(root / original)
+    with pytest.raises(PacketError, match=r"source.inputs.runner.path.*(repo-relative|path)"):
+        validate_packet(packet, repo_root=root)
+
+
+@pytest.mark.parametrize("value", ["", ".", "..", "scripts/", "scripts\\runner", "bad\0path"])
+def test_pinned_path_rejects_malformed_spelling(packet: dict, tmp_path: Path, value: str) -> None:
+    """Pins have one canonical, nonempty POSIX-relative spelling."""
+    root = _historical_checkout(packet, tmp_path)
+    packet["source"]["inputs"]["runner"]["path"] = value
+    with pytest.raises(PacketError, match=r"source.inputs.runner.path.*(repo-relative|path)"):
+        validate_packet(packet, repo_root=root)
+
+
+@pytest.mark.parametrize("length", [128 * 1024, 1024 * 1024], ids=["128KiB", "1MiB"])
+def test_oversized_pinned_paths_refused_with_packet_error(
+    packet: dict, tmp_path: Path, length: int
+) -> None:
+    """Retain the reviewer's public-interface subprocess argument-size regressions."""
+    root = _historical_checkout(packet, tmp_path)
+    assert validate_packet(packet, repo_root=root)["status"] == "ok"
+    packet["source"]["inputs"]["runner"]["path"] = "a" * length
+    with pytest.raises(PacketError, match=r"source.inputs.runner.path.*path") as exc:
+        validate_packet(packet, repo_root=root)
+    assert len(str(exc.value)) < 200
+
+
+@pytest.mark.parametrize(
+    "value",
+    ["a" * 256, "é" * 128, "/".join(["a" * 255] * 16) + "/a", "/".join(["é" * 127] * 17)],
+    ids=["segment-256-bytes", "utf8-segment-256-bytes", "path-4097-bytes", "utf8-path-over-limit"],
+)
+def test_oversized_pinned_paths_checked_before_lookup(
+    packet: dict, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, value: str
+) -> None:
+    """All pins obey encoded byte limits before any immutable or checkout lookup."""
+    root = _historical_checkout(packet, tmp_path)
+    packet["source"]["inputs"]["scenario_template"]["path"] = value
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("lookup preceded oversized pinned path rejection")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(packet_module, "_git_output", forbidden)
+        patch.setattr(Path, "lstat", forbidden)
+        with pytest.raises(PacketError, match=r"source.inputs.scenario_template.path.*path") as exc:
+            validate_packet(packet, repo_root=root)
+    assert len(str(exc.value)) < 200
+
+
+@pytest.mark.parametrize("failure", ["lstat", "digest"])
+def test_current_oserror_is_informational_unreadable(
+    packet: dict, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failure: str
+) -> None:
+    """Unavailable drift cannot crash or grant execution after historical validation."""
+    root = _historical_checkout(packet, tmp_path)
+    relative_path = packet["source"]["inputs"]["runner"]["path"]
+    if failure == "lstat":
+        original = Path.lstat
+
+        def unreadable(path, *args, **kwargs):
+            if path == root / relative_path:
+                raise OSError("injected current-tree failure")
+            return original(path, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "lstat", unreadable)
+    else:
+        original = packet_module._current_source_digest
+
+        def unreadable(current_root, path):
+            if path == relative_path:
+                raise OSError("injected remaining drift failure")
+            return original(current_root, path)
+
+        monkeypatch.setattr(packet_module, "_current_source_digest", unreadable)
+    result = validate_packet(packet, repo_root=root)
+    assert result["status"] == "ok"
+    assert result["claim_eligible"] is False
+    assert result["campaign_execution_allowed"] is False
+    assert result["source_staleness"] == [
+        {
+            "input_id": "runner",
+            "path": relative_path,
+            "source_commit": packet["source"]["base_commit"],
+            "message": f"unreadable since {packet['source']['base_commit']}",
+        }
+    ]
+
+
+@pytest.mark.parametrize(
+    "value",
+    ["a" * 255, "é" * 127 + "a", "/".join(["a" * 255] * 15 + ["a" * 254, "a"])],
+    ids=["segment-255-bytes", "utf8-segment-255-bytes", "path-4096-bytes"],
+)
+def test_pinned_path_byte_limits_are_inclusive(value: str) -> None:
+    """Exact byte limits remain valid lexical paths, independent of tree membership."""
+    assert packet_module._pinned_path(value, "source.inputs.runner.path") == value
+
+
+def test_all_pinned_paths_checked_before_any_git_lookup(
+    packet: dict, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A malformed late pin is rejected before even resolving the commit."""
+    root = _historical_checkout(packet, tmp_path)
+    packet["source"]["inputs"]["scenario_template"]["path"] = "./bad-path"
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("Git lookup preceded pinned path validation")
+
+    monkeypatch.setattr(packet_module, "_git_output", forbidden)
+    with pytest.raises(PacketError, match="source.inputs.scenario_template.path"):
+        validate_packet(packet, repo_root=root)
+
+
+@pytest.mark.parametrize("failure", ["digest", "semantics", "execution"])
+def test_immutable_failure_never_inspects_working_tree(
+    packet: dict, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failure: str
+) -> None:
+    """Every historical gate must precede all current-tree operations."""
+    root = _historical_checkout(packet, tmp_path)
+    if failure == "digest":
+        packet["source"]["inputs"]["confirmation"]["sha256"] = "0" * 64
+        message = "immutable source hash confirmation"
+    elif failure == "semantics":
+        packet["scenario"]["parameters"][0]["bounds"]["min"] += 1
+        message = "scenario parameters"
+    else:
+        packet["private_ops"]["execution_authorized"] = True
+        message = "private execution boundary"
+
+    def guard(original):
+        def checked(path, *args, **kwargs):
+            if Path(os.fsdecode(path)).is_relative_to(root):
+                pytest.fail("historical validation touched the working tree")
+            return original(path, *args, **kwargs)
+
+        return checked
+
+    with monkeypatch.context() as patch:
+        for name in ("resolve", "stat", "lstat", "open", "read_bytes"):
+            patch.setattr(Path, name, guard(getattr(Path, name)))
+        patch.setattr(os.path, "abspath", guard(os.path.abspath))
+        with pytest.raises(PacketError, match=message):
+            validate_packet(packet, repo_root=root)
+
+
+@pytest.mark.parametrize("kind", ["directory", "external-link", "internal-link", "loop"])
+def test_current_objects_are_only_informational(packet: dict, tmp_path: Path, kind: str) -> None:
+    """Current objects cannot redirect or invalidate regular committed inputs."""
+    root = _historical_checkout(packet, tmp_path / "repo")
+    item = packet["source"]["inputs"]["runner"]
+    path = root / item["path"]
+    original = path.read_bytes()
+    path.unlink()
+    if kind == "directory":
+        path.mkdir()
+    elif kind == "loop":
+        path.symlink_to(path.name)
+    else:
+        target = tmp_path / "external" if kind == "external-link" else root / "internal"
+        target.write_bytes(original)
+        path.symlink_to(target)
+    result = validate_packet(packet, repo_root=root)
+    assert result["status"] == "ok"
+    assert result["campaign_execution_allowed"] is False
+    assert result["claim_eligible"] is False
+    assert [entry["input_id"] for entry in result["source_staleness"]] == (
+        [] if kind == "internal-link" else ["runner"]
+    )
+
+
+def test_current_fifo_does_not_hang_historical_validation(packet: dict, tmp_path: Path) -> None:
+    """Run the review's FIFO-with-no-writer probe with bounded, explicit child cleanup."""
+    root = _historical_checkout(packet, tmp_path)
+    path = root / packet["source"]["inputs"]["runner"]["path"]
+    path.unlink()
+    os.mkfifo(path)
+    code = (
+        "import json, sys, yaml; from pathlib import Path; "
+        "from robot_sf.adversarial.matched_budget_packet import validate_packet; "
+        "print(json.dumps(validate_packet(yaml.safe_load(sys.stdin.read()), repo_root=Path(sys.argv[1]))))"
+    )
+    child = subprocess.Popen(
+        [sys.executable, "-c", code, str(root)],
+        cwd=ROOT,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        try:
+            stdout, stderr = child.communicate(yaml.safe_dump(packet), timeout=60)
+        except subprocess.TimeoutExpired:
+            pytest.fail("historical validation hung opening a current FIFO without a writer")
+        assert child.returncode == 0, stderr
+        result = json.loads(stdout)
+        assert result["status"] == "ok"
+        assert result["campaign_execution_allowed"] is False
+        assert result["claim_eligible"] is False
+        assert [entry["input_id"] for entry in result["source_staleness"]] == ["runner"]
+    finally:
+        if child.poll() is None:
+            child.kill()
+        child.communicate()
+        path.unlink()
+
+
+def _pin_source_entry(packet: dict, root: Path, kind: str) -> None:
+    """Create real Git entries with matching pins, borrowing the historical source tree."""
+
+    def git(*args: str, data: bytes | None = None) -> bytes:
+        return subprocess.run(
+            ["git", "-C", str(root), *args], input=data, capture_output=True, check=True
+        ).stdout
+
+    commit = packet["source"]["base_commit"]
+    relative = "robot_sf/adversarial" if kind == "directory" else "source-entry"
+    if kind != "directory":
+        git("read-tree", commit)
+        if kind == "gitlink":
+            mode, oid = "160000", commit
+        else:
+            mode = {
+                "symlink": "120000",
+                "symlink-to-source": "120000",
+                "regular": "100644",
+                "executable": "100755",
+            }[kind]
+            content = b"absent-target" if mode == "120000" else b"source file bytes\n"
+            if kind == "symlink-to-source":
+                content = packet["source"]["inputs"]["runner"]["path"].encode()
+                (root / relative).symlink_to(content.decode())
+                # The old resolver follows this dangling link to a regular committed target.
+                (root / content.decode()).unlink()
+            oid = git("hash-object", "-w", "--stdin", data=content).decode().strip()
+        git("update-index", "--add", "--cacheinfo", f"{mode},{oid},{relative}")
+        tree = git("write-tree").decode().strip()
+        commit = (
+            git(
+                "-c",
+                "user.name=Packet Test",
+                "-c",
+                "user.email=packet@example.invalid",
+                "commit-tree",
+                tree,
+                "-p",
+                commit,
+                data=b"source entry fixture\n",
+            )
+            .decode()
+            .strip()
+        )
+        git("update-ref", "refs/remotes/origin/main", commit)
+        packet["source"]["base_commit"] = commit
+    pin_path = content.decode() if kind == "symlink-to-source" else relative
+    shown = git("show", f"{commit}:{pin_path}")
+    packet["source"]["inputs"]["runner"].update(
+        path=relative, sha256=hashlib.sha256(shown).hexdigest()
+    )
+
+
+@pytest.mark.parametrize("kind", ["directory", "symlink", "gitlink", "symlink-to-source"])
+def test_pinned_source_rejects_non_file_entries(packet: dict, tmp_path: Path, kind: str) -> None:
+    """Matching pins cannot turn a tree, symlink or gitlink into a source file."""
+    root = _historical_checkout(packet, tmp_path)
+    assert validate_packet(packet, repo_root=root)["status"] == "ok"
+    _pin_source_entry(packet, root, kind)
+    with pytest.raises(PacketError, match=r"source.inputs.runner.path not found|regular.*blob"):
+        validate_packet(packet, repo_root=root)
+
+
+@pytest.mark.parametrize("kind", ["regular", "executable"])
+def test_pinned_source_accepts_regular_blob_modes(packet: dict, tmp_path: Path, kind: str) -> None:
+    """Both regular Git file modes remain valid even after current files are deleted."""
+    root = _historical_checkout(packet, tmp_path)
+    _pin_source_entry(packet, root, kind)
+    result = validate_packet(packet, repo_root=root)
+    assert result["status"] == "ok"
+    assert result["campaign_execution_allowed"] is False
+    assert result["claim_eligible"] is False
+    assert [item["input_id"] for item in result["source_staleness"]] == ["runner"]
+
+
+@pytest.mark.parametrize("input_id", ["runner", "search_space", "scenario_template"])
+def test_immutable_source_hash_stays_blocking(packet: dict, input_id: str) -> None:
+    """Commit-bound integrity remains a hard gate even when current drift is advisory."""
+    packet["source"]["inputs"][input_id]["sha256"] = "0" * 64
+    _bad(lambda: validate_packet(packet, repo_root=ROOT), f"immutable source hash {input_id}")
 
 
 def test_working_tree_refresh_hash_format_is_fail_closed(packet: dict) -> None:

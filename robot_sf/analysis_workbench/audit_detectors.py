@@ -21,6 +21,7 @@ from itertools import pairwise
 from statistics import mean, median, stdev
 from typing import Any
 
+from scipy.stats import fisher_exact
 from scipy.stats import t as student_t
 
 from robot_sf.analysis_workbench.audit_contracts import (
@@ -807,8 +808,8 @@ def default_registry(*, include_advisory: bool = True) -> DetectorRegistry:
                 "key": ["campaign_digest", "scenario_id"],
                 "require_present": ["planner_id", "scenario_id"],
             },
-            parameters={"absolute_failure_rate_floor": 0.0, "excess_rate_threshold": 0.1},
-            version="1.1.0",
+            parameters={"absolute_failure_rate_floor": 0.0, "family_alpha": 0.05},
+            version="1.2.0",
             units={"rate": "fraction of recorded terminal outcomes"},
         ),
         _spec(
@@ -4203,8 +4204,10 @@ def _outcome_incidence(
         )
     planner = _identity(row, "planner_id")
     absolute = _configured_number(config, spec, "absolute_failure_rate_floor", minimum=0.0)
-    excess = _configured_number(config, spec, "excess_rate_threshold", minimum=0.0)
-    if absolute is None or excess is None or absolute > 1 or excess > 1:
+    alpha = _configured_number(config, spec, "family_alpha", minimum=0.0, strictly_greater=True)
+    if absolute is None or alpha is None or absolute > 1 or alpha > 0.05:
+        return _detector_error(spec, row, "invalid_outcome_incidence_parameters", config=config)
+    if "excess_rate_threshold" in config:
         return _detector_error(spec, row, "invalid_outcome_incidence_parameters", config=config)
     target = cells.get(planner, [])
     if not target or _incidence_label(row) is None:
@@ -4212,6 +4215,7 @@ def _outcome_incidence(
             spec, row, "outcome_cohort_not_recorded", missing=("cohort.outcome",), config=config
         )
     rates: dict[str, dict[str, float]] = {}
+    outcome_counts: dict[str, dict[str, int]] = {}
     sizes: dict[str, int] = {}
     missing: dict[str, int] = {}
     for name, items in sorted(cells.items()):
@@ -4226,6 +4230,10 @@ def _outcome_incidence(
             label: counts[label] / len(items) for label in ("timeout", "collision", "failure")
         }
         rates[name]["adverse"] = 1 - counts["success"] / len(items)
+        outcome_counts[name] = {
+            label: counts[label] for label in ("timeout", "collision", "failure")
+        }
+        outcome_counts[name]["adverse"] = len(items) - counts["success"]
     if planner not in rates:
         return _unavailable(
             spec, row, "outcome_denominator_incomplete", missing=("cohort.outcome",), config=config
@@ -4236,12 +4244,42 @@ def _outcome_incidence(
         if len(rates) > 1
         else None
     )
-    differences = (
-        {label: rates[planner][label] - medians[label] for label in medians} if medians else {}
-    )
+    # Seed-set integrity above requires equal cell sizes, so pooled complete peers
+    # receive equal weight. Never reuse the target as part of its own control.
+    peers = [name for name in rates if name != planner]
+    peer_size = sum(sizes[name] for name in peers)
+    peer_counts = {
+        label: sum(outcome_counts[name][label] for name in peers) for label in rates[planner]
+    }
+    peer_rates = {label: count / peer_size for label, count in peer_counts.items()} if peers else {}
+    differences = {label: rates[planner][label] - peer_rates[label] for label in peer_rates}
+    # Correct the entire planned scenario family, even when some controls lack
+    # outcomes. Four dependent outcome channels still permit Bonferroni control.
+    comparison_count = 4 * len(cells)
+    corrected_alpha = alpha / comparison_count
+    p_values = {
+        label: float(
+            fisher_exact(
+                [
+                    [
+                        outcome_counts[planner][label],
+                        sizes[planner] - outcome_counts[planner][label],
+                    ],
+                    [peer_counts[label], peer_size - peer_counts[label]],
+                ],
+                alternative="greater",
+            ).pvalue
+        )
+        for label in peer_rates
+    }
+    significant = [
+        label
+        for label, p_value in p_values.items()
+        if differences[label] > 0 and p_value <= corrected_alpha
+    ]
     adverse_row = _incidence_label(row) != "success"
     absolute_flag = adverse_row and rates[planner]["adverse"] > absolute
-    relative_flag = bool(differences) and max(differences.values()) > excess
+    relative_flag = bool(significant)
     flagged = absolute_flag or relative_flag
     return _make_signal(
         spec,
@@ -4255,17 +4293,30 @@ def _outcome_incidence(
             "planner_rates": rates[planner],
             "cross_planner_median_rates": medians,
             "excess_rates": differences,
+            "planner_outcome_counts": outcome_counts[planner],
+            "peer_outcome_counts": peer_counts,
+            "peer_sample_size": peer_size,
+            "pooled_peer_rates": peer_rates,
+            "incidence_p_values": p_values,
+            "significant_outcomes": significant,
             "planner_sizes": sizes,
             "missing_outcomes": missing,
             "absolute_adverse_outcome": absolute_flag,
             "excess_incidence": relative_flag,
         },
-        threshold={"absolute_failure_rate_floor": absolute, "excess_rate_threshold": excess},
+        threshold={
+            "absolute_failure_rate_floor": absolute,
+            "relative_test": "fisher_exact_greater",
+            "family_alpha": alpha,
+            "comparison_count": comparison_count,
+            "bonferroni_alpha": corrected_alpha,
+        },
         evidence=(
             {
                 "cohort": dict(spec.cohort_definition),
                 "denominator": "all recorded terminal outcomes per planner and exact scenario; no outcome matching",
-                "interpretation": "absolute adverse outcomes remain candidates even without external controls; rates are descriptive, not significance or defect probability",
+                "interpretation": "absolute adverse outcomes remain candidates without controls; relative flags use one-sided Fisher tests with scenario-family Bonferroni correction, not defect probabilities",
+                "null_assumptions": "independent exchangeable Bernoulli outcomes within and across planner cells; paired cross-planner dependence can invalidate nominal calibration; no causal inference",
             },
         ),
         config=config,

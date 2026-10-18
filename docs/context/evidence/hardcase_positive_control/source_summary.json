@@ -1,0 +1,362 @@
+{
+  "algorithm_status": "ok",
+  "config_hash": "f330dd29077077ac",
+  "effective_physics": {
+    "clearance_definition": {
+      "formula": "center_distance-robot_radius-pedestrian_radius",
+      "identity": "surface_clearance_v1",
+      "pedestrian_radius_m": 0.4,
+      "robot_radius_m": 1.0
+    },
+    "group_forces": [
+      {
+        "identity": "GroupCoherenceForceAlt",
+        "parameters": {
+          "factor": 3.0
+        }
+      },
+      {
+        "identity": "GroupRepulsiveForce",
+        "parameters": {
+          "factor": 1.0,
+          "threshold": 0.55
+        }
+      },
+      {
+        "identity": "GroupGazeForceAlt",
+        "parameters": {
+          "factor": 4.0,
+          "fov_phi": 90.0
+        }
+      }
+    ],
+    "integration": {
+      "dt_s": 0.1,
+      "integrator": "semi_implicit_euler"
+    },
+    "pedestrian_contact_law": {
+      "enabled": true,
+      "hard_nonpenetration": false,
+      "identity": "social_force_without_hard_nonpenetration_v1",
+      "parameters": {
+        "activation_threshold": 20.0,
+        "factor": 5.1,
+        "gamma": 0.35,
+        "lambda_importance": 2.0,
+        "n": 2,
+        "n_prime": 3
+      },
+      "social_kernel": {
+        "angle_wrap": true,
+        "kernel_version": "wrapped_v2",
+        "resolution_mode": "explicit",
+        "schema_version": "social_force_kernel_metadata.v1",
+        "site": "fast_pysf"
+      }
+    },
+    "pedestrian_model": "social_force_default",
+    "pedestrian_speed_model": {
+      "cap_m_s": null,
+      "cap_rule": "velocity_norm<=max_speed_multiplier*initial_speed",
+      "identity": "spawn_coupled_v1",
+      "max_speed_multiplier": 1.3,
+      "mean_m_s": null,
+      "per_agent_caps_m_s": [
+        0.6499999999999999,
+        0.65,
+        0.65,
+        0.65,
+        0.6499999999999999,
+        0.65,
+        0.65,
+        0.6499999999999999,
+        0.6499999999999999,
+        0.65,
+        0.65,
+        0.65
+      ],
+      "sd_m_s": null
+    },
+    "radius_roles": {
+      "force_kernel_m": 0.35,
+      "metric_m": 0.4,
+      "occupancy_grid": {
+        "enabled": true,
+        "geometry": "circles",
+        "radii_m": [
+          0.35,
+          0.35,
+          0.35,
+          0.35,
+          0.35,
+          0.35,
+          0.35,
+          0.35,
+          0.35,
+          0.35,
+          0.35,
+          0.35
+        ]
+      },
+      "physical_contact_m": 0.4,
+      "placement_m": 0.4
+    },
+    "release_design_parameters": {
+      "pedestrian_force_radius_m": 0.35,
+      "pedestrian_metric_radius_m": 0.4,
+      "pedestrian_physical_radius_m": 0.4,
+      "pedestrian_radius_convention": "role_specific_radii_v1",
+      "pedestrian_robot_force_activation_range_m": 3.35,
+      "pedestrian_robot_force_enabled": true,
+      "pedestrian_robot_force_law": {
+        "activation_ranges_m": [
+          3.35
+        ],
+        "activation_rule": "distance<=activation_threshold+ped_force_radius+robot_radius",
+        "enabled": true,
+        "identity": "inverse_cubic_center_distance_v1",
+        "parameters": [
+          {
+            "activation_threshold": 2.0,
+            "force_multiplier": 10.0,
+            "is_active": true,
+            "robot_radius": 1.0
+          }
+        ],
+        "response_multipliers": [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "pedestrian_robot_steering_enabled": false,
+      "pedestrian_speed_cap_m_s": null,
+      "pedestrian_speed_mean_m_s": null,
+      "pedestrian_speed_sd_m_s": null,
+      "pedestrian_speed_tier": false,
+      "robot_reverse_speed_cap_m_s": 0.0,
+      "ttc_definition": {
+        "dt_s": 0.1,
+        "formula": "min(distance/relative_speed), dot(relative_velocity,displacement)>0",
+        "geometry": "center_based",
+        "identity": "time_to_collision_min.center_distance_v1",
+        "ped_velocity": "finite_difference_post_step_positions/dt",
+        "relative_speed_floor_m_s": 1e-09
+      },
+      "wall_force_law": {
+        "applied": true,
+        "compatibility_mode": "legacy_compatible",
+        "enabled": true,
+        "geometry_convention": "map_line_endpoints_orthogonal_vector",
+        "law_version": "legacy_shifted_gradient_v1",
+        "parameters": {
+          "agent_radius": 0.35,
+          "distance_floor": 1e-05,
+          "effective_offset": -0.57,
+          "factor": 10.0,
+          "sigma": 0.0,
+          "threshold": -0.57
+        },
+        "parameters_sha256": "f0bdf21b601417c3f045f70a17ea64bc14e20a3af2599b0c3fcbd8058eef96be",
+        "radius_convention": "threshold_plus_agent_radius_sigma",
+        "resolution_mode": "historical_unversioned",
+        "schema_version": "obstacle_force_law_metadata.v2",
+        "site": "fast_pysf"
+      }
+    },
+    "robot_kinematics": "DifferentialDriveRobot",
+    "schema_version": "effective-physics.v1"
+  },
+  "episode_id": "classic_cross_trap_high--1001--f330dd29077077ac",
+  "event_ledger": {
+    "collision_events": [],
+    "exact_events": {
+      "collision": false,
+      "goal_reached": false,
+      "invalid_run": false,
+      "timeout": true
+    },
+    "metric_definitions": {
+      "clearance_breach": {
+        "kind": "derived",
+        "source": "metrics.min_clearance"
+      },
+      "collision_count": {
+        "kind": "exact_or_sampled",
+        "source": "metrics.total_collision_count"
+      },
+      "late_evasive": {
+        "kind": "derived",
+        "source": "safety_predicates.late_evasive_predicate.late_evasive"
+      },
+      "near_miss": {
+        "kind": "derived",
+        "source": "metrics.near_misses"
+      },
+      "occlusion_near_miss": {
+        "kind": "derived",
+        "source": "safety_predicates.occlusion_near_miss_predicate.occlusion_near_miss"
+      },
+      "oscillation": {
+        "kind": "derived",
+        "source": "safety_predicates.oscillatory_control_predicate.oscillation"
+      },
+      "ttc_breach": {
+        "kind": "derived",
+        "source": "missing"
+      }
+    },
+    "planner": "social_force",
+    "provenance": {
+      "source": "episode_record"
+    },
+    "reconciliation": {
+      "audit_result": "pass",
+      "collision_metric_source": "metrics.total_collision_count",
+      "collision_metric_value": 0.0
+    },
+    "scenario_id": "classic_cross_trap_high",
+    "schema_version": "EpisodeEventLedger.v2",
+    "seed": 1001,
+    "software_commit": "53721be3248600e08641a9816d094b605e3c93e4",
+    "surrogate_events": {
+      "clearance_breach": false,
+      "late_evasive": true,
+      "late_evasive_predicate": {
+        "evidence_kind": "diagnostic_proxy",
+        "fields": {
+          "conflict_zone_entry_step": 346,
+          "first_clearance_restoring_action_step": 233,
+          "first_hazard_visible_step": 0,
+          "latency_unavailable_reason": null,
+          "minimum_distance_m": 1.8772732376037438,
+          "n_steps": 600,
+          "required_deceleration_m_s2": 0.005175727705106545,
+          "response_latency_s": 23.3
+        },
+        "late_evasive": true,
+        "predicate": "late_evasive",
+        "schema_version": "safety_predicate.late_evasive.v2",
+        "thresholds": {
+          "conflict_radius_m": 2.0,
+          "decel_threshold_m_s2": 0.5,
+          "max_response_latency_s": 1.0
+        }
+      },
+      "near_miss": true,
+      "occlusion_near_miss": false,
+      "occlusion_near_miss_predicate": {
+        "evidence_kind": "diagnostic_proxy",
+        "fields": {
+          "actual_minimum_separation_m": 1.8772732376037438,
+          "emergence_step": null,
+          "first_detection_step": null,
+          "first_response_step": null,
+          "min_separation_step": 379,
+          "n_steps": 600,
+          "near_miss": false,
+          "predicted_minimum_separation_m": null,
+          "visibility_evidence_reason": "observation_visibility_disabled",
+          "visibility_evidence_status": "not_applicable",
+          "was_occluded_before_min": null
+        },
+        "occlusion_near_miss": false,
+        "predicate": "occlusion_near_miss",
+        "schema_version": "safety_predicate.occlusion_near_miss.v1",
+        "status": "not_applicable",
+        "status_reason": "observation_visibility_disabled",
+        "thresholds": {
+          "decel_threshold_m_s2": 0.5,
+          "detection_confidence_threshold": 0.5,
+          "near_miss_radius_m": 0.5
+        }
+      },
+      "oscillation": false,
+      "oscillatory_control_predicate": {
+        "evidence_kind": "diagnostic_proxy",
+        "fields": {
+          "command_source_changes": 0,
+          "heading_rate_sign_changes": 15,
+          "linear_velocity_sign_changes": 0,
+          "mean_abs_jerk": 0.29347166097973637,
+          "n_steps": 600,
+          "net_progress_m": 32.81066396843501,
+          "path_length_m": 36.171721268730124,
+          "progress_ratio": 0.9070805263779168
+        },
+        "oscillation": false,
+        "predicate": "oscillatory_control",
+        "schema_version": "safety_predicate.oscillatory_control.v1",
+        "thresholds": {
+          "max_progress_ratio": 0.5,
+          "min_heading_rate_sign_changes": 4
+        }
+      },
+      "ttc_breach": false
+    }
+  },
+  "execution": {
+    "availability_reason": null,
+    "availability_status": "available",
+    "benchmark_success": true,
+    "execution_mode": "adapter",
+    "readiness_status": "adapter"
+  },
+  "integrity": {
+    "contradictions": [],
+    "effective_view": {
+      "degraded": false,
+      "degraded_reason": null,
+      "extracted_ped_count": 12,
+      "observation_ped_count": 12,
+      "pedestrian_blind_by_design": false,
+      "probed": true
+    }
+  },
+  "metric_parameters": {
+    "threshold_profile": {
+      "candidate_speed_dependent_variants": [
+        "relative_speed_weighted",
+        "ttc_gated"
+      ],
+      "center_distance_collision_definition": "center_distance_m < collision_distance_m",
+      "center_distance_pedestrian_role": "geometric_diagnostic_only",
+      "collision_distance_m": 0.25,
+      "comfort_force_threshold": 2.0,
+      "near_miss_definition": "0 <= min_clearance_m < near_miss_distance_m",
+      "near_miss_distance_m": 0.5,
+      "near_miss_speed_dependence": "disabled_distance_only",
+      "pedestrian_collision_definition": "min_clearance_m < 0",
+      "pedestrian_safety_metric": "surface_clearance_m",
+      "policy_search_near_miss_metric": "surface_clearance_m",
+      "profile_id": "social_nav_thresholds_v1",
+      "snqi_proxy_pedestrian_metric": "surface_clearance_m",
+      "sources": {
+        "constants": "robot_sf/benchmark/constants.py",
+        "metrics": "robot_sf/benchmark/metrics.py",
+        "spec": "docs/benchmark_spec.md"
+      },
+      "wall_agent_collision_definition": "center_distance_m < collision_distance_m"
+    },
+    "threshold_signature": "001e4daecbe4633b3aa73a7d6db147425844043c233b54d1707c4739dab566ce"
+  },
+  "outcome": {
+    "collision_event": false,
+    "route_complete": false,
+    "timeout_event": true
+  },
+  "source_repeat_exact_events_match": true,
+  "source_repeat_near_miss_match": true,
+  "status": "failure",
+  "termination_reason": "terminated",
+  "trace_schema": "simulation-step-trace.v2"
+}

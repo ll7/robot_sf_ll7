@@ -1,0 +1,7 @@
+{
+  "artifact_path": "docs/context/evidence/hardcase_positive_control/followup/packet/gate_replay_results.json.gz",
+  "artifact_sha256": "f874a44fbc0926c251b8cdf451015b3893551caa95d041707012084bd09e7f9f",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "evidence-review-marker.v1"
+}

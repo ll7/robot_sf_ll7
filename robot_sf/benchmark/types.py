@@ -136,6 +136,7 @@ class AlgoMeta(TypedDict, total=False):
     planner_decision_trace: PlannerDecisionTrace
     topology_guided_episode: dict[str, Any]
     simulation_step_trace: dict[str, Any]
+    generated_window_continuation: dict[str, Any]
     safety_wrapper: dict[str, Any]
     cbf_safety_filter: dict[str, Any]
     intent_conditioned_behavior: dict[str, Any]
@@ -238,6 +239,8 @@ class EpisodeRecordDict(TypedDict, total=False):
     episode_id: str
     scenario_id: str
     seed: int
+    source_seed: int
+    source_map: str
     scenario_params: dict[str, Any]
     runtime_input_records: list[dict[str, str]]
     selected_map_identity: dict[str, str | None]

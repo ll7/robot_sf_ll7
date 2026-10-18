@@ -1,0 +1,7 @@
+{
+  "artifact_path": "docs/context/evidence/hardcase_positive_control/effective_scenario.json",
+  "artifact_sha256": "7bc0bc886bd208676978e25d89b8b5b83acfd1a44a864fcd807723a1f0498798",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "evidence-review-marker.v1"
+}

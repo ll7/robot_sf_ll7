@@ -1,0 +1,511 @@
+{
+  "critical_window": {
+    "end_s": 39.0,
+    "event": {
+      "observed_at_s": 38.0,
+      "signal": "min_clearance",
+      "source_metrics": {
+        "min_clearance_m": 1.8772732376037438
+      }
+    },
+    "frame_count": 21,
+    "start_s": 37.0
+  },
+  "downstream": {
+    "corpus_admission": "NOT_RUN",
+    "persistence": "NOT_RUN"
+  },
+  "expected_first_near_miss_local_step": 4,
+  "materialization_status": "loads_only",
+  "replays": [
+    {
+      "actor_binding_status": "unverified_reindexed_by_adapter",
+      "availability": {
+        "availability_reason": null,
+        "availability_status": "available",
+        "benchmark_success": true,
+        "execution_mode": "adapter",
+        "readiness_status": "adapter"
+      },
+      "expected_step_count": 20,
+      "first_contact_step": null,
+      "first_near_miss_step": null,
+      "index": 1,
+      "length_pass": false,
+      "max_pedestrian_slot_error_on_paired_steps_m": 0.15037364817541385,
+      "max_robot_error_on_paired_steps_m": 0.03689150220919005,
+      "min_clearance_m": 0.7095036862680422,
+      "near_miss_steps_zero_based": [],
+      "near_misses": 0,
+      "outcome": {
+        "collision_event": false,
+        "route_complete": true,
+        "timeout_event": false
+      },
+      "paired_steps": 1,
+      "reset": {
+        "collision_at_reset": false,
+        "heading_source": "simulator.ped_headings (velocity-derived, 0.0 fallback when stationary)",
+        "min_surface_clearance_m": 0.750001,
+        "pedestrians": [
+          {
+            "actor_id": "simulator-slot-0",
+            "heading": 0.0,
+            "id": "simulator-slot-0",
+            "position": [
+              15.616003249904809,
+              27.402179327724834
+            ],
+            "surface_clearance_m": 5.450606352545914,
+            "velocity": [
+              0.5,
+              0.0
+            ]
+          },
+          {
+            "actor_id": "simulator-slot-1",
+            "heading": 0.0,
+            "id": "simulator-slot-1",
+            "position": [
+              8.914215439771406,
+              22.836620186550757
+            ],
+            "surface_clearance_m": 0.8516312811176364,
+            "velocity": [
+              0.5,
+              0.0
+            ]
+          },
+          {
+            "actor_id": "simulator-slot-2",
+            "heading": 0.0,
+            "id": "simulator-slot-2",
+            "position": [
+              7.743801214511969,
+              12.011617056927882
+            ],
+            "surface_clearance_m": 9.380176625546499,
+            "velocity": [
+              0.5,
+              0.0
+            ]
+          },
+          {
+            "actor_id": "simulator-slot-3",
+            "heading": 0.0,
+            "id": "simulator-slot-3",
+            "position": [
+              9.801451193389669,
+              19.26487086310055
+            ],
+            "surface_clearance_m": 1.8599601630025644,
+            "velocity": [
+              0.5,
+              0.0
+            ]
+          },
+          {
+            "actor_id": "simulator-slot-4",
+            "heading": 0.0,
+            "id": "simulator-slot-4",
+            "position": [
+              9.128717893187275,
+              13.439288551233208
+            ],
+            "surface_clearance_m": 7.6353963161292295,
+            "velocity": [
+              0.5,
+              0.0
+            ]
+          },
+          {
+            "actor_id": "simulator-slot-5",
+            "heading": 0.0,
+            "id": "simulator-slot-5",
+            "position": [
+              8.988520980650744,
+              20.35265479146786
+            ],
+            "surface_clearance_m": 1.4378006224968027,
+            "velocity": [
+              0.5,
+              0.0
+            ]
+          },
+          {
+            "actor_id": "simulator-slot-6",
+            "heading": 0.0,
+            "id": "simulator-slot-6",
+            "position": [
+              22.297517546038353,
+              32.828406092308065
+            ],
+            "surface_clearance_m": 14.004740912212652,
+            "velocity": [
+              0.5,
+              0.0
+            ]
+          },
+          {
+            "actor_id": "simulator-slot-7",
+            "heading": 0.0,
+            "id": "simulator-slot-7",
+            "position": [
+              18.42282874893072,
+              30.465078826178022
+            ],
+            "surface_clearance_m": 9.604549492142562,
+            "velocity": [
+              0.5,
+              0.0
+            ]
+          },
+          {
+            "actor_id": "simulator-slot-8",
+            "heading": 0.0,
+            "id": "simulator-slot-8",
+            "position": [
+              10.774110612170507,
+              24.385723204317017
+            ],
+            "surface_clearance_m": 0.750001,
+            "velocity": [
+              0.07358629700500162,
+              -0.4945554133695148
+            ]
+          },
+          {
+            "actor_id": "simulator-slot-9",
+            "heading": 0.0,
+            "id": "simulator-slot-9",
+            "position": [
+              8.956070184230136,
+              14.785084268146766
+            ],
+            "surface_clearance_m": 6.372859512950595,
+            "velocity": [
+              0.5,
+              0.0
+            ]
+          },
+          {
+            "actor_id": "simulator-slot-10",
+            "heading": 0.0,
+            "id": "simulator-slot-10",
+            "position": [
+              8.224923707478725,
+              15.197111466166447
+            ],
+            "surface_clearance_m": 6.221277539730386,
+            "velocity": [
+              0.5,
+              0.0
+            ]
+          },
+          {
+            "actor_id": "simulator-slot-11",
+            "heading": 0.0,
+            "id": "simulator-slot-11",
+            "position": [
+              17.004856707818362,
+              28.47397571505892
+            ],
+            "surface_clearance_m": 7.179248044048187,
+            "velocity": [
+              0.5,
+              0.0
+            ]
+          }
+        ],
+        "robot": {
+          "angular_velocity": 0.0,
+          "heading": 0.944165825843811,
+          "position": [
+            11.090531836464608,
+            22.259133937717277
+          ],
+          "velocity": [
+            0.0,
+            0.0
+          ]
+        },
+        "routes": {
+          "owner": "map_def.ped_routes",
+          "reason": "route_objects_not_retained_per_episode",
+          "status": "unavailable"
+        },
+        "spawn": {
+          "owner": "robot_sf.ped_npc.ped_population.populate_simulation",
+          "reason": "spawn_sampler_decision_not_retained",
+          "scenario_echo": {},
+          "status": "unavailable"
+        }
+      },
+      "step_count": 1,
+      "trace_digest": "8806cbcc2b66d30773ef24b62d64deaaf5d4c43f5ddc8684fb99889da6965d65",
+      "trajectory_pass": false
+    },
+    {
+      "actor_binding_status": "unverified_reindexed_by_adapter",
+      "availability": {
+        "availability_reason": null,
+        "availability_status": "available",
+        "benchmark_success": true,
+        "execution_mode": "adapter",
+        "readiness_status": "adapter"
+      },
+      "expected_step_count": 20,
+      "first_contact_step": null,
+      "first_near_miss_step": null,
+      "index": 2,
+      "length_pass": false,
+      "max_pedestrian_slot_error_on_paired_steps_m": 0.15037364817541385,
+      "max_robot_error_on_paired_steps_m": 0.03689150220919005,
+      "min_clearance_m": 0.7095036862680422,
+      "near_miss_steps_zero_based": [],
+      "near_misses": 0,
+      "outcome": {
+        "collision_event": false,
+        "route_complete": true,
+        "timeout_event": false
+      },
+      "paired_steps": 1,
+      "reset": {
+        "collision_at_reset": false,
+        "heading_source": "simulator.ped_headings (velocity-derived, 0.0 fallback when stationary)",
+        "min_surface_clearance_m": 0.750001,
+        "pedestrians": [
+          {
+            "actor_id": "simulator-slot-0",
+            "heading": 0.0,
+            "id": "simulator-slot-0",
+            "position": [
+              15.616003249904809,
+              27.402179327724834
+            ],
+            "surface_clearance_m": 5.450606352545914,
+            "velocity": [
+              0.5,
+              0.0
+            ]
+          },
+          {
+            "actor_id": "simulator-slot-1",
+            "heading": 0.0,
+            "id": "simulator-slot-1",
+            "position": [
+              8.914215439771406,
+              22.836620186550757
+            ],
+            "surface_clearance_m": 0.8516312811176364,
+            "velocity": [
+              0.5,
+              0.0
+            ]
+          },
+          {
+            "actor_id": "simulator-slot-2",
+            "heading": 0.0,
+            "id": "simulator-slot-2",
+            "position": [
+              7.743801214511969,
+              12.011617056927882
+            ],
+            "surface_clearance_m": 9.380176625546499,
+            "velocity": [
+              0.5,
+              0.0
+            ]
+          },
+          {
+            "actor_id": "simulator-slot-3",
+            "heading": 0.0,
+            "id": "simulator-slot-3",
+            "position": [
+              9.801451193389669,
+              19.26487086310055
+            ],
+            "surface_clearance_m": 1.8599601630025644,
+            "velocity": [
+              0.5,
+              0.0
+            ]
+          },
+          {
+            "actor_id": "simulator-slot-4",
+            "heading": 0.0,
+            "id": "simulator-slot-4",
+            "position": [
+              9.128717893187275,
+              13.439288551233208
+            ],
+            "surface_clearance_m": 7.6353963161292295,
+            "velocity": [
+              0.5,
+              0.0
+            ]
+          },
+          {
+            "actor_id": "simulator-slot-5",
+            "heading": 0.0,
+            "id": "simulator-slot-5",
+            "position": [
+              8.988520980650744,
+              20.35265479146786
+            ],
+            "surface_clearance_m": 1.4378006224968027,
+            "velocity": [
+              0.5,
+              0.0
+            ]
+          },
+          {
+            "actor_id": "simulator-slot-6",
+            "heading": 0.0,
+            "id": "simulator-slot-6",
+            "position": [
+              22.297517546038353,
+              32.828406092308065
+            ],
+            "surface_clearance_m": 14.004740912212652,
+            "velocity": [
+              0.5,
+              0.0
+            ]
+          },
+          {
+            "actor_id": "simulator-slot-7",
+            "heading": 0.0,
+            "id": "simulator-slot-7",
+            "position": [
+              18.42282874893072,
+              30.465078826178022
+            ],
+            "surface_clearance_m": 9.604549492142562,
+            "velocity": [
+              0.5,
+              0.0
+            ]
+          },
+          {
+            "actor_id": "simulator-slot-8",
+            "heading": 0.0,
+            "id": "simulator-slot-8",
+            "position": [
+              10.774110612170507,
+              24.385723204317017
+            ],
+            "surface_clearance_m": 0.750001,
+            "velocity": [
+              0.07358629700500162,
+              -0.4945554133695148
+            ]
+          },
+          {
+            "actor_id": "simulator-slot-9",
+            "heading": 0.0,
+            "id": "simulator-slot-9",
+            "position": [
+              8.956070184230136,
+              14.785084268146766
+            ],
+            "surface_clearance_m": 6.372859512950595,
+            "velocity": [
+              0.5,
+              0.0
+            ]
+          },
+          {
+            "actor_id": "simulator-slot-10",
+            "heading": 0.0,
+            "id": "simulator-slot-10",
+            "position": [
+              8.224923707478725,
+              15.197111466166447
+            ],
+            "surface_clearance_m": 6.221277539730386,
+            "velocity": [
+              0.5,
+              0.0
+            ]
+          },
+          {
+            "actor_id": "simulator-slot-11",
+            "heading": 0.0,
+            "id": "simulator-slot-11",
+            "position": [
+              17.004856707818362,
+              28.47397571505892
+            ],
+            "surface_clearance_m": 7.179248044048187,
+            "velocity": [
+              0.5,
+              0.0
+            ]
+          }
+        ],
+        "robot": {
+          "angular_velocity": 0.0,
+          "heading": 0.944165825843811,
+          "position": [
+            11.090531836464608,
+            22.259133937717277
+          ],
+          "velocity": [
+            0.0,
+            0.0
+          ]
+        },
+        "routes": {
+          "owner": "map_def.ped_routes",
+          "reason": "route_objects_not_retained_per_episode",
+          "status": "unavailable"
+        },
+        "spawn": {
+          "owner": "robot_sf.ped_npc.ped_population.populate_simulation",
+          "reason": "spawn_sampler_decision_not_retained",
+          "scenario_echo": {},
+          "status": "unavailable"
+        }
+      },
+      "step_count": 1,
+      "trace_digest": "8806cbcc2b66d30773ef24b62d64deaaf5d4c43f5ddc8684fb99889da6965d65",
+      "trajectory_pass": false
+    }
+  ],
+  "source": {
+    "first_contact_step": null,
+    "first_near_miss_step": 374,
+    "min_clearance_m": 0.47727323760374385,
+    "near_miss_steps_zero_based": [
+      374,
+      375,
+      376,
+      377,
+      378,
+      379,
+      380,
+      381,
+      382,
+      383,
+      384
+    ],
+    "near_misses": 11,
+    "outcome": {
+      "collision_event": false,
+      "route_complete": false,
+      "timeout_event": true
+    },
+    "step_count": 600
+  },
+  "source_repeat": {
+    "first_difference": null,
+    "outcome_equal": true,
+    "repeat_trace_digest": "7a73ee858ba8248969015c4f31273c014d15fd328bd97671876f9520c2bf2b34",
+    "trace_digest": "7a73ee858ba8248969015c4f31273c014d15fd328bd97671876f9520c2bf2b34"
+  },
+  "source_revision": "53721be3248600e08641a9816d094b605e3c93e4",
+  "stage": "exact_window_replay_parity",
+  "status": "FAIL",
+  "tolerance_m": 1e-09
+}

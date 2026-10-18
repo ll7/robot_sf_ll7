@@ -1,0 +1,96 @@
+{
+  "analytic_implementation_sha256": "fe4e5b99c0a9f51ada80cfccbf1361bb4f1872c0c523e2b35ce89e94e7b32958",
+  "artifacts": [
+    {
+      "location": "imech156-u:lanes/hardcase/rereview_custody_raw_3551282/source.jsonl",
+      "name": "source.jsonl",
+      "normalized_sha256": "63936721a212058cc961ad0f501b0c7387cb0d36ad6410b64ed802e7c98cee5d",
+      "raw_bytes": 4928161,
+      "raw_sha256": "63936721a212058cc961ad0f501b0c7387cb0d36ad6410b64ed802e7c98cee5d",
+      "reason": "duplicate 600-step trace; gold source retained in parent and rerun equality receipt in comparison.json",
+      "retained": false,
+      "size_bytes": 4928161
+    },
+    {
+      "compressed_sha256": "88013b12ad0de59bc7b201d2701bc5336c3d1cb24d1a9953e7cb9fb443b03a56",
+      "name": "window_replay_1.jsonl",
+      "normalized_sha256": "2aee176ca08865eb5ac28bc6fdb3c729ee08037d7984c0bd30fbaa55dced528f",
+      "raw_bytes": 206932,
+      "raw_sha256": "2b646f046301c2b14f957160f5f5445abf3a362047106d19c24521f03d372508",
+      "retained": "window_replay_1.jsonl.gz"
+    },
+    {
+      "compressed_sha256": "15cdac07144128e05e50f98b9f0a529f5c51a3e913311689722d1b900d72b1c3",
+      "name": "window_replay_2.jsonl",
+      "normalized_sha256": "ae94bf531dd0607e3b7c8ae857b78c042fea20b40e48b802846727694508b021",
+      "raw_bytes": 206931,
+      "raw_sha256": "fc90bb1685027be6e79f92fe203d9f299969253ae72dbc1f58df7b2a504fcfd0",
+      "retained": "window_replay_2.jsonl.gz"
+    },
+    {
+      "location": "imech156-u:lanes/hardcase/rereview_custody_raw_3551282/gate_source.jsonl",
+      "name": "gate_source.jsonl",
+      "normalized_sha256": "53a9fa9ecccf4228f9c67b30527eb3e8fe1e28d9321b264f33c28e859c770032",
+      "raw_bytes": 4928274,
+      "raw_sha256": "53a9fa9ecccf4228f9c67b30527eb3e8fe1e28d9321b264f33c28e859c770032",
+      "reason": "duplicate 600-step trace; gold source retained in parent and rerun equality receipt in comparison.json",
+      "retained": false,
+      "size_bytes": 4928274
+    },
+    {
+      "compressed_sha256": "f874a44fbc0926c251b8cdf451015b3893551caa95d041707012084bd09e7f9f",
+      "name": "gate_replay_results.json",
+      "normalized_sha256": "21363dd7dfcf46d653bc431db9d11a792b7ba429c07ab8ecf1466b5adb83b592",
+      "raw_bytes": 397768,
+      "raw_sha256": "66e06b50c405fc4019124d0ea267bc82043433aec08a989108b356318dc1d4bb",
+      "retained": "gate_replay_results.json.gz"
+    },
+    {
+      "name": "window_replay_1.jsonl.provenance.json",
+      "normalized_sha256": "fecd344b3e448b758bfc0b8d964ecd9892490e359cfe93c5dbfe9c6448e1d18d",
+      "raw_bytes": 4125,
+      "raw_sha256": "d95498bf37cfd272772e3ed6007c6da422c37454df920ddf7e26c3429906b425",
+      "retained": "window_replay_1.jsonl.provenance.json"
+    },
+    {
+      "name": "window_replay_2.jsonl.provenance.json",
+      "normalized_sha256": "0b82d8955b9fe21bf7d55dc407c5346acb809ecb986be08f5d63a1b0c8e443c9",
+      "raw_bytes": 4125,
+      "raw_sha256": "6fc85456e2f5fce34da45fa1006e59602bb1874ba821994c0c2a7b37f5f08240",
+      "retained": "window_replay_2.jsonl.provenance.json"
+    }
+  ],
+  "checkpoint_compatibility": {
+    "checkpoint_sha256": null,
+    "code_revision": "c2694ad8cd44d0af72452836f4bb43e3203af269daf689f05c0ce79db54bb2c8",
+    "config_sha256": "3e6a10bdcc89c477aa0cdfc1510564f6c0f04a7d2b6f1fd3a8b74dcbaeea5258",
+    "dt_s": 0.1,
+    "map_sha256": "d3bc9ad6205108a480469338282611730410787cc897abd4d71f3f0fbd47d6a8",
+    "planner_id": "social_force",
+    "platform_tag": "Linux-6.8.0-87-generic-x86_64-with-glibc2.39"
+  },
+  "checkpoint_sha256": "afe069972d0d346bdbffcd1d2d564114b933374d69357a71cf90a642b9f8d41c",
+  "command": "NUMBA_CPU_NAME=znver2 scripts/dev/run_worktree_shared_venv.sh -- uv run python docs/context/evidence/hardcase_positive_control/followup/reproduce.py --runtime-revision 3551282a86cad12ea825a0f701b4a24406dde2d0 --output docs/context/evidence/hardcase_positive_control/followup/packet",
+  "custody": "packet was produced in this final repository-relative namespace; native records compressed after capture; duplicate complete source omitted",
+  "custody_remediation": {
+    "disposition": "REMEDIATE; no new debt baseline",
+    "new_simulator_episodes": 3,
+    "new_simulator_resets": 3,
+    "raw_row_location": "imech156-u:lanes/hardcase/rereview_custody_raw_3551282",
+    "reason": "Symlink security repair changes the byte-bound runtime fingerprint; fresh capture plus two fresh replays, unchanged independent gold oracle.",
+    "regeneration_command": "python3 docs/context/evidence/hardcase_positive_control/followup/restore_raw_rows.py --output ../rereview_custody_raw_3551282"
+  },
+  "episode_seed": 1001,
+  "fix_commit": "3551282a86cad12ea825a0f701b4a24406dde2d0",
+  "historical_source_provenance": "../../provenance.json",
+  "learned_model_digest": null,
+  "learned_model_status": "not_applicable_analytic_planner",
+  "materialized_window_sha256": "be7913af2d79c800bb682fb131fbb3ac20cac6f48333ddc92ddd3ca940d96b7c",
+  "original_run_config_hash": "f330dd29077077ac",
+  "planner": "social_force",
+  "planner_config_sha256": "9a7015a5f66b5d9ddb5d96c706d33ac8fe027bc0aee256e9ab87d2e89804f773",
+  "record_normalization": "literal checkout/lane prefixes only; numeric trace payload unchanged; checkpoint companions remain byte-exact",
+  "scenario": "classic_cross_trap_high",
+  "schema_version": "hardcase-window-followup.v1",
+  "source_commit": "53721be3248600e08641a9816d094b605e3c93e4"
+}

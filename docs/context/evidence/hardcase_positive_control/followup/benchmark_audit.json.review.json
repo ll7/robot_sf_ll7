@@ -1,0 +1,7 @@
+{
+  "artifact_path": "docs/context/evidence/hardcase_positive_control/followup/benchmark_audit.json",
+  "artifact_sha256": "f027ff94a6ec378a8a49767b9da31787288bbd7d6f53852e0cdaf7eef474ecef",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "evidence-review-marker.v1"
+}

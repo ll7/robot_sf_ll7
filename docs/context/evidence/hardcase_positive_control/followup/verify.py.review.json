@@ -1,0 +1,7 @@
+{
+  "artifact_path": "docs/context/evidence/hardcase_positive_control/followup/verify.py",
+  "artifact_sha256": "011615af379c78be49a015c03fd5dfe55a25a87a7200436ece98c9c3f6984b39",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "evidence-review-marker.v1"
+}

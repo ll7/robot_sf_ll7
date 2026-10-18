@@ -1727,9 +1727,22 @@ def build_robot_config_from_scenario(
     _reject_required_platform_semantic_consumers(scenario)
 
     config = RobotSimulationConfig()
-    # Authored packets without a selector predate #10017. Preserve their
-    # historical identity; an explicit override below can opt into the 0.1.0 law.
-    config.sim_config.obstacle_force_law = {}
+    # Archived release/frozen inputs keep their original bytes and legacy physics.
+    # New authored scenarios inherit the 0.1.0 default; explicit selectors win.
+    if any(
+        "release_0_0_" in part or "release_v0_0_" in part or part.endswith("_frozen.yaml")
+        for part in scenario_path.parts
+    ) or scenario_path.name in {
+        # Unversioned scenario inputs referenced by archived release manifests.
+        "classic_interactions_francis2023.yaml",
+        "classic_interactions_francis2023_goal_zone_entry_kernel_wrapped_v2.yaml",
+        "classic_interactions_francis2023_goal_zone_entry_route_width_v4.yaml",
+        "issue_9860_corrected_diagnostic_v1.yaml",
+        "paper_matrix_v2_h600_hybrid_stress_smoke.yaml",
+        "francis2023_blind_corner.yaml",
+        "francis2023_blind_corner_goal_zone_entry_v1.yaml",
+    }:
+        config.sim_config.obstacle_force_law = {}
     consumed_inputs: list[dict[str, str]] | None = [] if runtime_input_records is not None else None
     _apply_simulation_overrides(config, scenario.get("simulation_config", {}))
     _apply_robot_overrides(config, scenario.get("robot_config", {}))

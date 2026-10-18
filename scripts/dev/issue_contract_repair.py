@@ -165,7 +165,11 @@ def main(argv: list[str] | None = None) -> int:
             if args.body_file is not None:
                 packet = plan_for_body(_read_body_file(args.body_file))
             elif args.issue is not None:
-                packet = plan_for_body(_exact_read_body(args.issue, repo=args.repo)["body"])
+                live = _exact_read_body(args.issue, repo=args.repo)
+                packet = plan_for_body(
+                    live["body"],
+                    labels=_label_snapshot(live.get("labels")),
+                )
             else:
                 print("repair plan needs --body-file or --issue", file=sys.stderr)
                 return 2

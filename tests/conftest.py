@@ -272,9 +272,12 @@ def isolated_ci_wrapper_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     """Let shell-contract fixtures own wrapper inputs instead of the hosting job.
 
     Keep CI/runner identity intact so hosted-only behavior remains exercised.
-    Each test can set the worker, shard, CUDA and selection inputs it needs.
+    Each test can set the environment, worker, shard, CUDA and selection inputs it needs.
     """
     for key in (
+        "VIRTUAL_ENV",
+        "UV_PROJECT_ENVIRONMENT",
+        "ROBOT_SF_EXPLICIT_VENV_OVERRIDE",
         "PYTEST_ADDOPTS",
         "PYTEST_NUM_WORKERS",
         "PYTEST_XDIST_DIST",

@@ -214,6 +214,25 @@ class _PedEnv:
         return None
 
 
+def _assert_runtime_identity_schema(record: dict) -> None:
+    """Validate recorded identities and reject a malformed map digest."""
+    runtime_identity_validator = Draft202012Validator(
+        json.loads(
+            (
+                _REPO_ROOT / "robot_sf/benchmark/schemas/episode_runtime_input_identity.v1.json"
+            ).read_text()
+        )
+    )
+    runtime_identity_validator.validate(record)
+    invalid_identity = dict(record)
+    invalid_identity["selected_map_identity"] = {
+        **record["selected_map_identity"],
+        "sha256": "not-a-sha256",
+    }
+    with pytest.raises(ValidationError):
+        runtime_identity_validator.validate(invalid_identity)
+
+
 @pytest.mark.parametrize("gated_learned_policy", [False, True])
 def test_run_map_episode_record_carries_native_blocks(
     monkeypatch: pytest.MonkeyPatch, gated_learned_policy: bool
@@ -326,21 +345,7 @@ def test_run_map_episode_record_carries_native_blocks(
     Draft202012Validator(
         json.loads((_REPO_ROOT / "robot_sf/benchmark/schemas/episode.schema.v1.json").read_text())
     ).validate(record)
-    runtime_identity_validator = Draft202012Validator(
-        json.loads(
-            (
-                _REPO_ROOT / "robot_sf/benchmark/schemas/episode_runtime_input_identity.v1.json"
-            ).read_text()
-        )
-    )
-    runtime_identity_validator.validate(record)
-    invalid_identity = dict(record)
-    invalid_identity["selected_map_identity"] = {
-        **record["selected_map_identity"],
-        "sha256": "not-a-sha256",
-    }
-    with pytest.raises(ValidationError):
-        runtime_identity_validator.validate(invalid_identity)
+    _assert_runtime_identity_schema(record)
 
     assert record["failure_mechanism"]["mechanism_schema_version"] == MECHANISM_SCHEMA_VERSION
     assert record["failure_mechanism"]["mechanism_label"] == "unknown"

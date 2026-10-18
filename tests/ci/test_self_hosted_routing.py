@@ -764,7 +764,12 @@ def _assert_token_references(workflow: dict[str, Any]) -> None:
                 inspect(child, (*path, index))
         elif isinstance(value, str):
             broad, direct, unsafe_secrets = _credential_context_references(
-                value, implicit_expression=bool(path) and path[-1] == "if"
+                value,
+                implicit_expression=(
+                    path[:1] == ("jobs",)
+                    and path[-1:] == ("if",)
+                    and (len(path) == 3 or (len(path) == 5 and path[2] == "steps"))
+                ),
             )
             assert not unsafe_secrets, (
                 "App credential must not escape through whole or computed secrets access"
@@ -1260,6 +1265,14 @@ def test_scalar_properties_named_secrets_retain_complete_boundary_acceptance(
         ("CONTEXT ${{ toJSON(CONTEXT) }} CONTEXT", True, "name"),
         ("Literal ROBOT_SF_ROUTER_APP_KEY", True, "env"),
         ("Literal robot_sf_router_app_key", True, "name"),
+        ("CONTEXT", False, "env-if"),
+        ("CONTEXT", False, "with-if"),
+        ("${{ CONTEXT }}", True, "env-if"),
+        ("${{ CONTEXT }}", True, "with-if"),
+        ("format('CONTEXT', 'safe')", False, "step-if"),
+        ("CONTEXT.OTHER_KEY", False, "step-if"),
+        ("CONTEXT", True, "step-if"),
+        ("toJSON(CONTEXT)", True, "step-if"),
     ],
     ids=[
         "output-dot",
@@ -1290,6 +1303,14 @@ def test_scalar_properties_named_secrets_retain_complete_boundary_acceptance(
         "mixed-name-unsafe",
         "raw-credential-env",
         "raw-credential-name",
+        "literal-env-key-if",
+        "literal-input-key-if",
+        "unsafe-env-key-if",
+        "unsafe-input-key-if",
+        "step-if-literal",
+        "step-if-scalar",
+        "step-if-whole",
+        "step-if-serialised",
     ],
 )
 def test_context_root_and_scalar_property_boundary_matrix(
@@ -1309,6 +1330,12 @@ def test_context_root_and_scalar_property_boundary_matrix(
         probe.setdefault("env", {})["ROUTER_DEBUG_SNAPSHOT"] = value
     elif site == "if":
         workflow["jobs"]["runner-availability"][site] = value
+    elif site == "step-if":
+        workflow["jobs"]["runner-availability"]["steps"][0]["if"] = value
+    elif site == "env-if":
+        probe.setdefault("env", {})["if"] = value
+    elif site == "with-if":
+        probe["with"]["if"] = value
     else:
         probe[site] = value
     if should_reject:

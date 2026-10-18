@@ -88,3 +88,48 @@ def test_campaign_serializes_nonfinite_metrics_like_native_writer():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     assert module.safe({"unobserved_metric": float("inf")}) == {"unobserved_metric": None}
+
+
+def test_conditional_rates_recompute_denominators_and_empty_strata():
+    rows = []
+    for seed in range(1091, 1121):
+        for policy in ("orca", "hybrid"):
+            rows.append(
+                {
+                    "seed": seed,
+                    "group": "portal",
+                    "policy": policy,
+                    "success": policy == "hybrid",
+                    "traversal": True,
+                }
+            )
+    summary = MODULE.group_success(rows, replicates=100)
+    rates = {(r["policy"], r["stratum"]): r for r in summary["rates"]}
+    assert rates["hybrid", "traversal"]["interval"] == [1.0, 1.0]
+    assert rates["orca", "traversal"]["interval"] == [0.0, 0.0]
+    assert rates["orca", "no_traversal"]["rate"] is None
+    assert rates["orca", "no_traversal"]["empty_replicates"] == 100
+    assert summary["contrasts"][0]["interval"] == [1.0, 1.0]
+
+
+def test_first_step_zero_velocity_sentinel_uses_position_speed():
+    fs = frames([[-0.1, 0], [0.2, 0]])
+    fs[1]["velocity"] = [0, 0]
+    fs[1]["first_step_sentinel"] = True
+    result = MODULE.actor_indicators(fs, [P])
+    assert result["first_step_sentinels"] == 1
+    assert not result["stationary"]
+
+
+def test_oblique_entry_uses_finite_plane_intersection():
+    fs = frames([[-0.2, 1.2], [0.2, 0.6], [0.8, 0.2], [1.2, 0]])
+    assert MODULE.actor_indicators(fs, [P])["passages"] == ["door"]
+
+
+def test_two_necks_must_be_completed_without_respawn_between_them():
+    second = {**P, "name": "second", "entry": 2, "exit": 3}
+    fs = frames([[-0.1, 0], [0.6, 0], [1.1, 0], [1.9, 0], [2.5, 0], [3.1, 0]])
+    fs[3]["boundary"] = True
+    result = MODULE.actor_indicators(fs, [P, second])
+    assert result["passages"] == ["door", "second"]
+    assert not result["all_passages_uninterrupted"]

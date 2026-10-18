@@ -656,12 +656,15 @@ def _credential_context_references(value: str) -> tuple[bool, bool, bool]:
     Normalize plain bracket properties before discarding grouping parentheses,
     so secrets[('key')] remains computed. Every literal's contents are checked
     for the credential prefix, even when passed to a function or left malformed.
+    Keep function-call delimiters so a property on the result cannot disguise a
+    whole secrets argument as scalar access. Only plain secret properties pass.
     """
     tokens = list(_credential_reference_tokens(value))
     direct = any(
         "robot_sf_router_app_" in text for kind, text in tokens if kind in {"identifier", "string"}
     )
     normalised: list[tuple[str, str]] = []
+    call_parentheses: list[bool] = []
     index = 0
     while index < len(tokens):
         if (
@@ -673,18 +676,33 @@ def _credential_context_references(value: str) -> tuple[bool, bool, bool]:
             normalised.extend((("symbol", "."), ("property", tokens[index + 1][1])))
             index += 3
         else:
-            if tokens[index] not in {("symbol", "("), ("symbol", ")")}:
+            if tokens[index] == ("symbol", "("):
+                is_call = index > 0 and tokens[index - 1][0] == "identifier"
+                call_parentheses.append(is_call)
+                if is_call:
+                    normalised.append(tokens[index])
+            elif tokens[index] == ("symbol", ")"):
+                if call_parentheses and call_parentheses.pop():
+                    normalised.append(tokens[index])
+            else:
                 normalised.append(tokens[index])
             index += 1
-    broad = computed = False
+    unsafe_secrets = False
     for index, (kind, token) in enumerate(normalised):
-        if kind != "identifier":
+        if (kind, token) == ("identifier", "secrets"):
+            unsafe_secrets |= not (
+                index + 2 < len(normalised)
+                and normalised[index + 1] == ("symbol", ".")
+                and normalised[index + 2][0] in {"identifier", "property"}
+            )
+    # Retain the existing parenthesis-free view and all its step refusals.
+    normalised = [item for item in normalised if item not in {("symbol", "("), ("symbol", ")")}]
+    broad = False
+    for index, (kind, token) in enumerate(normalised):
+        if kind != "identifier" or token != "steps":
             continue
         # At most six lookahead tokens: no growing suffix copies or rescans.
         tail = [text for _, text in normalised[index + 1 : index + 7]]
-        computed |= token == "secrets" and tail[:1] == ["["]
-        if token != "steps":
-            continue
         direct |= tail[:2] == [".", "router-token"]
         broad |= (
             not tail
@@ -698,7 +716,7 @@ def _credential_context_references(value: str) -> tuple[bool, bool, bool]:
                 and (len(tail) < 6 or tail[4] != "." or tail[5] == "*")
             )
         )
-    return broad, direct, computed
+    return broad, direct, unsafe_secrets
 
 
 def _assert_token_references(workflow: dict[str, Any]) -> None:
@@ -718,8 +736,10 @@ def _assert_token_references(workflow: dict[str, Any]) -> None:
             for index, child in enumerate(value):
                 inspect(child, (*path, index))
         elif isinstance(value, str):
-            broad, direct, computed = _credential_context_references(value)
-            assert not computed, "App credential must not escape through computed secrets access"
+            broad, direct, unsafe_secrets = _credential_context_references(value)
+            assert not unsafe_secrets, (
+                "App credential must not escape through whole or computed secrets access"
+            )
             if path[:2] == ("jobs", "runner-availability") and broad:
                 raise AssertionError("App credential must not escape via broad step serialization")
             if direct:
@@ -1033,3 +1053,76 @@ def test_token_reference_computed_secrets_cannot_use_location_exemption(site: st
         }
     with pytest.raises(AssertionError, match="must not escape"):
         _assert_token_references(workflow)
+
+
+@pytest.mark.parametrize(
+    "expression",
+    [
+        "${{ toJSON(secrets) }}",
+        "${{ secrets }}",
+        "${{ contains(secrets, 'x') }}",
+        "${{ format('{0}', secrets) }}",
+        "${{ join(secrets, ',') }}",
+        "${{ secrets.* }}",
+        "${{ toJSON(secrets.*) }}",
+        "${{ TOJSON(SeCrEtS) }}",
+        "${{ SeCrEtS }}",
+        "${{ FORMAT('{0}', SeCrEtS) }}",
+        "${{ JOIN(SeCrEtS, ',') }}",
+        "${{ SeCrEtS . * }}",
+        "${{ toJSON((SeCrEtS)) }}",
+        "${{ join((SeCrEtS).*, ',') }}",
+        "${{ toJSON(secrets).OTHER_KEY }}",
+        "${{ format('{0}', secrets).OTHER_KEY }}",
+        "${{ contains((secrets), 'x').OTHER_KEY }}",
+        "${{ secrets. }}",
+        "${{ secrets.123 }}",
+        "${{ secrets || 'fallback' }}",
+    ],
+)
+def test_whole_secret_context_rejected_by_complete_boundary(expression: str) -> None:
+    """Whole secrets, function arguments and wildcards must never cross the boundary."""
+    workflow = yaml.safe_load(CI_WORKFLOW.read_text(encoding="utf-8"))
+    _, probe = _token_steps(workflow)
+    probe.setdefault("env", {})["ROUTER_DEBUG_SNAPSHOT"] = expression
+    with pytest.raises(AssertionError, match="must not escape"):
+        _assert_router_app_token_boundary(workflow)
+
+
+@pytest.mark.parametrize("site", ["app-id", "private-key", "guard", "github-token", "other-job"])
+def test_whole_secret_context_cannot_use_location_exemption(site: str) -> None:
+    """The four exact allowlist locations and other jobs cannot exempt whole secrets."""
+    workflow = yaml.safe_load(CI_WORKFLOW.read_text(encoding="utf-8"))
+    mint, probe = _token_steps(workflow)
+    expression = "${{ toJSON(SeCrEtS) }}"
+    if site in {"app-id", "private-key"}:
+        mint["with"][site] = expression
+    elif site == "guard":
+        probe["if"] = expression
+    elif site == "github-token":
+        probe["with"][site] = expression
+    else:
+        workflow["jobs"]["fast-feedback"]["steps"][0]["env"] = {"SNAPSHOT": expression}
+    with pytest.raises(AssertionError, match="must not escape"):
+        _assert_token_references(workflow)
+
+
+@pytest.mark.parametrize(
+    "expression",
+    [
+        "${{ secrets.OTHER_KEY }}",
+        "${{ SeCrEtS . OTHER_KEY }}",
+        "${{ secrets['OTHER_KEY'] }}",
+        "${{ (SeCrEtS)['OTHER_KEY'] }}",
+        "${{ ((SeCrEtS)) . OTHER_KEY }}",
+        "${{ toJSON(secrets.OTHER_KEY) }}",
+        "${{ format('{0}', secrets['OTHER_KEY']) }}",
+        "${{ format('secrets', 'safe') }}",
+    ],
+)
+def test_plain_secret_scalar_access_retains_complete_boundary_acceptance(expression: str) -> None:
+    """Plain named scalar access and a quoted context name retain existing acceptance."""
+    workflow = yaml.safe_load(CI_WORKFLOW.read_text(encoding="utf-8"))
+    _, probe = _token_steps(workflow)
+    probe.setdefault("env", {})["ROUTER_DEBUG_SNAPSHOT"] = expression
+    _assert_router_app_token_boundary(workflow)

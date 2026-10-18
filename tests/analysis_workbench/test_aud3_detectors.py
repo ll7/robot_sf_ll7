@@ -1,10 +1,11 @@
 """RVAUD regressions through public scans, with explicit physical/coverage oracles."""
 
 from copy import deepcopy
+from math import isnan
 
 import pytest
 
-from robot_sf.analysis_workbench.audit_detectors import detect
+from robot_sf.analysis_workbench.audit_detectors import detect, normalize_recorded_undefined
 from robot_sf.analysis_workbench.audit_scan import scan_campaign
 
 
@@ -33,10 +34,32 @@ def test_named_force_record_validates_each_physical_quantile(field, value):
     # The zero control must also obey the ordered-quantile contract.
     row["metrics"]["force_quantiles"] = {"q50": 0, "q90": 0, "q95": 0}
     assert signal([row], "extreme_measurements", "named").status == "clear"
-    for invalid in (float("nan"), float("inf"), -float("inf")):
+    for invalid in (float("inf"), -float("inf")):
         row["metrics"]["force_quantiles"][field] = invalid
         s = detect("extreme_measurements", row)
         assert (s.status, s.reason_code) == ("error", "nonfinite_or_malformed_measurement")
+
+
+@pytest.mark.parametrize("field", ["q50", "q90", "q95"])
+def test_documented_nan_force_quantile_matches_explicit_missingness(field):
+    row = {
+        "episode_id": "undefined-force",
+        "metrics": {
+            "clearance_m": 1,
+            "force_quantiles": {"q50": 0, "q90": 0, "q95": 0, field: float("nan")},
+        },
+    }
+    projected = normalize_recorded_undefined(row)
+    assert projected["metrics"]["force_quantiles"][field] is None
+    assert projected["audit_adapter_missingness"] == [
+        {
+            "path": f"metrics.force_quantiles.{field}",
+            "source_token": "NaN",
+            "reason": "documented_undefined_metric",
+        }
+    ]
+    assert isnan(row["metrics"]["force_quantiles"][field])
+    assert signal([row], "extreme_measurements", "undefined-force").status == "clear"
 
 
 @pytest.mark.parametrize(

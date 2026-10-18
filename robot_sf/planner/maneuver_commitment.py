@@ -15,7 +15,7 @@ import math
 from dataclasses import dataclass, field
 from enum import StrEnum
 from types import MappingProxyType
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -196,10 +196,12 @@ class ManeuverCommitmentConfig:
     """Validated, bounded thresholds and costs for the state machine."""
 
     min_dwell_steps_by_state: Mapping[ManeuverState | str, int] = field(
-        default_factory=_default_min_dwell
+        default_factory=lambda: cast("Mapping[ManeuverState | str, int]", _default_min_dwell())
     )
     max_duration_steps_by_state: Mapping[ManeuverState | str, int | None] = field(
-        default_factory=_default_max_duration
+        default_factory=lambda: cast(
+            "Mapping[ManeuverState | str, int | None]", _default_max_duration()
+        )
     )
     switch_cost_by_transition: Mapping[tuple[ManeuverState | str, ManeuverState | str], float] = (
         field(default_factory=dict)
@@ -242,13 +244,15 @@ class ManeuverCommitmentConfig:
         """Return a deterministic digest of the validated configuration."""
         payload = {
             "min_dwell": sorted(
-                (key.value, value) for key, value in self.min_dwell_steps_by_state.items()
+                (cast("ManeuverState", key).value, value)
+                for key, value in self.min_dwell_steps_by_state.items()
             ),
             "max_duration": sorted(
-                (key.value, value) for key, value in self.max_duration_steps_by_state.items()
+                (cast("ManeuverState", key).value, value)
+                for key, value in self.max_duration_steps_by_state.items()
             ),
             "switch_costs": sorted(
-                (left.value, right.value, value)
+                (cast("ManeuverState", left).value, cast("ManeuverState", right).value, value)
                 for (left, right), value in self.switch_cost_by_transition.items()
             ),
             "costs": [

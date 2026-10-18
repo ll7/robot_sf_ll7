@@ -1030,6 +1030,10 @@ def _validate_preserved_trajectory_diagnostics(diagnostics: Mapping[str, Any]) -
         set(initial) == set(final) == set(speeds),
         "journal native terminal row trajectory diagnostic actor identities differ",
     )
+    _require(
+        all(speed >= 0.0 for speed in speeds.values()),
+        "journal native terminal row trajectory diagnostic maximum speeds must be nonnegative",
+    )
     _, spawn = _frozen_diagnostic_contracts()
     _require(
         spawn.get("initial_speed_binding") == "released_default"

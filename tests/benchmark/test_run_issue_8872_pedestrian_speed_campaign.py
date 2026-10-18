@@ -493,6 +493,63 @@ def test_preserved_trajectory_diagnostics_enforce_spawn_and_actor_contracts(
     )
 
 
+@pytest.mark.parametrize("boundary", ("accounting", "journal"))
+@pytest.mark.parametrize(
+    "updates",
+    [
+        {
+            "runtime_max_speed_m_s_by_pedestrian": {"p0": -0.1},
+            "realized_desired_speed_mean_m_s": -0.1,
+        },
+        {
+            "runtime_max_speed_m_s_by_pedestrian": {"p0": -0.1, "p1": 1.1},
+            "realized_desired_speed_mean_m_s": 0.5,
+            "realized_desired_speed_std_m_s": 0.6,
+            "initial_spawn_velocity_xy_by_pedestrian": {"p0": [0.5, 0.0], "p1": [0.5, 0.0]},
+            "final_post_integration_velocity_xy_by_pedestrian": {
+                "p0": [0.5, 0.0],
+                "p1": [0.5, 0.0],
+            },
+        },
+    ],
+    ids=("negative-mean", "negative-actor-positive-mean"),
+)
+def test_preserved_negative_actor_maximum_speeds_cannot_count_as_native_success(
+    tmp_path: Any, boundary: str, updates: dict[str, Any]
+) -> None:
+    _assert_preserved_diagnostics_rejected(
+        tmp_path, boundary, "legacy_default", updates, "maximum speeds must be nonnegative"
+    )
+
+
+@pytest.mark.parametrize("speed", (0.0, 0.5))
+def test_preserved_nonnegative_actor_maximum_speeds_remain_native(
+    tmp_path: Any, speed: float
+) -> None:
+    packet = _packet()
+    identity = next(row for row in packet["identities"] if row["regime_id"] == "legacy_default")
+    outcome = _native_outcome(identity, packet)
+    outcome["provenance"]["diagnostics"].update(
+        {
+            "runtime_max_speed_m_s_by_pedestrian": {"p0": speed},
+            "realized_desired_speed_mean_m_s": speed,
+        }
+    )
+    report = campaign.account_production_rows(
+        packet, [outcome], source_commit=packet["source_commit"]
+    )
+    assert report["terminal_status_counts"][campaign.SUCCESS_STATUS] == 1
+    journal = tmp_path / "nonnegative-speed.jsonl"
+    with journal.open("w", encoding="utf-8") as handle:
+        campaign._append_journal_event(handle, **_journal_header(expected_rows=2160, packet=packet))
+        campaign._append_journal_event(handle, "row_started", identity_key=identity["identity_key"])
+        campaign._append_journal_event(
+            handle, "row_finished", **campaign._journal_row_payload(outcome, packet_context=packet)
+        )
+    summary = _reconcile(journal, expected_rows=2160, packet=packet)
+    assert summary["rows"][0]["terminal_status"] == campaign.SUCCESS_STATUS
+
+
 @pytest.mark.parametrize("regime_id", ("legacy_default", "slow_distributed", "typical_distributed"))
 def test_preserved_diagnostics_accept_valid_vectors_and_activation_boundary(
     tmp_path: Any, regime_id: str

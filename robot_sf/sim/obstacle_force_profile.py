@@ -53,9 +53,17 @@ def resolve_obstacle_force_profile(value: str | None = None) -> _ResolvedProfile
 
 
 def apply_obstacle_force_profile(config: ObstacleForceConfig, value: str | None) -> None:
-    """Apply a fitted parameter set without changing the legacy/default path."""
+    """Apply an explicit profile while preserving missing-profile defaults."""
     profile = resolve_obstacle_force_profile(value)
+    if not profile.explicit:
+        return
     if profile == LEGACY_PROFILE:
+        if (
+            config.law_version != LEGACY_SHIFTED_GRADIENT_V1
+            and config.obstacle_force_law_resolution_mode != "defaulted_missing"
+        ):
+            raise ValueError("legacy_v1 requires obstacle_force_law=legacy_shifted_gradient_v1")
+        config.law_version = LEGACY_SHIFTED_GRADIENT_V1
         return
     if profile == BODY_EDGE_PROFILE:
         if (
@@ -81,8 +89,12 @@ def apply_obstacle_force_profile(config: ObstacleForceConfig, value: str | None)
         config.threshold = 0.4
         config.sigma = 0.0
         return
-    if config.law_version != LEGACY_SHIFTED_GRADIENT_V1:
+    if (
+        config.law_version != LEGACY_SHIFTED_GRADIENT_V1
+        and config.obstacle_force_law_resolution_mode != "defaulted_missing"
+    ):
         raise ValueError("calibrated_v2 requires obstacle_force_law=legacy_shifted_gradient_v1")
+    config.law_version = LEGACY_SHIFTED_GRADIENT_V1
     # Rejected prototype: footprint and narrow-door gates fail. Opt-in diagnostics only.
     config.factor = 0.003
     config.threshold = 0.375

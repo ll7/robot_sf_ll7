@@ -75,8 +75,8 @@ def test_opt_in_profile_removes_lone_doorway_force_barrier():
 
 
 def test_default_profile_preserves_legacy_settings_hash():
-    """The missing selector must preserve the current-main pre-profile digest."""
-    payload = asdict(SimulationSettings())
+    """A missing profile retains the original digest when legacy is selected."""
+    payload = asdict(SimulationSettings(obstacle_force_law="legacy_shifted_gradient_v1"))
     payload.pop("robot_goal_sampling_policy")
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
     assert hashlib.sha256(encoded.encode()).hexdigest() == (
@@ -195,3 +195,59 @@ def test_profile_copy_keeps_new_main_step_and_group_overrides():
     )
     assert replace(settings).episode_step_limit == 7
     assert replace(settings).group_allocation_mode == "exact_small_crowd_v1"
+
+
+@pytest.mark.parametrize(
+    ("profile", "law", "factor"),
+    [
+        (None, "body_edge_exponential_v3_physical_margin10x", 10.0),
+        ("legacy_v1", "legacy_shifted_gradient_v1", 10.0),
+        ("calibrated_v2", "legacy_shifted_gradient_v1", 0.003),
+        ("gradient_v3", "surface_distance_unit_normal_v2", 0.001),
+        ("body_edge_v3", "body_edge_exponential_v3", 10.0),
+    ],
+)
+def test_profile_and_promoted_default_bind_the_requested_native_law(profile, law, factor):
+    """A missing law inherits the new default or the explicitly selected profile."""
+    _, force = _doorway_force(profile)
+    assert force.config.law_version == law
+    assert force.config.factor == factor
+
+
+@pytest.mark.parametrize("profile", ["legacy_v1", "calibrated_v2"])
+def test_legacy_profiles_reject_an_explicit_promoted_law(profile):
+    """Profile precedence must never silently replace an explicitly supplied law."""
+    with pytest.raises(ValueError, match=f"{profile} requires"):
+        _doorway_force(profile, "body_edge_exponential_v3_physical_margin10x")
+
+
+def test_scenario_profile_keeps_default_provenance_and_other_overrides():
+    """Scenario loading composes profile selection with whole-step and group settings."""
+    from pathlib import Path
+
+    from robot_sf.training.scenario_loader import build_robot_config_from_scenario, load_scenarios
+
+    root = Path(__file__).resolve().parents[2]
+    manifest = root / "configs/scenarios/issue_10304_wall_law_bottleneck_successor_v1.yaml"
+    scenario = deepcopy(load_scenarios(manifest)[0])
+    scenario["simulation_config"] = {
+        "obstacle_force_profile": "calibrated_v2",
+        "max_episode_steps": 7,
+        "group_allocation_mode": "exact_small_crowd_v1",
+    }
+    config = build_robot_config_from_scenario(scenario, scenario_path=manifest).sim_config
+    assert config.obstacle_force_law == "body_edge_exponential_v3_physical_margin10x"
+    assert config.obstacle_force_law_resolution_mode == "defaulted_missing"
+    assert config.to_dict()["obstacle_force_profile"] == "calibrated_v2"
+    copied = replace(config)
+    assert copied.sim_time_in_secs == pytest.approx(0.7)
+    assert copied.group_allocation_mode == "exact_small_crowd_v1"
+    assert copied._config_hash_overrides() == config._config_hash_overrides()
+    from pysocialforce.config import ObstacleForceConfig
+
+    from robot_sf.sim.obstacle_force_profile import apply_obstacle_force_profile
+
+    force_config = ObstacleForceConfig(law_version=copied.obstacle_force_law)
+    apply_obstacle_force_profile(force_config, copied.obstacle_force_profile)
+    assert force_config.law_version == "legacy_shifted_gradient_v1"
+    assert force_config.factor == 0.003

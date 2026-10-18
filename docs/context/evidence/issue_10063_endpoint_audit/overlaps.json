@@ -1,0 +1,5827 @@
+{
+  "after": [
+    {
+      "bounds": [
+        17.904995,
+        29.452839,
+        21.904995,
+        33.452839
+      ],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((18.5 11.793715, 18.5 29.5, 21.5 29.5, 21.5 11.793715, 18.5 11.793715))",
+            "density": 0.0,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                20.0,
+                13.293715
+              ],
+              [
+                20.0,
+                28.0
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((17.904995 29.452839, 21.904995 29.452839, 21.904995 33.452839, 17.904995 33.452839, 17.904995 29.452839))"
+          },
+          "geometry_sha256": "c9f25a9bea33781e166d3df6ab7a3f781561a146d832076543ff3f5795a7d599"
+        }
+      ],
+      "map_id": "issue_9762_classic_bottleneck_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_bottleneck_low",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        18.015638,
+        5.8725448,
+        22.015638,
+        9.8725448
+      ],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "ped_spawn",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((18 6, 22 6, 22 10, 18 10, 18 6))",
+            "density": 0.0,
+            "ped_radius_m": 0.4,
+            "population_size": null,
+            "zone_wkt": "POLYGON ((18.015638 5.8725448, 22.015638 5.8725448, 22.015638 9.8725448, 18.015638 9.8725448, 18.015638 5.8725448))"
+          },
+          "geometry_sha256": "265ef8e459ed1ba14b524b4cc3f18c1fcc0cd33da5f904510d7381449f85c4c3"
+        }
+      ],
+      "map_id": "issue_9762_classic_bottleneck_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_bottleneck_low",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        17.904995,
+        29.452839,
+        21.904995,
+        33.452839
+      ],
+      "intersections": [
+        {
+          "actor": "h1",
+          "actor_kind": "single",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "LINESTRING (20 6, 20 34)",
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                20.0,
+                6.0
+              ],
+              [
+                20.0,
+                34.0
+              ]
+            ],
+            "role": null,
+            "zone_wkt": "POLYGON ((17.904995 29.452839, 21.904995 29.452839, 21.904995 33.452839, 17.904995 33.452839, 17.904995 29.452839))"
+          },
+          "geometry_sha256": "a798d68b3f2414fef5ef955538dac20e90f35412573c990ce67101f8fa704132"
+        },
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((18.5 11.793715, 18.5 29.5, 21.5 29.5, 21.5 11.793715, 18.5 11.793715))",
+            "density": 0.0,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                20.0,
+                13.293715
+              ],
+              [
+                20.0,
+                28.0
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((17.904995 29.452839, 21.904995 29.452839, 21.904995 33.452839, 17.904995 33.452839, 17.904995 29.452839))"
+          },
+          "geometry_sha256": "c9f25a9bea33781e166d3df6ab7a3f781561a146d832076543ff3f5795a7d599"
+        }
+      ],
+      "map_id": "issue_9762_classic_bottleneck_medium_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_bottleneck_medium",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        18.015638,
+        5.8725448,
+        22.015638,
+        9.8725448
+      ],
+      "intersections": [
+        {
+          "actor": "h1",
+          "actor_kind": "single",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "LINESTRING (20 6, 20 34)",
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                20.0,
+                6.0
+              ],
+              [
+                20.0,
+                34.0
+              ]
+            ],
+            "role": null,
+            "zone_wkt": "POLYGON ((18.015638 5.8725448, 22.015638 5.8725448, 22.015638 9.8725448, 18.015638 9.8725448, 18.015638 5.8725448))"
+          },
+          "geometry_sha256": "589112badc1318c99acc1e795a16ae3b6bd5ad847c634052c63f5d91179dd526"
+        },
+        {
+          "actor": "0",
+          "actor_kind": "ped_spawn",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((18 6, 22 6, 22 10, 18 10, 18 6))",
+            "density": 0.0,
+            "ped_radius_m": 0.4,
+            "population_size": null,
+            "zone_wkt": "POLYGON ((18.015638 5.8725448, 22.015638 5.8725448, 22.015638 9.8725448, 18.015638 9.8725448, 18.015638 5.8725448))"
+          },
+          "geometry_sha256": "265ef8e459ed1ba14b524b4cc3f18c1fcc0cd33da5f904510d7381449f85c4c3"
+        }
+      ],
+      "map_id": "issue_9762_classic_bottleneck_medium_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_bottleneck_medium",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        17.904995,
+        29.452839,
+        21.904995,
+        33.452839
+      ],
+      "intersections": [
+        {
+          "actor": "h1",
+          "actor_kind": "single",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "LINESTRING (19 6, 19 34)",
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                19.0,
+                6.0
+              ],
+              [
+                19.0,
+                34.0
+              ]
+            ],
+            "role": null,
+            "zone_wkt": "POLYGON ((17.904995 29.452839, 21.904995 29.452839, 21.904995 33.452839, 17.904995 33.452839, 17.904995 29.452839))"
+          },
+          "geometry_sha256": "16cf4a43528b9c3cebcbe2ba962e3d074bf6c725872c742fd054579039541bee"
+        },
+        {
+          "actor": "h2",
+          "actor_kind": "single",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "LINESTRING (20 6, 20 34)",
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                20.0,
+                6.0
+              ],
+              [
+                20.0,
+                34.0
+              ]
+            ],
+            "role": null,
+            "zone_wkt": "POLYGON ((17.904995 29.452839, 21.904995 29.452839, 21.904995 33.452839, 17.904995 33.452839, 17.904995 29.452839))"
+          },
+          "geometry_sha256": "a798d68b3f2414fef5ef955538dac20e90f35412573c990ce67101f8fa704132"
+        },
+        {
+          "actor": "h3",
+          "actor_kind": "single",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "LINESTRING (21 6, 21 34)",
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                21.0,
+                6.0
+              ],
+              [
+                21.0,
+                34.0
+              ]
+            ],
+            "role": null,
+            "zone_wkt": "POLYGON ((17.904995 29.452839, 21.904995 29.452839, 21.904995 33.452839, 17.904995 33.452839, 17.904995 29.452839))"
+          },
+          "geometry_sha256": "d697e982d061cae917b56f648adb9b7e6811474b3726b40d4ad3fffbe65fe4b1"
+        },
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((18.5 11.793715, 18.5 29.5, 21.5 29.5, 21.5 11.793715, 18.5 11.793715))",
+            "density": 0.0,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                20.0,
+                13.293715
+              ],
+              [
+                20.0,
+                28.0
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((17.904995 29.452839, 21.904995 29.452839, 21.904995 33.452839, 17.904995 33.452839, 17.904995 29.452839))"
+          },
+          "geometry_sha256": "c9f25a9bea33781e166d3df6ab7a3f781561a146d832076543ff3f5795a7d599"
+        }
+      ],
+      "map_id": "issue_9762_classic_bottleneck_high_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_bottleneck_high",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        18.015638,
+        5.8725448,
+        22.015638,
+        9.8725448
+      ],
+      "intersections": [
+        {
+          "actor": "h1",
+          "actor_kind": "single",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "LINESTRING (19 6, 19 34)",
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                19.0,
+                6.0
+              ],
+              [
+                19.0,
+                34.0
+              ]
+            ],
+            "role": null,
+            "zone_wkt": "POLYGON ((18.015638 5.8725448, 22.015638 5.8725448, 22.015638 9.8725448, 18.015638 9.8725448, 18.015638 5.8725448))"
+          },
+          "geometry_sha256": "fe85a5e1f8b020386ebb9bb8ec303120d66089613e40150d019e65f07348fdc6"
+        },
+        {
+          "actor": "h2",
+          "actor_kind": "single",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "LINESTRING (20 6, 20 34)",
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                20.0,
+                6.0
+              ],
+              [
+                20.0,
+                34.0
+              ]
+            ],
+            "role": null,
+            "zone_wkt": "POLYGON ((18.015638 5.8725448, 22.015638 5.8725448, 22.015638 9.8725448, 18.015638 9.8725448, 18.015638 5.8725448))"
+          },
+          "geometry_sha256": "589112badc1318c99acc1e795a16ae3b6bd5ad847c634052c63f5d91179dd526"
+        },
+        {
+          "actor": "h3",
+          "actor_kind": "single",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "LINESTRING (21 6, 21 34)",
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                21.0,
+                6.0
+              ],
+              [
+                21.0,
+                34.0
+              ]
+            ],
+            "role": null,
+            "zone_wkt": "POLYGON ((18.015638 5.8725448, 22.015638 5.8725448, 22.015638 9.8725448, 18.015638 9.8725448, 18.015638 5.8725448))"
+          },
+          "geometry_sha256": "9ede591859e683a797105688f4cb130ad4aedefdda105f353f1244e876e7c312"
+        },
+        {
+          "actor": "0",
+          "actor_kind": "ped_spawn",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((18 6, 22 6, 22 10, 18 10, 18 6))",
+            "density": 0.0,
+            "ped_radius_m": 0.4,
+            "population_size": null,
+            "zone_wkt": "POLYGON ((18.015638 5.8725448, 22.015638 5.8725448, 22.015638 9.8725448, 18.015638 9.8725448, 18.015638 5.8725448))"
+          },
+          "geometry_sha256": "265ef8e459ed1ba14b524b4cc3f18c1fcc0cd33da5f904510d7381449f85c4c3"
+        }
+      ],
+      "map_id": "issue_9762_classic_bottleneck_high_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_bottleneck_high",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        4.0,
+        13.5,
+        7.0,
+        16.5
+      ],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((15.5 16.5, 18.5 16.5, 21.5 16.5, 24.5 16.5, 35.5 16.5, 38.5 16.5, 41.5 16.5, 44.5 16.5, 54.5 16.5, 54.5 13.5, 44.5 13.5, 41.5 13.5, 38.5 13.5, 35.5 13.5, 24.5 13.5, 21.5 13.5, 18.5 13.5, 15.5 13.5, 5.5 13.5, 5.5 16.5, 15.5 16.5))",
+            "density": 0.0,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                7.0,
+                15.0
+              ],
+              [
+                17.0,
+                15.0
+              ],
+              [
+                23.0,
+                15.0
+              ],
+              [
+                37.0,
+                15.0
+              ],
+              [
+                43.0,
+                15.0
+              ],
+              [
+                53.0,
+                15.0
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((4 13.5, 7 13.5, 7 16.5, 4 16.5, 4 13.5))"
+          },
+          "geometry_sha256": "57e936705b42110bf5135a6d88a3fa9f8f783f49fefaf38280ff21380bf18b84"
+        },
+        {
+          "actor": "1",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((15.5 16.5, 18.5 16.5, 21.5 16.5, 24.5 16.5, 35.5 16.5, 38.5 16.5, 41.5 16.5, 44.5 16.5, 54.5 16.5, 54.5 13.5, 44.5 13.5, 41.5 13.5, 38.5 13.5, 35.5 13.5, 24.5 13.5, 21.5 13.5, 18.5 13.5, 15.5 13.5, 5.5 13.5, 5.5 16.5, 15.5 16.5))",
+            "density": 0.0,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                53.0,
+                15.0
+              ],
+              [
+                43.0,
+                15.0
+              ],
+              [
+                37.0,
+                15.0
+              ],
+              [
+                23.0,
+                15.0
+              ],
+              [
+                17.0,
+                15.0
+              ],
+              [
+                7.0,
+                15.0
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((4 13.5, 7 13.5, 7 16.5, 4 16.5, 4 13.5))"
+          },
+          "geometry_sha256": "c453cff2f9c27c42fbfb6cce5c609ecdd2bda3b38d13975db6f2ed6f7fb3191a"
+        },
+        {
+          "actor": "0",
+          "actor_kind": "ped_spawn",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((3 11, 7 11, 7 19, 3 19, 3 11))",
+            "density": 0.0,
+            "ped_radius_m": 0.4,
+            "population_size": null,
+            "zone_wkt": "POLYGON ((4 13.5, 7 13.5, 7 16.5, 4 16.5, 4 13.5))"
+          },
+          "geometry_sha256": "f6895b19839e52007939dc372c1e24fbde6337db4465dba57e97f1e5cbe26a85"
+        }
+      ],
+      "map_id": "issue_9762_classic_realworld_bottleneck_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_realworld_double_bottleneck_high",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        53.0,
+        13.5,
+        56.0,
+        16.5
+      ],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((15.5 16.5, 18.5 16.5, 21.5 16.5, 24.5 16.5, 35.5 16.5, 38.5 16.5, 41.5 16.5, 44.5 16.5, 54.5 16.5, 54.5 13.5, 44.5 13.5, 41.5 13.5, 38.5 13.5, 35.5 13.5, 24.5 13.5, 21.5 13.5, 18.5 13.5, 15.5 13.5, 5.5 13.5, 5.5 16.5, 15.5 16.5))",
+            "density": 0.0,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                7.0,
+                15.0
+              ],
+              [
+                17.0,
+                15.0
+              ],
+              [
+                23.0,
+                15.0
+              ],
+              [
+                37.0,
+                15.0
+              ],
+              [
+                43.0,
+                15.0
+              ],
+              [
+                53.0,
+                15.0
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((53 13.5, 56 13.5, 56 16.5, 53 16.5, 53 13.5))"
+          },
+          "geometry_sha256": "fcde112a9daf07a0957b39aff17e394625b77522e4e00f01205fde9fae583636"
+        },
+        {
+          "actor": "1",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((15.5 16.5, 18.5 16.5, 21.5 16.5, 24.5 16.5, 35.5 16.5, 38.5 16.5, 41.5 16.5, 44.5 16.5, 54.5 16.5, 54.5 13.5, 44.5 13.5, 41.5 13.5, 38.5 13.5, 35.5 13.5, 24.5 13.5, 21.5 13.5, 18.5 13.5, 15.5 13.5, 5.5 13.5, 5.5 16.5, 15.5 16.5))",
+            "density": 0.0,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                53.0,
+                15.0
+              ],
+              [
+                43.0,
+                15.0
+              ],
+              [
+                37.0,
+                15.0
+              ],
+              [
+                23.0,
+                15.0
+              ],
+              [
+                17.0,
+                15.0
+              ],
+              [
+                7.0,
+                15.0
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((53 13.5, 56 13.5, 56 16.5, 53 16.5, 53 13.5))"
+          },
+          "geometry_sha256": "41375784fbbfbe3d10b2a9dd66c39464c9713d1ced07605f5a9957ccf1f9be1d"
+        },
+        {
+          "actor": "1",
+          "actor_kind": "ped_spawn",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((53 11, 57 11, 57 19, 53 19, 53 11))",
+            "density": 0.0,
+            "ped_radius_m": 0.4,
+            "population_size": null,
+            "zone_wkt": "POLYGON ((53 13.5, 56 13.5, 56 16.5, 53 16.5, 53 13.5))"
+          },
+          "geometry_sha256": "b6eaa9b2463f9d322eb287d2d4e421dec968c61327d45391840ff371b8d52d27"
+        }
+      ],
+      "map_id": "issue_9762_classic_realworld_bottleneck_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_realworld_double_bottleneck_high",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        2.0,
+        3.0,
+        6.0,
+        6.0
+      ],
+      "intersections": [],
+      "map_id": "issue_10063_classic_station_platform_safe_spawn_v1",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_station_platform_medium",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        77.0,
+        21.0,
+        81.0,
+        24.0
+      ],
+      "intersections": [],
+      "map_id": "issue_10063_classic_station_platform_safe_spawn_v1",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_station_platform_medium",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        4.0,
+        4.0,
+        8.0,
+        8.0
+      ],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((1.6189285999999998 4.1832518, 9.774272 22.813108, 17.165053 30.438106, 34.149275 38.561894, 37.149275 38.561894, 37.149275 35.561894, 20.165053 27.438106, 12.774272 19.813108, 4.6189286 1.1832517999999999, 1.6189285999999998 1.1832517999999999, 1.6189285999999998 4.1832518))",
+            "density": 0.02,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                3.1189286,
+                2.6832518
+              ],
+              [
+                11.274272,
+                21.313108
+              ],
+              [
+                18.665053,
+                28.938106
+              ],
+              [
+                35.649275,
+                37.061894
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((4 4, 8 4, 8 8, 4 8, 4 4))"
+          },
+          "geometry_sha256": "b36170db76b366590e56b97bf3f1155db00faac5d9966d4b8be1d0a0d7ba3a7e"
+        }
+      ],
+      "map_id": "issue_9762_classic_crossing_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_cross_trap_low",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        32.0,
+        32.0,
+        36.0,
+        36.0
+      ],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((1.6189285999999998 4.1832518, 9.774272 22.813108, 17.165053 30.438106, 34.149275 38.561894, 37.149275 38.561894, 37.149275 35.561894, 20.165053 27.438106, 12.774272 19.813108, 4.6189286 1.1832517999999999, 1.6189285999999998 1.1832517999999999, 1.6189285999999998 4.1832518))",
+            "density": 0.02,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                3.1189286,
+                2.6832518
+              ],
+              [
+                11.274272,
+                21.313108
+              ],
+              [
+                18.665053,
+                28.938106
+              ],
+              [
+                35.649275,
+                37.061894
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((32 32, 36 32, 36 36, 32 36, 32 32))"
+          },
+          "geometry_sha256": "5a6839dd70e14cdd69f24d0e8a395661a8313b48f6298a08da3fc8e1f1483667"
+        }
+      ],
+      "map_id": "issue_9762_classic_crossing_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_cross_trap_low",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        4.0,
+        4.0,
+        8.0,
+        8.0
+      ],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((1.6189285999999998 4.1832518, 9.774272 22.813108, 17.165053 30.438106, 34.149275 38.561894, 37.149275 38.561894, 37.149275 35.561894, 20.165053 27.438106, 12.774272 19.813108, 4.6189286 1.1832517999999999, 1.6189285999999998 1.1832517999999999, 1.6189285999999998 4.1832518))",
+            "density": 0.05,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                3.1189286,
+                2.6832518
+              ],
+              [
+                11.274272,
+                21.313108
+              ],
+              [
+                18.665053,
+                28.938106
+              ],
+              [
+                35.649275,
+                37.061894
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((4 4, 8 4, 8 8, 4 8, 4 4))"
+          },
+          "geometry_sha256": "0e4f55f4f4ee8abcaa101306a7e47b9cd07c46748044b2de2d0a0f270f954224"
+        }
+      ],
+      "map_id": "issue_9762_classic_crossing_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_cross_trap_medium",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        32.0,
+        32.0,
+        36.0,
+        36.0
+      ],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((1.6189285999999998 4.1832518, 9.774272 22.813108, 17.165053 30.438106, 34.149275 38.561894, 37.149275 38.561894, 37.149275 35.561894, 20.165053 27.438106, 12.774272 19.813108, 4.6189286 1.1832517999999999, 1.6189285999999998 1.1832517999999999, 1.6189285999999998 4.1832518))",
+            "density": 0.05,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                3.1189286,
+                2.6832518
+              ],
+              [
+                11.274272,
+                21.313108
+              ],
+              [
+                18.665053,
+                28.938106
+              ],
+              [
+                35.649275,
+                37.061894
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((32 32, 36 32, 36 36, 32 36, 32 32))"
+          },
+          "geometry_sha256": "f736ab294f21a9d7232c9a9cb8b3f52902cff2de93184facb4792e25378e7367"
+        }
+      ],
+      "map_id": "issue_9762_classic_crossing_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_cross_trap_medium",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        4.0,
+        4.0,
+        8.0,
+        8.0
+      ],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((1.6189285999999998 4.1832518, 9.774272 22.813108, 17.165053 30.438106, 34.149275 38.561894, 37.149275 38.561894, 37.149275 35.561894, 20.165053 27.438106, 12.774272 19.813108, 4.6189286 1.1832517999999999, 1.6189285999999998 1.1832517999999999, 1.6189285999999998 4.1832518))",
+            "density": 0.08,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                3.1189286,
+                2.6832518
+              ],
+              [
+                11.274272,
+                21.313108
+              ],
+              [
+                18.665053,
+                28.938106
+              ],
+              [
+                35.649275,
+                37.061894
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((4 4, 8 4, 8 8, 4 8, 4 4))"
+          },
+          "geometry_sha256": "e07bd318ace052d865e2da212bcee5bbe0f581155ddf083e96546799a08ccd9f"
+        }
+      ],
+      "map_id": "issue_9762_classic_crossing_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_cross_trap_high",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        32.0,
+        32.0,
+        36.0,
+        36.0
+      ],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((1.6189285999999998 4.1832518, 9.774272 22.813108, 17.165053 30.438106, 34.149275 38.561894, 37.149275 38.561894, 37.149275 35.561894, 20.165053 27.438106, 12.774272 19.813108, 4.6189286 1.1832517999999999, 1.6189285999999998 1.1832517999999999, 1.6189285999999998 4.1832518))",
+            "density": 0.08,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                3.1189286,
+                2.6832518
+              ],
+              [
+                11.274272,
+                21.313108
+              ],
+              [
+                18.665053,
+                28.938106
+              ],
+              [
+                35.649275,
+                37.061894
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((32 32, 36 32, 36 36, 32 36, 32 32))"
+          },
+          "geometry_sha256": "90bd3259ba79062876baaf78f6c8dfdf04dbab4743d8b5750614e183101085db"
+        }
+      ],
+      "map_id": "issue_9762_classic_crossing_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_cross_trap_high",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        26.895477,
+        13.63518,
+        30.895477,
+        17.63518
+      ],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((20.5 12.4, 4.5 20.5, 4.5 23.5, 7.5 23.5, 23.5 15.4, 39.5 7.5, 39.5 4.5, 36.5 4.5, 20.5 12.4))",
+            "density": 0.02,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                6.0,
+                22.0
+              ],
+              [
+                22.0,
+                13.9
+              ],
+              [
+                38.0,
+                6.0
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((26.895477 13.63518, 30.895477 13.63518, 30.895477 17.63518, 26.895477 17.63518, 26.895477 13.63518))"
+          },
+          "geometry_sha256": "28e5c29fff6ad04bb95eb928e85cfa68df56f5a3588d5a50461453369441a789"
+        }
+      ],
+      "map_id": "issue_9762_classic_doorway_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_doorway_low",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        14.440092,
+        9.4108419,
+        18.440092,
+        13.4108419
+      ],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.02853791708073283,
+          "evidence": {
+            "actor_wkt": "POLYGON ((20.5 12.4, 4.5 20.5, 4.5 23.5, 7.5 23.5, 23.5 15.4, 39.5 7.5, 39.5 4.5, 36.5 4.5, 20.5 12.4))",
+            "density": 0.02,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                6.0,
+                22.0
+              ],
+              [
+                22.0,
+                13.9
+              ],
+              [
+                38.0,
+                6.0
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((14.440092 9.4108419, 18.440092 9.4108419, 18.440092 13.4108419, 14.440092 13.4108419, 14.440092 9.4108419))"
+          },
+          "geometry_sha256": "a7cecc5b39de01194fe98b0a2d1fcf9cfdb1711bf693b9a6c63d579c98b082e2"
+        }
+      ],
+      "map_id": "issue_9762_classic_doorway_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_doorway_low",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        26.895477,
+        13.63518,
+        30.895477,
+        17.63518
+      ],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((20.5 12.4, 4.5 20.5, 4.5 23.5, 7.5 23.5, 23.5 15.4, 39.5 7.5, 39.5 4.5, 36.5 4.5, 20.5 12.4))",
+            "density": 0.05,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                6.0,
+                22.0
+              ],
+              [
+                22.0,
+                13.9
+              ],
+              [
+                38.0,
+                6.0
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((26.895477 13.63518, 30.895477 13.63518, 30.895477 17.63518, 26.895477 17.63518, 26.895477 13.63518))"
+          },
+          "geometry_sha256": "59211442c47347d170a64cdc88ae4931b74443efd119497c3962edbc991fd0cc"
+        }
+      ],
+      "map_id": "issue_9762_classic_doorway_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_doorway_medium",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        14.440092,
+        9.4108419,
+        18.440092,
+        13.4108419
+      ],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.02853791708073283,
+          "evidence": {
+            "actor_wkt": "POLYGON ((20.5 12.4, 4.5 20.5, 4.5 23.5, 7.5 23.5, 23.5 15.4, 39.5 7.5, 39.5 4.5, 36.5 4.5, 20.5 12.4))",
+            "density": 0.05,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                6.0,
+                22.0
+              ],
+              [
+                22.0,
+                13.9
+              ],
+              [
+                38.0,
+                6.0
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((14.440092 9.4108419, 18.440092 9.4108419, 18.440092 13.4108419, 14.440092 13.4108419, 14.440092 9.4108419))"
+          },
+          "geometry_sha256": "05747dece460dba8bbce8f90c739112c615bd76a32c672efd158ccceecef83af"
+        }
+      ],
+      "map_id": "issue_9762_classic_doorway_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_doorway_medium",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        26.895477,
+        13.63518,
+        30.895477,
+        17.63518
+      ],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((20.5 12.4, 4.5 20.5, 4.5 23.5, 7.5 23.5, 23.5 15.4, 39.5 7.5, 39.5 4.5, 36.5 4.5, 20.5 12.4))",
+            "density": 0.08,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                6.0,
+                22.0
+              ],
+              [
+                22.0,
+                13.9
+              ],
+              [
+                38.0,
+                6.0
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((26.895477 13.63518, 30.895477 13.63518, 30.895477 17.63518, 26.895477 17.63518, 26.895477 13.63518))"
+          },
+          "geometry_sha256": "9f319cb77beeffe0c3ec5bf2ef550003a11ad092349b01f5cc47c78185c49fa8"
+        }
+      ],
+      "map_id": "issue_9762_classic_doorway_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_doorway_high",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        14.440092,
+        9.4108419,
+        18.440092,
+        13.4108419
+      ],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.02853791708073283,
+          "evidence": {
+            "actor_wkt": "POLYGON ((20.5 12.4, 4.5 20.5, 4.5 23.5, 7.5 23.5, 23.5 15.4, 39.5 7.5, 39.5 4.5, 36.5 4.5, 20.5 12.4))",
+            "density": 0.08,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                6.0,
+                22.0
+              ],
+              [
+                22.0,
+                13.9
+              ],
+              [
+                38.0,
+                6.0
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((14.440092 9.4108419, 18.440092 9.4108419, 18.440092 13.4108419, 14.440092 13.4108419, 14.440092 9.4108419))"
+          },
+          "geometry_sha256": "a96437f034cbac69662e3cae6415e1d8a711400a3eb3c6268dcca8daf8c043ff"
+        }
+      ],
+      "map_id": "issue_9762_classic_doorway_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_doorway_high",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        8.9075975,
+        17.964346,
+        12.9075975,
+        21.964346
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_classic_group_crossing_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_group_crossing_low",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        27.627777,
+        18.214111,
+        31.627777,
+        22.214111
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_classic_group_crossing_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_group_crossing_low",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        8.9075975,
+        17.964346,
+        12.9075975,
+        21.964346
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_classic_group_crossing_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_group_crossing_medium",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        27.627777,
+        18.214111,
+        31.627777,
+        22.214111
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_classic_group_crossing_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_group_crossing_medium",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        8.9075975,
+        17.964346,
+        12.9075975,
+        21.964346
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_classic_group_crossing_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_group_crossing_high",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        27.627777,
+        18.214111,
+        31.627777,
+        22.214111
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_classic_group_crossing_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_group_crossing_high",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        12.324901,
+        2.8169494,
+        16.324901,
+        6.8169494
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_classic_head_on_corridor_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_head_on_corridor_low",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        17.109221,
+        33.043137,
+        21.109221,
+        37.043137
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_classic_head_on_corridor_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_head_on_corridor_low",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        12.324901,
+        2.8169494,
+        16.324901,
+        6.8169494
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_classic_head_on_corridor_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_head_on_corridor_medium",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        17.109221,
+        33.043137,
+        21.109221,
+        37.043137
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_classic_head_on_corridor_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_head_on_corridor_medium",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        6.0,
+        6.0,
+        10.0,
+        10.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_classic_merging_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_merging_low",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        34.0,
+        32.0,
+        38.0,
+        36.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_classic_merging_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_merging_low",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        6.0,
+        6.0,
+        10.0,
+        10.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_classic_merging_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_merging_medium",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        34.0,
+        32.0,
+        38.0,
+        36.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_classic_merging_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_merging_medium",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        14.398912,
+        3.6078129,
+        19.0189119,
+        8.227812799999999
+      ],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.02401398783685534,
+          "evidence": {
+            "actor_wkt": "POLYGON ((9.497102 9.6461963, 14.246408 13.674533, 37.319198 17.717471, 46.307357 21.785536, 49.307357 21.785536, 49.307357 18.785536, 40.319198 14.717471, 17.246408000000002 10.674533, 12.497102 6.6461963, 9.497102 6.6461963, 9.497102 9.6461963))",
+            "density": 0.02,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                10.997102,
+                8.1461963
+              ],
+              [
+                15.746408,
+                12.174533
+              ],
+              [
+                38.819198,
+                16.217471
+              ],
+              [
+                47.807357,
+                20.285536
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((14.398912 3.6078129, 19.0189119 3.6078129, 19.0189119 8.227812799999999, 14.398912 8.227812799999999, 14.398912 3.6078129))"
+          },
+          "geometry_sha256": "f8d51e7144227b90076752b8849d7909c315796a167ee2a9e72bb1deee5e1500"
+        }
+      ],
+      "map_id": "issue_9762_classic_overtaking_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_overtaking_low",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        40.837814,
+        21.288258,
+        45.457813900000005,
+        25.9082579
+      ],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((9.497102 9.6461963, 14.246408 13.674533, 37.319198 17.717471, 46.307357 21.785536, 49.307357 21.785536, 49.307357 18.785536, 40.319198 14.717471, 17.246408000000002 10.674533, 12.497102 6.6461963, 9.497102 6.6461963, 9.497102 9.6461963))",
+            "density": 0.02,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                10.997102,
+                8.1461963
+              ],
+              [
+                15.746408,
+                12.174533
+              ],
+              [
+                38.819198,
+                16.217471
+              ],
+              [
+                47.807357,
+                20.285536
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((40.837814 21.288258, 45.457813900000005 21.288258, 45.457813900000005 25.9082579, 40.837814 25.9082579, 40.837814 21.288258))"
+          },
+          "geometry_sha256": "68f3a9ee089dcf688f21f0f45748c2157bbe27ba633b79b41923341568f200ba"
+        }
+      ],
+      "map_id": "issue_9762_classic_overtaking_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_overtaking_low",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        14.398912,
+        3.6078129,
+        19.0189119,
+        8.227812799999999
+      ],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.02401398783685534,
+          "evidence": {
+            "actor_wkt": "POLYGON ((9.497102 9.6461963, 14.246408 13.674533, 37.319198 17.717471, 46.307357 21.785536, 49.307357 21.785536, 49.307357 18.785536, 40.319198 14.717471, 17.246408000000002 10.674533, 12.497102 6.6461963, 9.497102 6.6461963, 9.497102 9.6461963))",
+            "density": 0.05,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                10.997102,
+                8.1461963
+              ],
+              [
+                15.746408,
+                12.174533
+              ],
+              [
+                38.819198,
+                16.217471
+              ],
+              [
+                47.807357,
+                20.285536
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((14.398912 3.6078129, 19.0189119 3.6078129, 19.0189119 8.227812799999999, 14.398912 8.227812799999999, 14.398912 3.6078129))"
+          },
+          "geometry_sha256": "d83b33d13ba9623547824f38bad905a52ecac56e43366ee2796ad5075c665d6d"
+        }
+      ],
+      "map_id": "issue_9762_classic_overtaking_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_overtaking_medium",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        40.837814,
+        21.288258,
+        45.457813900000005,
+        25.9082579
+      ],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((9.497102 9.6461963, 14.246408 13.674533, 37.319198 17.717471, 46.307357 21.785536, 49.307357 21.785536, 49.307357 18.785536, 40.319198 14.717471, 17.246408000000002 10.674533, 12.497102 6.6461963, 9.497102 6.6461963, 9.497102 9.6461963))",
+            "density": 0.05,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                10.997102,
+                8.1461963
+              ],
+              [
+                15.746408,
+                12.174533
+              ],
+              [
+                38.819198,
+                16.217471
+              ],
+              [
+                47.807357,
+                20.285536
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((40.837814 21.288258, 45.457813900000005 21.288258, 45.457813900000005 25.9082579, 40.837814 25.9082579, 40.837814 21.288258))"
+          },
+          "geometry_sha256": "295a9c196fe772d10c1974c29ad37cfa621da1aa5de2f41a9311448dedfddbdb"
+        }
+      ],
+      "map_id": "issue_9762_classic_overtaking_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_overtaking_medium",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        20.605928,
+        31.842947,
+        24.605928,
+        35.842946999999995
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_classic_t_intersection_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_t_intersection_low",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        34.889965,
+        16.784306,
+        38.889965,
+        20.784306
+      ],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((31.987152000000002 17.998774, 13.567384 18.017219, 13.567384 21.017219, 16.567384 21.017219, 34.987152 20.998774, 34.987152 17.998774, 31.987152000000002 17.998774))",
+            "density": 0.02,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                15.067384,
+                19.517219
+              ],
+              [
+                33.487152,
+                19.498774
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((34.889965 16.784306, 38.889965 16.784306, 38.889965 20.784306, 34.889965 20.784306, 34.889965 16.784306))"
+          },
+          "geometry_sha256": "db8c3db46f92e8bd3863423677bdbc14c06ff9a24966c8d3fef8e15aab3f2af0"
+        }
+      ],
+      "map_id": "issue_9762_classic_t_intersection_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_t_intersection_low",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        20.605928,
+        31.842947,
+        24.605928,
+        35.842946999999995
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_classic_t_intersection_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_t_intersection_medium",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        34.889965,
+        16.784306,
+        38.889965,
+        20.784306
+      ],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((31.987152000000002 17.998774, 13.567384 18.017219, 13.567384 21.017219, 16.567384 21.017219, 34.987152 20.998774, 34.987152 17.998774, 31.987152000000002 17.998774))",
+            "density": 0.05,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                15.067384,
+                19.517219
+              ],
+              [
+                33.487152,
+                19.498774
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((34.889965 16.784306, 38.889965 16.784306, 38.889965 20.784306, 34.889965 20.784306, 34.889965 16.784306))"
+          },
+          "geometry_sha256": "ed3e487f3374f7bdf1bf01d2aada96fd67f36d50d24f0f39e12400cecfc52b6a"
+        }
+      ],
+      "map_id": "issue_9762_classic_t_intersection_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_t_intersection_medium",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        7.0,
+        23.0,
+        11.0,
+        27.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_classic_urban_crossing_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_urban_crossing_medium",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        39.0,
+        23.0,
+        43.0,
+        27.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_classic_urban_crossing_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_urban_crossing_medium",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        3.0,
+        4.0,
+        5.0,
+        6.0
+      ],
+      "intersections": [
+        {
+          "actor": "h1",
+          "actor_kind": "single",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "LINESTRING (35 5, 5 5)",
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                35.0,
+                5.0
+              ],
+              [
+                5.0,
+                5.0
+              ]
+            ],
+            "role": null,
+            "zone_wkt": "POLYGON ((3 4, 5 4, 5 6, 3 6, 3 4))"
+          },
+          "geometry_sha256": "4257977fb5e6dfebfe22699397a1a0eff7d17faf6bd4373253ffd54b7f95f9b9"
+        }
+      ],
+      "map_id": "issue_9762_francis2023_frontal_approach_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_frontal_approach",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        36.0,
+        4.0,
+        38.0,
+        6.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_francis2023_frontal_approach_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_frontal_approach",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        3.0,
+        4.0,
+        5.0,
+        6.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_francis2023_ped_obstruction_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_pedestrian_obstruction",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        36.0,
+        4.0,
+        38.0,
+        6.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_francis2023_ped_obstruction_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_pedestrian_obstruction",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        3.0,
+        4.0,
+        5.0,
+        4.5
+      ],
+      "intersections": [],
+      "map_id": "issue_10063_francis2023_ped_overtaking_safe_spawn_v1",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_pedestrian_overtaking",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        36.0,
+        4.0,
+        38.0,
+        6.0
+      ],
+      "intersections": [],
+      "map_id": "issue_10063_francis2023_ped_overtaking_safe_spawn_v1",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_pedestrian_overtaking",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        3.0,
+        4.0,
+        5.0,
+        6.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_francis2023_robot_overtaking_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_robot_overtaking",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        36.0,
+        4.0,
+        38.0,
+        6.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_francis2023_robot_overtaking_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_robot_overtaking",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        4.0,
+        3.0,
+        6.0,
+        5.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_francis2023_down_path_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_down_path",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        36.0,
+        2.0,
+        38.0,
+        4.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_francis2023_down_path_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_down_path",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        3.0,
+        13.0,
+        5.0,
+        15.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_francis2023_intersection_no_gesture_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_intersection_no_gesture",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        26.0,
+        13.0,
+        28.0,
+        15.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_francis2023_intersection_no_gesture_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_intersection_no_gesture",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        4.0,
+        25.0,
+        6.0,
+        27.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_francis2023_blind_corner_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_blind_corner",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        26.0,
+        2.0,
+        28.0,
+        4.0
+      ],
+      "intersections": [
+        {
+          "actor": "h1",
+          "actor_kind": "single",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "LINESTRING (27 4, 27 26)",
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                27.0,
+                4.0
+              ],
+              [
+                27.0,
+                26.0
+              ]
+            ],
+            "role": null,
+            "zone_wkt": "POLYGON ((26 2, 28 2, 28 4, 26 4, 26 2))"
+          },
+          "geometry_sha256": "43935a027975691c8f5255665f1abe2bd248c714081049501952004fc9643bbb"
+        }
+      ],
+      "map_id": "issue_9762_francis2023_blind_corner_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_blind_corner",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        3.0,
+        2.0,
+        5.0,
+        4.0
+      ],
+      "intersections": [
+        {
+          "actor": "h1",
+          "actor_kind": "single",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "LINESTRING (27 4, 3 4)",
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                27.0,
+                4.0
+              ],
+              [
+                3.0,
+                4.0
+              ]
+            ],
+            "role": null,
+            "zone_wkt": "POLYGON ((3 2, 5 2, 5 4, 3 4, 3 2))"
+          },
+          "geometry_sha256": "19337ab6f3c07e4b021de30be67b3556c3fbd6e1267e79357206a0eeb93b608d"
+        }
+      ],
+      "map_id": "issue_9762_francis2023_narrow_hallway_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_narrow_hallway",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        26.0,
+        2.0,
+        28.0,
+        4.0
+      ],
+      "intersections": [
+        {
+          "actor": "h1",
+          "actor_kind": "single",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "LINESTRING (27 4, 3 4)",
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                27.0,
+                4.0
+              ],
+              [
+                3.0,
+                4.0
+              ]
+            ],
+            "role": null,
+            "zone_wkt": "POLYGON ((26 2, 28 2, 28 4, 26 4, 26 2))"
+          },
+          "geometry_sha256": "21695de4eb815f20a32fc3df471673fe60c351fba1cdbac6220f7fadf145ef87"
+        }
+      ],
+      "map_id": "issue_9762_francis2023_narrow_hallway_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_narrow_hallway",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        3.0,
+        4.0,
+        5.0,
+        6.0
+      ],
+      "intersections": [
+        {
+          "actor": "h1",
+          "actor_kind": "single",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "LINESTRING (27 5, 3 5)",
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                27.0,
+                5.0
+              ],
+              [
+                3.0,
+                5.0
+              ]
+            ],
+            "role": null,
+            "zone_wkt": "POLYGON ((3 4, 5 4, 5 6, 3 6, 3 4))"
+          },
+          "geometry_sha256": "f5c41e89e0c5628ef4ff607b22b9bf6b8a5820f95570539c1c39eac3bdcf9380"
+        }
+      ],
+      "map_id": "francis2023_narrow_doorway",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_narrow_doorway",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        26.0,
+        4.0,
+        28.0,
+        6.0
+      ],
+      "intersections": [
+        {
+          "actor": "h1",
+          "actor_kind": "single",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "LINESTRING (27 5, 3 5)",
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                27.0,
+                5.0
+              ],
+              [
+                3.0,
+                5.0
+              ]
+            ],
+            "role": null,
+            "zone_wkt": "POLYGON ((26 4, 28 4, 28 6, 26 6, 26 4))"
+          },
+          "geometry_sha256": "9e6cf06b6a931dbfb0235fab37a06972f7406db8fb6d212780b7a073cce6f985"
+        }
+      ],
+      "map_id": "francis2023_narrow_doorway",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_narrow_doorway",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        3.0,
+        9.0,
+        5.0,
+        11.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9856_francis2023_entering_room_route_width_v1",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_entering_room",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        20.0,
+        9.0,
+        22.0,
+        11.0
+      ],
+      "intersections": [
+        {
+          "actor": "h1",
+          "actor_kind": "single",
+          "distance_m": 0.2773500981126146,
+          "evidence": {
+            "actor_wkt": "LINESTRING (18 10, 24 14)",
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                18.0,
+                10.0
+              ],
+              [
+                24.0,
+                14.0
+              ]
+            ],
+            "role": null,
+            "zone_wkt": "POLYGON ((20 9, 22 9, 22 11, 20 11, 20 9))"
+          },
+          "geometry_sha256": "1abfd4eb2c208ad9655f48285dc462a33d5c73044bb3ff5af55c3fa05108a7bd"
+        }
+      ],
+      "map_id": "issue_9856_francis2023_entering_room_route_width_v1",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_entering_room",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        20.0,
+        9.0,
+        22.0,
+        11.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9856_francis2023_exiting_room_route_width_v1",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_exiting_room",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        2.0,
+        9.0,
+        4.0,
+        11.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9856_francis2023_exiting_room_route_width_v1",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_exiting_room",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        3.0,
+        9.0,
+        5.0,
+        11.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9856_francis2023_entering_elevator_route_width_v1",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_entering_elevator",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        14.0,
+        9.0,
+        16.0,
+        11.0
+      ],
+      "intersections": [
+        {
+          "actor": "h1",
+          "actor_kind": "single",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "LINESTRING (15 10, 16 11)",
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                15.0,
+                10.0
+              ],
+              [
+                16.0,
+                11.0
+              ]
+            ],
+            "role": null,
+            "zone_wkt": "POLYGON ((14 9, 16 9, 16 11, 14 11, 14 9))"
+          },
+          "geometry_sha256": "d191e99dfbdc33fa4de8f98d1588087828078c2bef2cbdbe6a78c39866a0c2ba"
+        }
+      ],
+      "map_id": "issue_9856_francis2023_entering_elevator_route_width_v1",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_entering_elevator",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        14.0,
+        9.0,
+        16.0,
+        11.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9856_francis2023_exiting_elevator_route_width_v1",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_exiting_elevator",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        2.0,
+        9.0,
+        4.0,
+        11.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9856_francis2023_exiting_elevator_route_width_v1",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_exiting_elevator",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        3.0,
+        13.0,
+        5.0,
+        15.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_francis2023_intersection_no_gesture_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_intersection_wait",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        26.0,
+        13.0,
+        28.0,
+        15.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_francis2023_intersection_no_gesture_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_intersection_wait",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        3.0,
+        13.0,
+        5.0,
+        15.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_francis2023_intersection_no_gesture_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_intersection_proceed",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        26.0,
+        13.0,
+        28.0,
+        15.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_francis2023_intersection_no_gesture_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_intersection_proceed",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        4.0,
+        3.0,
+        6.0,
+        5.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_francis2023_down_path_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_following_human",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        36.0,
+        2.0,
+        38.0,
+        4.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_francis2023_down_path_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_following_human",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        4.0,
+        3.0,
+        6.0,
+        5.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_francis2023_down_path_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_leading_human",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        36.0,
+        2.0,
+        38.0,
+        4.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_francis2023_down_path_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_leading_human",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        4.0,
+        3.0,
+        6.0,
+        5.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_francis2023_down_path_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_accompanying_peer",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        36.0,
+        2.0,
+        38.0,
+        4.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_francis2023_down_path_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_accompanying_peer",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        3.0,
+        9.0,
+        5.0,
+        11.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_francis2023_join_group_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_join_group",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        16.0,
+        9.0,
+        18.0,
+        11.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_francis2023_join_group_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_join_group",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        3.0,
+        9.0,
+        5.0,
+        11.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_francis2023_leave_group_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_leave_group",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        16.0,
+        9.0,
+        18.0,
+        11.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_francis2023_leave_group_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_leave_group",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        3.0,
+        9.0,
+        5.0,
+        11.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_francis2023_crowd_navigation_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_crowd_navigation",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        26.0,
+        9.0,
+        28.0,
+        11.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_francis2023_crowd_navigation_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_crowd_navigation",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        3.0,
+        4.0,
+        5.0,
+        6.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_francis2023_parallel_traffic_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_parallel_traffic",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        36.0,
+        4.0,
+        38.0,
+        6.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_francis2023_parallel_traffic_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_parallel_traffic",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        3.0,
+        13.0,
+        5.0,
+        15.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_francis2023_perpendicular_traffic_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_perpendicular_traffic",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        26.0,
+        13.0,
+        28.0,
+        15.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_francis2023_perpendicular_traffic_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_perpendicular_traffic",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        3.0,
+        9.0,
+        5.0,
+        11.0
+      ],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((2.5 6.5, 2.5 9.5, 2.5 10.5, 2.5 13.5, 3.5 16.5, 5 18, 8.5 18.5, 11.5 18.5, 15 18, 16.5 16.5, 16.5 13.5, 13.5 13.5, 12 15, 10 15.285714285714286, 8 15, 6.5 13.5, 5.5 10.5, 5.5 9.5, 6.5 6.5, 8 5, 10 4.714285714285714, 12 5, 13.5 6.5, 16.5 6.5, 16.5 3.5, 15 2, 11.5 1.5, 8.5 1.5, 5 2, 3.5 3.5, 2.5 6.5))",
+            "density": 0.06,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                15.0,
+                5.0
+              ],
+              [
+                13.5,
+                3.5
+              ],
+              [
+                10.0,
+                3.0
+              ],
+              [
+                6.5,
+                3.5
+              ],
+              [
+                5.0,
+                5.0
+              ],
+              [
+                4.0,
+                8.0
+              ],
+              [
+                4.0,
+                12.0
+              ],
+              [
+                5.0,
+                15.0
+              ],
+              [
+                6.5,
+                16.5
+              ],
+              [
+                10.0,
+                17.0
+              ],
+              [
+                13.5,
+                16.5
+              ],
+              [
+                15.0,
+                15.0
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((3 9, 5 9, 5 11, 3 11, 3 9))"
+          },
+          "geometry_sha256": "010dd2ae4dd65bb25fac14d390e7944b3b87e704c494bb8a03afe4288860a3b5"
+        }
+      ],
+      "map_id": "issue_9762_francis2023_circular_crossing_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_circular_crossing",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        16.0,
+        9.0,
+        18.0,
+        11.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_francis2023_circular_crossing_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_circular_crossing",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        3.0,
+        9.0,
+        5.0,
+        11.0
+      ],
+      "intersections": [],
+      "map_id": "issue_10063_francis2023_robot_crowding_safe_spawn_v1",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_robot_crowding",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        16.0,
+        9.0,
+        18.0,
+        11.0
+      ],
+      "intersections": [],
+      "map_id": "issue_10063_francis2023_robot_crowding_safe_spawn_v1",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_robot_crowding",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        3.0,
+        4.0,
+        5.0,
+        6.0
+      ],
+      "intersections": [
+        {
+          "actor": "h1",
+          "actor_kind": "single",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "LINESTRING (27 5, 3 5)",
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                27.0,
+                5.0
+              ],
+              [
+                3.0,
+                5.0
+              ]
+            ],
+            "role": null,
+            "zone_wkt": "POLYGON ((3 4, 5 4, 5 6, 3 6, 3 4))"
+          },
+          "geometry_sha256": "f5c41e89e0c5628ef4ff607b22b9bf6b8a5820f95570539c1c39eac3bdcf9380"
+        }
+      ],
+      "map_id": "issue_9348_francis2023_narrow_doorway_2p20_v1",
+      "matrix": "configs/scenarios/francis2023_narrow_doorway_three_width_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_narrow_doorway_width_2p20",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        26.0,
+        4.0,
+        28.0,
+        6.0
+      ],
+      "intersections": [
+        {
+          "actor": "h1",
+          "actor_kind": "single",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "LINESTRING (27 5, 3 5)",
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                27.0,
+                5.0
+              ],
+              [
+                3.0,
+                5.0
+              ]
+            ],
+            "role": null,
+            "zone_wkt": "POLYGON ((26 4, 28 4, 28 6, 26 6, 26 4))"
+          },
+          "geometry_sha256": "9e6cf06b6a931dbfb0235fab37a06972f7406db8fb6d212780b7a073cce6f985"
+        }
+      ],
+      "map_id": "issue_9348_francis2023_narrow_doorway_2p20_v1",
+      "matrix": "configs/scenarios/francis2023_narrow_doorway_three_width_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_narrow_doorway_width_2p20",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        3.0,
+        4.0,
+        5.0,
+        6.0
+      ],
+      "intersections": [
+        {
+          "actor": "h1",
+          "actor_kind": "single",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "LINESTRING (27 5, 3 5)",
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                27.0,
+                5.0
+              ],
+              [
+                3.0,
+                5.0
+              ]
+            ],
+            "role": null,
+            "zone_wkt": "POLYGON ((3 4, 5 4, 5 6, 3 6, 3 4))"
+          },
+          "geometry_sha256": "f5c41e89e0c5628ef4ff607b22b9bf6b8a5820f95570539c1c39eac3bdcf9380"
+        }
+      ],
+      "map_id": "issue_9348_francis2023_narrow_doorway_2p80_v1",
+      "matrix": "configs/scenarios/francis2023_narrow_doorway_three_width_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_narrow_doorway_width_2p80",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        26.0,
+        4.0,
+        28.0,
+        6.0
+      ],
+      "intersections": [
+        {
+          "actor": "h1",
+          "actor_kind": "single",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "LINESTRING (27 5, 3 5)",
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                27.0,
+                5.0
+              ],
+              [
+                3.0,
+                5.0
+              ]
+            ],
+            "role": null,
+            "zone_wkt": "POLYGON ((26 4, 28 4, 28 6, 26 6, 26 4))"
+          },
+          "geometry_sha256": "9e6cf06b6a931dbfb0235fab37a06972f7406db8fb6d212780b7a073cce6f985"
+        }
+      ],
+      "map_id": "issue_9348_francis2023_narrow_doorway_2p80_v1",
+      "matrix": "configs/scenarios/francis2023_narrow_doorway_three_width_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_narrow_doorway_width_2p80",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        3.0,
+        4.0,
+        5.0,
+        6.0
+      ],
+      "intersections": [
+        {
+          "actor": "h1",
+          "actor_kind": "single",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "LINESTRING (27 5, 3 5)",
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                27.0,
+                5.0
+              ],
+              [
+                3.0,
+                5.0
+              ]
+            ],
+            "role": null,
+            "zone_wkt": "POLYGON ((3 4, 5 4, 5 6, 3 6, 3 4))"
+          },
+          "geometry_sha256": "f5c41e89e0c5628ef4ff607b22b9bf6b8a5820f95570539c1c39eac3bdcf9380"
+        }
+      ],
+      "map_id": "issue_9728_francis2023_narrow_doorway_feasible_3p60_v1",
+      "matrix": "configs/scenarios/francis2023_narrow_doorway_three_width_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_narrow_doorway_width_3p60",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        26.0,
+        4.0,
+        28.0,
+        6.0
+      ],
+      "intersections": [
+        {
+          "actor": "h1",
+          "actor_kind": "single",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "LINESTRING (27 5, 3 5)",
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                27.0,
+                5.0
+              ],
+              [
+                3.0,
+                5.0
+              ]
+            ],
+            "role": null,
+            "zone_wkt": "POLYGON ((26 4, 28 4, 28 6, 26 6, 26 4))"
+          },
+          "geometry_sha256": "9e6cf06b6a931dbfb0235fab37a06972f7406db8fb6d212780b7a073cce6f985"
+        }
+      ],
+      "map_id": "issue_9728_francis2023_narrow_doorway_feasible_3p60_v1",
+      "matrix": "configs/scenarios/francis2023_narrow_doorway_three_width_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_narrow_doorway_width_3p60",
+      "zone": "goal[0]"
+    }
+  ],
+  "base_sha": "d3370652cdd90efbbbe3dc484bcc869a2a533e96",
+  "before": [
+    {
+      "bounds": [
+        17.904995,
+        29.452839,
+        21.904995,
+        33.452839
+      ],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((18.5 11.793715, 18.5 29.5, 21.5 29.5, 21.5 11.793715, 18.5 11.793715))",
+            "density": 0.0,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                20.0,
+                13.293715
+              ],
+              [
+                20.0,
+                28.0
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((17.904995 29.452839, 21.904995 29.452839, 21.904995 33.452839, 17.904995 33.452839, 17.904995 29.452839))"
+          },
+          "geometry_sha256": "c9f25a9bea33781e166d3df6ab7a3f781561a146d832076543ff3f5795a7d599"
+        }
+      ],
+      "map_id": "issue_9762_classic_bottleneck_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_bottleneck_low",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        18.015638,
+        5.8725448,
+        22.015638,
+        9.8725448
+      ],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "ped_spawn",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((18 6, 22 6, 22 10, 18 10, 18 6))",
+            "density": 0.0,
+            "ped_radius_m": 0.4,
+            "population_size": null,
+            "zone_wkt": "POLYGON ((18.015638 5.8725448, 22.015638 5.8725448, 22.015638 9.8725448, 18.015638 9.8725448, 18.015638 5.8725448))"
+          },
+          "geometry_sha256": "265ef8e459ed1ba14b524b4cc3f18c1fcc0cd33da5f904510d7381449f85c4c3"
+        }
+      ],
+      "map_id": "issue_9762_classic_bottleneck_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_bottleneck_low",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        17.904995,
+        29.452839,
+        21.904995,
+        33.452839
+      ],
+      "intersections": [
+        {
+          "actor": "h1",
+          "actor_kind": "single",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "LINESTRING (20 6, 20 34)",
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                20.0,
+                6.0
+              ],
+              [
+                20.0,
+                34.0
+              ]
+            ],
+            "role": null,
+            "zone_wkt": "POLYGON ((17.904995 29.452839, 21.904995 29.452839, 21.904995 33.452839, 17.904995 33.452839, 17.904995 29.452839))"
+          },
+          "geometry_sha256": "a798d68b3f2414fef5ef955538dac20e90f35412573c990ce67101f8fa704132"
+        },
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((18.5 11.793715, 18.5 29.5, 21.5 29.5, 21.5 11.793715, 18.5 11.793715))",
+            "density": 0.0,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                20.0,
+                13.293715
+              ],
+              [
+                20.0,
+                28.0
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((17.904995 29.452839, 21.904995 29.452839, 21.904995 33.452839, 17.904995 33.452839, 17.904995 29.452839))"
+          },
+          "geometry_sha256": "c9f25a9bea33781e166d3df6ab7a3f781561a146d832076543ff3f5795a7d599"
+        }
+      ],
+      "map_id": "issue_9762_classic_bottleneck_medium_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_bottleneck_medium",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        18.015638,
+        5.8725448,
+        22.015638,
+        9.8725448
+      ],
+      "intersections": [
+        {
+          "actor": "h1",
+          "actor_kind": "single",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "LINESTRING (20 6, 20 34)",
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                20.0,
+                6.0
+              ],
+              [
+                20.0,
+                34.0
+              ]
+            ],
+            "role": null,
+            "zone_wkt": "POLYGON ((18.015638 5.8725448, 22.015638 5.8725448, 22.015638 9.8725448, 18.015638 9.8725448, 18.015638 5.8725448))"
+          },
+          "geometry_sha256": "589112badc1318c99acc1e795a16ae3b6bd5ad847c634052c63f5d91179dd526"
+        },
+        {
+          "actor": "0",
+          "actor_kind": "ped_spawn",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((18 6, 22 6, 22 10, 18 10, 18 6))",
+            "density": 0.0,
+            "ped_radius_m": 0.4,
+            "population_size": null,
+            "zone_wkt": "POLYGON ((18.015638 5.8725448, 22.015638 5.8725448, 22.015638 9.8725448, 18.015638 9.8725448, 18.015638 5.8725448))"
+          },
+          "geometry_sha256": "265ef8e459ed1ba14b524b4cc3f18c1fcc0cd33da5f904510d7381449f85c4c3"
+        }
+      ],
+      "map_id": "issue_9762_classic_bottleneck_medium_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_bottleneck_medium",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        17.904995,
+        29.452839,
+        21.904995,
+        33.452839
+      ],
+      "intersections": [
+        {
+          "actor": "h1",
+          "actor_kind": "single",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "LINESTRING (19 6, 19 34)",
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                19.0,
+                6.0
+              ],
+              [
+                19.0,
+                34.0
+              ]
+            ],
+            "role": null,
+            "zone_wkt": "POLYGON ((17.904995 29.452839, 21.904995 29.452839, 21.904995 33.452839, 17.904995 33.452839, 17.904995 29.452839))"
+          },
+          "geometry_sha256": "16cf4a43528b9c3cebcbe2ba962e3d074bf6c725872c742fd054579039541bee"
+        },
+        {
+          "actor": "h2",
+          "actor_kind": "single",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "LINESTRING (20 6, 20 34)",
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                20.0,
+                6.0
+              ],
+              [
+                20.0,
+                34.0
+              ]
+            ],
+            "role": null,
+            "zone_wkt": "POLYGON ((17.904995 29.452839, 21.904995 29.452839, 21.904995 33.452839, 17.904995 33.452839, 17.904995 29.452839))"
+          },
+          "geometry_sha256": "a798d68b3f2414fef5ef955538dac20e90f35412573c990ce67101f8fa704132"
+        },
+        {
+          "actor": "h3",
+          "actor_kind": "single",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "LINESTRING (21 6, 21 34)",
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                21.0,
+                6.0
+              ],
+              [
+                21.0,
+                34.0
+              ]
+            ],
+            "role": null,
+            "zone_wkt": "POLYGON ((17.904995 29.452839, 21.904995 29.452839, 21.904995 33.452839, 17.904995 33.452839, 17.904995 29.452839))"
+          },
+          "geometry_sha256": "d697e982d061cae917b56f648adb9b7e6811474b3726b40d4ad3fffbe65fe4b1"
+        },
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((18.5 11.793715, 18.5 29.5, 21.5 29.5, 21.5 11.793715, 18.5 11.793715))",
+            "density": 0.0,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                20.0,
+                13.293715
+              ],
+              [
+                20.0,
+                28.0
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((17.904995 29.452839, 21.904995 29.452839, 21.904995 33.452839, 17.904995 33.452839, 17.904995 29.452839))"
+          },
+          "geometry_sha256": "c9f25a9bea33781e166d3df6ab7a3f781561a146d832076543ff3f5795a7d599"
+        }
+      ],
+      "map_id": "issue_9762_classic_bottleneck_high_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_bottleneck_high",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        18.015638,
+        5.8725448,
+        22.015638,
+        9.8725448
+      ],
+      "intersections": [
+        {
+          "actor": "h1",
+          "actor_kind": "single",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "LINESTRING (19 6, 19 34)",
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                19.0,
+                6.0
+              ],
+              [
+                19.0,
+                34.0
+              ]
+            ],
+            "role": null,
+            "zone_wkt": "POLYGON ((18.015638 5.8725448, 22.015638 5.8725448, 22.015638 9.8725448, 18.015638 9.8725448, 18.015638 5.8725448))"
+          },
+          "geometry_sha256": "fe85a5e1f8b020386ebb9bb8ec303120d66089613e40150d019e65f07348fdc6"
+        },
+        {
+          "actor": "h2",
+          "actor_kind": "single",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "LINESTRING (20 6, 20 34)",
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                20.0,
+                6.0
+              ],
+              [
+                20.0,
+                34.0
+              ]
+            ],
+            "role": null,
+            "zone_wkt": "POLYGON ((18.015638 5.8725448, 22.015638 5.8725448, 22.015638 9.8725448, 18.015638 9.8725448, 18.015638 5.8725448))"
+          },
+          "geometry_sha256": "589112badc1318c99acc1e795a16ae3b6bd5ad847c634052c63f5d91179dd526"
+        },
+        {
+          "actor": "h3",
+          "actor_kind": "single",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "LINESTRING (21 6, 21 34)",
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                21.0,
+                6.0
+              ],
+              [
+                21.0,
+                34.0
+              ]
+            ],
+            "role": null,
+            "zone_wkt": "POLYGON ((18.015638 5.8725448, 22.015638 5.8725448, 22.015638 9.8725448, 18.015638 9.8725448, 18.015638 5.8725448))"
+          },
+          "geometry_sha256": "9ede591859e683a797105688f4cb130ad4aedefdda105f353f1244e876e7c312"
+        },
+        {
+          "actor": "0",
+          "actor_kind": "ped_spawn",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((18 6, 22 6, 22 10, 18 10, 18 6))",
+            "density": 0.0,
+            "ped_radius_m": 0.4,
+            "population_size": null,
+            "zone_wkt": "POLYGON ((18.015638 5.8725448, 22.015638 5.8725448, 22.015638 9.8725448, 18.015638 9.8725448, 18.015638 5.8725448))"
+          },
+          "geometry_sha256": "265ef8e459ed1ba14b524b4cc3f18c1fcc0cd33da5f904510d7381449f85c4c3"
+        }
+      ],
+      "map_id": "issue_9762_classic_bottleneck_high_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_bottleneck_high",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        4.0,
+        13.5,
+        7.0,
+        16.5
+      ],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((15.5 16.5, 18.5 16.5, 21.5 16.5, 24.5 16.5, 35.5 16.5, 38.5 16.5, 41.5 16.5, 44.5 16.5, 54.5 16.5, 54.5 13.5, 44.5 13.5, 41.5 13.5, 38.5 13.5, 35.5 13.5, 24.5 13.5, 21.5 13.5, 18.5 13.5, 15.5 13.5, 5.5 13.5, 5.5 16.5, 15.5 16.5))",
+            "density": 0.0,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                7.0,
+                15.0
+              ],
+              [
+                17.0,
+                15.0
+              ],
+              [
+                23.0,
+                15.0
+              ],
+              [
+                37.0,
+                15.0
+              ],
+              [
+                43.0,
+                15.0
+              ],
+              [
+                53.0,
+                15.0
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((4 13.5, 7 13.5, 7 16.5, 4 16.5, 4 13.5))"
+          },
+          "geometry_sha256": "57e936705b42110bf5135a6d88a3fa9f8f783f49fefaf38280ff21380bf18b84"
+        },
+        {
+          "actor": "1",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((15.5 16.5, 18.5 16.5, 21.5 16.5, 24.5 16.5, 35.5 16.5, 38.5 16.5, 41.5 16.5, 44.5 16.5, 54.5 16.5, 54.5 13.5, 44.5 13.5, 41.5 13.5, 38.5 13.5, 35.5 13.5, 24.5 13.5, 21.5 13.5, 18.5 13.5, 15.5 13.5, 5.5 13.5, 5.5 16.5, 15.5 16.5))",
+            "density": 0.0,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                53.0,
+                15.0
+              ],
+              [
+                43.0,
+                15.0
+              ],
+              [
+                37.0,
+                15.0
+              ],
+              [
+                23.0,
+                15.0
+              ],
+              [
+                17.0,
+                15.0
+              ],
+              [
+                7.0,
+                15.0
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((4 13.5, 7 13.5, 7 16.5, 4 16.5, 4 13.5))"
+          },
+          "geometry_sha256": "c453cff2f9c27c42fbfb6cce5c609ecdd2bda3b38d13975db6f2ed6f7fb3191a"
+        },
+        {
+          "actor": "0",
+          "actor_kind": "ped_spawn",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((3 11, 7 11, 7 19, 3 19, 3 11))",
+            "density": 0.0,
+            "ped_radius_m": 0.4,
+            "population_size": null,
+            "zone_wkt": "POLYGON ((4 13.5, 7 13.5, 7 16.5, 4 16.5, 4 13.5))"
+          },
+          "geometry_sha256": "f6895b19839e52007939dc372c1e24fbde6337db4465dba57e97f1e5cbe26a85"
+        }
+      ],
+      "map_id": "issue_9762_classic_realworld_bottleneck_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_realworld_double_bottleneck_high",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        53.0,
+        13.5,
+        56.0,
+        16.5
+      ],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((15.5 16.5, 18.5 16.5, 21.5 16.5, 24.5 16.5, 35.5 16.5, 38.5 16.5, 41.5 16.5, 44.5 16.5, 54.5 16.5, 54.5 13.5, 44.5 13.5, 41.5 13.5, 38.5 13.5, 35.5 13.5, 24.5 13.5, 21.5 13.5, 18.5 13.5, 15.5 13.5, 5.5 13.5, 5.5 16.5, 15.5 16.5))",
+            "density": 0.0,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                7.0,
+                15.0
+              ],
+              [
+                17.0,
+                15.0
+              ],
+              [
+                23.0,
+                15.0
+              ],
+              [
+                37.0,
+                15.0
+              ],
+              [
+                43.0,
+                15.0
+              ],
+              [
+                53.0,
+                15.0
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((53 13.5, 56 13.5, 56 16.5, 53 16.5, 53 13.5))"
+          },
+          "geometry_sha256": "fcde112a9daf07a0957b39aff17e394625b77522e4e00f01205fde9fae583636"
+        },
+        {
+          "actor": "1",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((15.5 16.5, 18.5 16.5, 21.5 16.5, 24.5 16.5, 35.5 16.5, 38.5 16.5, 41.5 16.5, 44.5 16.5, 54.5 16.5, 54.5 13.5, 44.5 13.5, 41.5 13.5, 38.5 13.5, 35.5 13.5, 24.5 13.5, 21.5 13.5, 18.5 13.5, 15.5 13.5, 5.5 13.5, 5.5 16.5, 15.5 16.5))",
+            "density": 0.0,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                53.0,
+                15.0
+              ],
+              [
+                43.0,
+                15.0
+              ],
+              [
+                37.0,
+                15.0
+              ],
+              [
+                23.0,
+                15.0
+              ],
+              [
+                17.0,
+                15.0
+              ],
+              [
+                7.0,
+                15.0
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((53 13.5, 56 13.5, 56 16.5, 53 16.5, 53 13.5))"
+          },
+          "geometry_sha256": "41375784fbbfbe3d10b2a9dd66c39464c9713d1ced07605f5a9957ccf1f9be1d"
+        },
+        {
+          "actor": "1",
+          "actor_kind": "ped_spawn",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((53 11, 57 11, 57 19, 53 19, 53 11))",
+            "density": 0.0,
+            "ped_radius_m": 0.4,
+            "population_size": null,
+            "zone_wkt": "POLYGON ((53 13.5, 56 13.5, 56 16.5, 53 16.5, 53 13.5))"
+          },
+          "geometry_sha256": "b6eaa9b2463f9d322eb287d2d4e421dec968c61327d45391840ff371b8d52d27"
+        }
+      ],
+      "map_id": "issue_9762_classic_realworld_bottleneck_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_realworld_double_bottleneck_high",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        2.0,
+        3.0,
+        6.0,
+        6.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_classic_station_platform_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_station_platform_medium",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        77.0,
+        21.0,
+        81.0,
+        24.0
+      ],
+      "intersections": [
+        {
+          "actor": "1",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((16.5 23.5, 19.5 23.5, 28.5 23.5, 31.5 23.5, 40.5 23.5, 43.5 23.5, 52.5 23.5, 55.5 23.5, 64.5 23.5, 67.5 23.5, 79.5 23.5, 79.5 20.5, 67.5 20.5, 64.5 20.5, 55.5 20.5, 52.5 20.5, 43.5 20.5, 40.5 20.5, 31.5 20.5, 28.5 20.5, 19.5 20.5, 16.5 20.5, 4.5 20.5, 4.5 23.5, 16.5 23.5))",
+            "density": 0.05,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                78.0,
+                22.0
+              ],
+              [
+                66.0,
+                22.0
+              ],
+              [
+                54.0,
+                22.0
+              ],
+              [
+                42.0,
+                22.0
+              ],
+              [
+                30.0,
+                22.0
+              ],
+              [
+                18.0,
+                22.0
+              ],
+              [
+                6.0,
+                22.0
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((77 21, 81 21, 81 24, 77 24, 77 21))"
+          },
+          "geometry_sha256": "d97d07957975c0b82281ee4760f815c3c1b9cbfeab54c8ed11b673b6105238e1"
+        },
+        {
+          "actor": "1",
+          "actor_kind": "ped_spawn",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((78 20, 82 20, 82 23, 78 23, 78 20))",
+            "density": 0.05,
+            "ped_radius_m": 0.4,
+            "population_size": null,
+            "zone_wkt": "POLYGON ((77 21, 81 21, 81 24, 77 24, 77 21))"
+          },
+          "geometry_sha256": "a60e03c8d05635d094aa02661b89aa8a7ed38fb50d9ff473b83a8ce8bc0b41b0"
+        }
+      ],
+      "map_id": "issue_9762_classic_station_platform_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_station_platform_medium",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        4.0,
+        4.0,
+        8.0,
+        8.0
+      ],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((1.6189285999999998 4.1832518, 9.774272 22.813108, 17.165053 30.438106, 34.149275 38.561894, 37.149275 38.561894, 37.149275 35.561894, 20.165053 27.438106, 12.774272 19.813108, 4.6189286 1.1832517999999999, 1.6189285999999998 1.1832517999999999, 1.6189285999999998 4.1832518))",
+            "density": 0.02,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                3.1189286,
+                2.6832518
+              ],
+              [
+                11.274272,
+                21.313108
+              ],
+              [
+                18.665053,
+                28.938106
+              ],
+              [
+                35.649275,
+                37.061894
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((4 4, 8 4, 8 8, 4 8, 4 4))"
+          },
+          "geometry_sha256": "b36170db76b366590e56b97bf3f1155db00faac5d9966d4b8be1d0a0d7ba3a7e"
+        }
+      ],
+      "map_id": "issue_9762_classic_crossing_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_cross_trap_low",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        32.0,
+        32.0,
+        36.0,
+        36.0
+      ],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((1.6189285999999998 4.1832518, 9.774272 22.813108, 17.165053 30.438106, 34.149275 38.561894, 37.149275 38.561894, 37.149275 35.561894, 20.165053 27.438106, 12.774272 19.813108, 4.6189286 1.1832517999999999, 1.6189285999999998 1.1832517999999999, 1.6189285999999998 4.1832518))",
+            "density": 0.02,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                3.1189286,
+                2.6832518
+              ],
+              [
+                11.274272,
+                21.313108
+              ],
+              [
+                18.665053,
+                28.938106
+              ],
+              [
+                35.649275,
+                37.061894
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((32 32, 36 32, 36 36, 32 36, 32 32))"
+          },
+          "geometry_sha256": "5a6839dd70e14cdd69f24d0e8a395661a8313b48f6298a08da3fc8e1f1483667"
+        }
+      ],
+      "map_id": "issue_9762_classic_crossing_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_cross_trap_low",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        4.0,
+        4.0,
+        8.0,
+        8.0
+      ],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((1.6189285999999998 4.1832518, 9.774272 22.813108, 17.165053 30.438106, 34.149275 38.561894, 37.149275 38.561894, 37.149275 35.561894, 20.165053 27.438106, 12.774272 19.813108, 4.6189286 1.1832517999999999, 1.6189285999999998 1.1832517999999999, 1.6189285999999998 4.1832518))",
+            "density": 0.05,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                3.1189286,
+                2.6832518
+              ],
+              [
+                11.274272,
+                21.313108
+              ],
+              [
+                18.665053,
+                28.938106
+              ],
+              [
+                35.649275,
+                37.061894
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((4 4, 8 4, 8 8, 4 8, 4 4))"
+          },
+          "geometry_sha256": "0e4f55f4f4ee8abcaa101306a7e47b9cd07c46748044b2de2d0a0f270f954224"
+        }
+      ],
+      "map_id": "issue_9762_classic_crossing_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_cross_trap_medium",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        32.0,
+        32.0,
+        36.0,
+        36.0
+      ],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((1.6189285999999998 4.1832518, 9.774272 22.813108, 17.165053 30.438106, 34.149275 38.561894, 37.149275 38.561894, 37.149275 35.561894, 20.165053 27.438106, 12.774272 19.813108, 4.6189286 1.1832517999999999, 1.6189285999999998 1.1832517999999999, 1.6189285999999998 4.1832518))",
+            "density": 0.05,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                3.1189286,
+                2.6832518
+              ],
+              [
+                11.274272,
+                21.313108
+              ],
+              [
+                18.665053,
+                28.938106
+              ],
+              [
+                35.649275,
+                37.061894
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((32 32, 36 32, 36 36, 32 36, 32 32))"
+          },
+          "geometry_sha256": "f736ab294f21a9d7232c9a9cb8b3f52902cff2de93184facb4792e25378e7367"
+        }
+      ],
+      "map_id": "issue_9762_classic_crossing_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_cross_trap_medium",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        4.0,
+        4.0,
+        8.0,
+        8.0
+      ],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((1.6189285999999998 4.1832518, 9.774272 22.813108, 17.165053 30.438106, 34.149275 38.561894, 37.149275 38.561894, 37.149275 35.561894, 20.165053 27.438106, 12.774272 19.813108, 4.6189286 1.1832517999999999, 1.6189285999999998 1.1832517999999999, 1.6189285999999998 4.1832518))",
+            "density": 0.08,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                3.1189286,
+                2.6832518
+              ],
+              [
+                11.274272,
+                21.313108
+              ],
+              [
+                18.665053,
+                28.938106
+              ],
+              [
+                35.649275,
+                37.061894
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((4 4, 8 4, 8 8, 4 8, 4 4))"
+          },
+          "geometry_sha256": "e07bd318ace052d865e2da212bcee5bbe0f581155ddf083e96546799a08ccd9f"
+        }
+      ],
+      "map_id": "issue_9762_classic_crossing_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_cross_trap_high",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        32.0,
+        32.0,
+        36.0,
+        36.0
+      ],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((1.6189285999999998 4.1832518, 9.774272 22.813108, 17.165053 30.438106, 34.149275 38.561894, 37.149275 38.561894, 37.149275 35.561894, 20.165053 27.438106, 12.774272 19.813108, 4.6189286 1.1832517999999999, 1.6189285999999998 1.1832517999999999, 1.6189285999999998 4.1832518))",
+            "density": 0.08,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                3.1189286,
+                2.6832518
+              ],
+              [
+                11.274272,
+                21.313108
+              ],
+              [
+                18.665053,
+                28.938106
+              ],
+              [
+                35.649275,
+                37.061894
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((32 32, 36 32, 36 36, 32 36, 32 32))"
+          },
+          "geometry_sha256": "90bd3259ba79062876baaf78f6c8dfdf04dbab4743d8b5750614e183101085db"
+        }
+      ],
+      "map_id": "issue_9762_classic_crossing_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_cross_trap_high",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        26.895477,
+        13.63518,
+        30.895477,
+        17.63518
+      ],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((20.5 12.4, 4.5 20.5, 4.5 23.5, 7.5 23.5, 23.5 15.4, 39.5 7.5, 39.5 4.5, 36.5 4.5, 20.5 12.4))",
+            "density": 0.02,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                6.0,
+                22.0
+              ],
+              [
+                22.0,
+                13.9
+              ],
+              [
+                38.0,
+                6.0
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((26.895477 13.63518, 30.895477 13.63518, 30.895477 17.63518, 26.895477 17.63518, 26.895477 13.63518))"
+          },
+          "geometry_sha256": "28e5c29fff6ad04bb95eb928e85cfa68df56f5a3588d5a50461453369441a789"
+        }
+      ],
+      "map_id": "issue_9762_classic_doorway_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_doorway_low",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        14.440092,
+        9.4108419,
+        18.440092,
+        13.4108419
+      ],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.02853791708073283,
+          "evidence": {
+            "actor_wkt": "POLYGON ((20.5 12.4, 4.5 20.5, 4.5 23.5, 7.5 23.5, 23.5 15.4, 39.5 7.5, 39.5 4.5, 36.5 4.5, 20.5 12.4))",
+            "density": 0.02,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                6.0,
+                22.0
+              ],
+              [
+                22.0,
+                13.9
+              ],
+              [
+                38.0,
+                6.0
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((14.440092 9.4108419, 18.440092 9.4108419, 18.440092 13.4108419, 14.440092 13.4108419, 14.440092 9.4108419))"
+          },
+          "geometry_sha256": "a7cecc5b39de01194fe98b0a2d1fcf9cfdb1711bf693b9a6c63d579c98b082e2"
+        }
+      ],
+      "map_id": "issue_9762_classic_doorway_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_doorway_low",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        26.895477,
+        13.63518,
+        30.895477,
+        17.63518
+      ],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((20.5 12.4, 4.5 20.5, 4.5 23.5, 7.5 23.5, 23.5 15.4, 39.5 7.5, 39.5 4.5, 36.5 4.5, 20.5 12.4))",
+            "density": 0.05,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                6.0,
+                22.0
+              ],
+              [
+                22.0,
+                13.9
+              ],
+              [
+                38.0,
+                6.0
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((26.895477 13.63518, 30.895477 13.63518, 30.895477 17.63518, 26.895477 17.63518, 26.895477 13.63518))"
+          },
+          "geometry_sha256": "59211442c47347d170a64cdc88ae4931b74443efd119497c3962edbc991fd0cc"
+        }
+      ],
+      "map_id": "issue_9762_classic_doorway_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_doorway_medium",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        14.440092,
+        9.4108419,
+        18.440092,
+        13.4108419
+      ],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.02853791708073283,
+          "evidence": {
+            "actor_wkt": "POLYGON ((20.5 12.4, 4.5 20.5, 4.5 23.5, 7.5 23.5, 23.5 15.4, 39.5 7.5, 39.5 4.5, 36.5 4.5, 20.5 12.4))",
+            "density": 0.05,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                6.0,
+                22.0
+              ],
+              [
+                22.0,
+                13.9
+              ],
+              [
+                38.0,
+                6.0
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((14.440092 9.4108419, 18.440092 9.4108419, 18.440092 13.4108419, 14.440092 13.4108419, 14.440092 9.4108419))"
+          },
+          "geometry_sha256": "05747dece460dba8bbce8f90c739112c615bd76a32c672efd158ccceecef83af"
+        }
+      ],
+      "map_id": "issue_9762_classic_doorway_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_doorway_medium",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        26.895477,
+        13.63518,
+        30.895477,
+        17.63518
+      ],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((20.5 12.4, 4.5 20.5, 4.5 23.5, 7.5 23.5, 23.5 15.4, 39.5 7.5, 39.5 4.5, 36.5 4.5, 20.5 12.4))",
+            "density": 0.08,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                6.0,
+                22.0
+              ],
+              [
+                22.0,
+                13.9
+              ],
+              [
+                38.0,
+                6.0
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((26.895477 13.63518, 30.895477 13.63518, 30.895477 17.63518, 26.895477 17.63518, 26.895477 13.63518))"
+          },
+          "geometry_sha256": "9f319cb77beeffe0c3ec5bf2ef550003a11ad092349b01f5cc47c78185c49fa8"
+        }
+      ],
+      "map_id": "issue_9762_classic_doorway_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_doorway_high",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        14.440092,
+        9.4108419,
+        18.440092,
+        13.4108419
+      ],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.02853791708073283,
+          "evidence": {
+            "actor_wkt": "POLYGON ((20.5 12.4, 4.5 20.5, 4.5 23.5, 7.5 23.5, 23.5 15.4, 39.5 7.5, 39.5 4.5, 36.5 4.5, 20.5 12.4))",
+            "density": 0.08,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                6.0,
+                22.0
+              ],
+              [
+                22.0,
+                13.9
+              ],
+              [
+                38.0,
+                6.0
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((14.440092 9.4108419, 18.440092 9.4108419, 18.440092 13.4108419, 14.440092 13.4108419, 14.440092 9.4108419))"
+          },
+          "geometry_sha256": "a96437f034cbac69662e3cae6415e1d8a711400a3eb3c6268dcca8daf8c043ff"
+        }
+      ],
+      "map_id": "issue_9762_classic_doorway_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_doorway_high",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        8.9075975,
+        17.964346,
+        12.9075975,
+        21.964346
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_classic_group_crossing_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_group_crossing_low",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        27.627777,
+        18.214111,
+        31.627777,
+        22.214111
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_classic_group_crossing_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_group_crossing_low",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        8.9075975,
+        17.964346,
+        12.9075975,
+        21.964346
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_classic_group_crossing_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_group_crossing_medium",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        27.627777,
+        18.214111,
+        31.627777,
+        22.214111
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_classic_group_crossing_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_group_crossing_medium",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        8.9075975,
+        17.964346,
+        12.9075975,
+        21.964346
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_classic_group_crossing_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_group_crossing_high",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        27.627777,
+        18.214111,
+        31.627777,
+        22.214111
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_classic_group_crossing_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_group_crossing_high",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        12.324901,
+        2.8169494,
+        16.324901,
+        6.8169494
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_classic_head_on_corridor_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_head_on_corridor_low",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        17.109221,
+        33.043137,
+        21.109221,
+        37.043137
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_classic_head_on_corridor_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_head_on_corridor_low",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        12.324901,
+        2.8169494,
+        16.324901,
+        6.8169494
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_classic_head_on_corridor_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_head_on_corridor_medium",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        17.109221,
+        33.043137,
+        21.109221,
+        37.043137
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_classic_head_on_corridor_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_head_on_corridor_medium",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        6.0,
+        6.0,
+        10.0,
+        10.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_classic_merging_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_merging_low",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        34.0,
+        32.0,
+        38.0,
+        36.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_classic_merging_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_merging_low",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        6.0,
+        6.0,
+        10.0,
+        10.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_classic_merging_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_merging_medium",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        34.0,
+        32.0,
+        38.0,
+        36.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_classic_merging_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_merging_medium",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        14.398912,
+        3.6078129,
+        19.0189119,
+        8.227812799999999
+      ],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.02401398783685534,
+          "evidence": {
+            "actor_wkt": "POLYGON ((9.497102 9.6461963, 14.246408 13.674533, 37.319198 17.717471, 46.307357 21.785536, 49.307357 21.785536, 49.307357 18.785536, 40.319198 14.717471, 17.246408000000002 10.674533, 12.497102 6.6461963, 9.497102 6.6461963, 9.497102 9.6461963))",
+            "density": 0.02,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                10.997102,
+                8.1461963
+              ],
+              [
+                15.746408,
+                12.174533
+              ],
+              [
+                38.819198,
+                16.217471
+              ],
+              [
+                47.807357,
+                20.285536
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((14.398912 3.6078129, 19.0189119 3.6078129, 19.0189119 8.227812799999999, 14.398912 8.227812799999999, 14.398912 3.6078129))"
+          },
+          "geometry_sha256": "f8d51e7144227b90076752b8849d7909c315796a167ee2a9e72bb1deee5e1500"
+        }
+      ],
+      "map_id": "issue_9762_classic_overtaking_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_overtaking_low",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        40.837814,
+        21.288258,
+        45.457813900000005,
+        25.9082579
+      ],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((9.497102 9.6461963, 14.246408 13.674533, 37.319198 17.717471, 46.307357 21.785536, 49.307357 21.785536, 49.307357 18.785536, 40.319198 14.717471, 17.246408000000002 10.674533, 12.497102 6.6461963, 9.497102 6.6461963, 9.497102 9.6461963))",
+            "density": 0.02,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                10.997102,
+                8.1461963
+              ],
+              [
+                15.746408,
+                12.174533
+              ],
+              [
+                38.819198,
+                16.217471
+              ],
+              [
+                47.807357,
+                20.285536
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((40.837814 21.288258, 45.457813900000005 21.288258, 45.457813900000005 25.9082579, 40.837814 25.9082579, 40.837814 21.288258))"
+          },
+          "geometry_sha256": "68f3a9ee089dcf688f21f0f45748c2157bbe27ba633b79b41923341568f200ba"
+        }
+      ],
+      "map_id": "issue_9762_classic_overtaking_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_overtaking_low",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        14.398912,
+        3.6078129,
+        19.0189119,
+        8.227812799999999
+      ],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.02401398783685534,
+          "evidence": {
+            "actor_wkt": "POLYGON ((9.497102 9.6461963, 14.246408 13.674533, 37.319198 17.717471, 46.307357 21.785536, 49.307357 21.785536, 49.307357 18.785536, 40.319198 14.717471, 17.246408000000002 10.674533, 12.497102 6.6461963, 9.497102 6.6461963, 9.497102 9.6461963))",
+            "density": 0.05,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                10.997102,
+                8.1461963
+              ],
+              [
+                15.746408,
+                12.174533
+              ],
+              [
+                38.819198,
+                16.217471
+              ],
+              [
+                47.807357,
+                20.285536
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((14.398912 3.6078129, 19.0189119 3.6078129, 19.0189119 8.227812799999999, 14.398912 8.227812799999999, 14.398912 3.6078129))"
+          },
+          "geometry_sha256": "d83b33d13ba9623547824f38bad905a52ecac56e43366ee2796ad5075c665d6d"
+        }
+      ],
+      "map_id": "issue_9762_classic_overtaking_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_overtaking_medium",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        40.837814,
+        21.288258,
+        45.457813900000005,
+        25.9082579
+      ],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((9.497102 9.6461963, 14.246408 13.674533, 37.319198 17.717471, 46.307357 21.785536, 49.307357 21.785536, 49.307357 18.785536, 40.319198 14.717471, 17.246408000000002 10.674533, 12.497102 6.6461963, 9.497102 6.6461963, 9.497102 9.6461963))",
+            "density": 0.05,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                10.997102,
+                8.1461963
+              ],
+              [
+                15.746408,
+                12.174533
+              ],
+              [
+                38.819198,
+                16.217471
+              ],
+              [
+                47.807357,
+                20.285536
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((40.837814 21.288258, 45.457813900000005 21.288258, 45.457813900000005 25.9082579, 40.837814 25.9082579, 40.837814 21.288258))"
+          },
+          "geometry_sha256": "295a9c196fe772d10c1974c29ad37cfa621da1aa5de2f41a9311448dedfddbdb"
+        }
+      ],
+      "map_id": "issue_9762_classic_overtaking_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_overtaking_medium",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        20.605928,
+        31.842947,
+        24.605928,
+        35.842946999999995
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_classic_t_intersection_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_t_intersection_low",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        34.889965,
+        16.784306,
+        38.889965,
+        20.784306
+      ],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((31.987152000000002 17.998774, 13.567384 18.017219, 13.567384 21.017219, 16.567384 21.017219, 34.987152 20.998774, 34.987152 17.998774, 31.987152000000002 17.998774))",
+            "density": 0.02,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                15.067384,
+                19.517219
+              ],
+              [
+                33.487152,
+                19.498774
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((34.889965 16.784306, 38.889965 16.784306, 38.889965 20.784306, 34.889965 20.784306, 34.889965 16.784306))"
+          },
+          "geometry_sha256": "db8c3db46f92e8bd3863423677bdbc14c06ff9a24966c8d3fef8e15aab3f2af0"
+        }
+      ],
+      "map_id": "issue_9762_classic_t_intersection_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_t_intersection_low",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        20.605928,
+        31.842947,
+        24.605928,
+        35.842946999999995
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_classic_t_intersection_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_t_intersection_medium",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        34.889965,
+        16.784306,
+        38.889965,
+        20.784306
+      ],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((31.987152000000002 17.998774, 13.567384 18.017219, 13.567384 21.017219, 16.567384 21.017219, 34.987152 20.998774, 34.987152 17.998774, 31.987152000000002 17.998774))",
+            "density": 0.05,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                15.067384,
+                19.517219
+              ],
+              [
+                33.487152,
+                19.498774
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((34.889965 16.784306, 38.889965 16.784306, 38.889965 20.784306, 34.889965 20.784306, 34.889965 16.784306))"
+          },
+          "geometry_sha256": "ed3e487f3374f7bdf1bf01d2aada96fd67f36d50d24f0f39e12400cecfc52b6a"
+        }
+      ],
+      "map_id": "issue_9762_classic_t_intersection_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_t_intersection_medium",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        7.0,
+        23.0,
+        11.0,
+        27.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_classic_urban_crossing_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_urban_crossing_medium",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        39.0,
+        23.0,
+        43.0,
+        27.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_classic_urban_crossing_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "classic_urban_crossing_medium",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        3.0,
+        4.0,
+        5.0,
+        6.0
+      ],
+      "intersections": [
+        {
+          "actor": "h1",
+          "actor_kind": "single",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "LINESTRING (35 5, 5 5)",
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                35.0,
+                5.0
+              ],
+              [
+                5.0,
+                5.0
+              ]
+            ],
+            "role": null,
+            "zone_wkt": "POLYGON ((3 4, 5 4, 5 6, 3 6, 3 4))"
+          },
+          "geometry_sha256": "4257977fb5e6dfebfe22699397a1a0eff7d17faf6bd4373253ffd54b7f95f9b9"
+        }
+      ],
+      "map_id": "issue_9762_francis2023_frontal_approach_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_frontal_approach",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        36.0,
+        4.0,
+        38.0,
+        6.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_francis2023_frontal_approach_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_frontal_approach",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        3.0,
+        4.0,
+        5.0,
+        6.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_francis2023_ped_obstruction_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_pedestrian_obstruction",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        36.0,
+        4.0,
+        38.0,
+        6.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_francis2023_ped_obstruction_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_pedestrian_obstruction",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        3.0,
+        4.0,
+        5.0,
+        6.0
+      ],
+      "intersections": [
+        {
+          "actor": "h1",
+          "actor_kind": "single",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "LINESTRING (1.5 6, 35 6)",
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                1.5,
+                6.0
+              ],
+              [
+                35.0,
+                6.0
+              ]
+            ],
+            "role": null,
+            "zone_wkt": "POLYGON ((3 4, 5 4, 5 6, 3 6, 3 4))"
+          },
+          "geometry_sha256": "848bac789626b9945faaaa88a8cb4614bdf5579877f14f7bab5e98a0fb429d5c"
+        }
+      ],
+      "map_id": "issue_9762_francis2023_ped_overtaking_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_pedestrian_overtaking",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        36.0,
+        4.0,
+        38.0,
+        6.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_francis2023_ped_overtaking_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_pedestrian_overtaking",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        3.0,
+        4.0,
+        5.0,
+        6.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_francis2023_robot_overtaking_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_robot_overtaking",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        36.0,
+        4.0,
+        38.0,
+        6.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_francis2023_robot_overtaking_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_robot_overtaking",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        4.0,
+        3.0,
+        6.0,
+        5.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_francis2023_down_path_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_down_path",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        36.0,
+        2.0,
+        38.0,
+        4.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_francis2023_down_path_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_down_path",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        3.0,
+        13.0,
+        5.0,
+        15.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_francis2023_intersection_no_gesture_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_intersection_no_gesture",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        26.0,
+        13.0,
+        28.0,
+        15.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_francis2023_intersection_no_gesture_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_intersection_no_gesture",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        4.0,
+        25.0,
+        6.0,
+        27.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_francis2023_blind_corner_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_blind_corner",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        26.0,
+        2.0,
+        28.0,
+        4.0
+      ],
+      "intersections": [
+        {
+          "actor": "h1",
+          "actor_kind": "single",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "LINESTRING (27 4, 27 26)",
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                27.0,
+                4.0
+              ],
+              [
+                27.0,
+                26.0
+              ]
+            ],
+            "role": null,
+            "zone_wkt": "POLYGON ((26 2, 28 2, 28 4, 26 4, 26 2))"
+          },
+          "geometry_sha256": "43935a027975691c8f5255665f1abe2bd248c714081049501952004fc9643bbb"
+        }
+      ],
+      "map_id": "issue_9762_francis2023_blind_corner_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_blind_corner",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        3.0,
+        2.0,
+        5.0,
+        4.0
+      ],
+      "intersections": [
+        {
+          "actor": "h1",
+          "actor_kind": "single",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "LINESTRING (27 4, 3 4)",
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                27.0,
+                4.0
+              ],
+              [
+                3.0,
+                4.0
+              ]
+            ],
+            "role": null,
+            "zone_wkt": "POLYGON ((3 2, 5 2, 5 4, 3 4, 3 2))"
+          },
+          "geometry_sha256": "19337ab6f3c07e4b021de30be67b3556c3fbd6e1267e79357206a0eeb93b608d"
+        }
+      ],
+      "map_id": "issue_9762_francis2023_narrow_hallway_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_narrow_hallway",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        26.0,
+        2.0,
+        28.0,
+        4.0
+      ],
+      "intersections": [
+        {
+          "actor": "h1",
+          "actor_kind": "single",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "LINESTRING (27 4, 3 4)",
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                27.0,
+                4.0
+              ],
+              [
+                3.0,
+                4.0
+              ]
+            ],
+            "role": null,
+            "zone_wkt": "POLYGON ((26 2, 28 2, 28 4, 26 4, 26 2))"
+          },
+          "geometry_sha256": "21695de4eb815f20a32fc3df471673fe60c351fba1cdbac6220f7fadf145ef87"
+        }
+      ],
+      "map_id": "issue_9762_francis2023_narrow_hallway_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_narrow_hallway",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        3.0,
+        4.0,
+        5.0,
+        6.0
+      ],
+      "intersections": [
+        {
+          "actor": "h1",
+          "actor_kind": "single",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "LINESTRING (27 5, 3 5)",
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                27.0,
+                5.0
+              ],
+              [
+                3.0,
+                5.0
+              ]
+            ],
+            "role": null,
+            "zone_wkt": "POLYGON ((3 4, 5 4, 5 6, 3 6, 3 4))"
+          },
+          "geometry_sha256": "f5c41e89e0c5628ef4ff607b22b9bf6b8a5820f95570539c1c39eac3bdcf9380"
+        }
+      ],
+      "map_id": "francis2023_narrow_doorway",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_narrow_doorway",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        26.0,
+        4.0,
+        28.0,
+        6.0
+      ],
+      "intersections": [
+        {
+          "actor": "h1",
+          "actor_kind": "single",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "LINESTRING (27 5, 3 5)",
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                27.0,
+                5.0
+              ],
+              [
+                3.0,
+                5.0
+              ]
+            ],
+            "role": null,
+            "zone_wkt": "POLYGON ((26 4, 28 4, 28 6, 26 6, 26 4))"
+          },
+          "geometry_sha256": "9e6cf06b6a931dbfb0235fab37a06972f7406db8fb6d212780b7a073cce6f985"
+        }
+      ],
+      "map_id": "francis2023_narrow_doorway",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_narrow_doorway",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        3.0,
+        9.0,
+        5.0,
+        11.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9856_francis2023_entering_room_route_width_v1",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_entering_room",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        20.0,
+        9.0,
+        22.0,
+        11.0
+      ],
+      "intersections": [
+        {
+          "actor": "h1",
+          "actor_kind": "single",
+          "distance_m": 0.2773500981126146,
+          "evidence": {
+            "actor_wkt": "LINESTRING (18 10, 24 14)",
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                18.0,
+                10.0
+              ],
+              [
+                24.0,
+                14.0
+              ]
+            ],
+            "role": null,
+            "zone_wkt": "POLYGON ((20 9, 22 9, 22 11, 20 11, 20 9))"
+          },
+          "geometry_sha256": "1abfd4eb2c208ad9655f48285dc462a33d5c73044bb3ff5af55c3fa05108a7bd"
+        }
+      ],
+      "map_id": "issue_9856_francis2023_entering_room_route_width_v1",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_entering_room",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        20.0,
+        9.0,
+        22.0,
+        11.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9856_francis2023_exiting_room_route_width_v1",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_exiting_room",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        2.0,
+        9.0,
+        4.0,
+        11.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9856_francis2023_exiting_room_route_width_v1",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_exiting_room",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        3.0,
+        9.0,
+        5.0,
+        11.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9856_francis2023_entering_elevator_route_width_v1",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_entering_elevator",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        14.0,
+        9.0,
+        16.0,
+        11.0
+      ],
+      "intersections": [
+        {
+          "actor": "h1",
+          "actor_kind": "single",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "LINESTRING (15 10, 16 11)",
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                15.0,
+                10.0
+              ],
+              [
+                16.0,
+                11.0
+              ]
+            ],
+            "role": null,
+            "zone_wkt": "POLYGON ((14 9, 16 9, 16 11, 14 11, 14 9))"
+          },
+          "geometry_sha256": "d191e99dfbdc33fa4de8f98d1588087828078c2bef2cbdbe6a78c39866a0c2ba"
+        }
+      ],
+      "map_id": "issue_9856_francis2023_entering_elevator_route_width_v1",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_entering_elevator",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        14.0,
+        9.0,
+        16.0,
+        11.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9856_francis2023_exiting_elevator_route_width_v1",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_exiting_elevator",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        2.0,
+        9.0,
+        4.0,
+        11.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9856_francis2023_exiting_elevator_route_width_v1",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_exiting_elevator",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        3.0,
+        13.0,
+        5.0,
+        15.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_francis2023_intersection_no_gesture_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_intersection_wait",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        26.0,
+        13.0,
+        28.0,
+        15.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_francis2023_intersection_no_gesture_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_intersection_wait",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        3.0,
+        13.0,
+        5.0,
+        15.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_francis2023_intersection_no_gesture_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_intersection_proceed",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        26.0,
+        13.0,
+        28.0,
+        15.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_francis2023_intersection_no_gesture_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_intersection_proceed",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        4.0,
+        3.0,
+        6.0,
+        5.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_francis2023_down_path_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_following_human",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        36.0,
+        2.0,
+        38.0,
+        4.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_francis2023_down_path_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_following_human",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        4.0,
+        3.0,
+        6.0,
+        5.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_francis2023_down_path_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_leading_human",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        36.0,
+        2.0,
+        38.0,
+        4.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_francis2023_down_path_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_leading_human",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        4.0,
+        3.0,
+        6.0,
+        5.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_francis2023_down_path_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_accompanying_peer",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        36.0,
+        2.0,
+        38.0,
+        4.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_francis2023_down_path_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_accompanying_peer",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        3.0,
+        9.0,
+        5.0,
+        11.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_francis2023_join_group_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_join_group",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        16.0,
+        9.0,
+        18.0,
+        11.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_francis2023_join_group_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_join_group",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        3.0,
+        9.0,
+        5.0,
+        11.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_francis2023_leave_group_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_leave_group",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        16.0,
+        9.0,
+        18.0,
+        11.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_francis2023_leave_group_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_leave_group",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        3.0,
+        9.0,
+        5.0,
+        11.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_francis2023_crowd_navigation_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_crowd_navigation",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        26.0,
+        9.0,
+        28.0,
+        11.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_francis2023_crowd_navigation_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_crowd_navigation",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        3.0,
+        4.0,
+        5.0,
+        6.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_francis2023_parallel_traffic_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_parallel_traffic",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        36.0,
+        4.0,
+        38.0,
+        6.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_francis2023_parallel_traffic_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_parallel_traffic",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        3.0,
+        13.0,
+        5.0,
+        15.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_francis2023_perpendicular_traffic_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_perpendicular_traffic",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        26.0,
+        13.0,
+        28.0,
+        15.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_francis2023_perpendicular_traffic_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_perpendicular_traffic",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        3.0,
+        9.0,
+        5.0,
+        11.0
+      ],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowd_route",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((2.5 6.5, 2.5 9.5, 2.5 10.5, 2.5 13.5, 3.5 16.5, 5 18, 8.5 18.5, 11.5 18.5, 15 18, 16.5 16.5, 16.5 13.5, 13.5 13.5, 12 15, 10 15.285714285714286, 8 15, 6.5 13.5, 5.5 10.5, 5.5 9.5, 6.5 6.5, 8 5, 10 4.714285714285714, 12 5, 13.5 6.5, 16.5 6.5, 16.5 3.5, 15 2, 11.5 1.5, 8.5 1.5, 5 2, 3.5 3.5, 2.5 6.5))",
+            "density": 0.06,
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                15.0,
+                5.0
+              ],
+              [
+                13.5,
+                3.5
+              ],
+              [
+                10.0,
+                3.0
+              ],
+              [
+                6.5,
+                3.5
+              ],
+              [
+                5.0,
+                5.0
+              ],
+              [
+                4.0,
+                8.0
+              ],
+              [
+                4.0,
+                12.0
+              ],
+              [
+                5.0,
+                15.0
+              ],
+              [
+                6.5,
+                16.5
+              ],
+              [
+                10.0,
+                17.0
+              ],
+              [
+                13.5,
+                16.5
+              ],
+              [
+                15.0,
+                15.0
+              ]
+            ],
+            "population_size": null,
+            "sidewalk_width": 3.0,
+            "zone_wkt": "POLYGON ((3 9, 5 9, 5 11, 3 11, 3 9))"
+          },
+          "geometry_sha256": "010dd2ae4dd65bb25fac14d390e7944b3b87e704c494bb8a03afe4288860a3b5"
+        }
+      ],
+      "map_id": "issue_9762_francis2023_circular_crossing_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_circular_crossing",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        16.0,
+        9.0,
+        18.0,
+        11.0
+      ],
+      "intersections": [],
+      "map_id": "issue_9762_francis2023_circular_crossing_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_circular_crossing",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        3.0,
+        9.0,
+        5.0,
+        11.0
+      ],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowded",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((3 3, 17 3, 17 17, 3 17, 3 3))",
+            "density": 0.12,
+            "ped_radius_m": 0.4,
+            "population_size": null,
+            "zone_wkt": "POLYGON ((3 9, 5 9, 5 11, 3 11, 3 9))"
+          },
+          "geometry_sha256": "191829a77d83dfaf7e576e73fda7439493f78425c0bc1e2083585a5d2822a083"
+        }
+      ],
+      "map_id": "issue_9762_francis2023_robot_crowding_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_robot_crowding",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        16.0,
+        9.0,
+        18.0,
+        11.0
+      ],
+      "intersections": [
+        {
+          "actor": "0",
+          "actor_kind": "crowded",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "POLYGON ((3 3, 17 3, 17 17, 3 17, 3 3))",
+            "density": 0.12,
+            "ped_radius_m": 0.4,
+            "population_size": null,
+            "zone_wkt": "POLYGON ((16 9, 18 9, 18 11, 16 11, 16 9))"
+          },
+          "geometry_sha256": "f1907540431e9f84b3968033006942b8e06f43841c7649d67d45e4ba25f2cca4"
+        }
+      ],
+      "map_id": "issue_9762_francis2023_robot_crowding_goal_zone_entry_v2",
+      "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_robot_crowding",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        3.0,
+        4.0,
+        5.0,
+        6.0
+      ],
+      "intersections": [
+        {
+          "actor": "h1",
+          "actor_kind": "single",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "LINESTRING (27 5, 3 5)",
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                27.0,
+                5.0
+              ],
+              [
+                3.0,
+                5.0
+              ]
+            ],
+            "role": null,
+            "zone_wkt": "POLYGON ((3 4, 5 4, 5 6, 3 6, 3 4))"
+          },
+          "geometry_sha256": "f5c41e89e0c5628ef4ff607b22b9bf6b8a5820f95570539c1c39eac3bdcf9380"
+        }
+      ],
+      "map_id": "issue_9348_francis2023_narrow_doorway_2p20_v1",
+      "matrix": "configs/scenarios/francis2023_narrow_doorway_three_width_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_narrow_doorway_width_2p20",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        26.0,
+        4.0,
+        28.0,
+        6.0
+      ],
+      "intersections": [
+        {
+          "actor": "h1",
+          "actor_kind": "single",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "LINESTRING (27 5, 3 5)",
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                27.0,
+                5.0
+              ],
+              [
+                3.0,
+                5.0
+              ]
+            ],
+            "role": null,
+            "zone_wkt": "POLYGON ((26 4, 28 4, 28 6, 26 6, 26 4))"
+          },
+          "geometry_sha256": "9e6cf06b6a931dbfb0235fab37a06972f7406db8fb6d212780b7a073cce6f985"
+        }
+      ],
+      "map_id": "issue_9348_francis2023_narrow_doorway_2p20_v1",
+      "matrix": "configs/scenarios/francis2023_narrow_doorway_three_width_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_narrow_doorway_width_2p20",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        3.0,
+        4.0,
+        5.0,
+        6.0
+      ],
+      "intersections": [
+        {
+          "actor": "h1",
+          "actor_kind": "single",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "LINESTRING (27 5, 3 5)",
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                27.0,
+                5.0
+              ],
+              [
+                3.0,
+                5.0
+              ]
+            ],
+            "role": null,
+            "zone_wkt": "POLYGON ((3 4, 5 4, 5 6, 3 6, 3 4))"
+          },
+          "geometry_sha256": "f5c41e89e0c5628ef4ff607b22b9bf6b8a5820f95570539c1c39eac3bdcf9380"
+        }
+      ],
+      "map_id": "issue_9348_francis2023_narrow_doorway_2p80_v1",
+      "matrix": "configs/scenarios/francis2023_narrow_doorway_three_width_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_narrow_doorway_width_2p80",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        26.0,
+        4.0,
+        28.0,
+        6.0
+      ],
+      "intersections": [
+        {
+          "actor": "h1",
+          "actor_kind": "single",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "LINESTRING (27 5, 3 5)",
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                27.0,
+                5.0
+              ],
+              [
+                3.0,
+                5.0
+              ]
+            ],
+            "role": null,
+            "zone_wkt": "POLYGON ((26 4, 28 4, 28 6, 26 6, 26 4))"
+          },
+          "geometry_sha256": "9e6cf06b6a931dbfb0235fab37a06972f7406db8fb6d212780b7a073cce6f985"
+        }
+      ],
+      "map_id": "issue_9348_francis2023_narrow_doorway_2p80_v1",
+      "matrix": "configs/scenarios/francis2023_narrow_doorway_three_width_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_narrow_doorway_width_2p80",
+      "zone": "goal[0]"
+    },
+    {
+      "bounds": [
+        3.0,
+        4.0,
+        5.0,
+        6.0
+      ],
+      "intersections": [
+        {
+          "actor": "h1",
+          "actor_kind": "single",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "LINESTRING (27 5, 3 5)",
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                27.0,
+                5.0
+              ],
+              [
+                3.0,
+                5.0
+              ]
+            ],
+            "role": null,
+            "zone_wkt": "POLYGON ((3 4, 5 4, 5 6, 3 6, 3 4))"
+          },
+          "geometry_sha256": "f5c41e89e0c5628ef4ff607b22b9bf6b8a5820f95570539c1c39eac3bdcf9380"
+        }
+      ],
+      "map_id": "issue_9728_francis2023_narrow_doorway_feasible_3p60_v1",
+      "matrix": "configs/scenarios/francis2023_narrow_doorway_three_width_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_narrow_doorway_width_3p60",
+      "zone": "spawn[0]"
+    },
+    {
+      "bounds": [
+        26.0,
+        4.0,
+        28.0,
+        6.0
+      ],
+      "intersections": [
+        {
+          "actor": "h1",
+          "actor_kind": "single",
+          "distance_m": 0.0,
+          "evidence": {
+            "actor_wkt": "LINESTRING (27 5, 3 5)",
+            "ped_radius_m": 0.4,
+            "points": [
+              [
+                27.0,
+                5.0
+              ],
+              [
+                3.0,
+                5.0
+              ]
+            ],
+            "role": null,
+            "zone_wkt": "POLYGON ((26 4, 28 4, 28 6, 26 6, 26 4))"
+          },
+          "geometry_sha256": "9e6cf06b6a931dbfb0235fab37a06972f7406db8fb6d212780b7a073cce6f985"
+        }
+      ],
+      "map_id": "issue_9728_francis2023_narrow_doorway_feasible_3p60_v1",
+      "matrix": "configs/scenarios/francis2023_narrow_doorway_three_width_release_0_0_8_v1.yaml",
+      "ped_radius_m": 0.4,
+      "scenario": "francis2023_narrow_doorway_width_3p60",
+      "zone": "goal[0]"
+    }
+  ],
+  "comparison_allowance_m": 1e-09,
+  "distance_convention": "robot_zone_to_nominal_pedestrian_centres",
+  "evidence_status": "diagnostic-only",
+  "geometry_sha": "ab96ad95e114337e5f342f970be70803f7de9234",
+  "issue": 10063,
+  "ped_radius_m": 0.4,
+  "resolved_current_matrix_sha256": "94867f641deea997399d2c2fe0a5c6becb373914ae5e490493287617ab8b3c82",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "release_endpoint_overlap_audit.v1",
+  "substrate_radius_m": 0.35,
+  "validation_source_sha": "f0e911aa2d7e90919fe87f633525ac8010b77a63"
+}

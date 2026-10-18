@@ -1,0 +1,15 @@
+{
+  "schema": "release-distribution-metrics.v1",
+  "review_basis": "0.0.7 source 07f7e8d vs metric v2; CHANGED_METRICS exclusion plus D-055 curvature exclusion. Explicit conservative allowlist, not the complement of CHANGED_METRICS.",
+  "allowlist": {
+    "avg_speed": "Mean recorded robot velocity magnitude; no terminal-goal or SNQI dependence; formula unchanged.",
+    "energy": "Sum of recorded acceleration magnitudes (proxy, not physical energy); formula unchanged.",
+    "clearing_distance_min": "Minimum trajectory-to-obstacle distance in metres; formula unchanged; absent obstacles remain missing.",
+    "clearing_distance_avg": "Mean nearest-obstacle distance in metres; formula unchanged; absent obstacles remain missing.",
+    "near_misses": "Count of pedestrian distances within fixed near-miss threshold; formula unchanged."
+  },
+  "additional_changed": {
+    "curvature_mean": "D-055: conservatively version-qualified; never subtract even though absent from CHANGED_METRICS."
+  },
+  "excluded": "Unreviewed fields, force-dependent comfort, terminal-goal-dependent fields and SNQI dependencies are never admitted to the allowlist. robot_force_* and snqi_v2* are successor-only."
+}

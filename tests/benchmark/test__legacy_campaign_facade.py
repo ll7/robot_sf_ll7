@@ -195,6 +195,7 @@ def test_run_campaign_delegates_with_injected_callables_and_forwards_kwargs(
         compute_aggregates_with_ci,
         export_publication_bundle,
         arm_isolation,
+        allow_pending_snqi_v2,
     ):
         captured["cfg"] = cfg
         captured["output_root"] = output_root
@@ -207,6 +208,7 @@ def test_run_campaign_delegates_with_injected_callables_and_forwards_kwargs(
         captured["compute_aggregates_with_ci"] = compute_aggregates_with_ci
         captured["export_publication_bundle"] = export_publication_bundle
         captured["arm_isolation"] = arm_isolation
+        captured["allow_pending_snqi_v2"] = allow_pending_snqi_v2
         return {"campaign": "delegate-sentinel"}
 
     monkeypatch.setattr(camera_ready_legacy_facade, "_run_campaign_impl", _fake_impl)
@@ -229,6 +231,7 @@ def test_run_campaign_delegates_with_injected_callables_and_forwards_kwargs(
     assert captured["skip_publication_bundle"] is True
     assert captured["invoked_command"] == "python -m robot_sf ..."
     assert captured["arm_isolation"] == "subprocess"
+    assert captured["allow_pending_snqi_v2"] is False
     # Injected collaborators are the facade's own module-level bindings.
     assert (
         captured["prepare_campaign_preflight"]

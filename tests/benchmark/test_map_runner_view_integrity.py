@@ -316,7 +316,7 @@ def _patch_episode_env(monkeypatch: pytest.MonkeyPatch) -> None:
     dummy_config = type(
         "Cfg",
         (),
-        {"sim_config": type("SC", (), {"time_per_step_in_secs": 0.1})()},
+        {"sim_config": type("SC", (), {"max_sim_steps": 600, "time_per_step_in_secs": 0.1})()},
     )()
     monkeypatch.setattr(
         "robot_sf.benchmark.map_runner.map_runner._build_env_config",

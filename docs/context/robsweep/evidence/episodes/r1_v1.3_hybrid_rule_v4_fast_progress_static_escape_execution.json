@@ -1,0 +1,1008 @@
+{
+  "treatment": "r1_v1.3",
+  "planner": "hybrid_rule_v4_fast_progress_static_escape",
+  "requested": 300,
+  "elapsed_s": 3280.7312666479847,
+  "result": {
+    "total_jobs": 300,
+    "workers": 1,
+    "parallel_execution": false,
+    "batch_runtime_sec": 3280.645119578985,
+    "written": 300,
+    "successful_jobs": 300,
+    "failed_jobs": 0,
+    "skipped_jobs": 0,
+    "failures": [],
+    "out_path": "docs/context/robsweep/evidence/episodes/r1_v1.3_hybrid_rule_v4_fast_progress_static_escape.jsonl",
+    "algorithm_readiness": {
+      "name": "hybrid_rule_local_planner",
+      "tier": "experimental",
+      "profile": "experimental"
+    },
+    "algorithm_metadata_contract": {
+      "algorithm": "hybrid_rule_local_planner",
+      "status": "ok",
+      "canonical_algorithm": "hybrid_rule_local_planner",
+      "baseline_category": "classical",
+      "policy_semantics": "hybrid_rule_deterministic_local_planner",
+      "observation_spec": {
+        "default_mode": "socnav_state",
+        "supported_modes": [
+          "socnav_state"
+        ],
+        "inputs": [
+          "robot_state",
+          "goal",
+          "pedestrians"
+        ],
+        "notes": "Structured Robot SF social-navigation state: robot pose/velocity, route goal, and pedestrian state when present.",
+        "active_mode": "socnav_state",
+        "observation_level": "tracked_agents_no_noise",
+        "override_applied": false
+      },
+      "observation_level": {
+        "key": "tracked_agents_no_noise",
+        "display_name": "Perfect tracked agents",
+        "perception_assumption": "perfect_tracking_without_noise",
+        "active_observation_mode": "socnav_state",
+        "compatible_observation_modes": [
+          "socnav_state",
+          "headed_socnav_state",
+          "gst_human_state"
+        ],
+        "required_inputs": [
+          "robot_state",
+          "goal",
+          "tracked_agents"
+        ],
+        "noise_policy": "none",
+        "occlusion_policy": "none",
+        "interpretation": "benchmark_metadata_not_sensor_certification"
+      },
+      "planner_kinematics": {
+        "robot_kinematics": "differential_drive",
+        "planner_command_space": "unicycle_vw",
+        "supports_native_commands": true,
+        "supports_adapter_commands": true,
+        "execution_mode": "adapter",
+        "adapter_name": "HybridRuleLocalPlannerAdapter",
+        "adapter_active": true,
+        "scenario_kinematics": [
+          "differential_drive"
+        ]
+      },
+      "planner_contract": {
+        "planner_id": "hybrid_rule_local_planner",
+        "observation_contract": {
+          "mode": "socnav_state",
+          "active_mode": "socnav_state",
+          "observation_level": "tracked_agents_no_noise",
+          "perception_assumption": "perfect_tracking_without_noise",
+          "supported_modes": [
+            "socnav_state"
+          ],
+          "required_inputs": [
+            "robot_state",
+            "goal",
+            "pedestrians"
+          ],
+          "frame": "world",
+          "normalization": "raw",
+          "pedestrian_ordering": "distance_ascending",
+          "missing_value": null,
+          "notes": "Structured Robot SF social-navigation state: robot pose/velocity, route goal, and pedestrian state when present."
+        },
+        "action_contract": {
+          "command_space": "unicycle_vw",
+          "output_keys": [
+            "v",
+            "omega"
+          ],
+          "frame": "robot",
+          "normalization": "raw",
+          "units": "mps_radps",
+          "scaling": "none",
+          "compatible_robot_kinematics": [
+            "differential_drive"
+          ],
+          "active_robot_kinematics": "differential_drive",
+          "bounds": {},
+          "notes": ""
+        },
+        "reset_contract": "seeded_reset",
+        "scenario_requirements": [],
+        "compatibility_scope": "metadata_only",
+        "notes": "Compatibility metadata only; not a benchmark quality claim."
+      },
+      "adapter_impact": {
+        "requested": false,
+        "native_steps": 0,
+        "adapted_steps": 0,
+        "status": "disabled"
+      },
+      "learned_checkpoint_observation_contract": {
+        "status": "not_applicable",
+        "metadata_source": "algorithm_default",
+        "active_observation_mode": "socnav_state",
+        "observation_level": "tracked_agents_no_noise",
+        "observation_level_key": "tracked_agents_no_noise",
+        "planner_observation_mode": null
+      },
+      "planner_runtime": {
+        "planner_variant": "hybrid_rule_v4_clearance_braking",
+        "value_scorer": null,
+        "proxemic_costmap": {
+          "enabled": false,
+          "status": "disabled",
+          "config_hash": "5198b4bfe767",
+          "weight": 0.0,
+          "soft_cost_only": true,
+          "fallback_or_degraded": false
+        },
+        "actuation_scoring": null,
+        "goal_posterior_avoidance": {
+          "enabled": false,
+          "status": "disabled",
+          "min_confidence": 0.55,
+          "near_distance": 2.5,
+          "crossing_lateral_margin": 0.75,
+          "yield_speed": 0.15,
+          "turn_rate": 0.55,
+          "score_bonus": 2.0,
+          "fallback_or_degraded": false
+        },
+        "steps": "mixed",
+        "selected_source_counts": {
+          "dynamic_protective_stop": 4073,
+          "dynamic_window": 44765,
+          "path_follow_0.5m": 1104,
+          "rotate_left": 160,
+          "rotate_right": 133,
+          "route_guide": 1279,
+          "stop": 66,
+          "safety_protective_stop": 95,
+          "creep": 304,
+          "static_protective_stop": 14,
+          "path_follow_1.5m": 33,
+          "path_follow_2.0m": 65
+        },
+        "rejection_counts": {
+          "braking_infeasible": "mixed",
+          "dynamic_collision": 2191,
+          "static_collision": 111
+        },
+        "unavailable_counts": {
+          "corridor_subgoal": "mixed"
+        },
+        "fallback_count": 0,
+        "protective_stop_count": 4182,
+        "last_decision": {
+          "planner_variant": "hybrid_rule_v4_clearance_braking",
+          "value_scorer": null,
+          "proxemic_costmap": {
+            "enabled": false,
+            "status": "disabled",
+            "config_hash": "5198b4bfe767",
+            "weight": 0.0,
+            "soft_cost_only": true,
+            "fallback_or_degraded": false
+          },
+          "planner_mode": "PROTECTIVE_STOP",
+          "selected_command": [
+            0.0,
+            0.0
+          ],
+          "selected_source": "dynamic_protective_stop",
+          "selected_score": 0.0,
+          "selected_terms": {
+            "goal_progress": 0.4189504841473943,
+            "route_arc_progress": 0.41408678787074343,
+            "path_alignment": 0.9236715129603119,
+            "speed_preference": 0.422520124912262,
+            "static_clearance": 1.0,
+            "dynamic_clearance": 1.0,
+            "time_to_collision_margin": 1.0,
+            "heading_smoothness": 1.0,
+            "velocity_smoothness": 0.9,
+            "control_effort": 0.6889197181471076,
+            "freezing_penalty": 1.0,
+            "oscillation_penalty": 0.0,
+            "deadlock_escape": 0.0,
+            "static_recenter": 0.0,
+            "static_clearance_escape": 0.0,
+            "static_corridor_transit": 0.0,
+            "route_guide_commitment": 0.0,
+            "static_safety_gate_penalty": 0.0,
+            "goal_posterior_avoidance": 0.0,
+            "proxemic_cost": 0.0,
+            "corridor_subgoal_route_progress": 0.0,
+            "corridor_subgoal_centering": 0.0,
+            "corridor_subgoal_tangent_alignment": 0.0,
+            "corridor_subgoal_clearance_margin": 0.0,
+            "corridor_subgoal_continuity": 0.0,
+            "actuation_feasibility": 1.0,
+            "actuation_clip_risk": 0.0
+          },
+          "top_k": [],
+          "rejection_counts": {
+            "dynamic_collision": 11,
+            "static_collision": "mixed"
+          },
+          "moving_rejection_counts": {
+            "static_collision": "mixed",
+            "dynamic_collision": 56
+          },
+          "rejection_counts_by_source": {
+            "dynamic_window": {
+              "dynamic_collision": 9,
+              "static_collision": "mixed"
+            },
+            "path_follow_0.5m": {
+              "dynamic_collision": 1,
+              "static_collision": 1
+            },
+            "route_guide": {
+              "dynamic_collision": 1
+            },
+            "path_follow_2.0m": {
+              "static_collision": 1
+            },
+            "creep": {
+              "dynamic_collision": 1
+            }
+          },
+          "rejected_examples": [
+            {
+              "reason": "dynamic_collision",
+              "command": [
+                0.0,
+                -0.6
+              ],
+              "source": "dynamic_window",
+              "min_dynamic_clearance": 1.3737515121834107,
+              "collision_radius": 1.4500000059604645,
+              "time": 0.2
+            },
+            {
+              "reason": "dynamic_collision",
+              "command": [
+                0.0,
+                -0.44999999999999996
+              ],
+              "source": "dynamic_window",
+              "min_dynamic_clearance": 1.3737515121834107,
+              "collision_radius": 1.4500000059604645,
+              "time": 0.2
+            },
+            {
+              "reason": "dynamic_collision",
+              "command": [
+                0.0,
+                -0.3
+              ],
+              "source": "dynamic_window",
+              "min_dynamic_clearance": 1.3737515121834107,
+              "collision_radius": 1.4500000059604645,
+              "time": 0.2
+            },
+            {
+              "reason": "dynamic_collision",
+              "command": [
+                0.0,
+                -0.15000000000000002
+              ],
+              "source": "dynamic_window",
+              "min_dynamic_clearance": 1.3737515121834107,
+              "collision_radius": 1.4500000059604645,
+              "time": 0.2
+            },
+            {
+              "reason": "dynamic_collision",
+              "command": [
+                0.0,
+                0.0
+              ],
+              "source": "dynamic_window",
+              "min_dynamic_clearance": 1.3737515121834107,
+              "collision_radius": 1.4500000059604645,
+              "time": 0.2
+            }
+          ],
+          "unavailable_counts": {
+            "corridor_subgoal": 1
+          },
+          "unavailable_examples": [
+            {
+              "source": "corridor_subgoal",
+              "reason": "disabled"
+            }
+          ],
+          "nearest_pedestrian_distance": "mixed",
+          "nearest_static_obstacle_distance": null,
+          "predicted_ttc": 3.0,
+          "progress_windows": {
+            "1s": 0.0,
+            "3s": "mixed",
+            "5s": "mixed"
+          },
+          "route_corridor": {
+            "route_start_world": [
+              8.083590445583198,
+              13.095259420506904
+            ],
+            "route_next_world": [
+              8.151547998475083,
+              13.283359851652182
+            ],
+            "route_goal_world": [
+              16.992268262303178,
+              10.089354865733643
+            ],
+            "route_waypoint_world": [
+              8.423378210042618,
+              14.035761576233298
+            ],
+            "route_waypoint_index": 5,
+            "route_path_cell_count": 67,
+            "route_remaining_distance": "mixed",
+            "route_distance_to_waypoint": "mixed",
+            "route_corner_distance": 3.6000000536441803,
+            "route_tangent_heading": 1.2241051057961345,
+            "route_heading_error": 1.5707963267948983,
+            "corridor_center_clearance": 0.800000011920929,
+            "corridor_width_estimate": 1.600000023841858,
+            "robot_lateral_offset_to_corridor": 0.29999976605176765,
+            "route_arc_progress_windows": {
+              "1s": "mixed",
+              "3s": "mixed",
+              "5s": "mixed"
+            }
+          },
+          "corridor_subgoal": {
+            "enabled": false,
+            "active": false,
+            "reason": "disabled",
+            "candidate_count": 0,
+            "nearest_pedestrian_distance": "mixed",
+            "min_nearest_pedestrian_distance": 1.0
+          },
+          "route_trace_recovery": {
+            "enabled": false,
+            "active": false,
+            "reason": "disabled",
+            "selected": false,
+            "nearest_pedestrian_distance": "mixed",
+            "min_nearest_pedestrian_distance": 1.0
+          },
+          "goal_posterior_avoidance": {
+            "enabled": false,
+            "consumed": false,
+            "active": false,
+            "blocker": "planner_disabled",
+            "source": "planner_goal_posterior_channel"
+          },
+          "selected_actuation_diagnostics": null,
+          "selected_static_safety_gate": null,
+          "speed_safety": {
+            "model": "hybrid_rule_v4_clearance_braking",
+            "min_surface_clearance": "mixed",
+            "level": "stop",
+            "band_cap": 0.0,
+            "braking_cap": 0.0,
+            "speed_cap": 0.0,
+            "reaction_time": 0.10000000149011612
+          },
+          "state_sources": {
+            "dt": "observation.sim_timestep",
+            "robot_radius": "observation.robot_radius",
+            "ped_radius": "observation.pedestrians_radius"
+          }
+        },
+        "speed_safety": {
+          "model": "hybrid_rule_v4_clearance_braking",
+          "clearance_reference": "surface",
+          "stop_clearance_human": 0.15,
+          "slow_clearance_human": 0.35,
+          "moderate_clearance_human": 0.6,
+          "braking_margin": 0.1,
+          "braking_check_enabled": true,
+          "effective_max_linear_speed": 2.0,
+          "effective_max_angular_speed": 1.0,
+          "drive_limits": {
+            "max_linear_accel": 1.0,
+            "max_linear_decel": 1.0,
+            "max_linear_speed": 2.0,
+            "max_angular_accel": 1.0,
+            "max_angular_speed": 1.0,
+            "source": "env_robot_config:DifferentialDriveSettings"
+          },
+          "bound_timestep": 0.1,
+          "state_sources": {
+            "dt": "observation.sim_timestep",
+            "robot_radius": "observation.robot_radius",
+            "ped_radius": "observation.pedestrians_radius"
+          },
+          "surface_clearance_gates": [
+            "corridor_subgoal_min_nearest_ped_distance",
+            "route_trace_recovery_min_nearest_ped_distance",
+            "slow_distance_human (deadlock escape and static recenter)"
+          ],
+          "centre_distance_gates": [
+            "near_human_angular_limit_distance"
+          ]
+        }
+      },
+      "kinematics_feasibility": {
+        "commands_evaluated": 52091,
+        "infeasible_native_count": 0,
+        "projected_count": 0,
+        "projection_rate": 0.0,
+        "infeasible_rate": 0.0,
+        "mean_abs_delta_linear": 0.0,
+        "mean_abs_delta_angular": 0.0,
+        "max_abs_delta_linear": 0.0,
+        "max_abs_delta_angular": 0.0
+      },
+      "ammv_feasibility": {
+        "schema_version": "ammv_feasibility.v1",
+        "evidence_kind": "diagnostic_proxy",
+        "proxy_kind": "internal_non_hardware",
+        "status": "available",
+        "episode_count": 300,
+        "commands_evaluated": 52091,
+        "min_stability_margin": 0.2660550458715598,
+        "tip_over_violation": false,
+        "n_curvature_violations": 3038,
+        "feasible": false
+      }
+    },
+    "preflight": {
+      "status": "ok",
+      "learned_policy_contract": {
+        "status": "not_applicable"
+      },
+      "algorithm_metadata_contract": {
+        "algorithm": "hybrid_rule_local_planner",
+        "status": "ok",
+        "canonical_algorithm": "hybrid_rule_local_planner",
+        "baseline_category": "classical",
+        "policy_semantics": "hybrid_rule_deterministic_local_planner",
+        "observation_spec": {
+          "default_mode": "socnav_state",
+          "supported_modes": [
+            "socnav_state"
+          ],
+          "inputs": [
+            "robot_state",
+            "goal",
+            "pedestrians"
+          ],
+          "notes": "Structured Robot SF social-navigation state: robot pose/velocity, route goal, and pedestrian state when present.",
+          "active_mode": "socnav_state",
+          "observation_level": "tracked_agents_no_noise",
+          "override_applied": false
+        },
+        "observation_level": {
+          "key": "tracked_agents_no_noise",
+          "display_name": "Perfect tracked agents",
+          "perception_assumption": "perfect_tracking_without_noise",
+          "active_observation_mode": "socnav_state",
+          "compatible_observation_modes": [
+            "socnav_state",
+            "headed_socnav_state",
+            "gst_human_state"
+          ],
+          "required_inputs": [
+            "robot_state",
+            "goal",
+            "tracked_agents"
+          ],
+          "noise_policy": "none",
+          "occlusion_policy": "none",
+          "interpretation": "benchmark_metadata_not_sensor_certification"
+        },
+        "planner_kinematics": {
+          "robot_kinematics": "differential_drive",
+          "planner_command_space": "unicycle_vw",
+          "supports_native_commands": true,
+          "supports_adapter_commands": true,
+          "execution_mode": "adapter",
+          "adapter_name": "HybridRuleLocalPlannerAdapter",
+          "adapter_active": true,
+          "scenario_kinematics": [
+            "differential_drive"
+          ]
+        },
+        "planner_contract": {
+          "planner_id": "hybrid_rule_local_planner",
+          "observation_contract": {
+            "mode": "socnav_state",
+            "active_mode": "socnav_state",
+            "observation_level": "tracked_agents_no_noise",
+            "perception_assumption": "perfect_tracking_without_noise",
+            "supported_modes": [
+              "socnav_state"
+            ],
+            "required_inputs": [
+              "robot_state",
+              "goal",
+              "pedestrians"
+            ],
+            "frame": "world",
+            "normalization": "raw",
+            "pedestrian_ordering": "distance_ascending",
+            "missing_value": null,
+            "notes": "Structured Robot SF social-navigation state: robot pose/velocity, route goal, and pedestrian state when present."
+          },
+          "action_contract": {
+            "command_space": "unicycle_vw",
+            "output_keys": [
+              "v",
+              "omega"
+            ],
+            "frame": "robot",
+            "normalization": "raw",
+            "units": "mps_radps",
+            "scaling": "none",
+            "compatible_robot_kinematics": [
+              "differential_drive"
+            ],
+            "active_robot_kinematics": "differential_drive",
+            "bounds": {},
+            "notes": ""
+          },
+          "reset_contract": "seeded_reset",
+          "scenario_requirements": [],
+          "compatibility_scope": "metadata_only",
+          "notes": "Compatibility metadata only; not a benchmark quality claim."
+        },
+        "adapter_impact": {
+          "requested": false,
+          "native_steps": 0,
+          "adapted_steps": 0,
+          "status": "disabled"
+        },
+        "learned_checkpoint_observation_contract": {
+          "status": "not_applicable",
+          "metadata_source": "algorithm_default",
+          "active_observation_mode": "socnav_state",
+          "observation_level": "tracked_agents_no_noise",
+          "observation_level_key": "tracked_agents_no_noise",
+          "planner_observation_mode": null
+        },
+        "planner_runtime": {
+          "planner_variant": "hybrid_rule_v4_clearance_braking",
+          "value_scorer": null,
+          "proxemic_costmap": {
+            "enabled": false,
+            "status": "disabled",
+            "config_hash": "5198b4bfe767",
+            "weight": 0.0,
+            "soft_cost_only": true,
+            "fallback_or_degraded": false
+          },
+          "actuation_scoring": null,
+          "goal_posterior_avoidance": {
+            "enabled": false,
+            "status": "disabled",
+            "min_confidence": 0.55,
+            "near_distance": 2.5,
+            "crossing_lateral_margin": 0.75,
+            "yield_speed": 0.15,
+            "turn_rate": 0.55,
+            "score_bonus": 2.0,
+            "fallback_or_degraded": false
+          },
+          "steps": "mixed",
+          "selected_source_counts": {
+            "dynamic_protective_stop": 4073,
+            "dynamic_window": 44765,
+            "path_follow_0.5m": 1104,
+            "rotate_left": 160,
+            "rotate_right": 133,
+            "route_guide": 1279,
+            "stop": 66,
+            "safety_protective_stop": 95,
+            "creep": 304,
+            "static_protective_stop": 14,
+            "path_follow_1.5m": 33,
+            "path_follow_2.0m": 65
+          },
+          "rejection_counts": {
+            "braking_infeasible": "mixed",
+            "dynamic_collision": 2191,
+            "static_collision": 111
+          },
+          "unavailable_counts": {
+            "corridor_subgoal": "mixed"
+          },
+          "fallback_count": 0,
+          "protective_stop_count": 4182,
+          "last_decision": {
+            "planner_variant": "hybrid_rule_v4_clearance_braking",
+            "value_scorer": null,
+            "proxemic_costmap": {
+              "enabled": false,
+              "status": "disabled",
+              "config_hash": "5198b4bfe767",
+              "weight": 0.0,
+              "soft_cost_only": true,
+              "fallback_or_degraded": false
+            },
+            "planner_mode": "PROTECTIVE_STOP",
+            "selected_command": [
+              0.0,
+              0.0
+            ],
+            "selected_source": "dynamic_protective_stop",
+            "selected_score": 0.0,
+            "selected_terms": {
+              "goal_progress": 0.4189504841473943,
+              "route_arc_progress": 0.41408678787074343,
+              "path_alignment": 0.9236715129603119,
+              "speed_preference": 0.422520124912262,
+              "static_clearance": 1.0,
+              "dynamic_clearance": 1.0,
+              "time_to_collision_margin": 1.0,
+              "heading_smoothness": 1.0,
+              "velocity_smoothness": 0.9,
+              "control_effort": 0.6889197181471076,
+              "freezing_penalty": 1.0,
+              "oscillation_penalty": 0.0,
+              "deadlock_escape": 0.0,
+              "static_recenter": 0.0,
+              "static_clearance_escape": 0.0,
+              "static_corridor_transit": 0.0,
+              "route_guide_commitment": 0.0,
+              "static_safety_gate_penalty": 0.0,
+              "goal_posterior_avoidance": 0.0,
+              "proxemic_cost": 0.0,
+              "corridor_subgoal_route_progress": 0.0,
+              "corridor_subgoal_centering": 0.0,
+              "corridor_subgoal_tangent_alignment": 0.0,
+              "corridor_subgoal_clearance_margin": 0.0,
+              "corridor_subgoal_continuity": 0.0,
+              "actuation_feasibility": 1.0,
+              "actuation_clip_risk": 0.0
+            },
+            "top_k": [],
+            "rejection_counts": {
+              "dynamic_collision": 11,
+              "static_collision": "mixed"
+            },
+            "moving_rejection_counts": {
+              "static_collision": "mixed",
+              "dynamic_collision": 56
+            },
+            "rejection_counts_by_source": {
+              "dynamic_window": {
+                "dynamic_collision": 9,
+                "static_collision": "mixed"
+              },
+              "path_follow_0.5m": {
+                "dynamic_collision": 1,
+                "static_collision": 1
+              },
+              "route_guide": {
+                "dynamic_collision": 1
+              },
+              "path_follow_2.0m": {
+                "static_collision": 1
+              },
+              "creep": {
+                "dynamic_collision": 1
+              }
+            },
+            "rejected_examples": [
+              {
+                "reason": "dynamic_collision",
+                "command": [
+                  0.0,
+                  -0.6
+                ],
+                "source": "dynamic_window",
+                "min_dynamic_clearance": 1.3737515121834107,
+                "collision_radius": 1.4500000059604645,
+                "time": 0.2
+              },
+              {
+                "reason": "dynamic_collision",
+                "command": [
+                  0.0,
+                  -0.44999999999999996
+                ],
+                "source": "dynamic_window",
+                "min_dynamic_clearance": 1.3737515121834107,
+                "collision_radius": 1.4500000059604645,
+                "time": 0.2
+              },
+              {
+                "reason": "dynamic_collision",
+                "command": [
+                  0.0,
+                  -0.3
+                ],
+                "source": "dynamic_window",
+                "min_dynamic_clearance": 1.3737515121834107,
+                "collision_radius": 1.4500000059604645,
+                "time": 0.2
+              },
+              {
+                "reason": "dynamic_collision",
+                "command": [
+                  0.0,
+                  -0.15000000000000002
+                ],
+                "source": "dynamic_window",
+                "min_dynamic_clearance": 1.3737515121834107,
+                "collision_radius": 1.4500000059604645,
+                "time": 0.2
+              },
+              {
+                "reason": "dynamic_collision",
+                "command": [
+                  0.0,
+                  0.0
+                ],
+                "source": "dynamic_window",
+                "min_dynamic_clearance": 1.3737515121834107,
+                "collision_radius": 1.4500000059604645,
+                "time": 0.2
+              }
+            ],
+            "unavailable_counts": {
+              "corridor_subgoal": 1
+            },
+            "unavailable_examples": [
+              {
+                "source": "corridor_subgoal",
+                "reason": "disabled"
+              }
+            ],
+            "nearest_pedestrian_distance": "mixed",
+            "nearest_static_obstacle_distance": null,
+            "predicted_ttc": 3.0,
+            "progress_windows": {
+              "1s": 0.0,
+              "3s": "mixed",
+              "5s": "mixed"
+            },
+            "route_corridor": {
+              "route_start_world": [
+                8.083590445583198,
+                13.095259420506904
+              ],
+              "route_next_world": [
+                8.151547998475083,
+                13.283359851652182
+              ],
+              "route_goal_world": [
+                16.992268262303178,
+                10.089354865733643
+              ],
+              "route_waypoint_world": [
+                8.423378210042618,
+                14.035761576233298
+              ],
+              "route_waypoint_index": 5,
+              "route_path_cell_count": 67,
+              "route_remaining_distance": "mixed",
+              "route_distance_to_waypoint": "mixed",
+              "route_corner_distance": 3.6000000536441803,
+              "route_tangent_heading": 1.2241051057961345,
+              "route_heading_error": 1.5707963267948983,
+              "corridor_center_clearance": 0.800000011920929,
+              "corridor_width_estimate": 1.600000023841858,
+              "robot_lateral_offset_to_corridor": 0.29999976605176765,
+              "route_arc_progress_windows": {
+                "1s": "mixed",
+                "3s": "mixed",
+                "5s": "mixed"
+              }
+            },
+            "corridor_subgoal": {
+              "enabled": false,
+              "active": false,
+              "reason": "disabled",
+              "candidate_count": 0,
+              "nearest_pedestrian_distance": "mixed",
+              "min_nearest_pedestrian_distance": 1.0
+            },
+            "route_trace_recovery": {
+              "enabled": false,
+              "active": false,
+              "reason": "disabled",
+              "selected": false,
+              "nearest_pedestrian_distance": "mixed",
+              "min_nearest_pedestrian_distance": 1.0
+            },
+            "goal_posterior_avoidance": {
+              "enabled": false,
+              "consumed": false,
+              "active": false,
+              "blocker": "planner_disabled",
+              "source": "planner_goal_posterior_channel"
+            },
+            "selected_actuation_diagnostics": null,
+            "selected_static_safety_gate": null,
+            "speed_safety": {
+              "model": "hybrid_rule_v4_clearance_braking",
+              "min_surface_clearance": "mixed",
+              "level": "stop",
+              "band_cap": 0.0,
+              "braking_cap": 0.0,
+              "speed_cap": 0.0,
+              "reaction_time": 0.10000000149011612
+            },
+            "state_sources": {
+              "dt": "observation.sim_timestep",
+              "robot_radius": "observation.robot_radius",
+              "ped_radius": "observation.pedestrians_radius"
+            }
+          },
+          "speed_safety": {
+            "model": "hybrid_rule_v4_clearance_braking",
+            "clearance_reference": "surface",
+            "stop_clearance_human": 0.15,
+            "slow_clearance_human": 0.35,
+            "moderate_clearance_human": 0.6,
+            "braking_margin": 0.1,
+            "braking_check_enabled": true,
+            "effective_max_linear_speed": 2.0,
+            "effective_max_angular_speed": 1.0,
+            "drive_limits": {
+              "max_linear_accel": 1.0,
+              "max_linear_decel": 1.0,
+              "max_linear_speed": 2.0,
+              "max_angular_accel": 1.0,
+              "max_angular_speed": 1.0,
+              "source": "env_robot_config:DifferentialDriveSettings"
+            },
+            "bound_timestep": 0.1,
+            "state_sources": {
+              "dt": "observation.sim_timestep",
+              "robot_radius": "observation.robot_radius",
+              "ped_radius": "observation.pedestrians_radius"
+            },
+            "surface_clearance_gates": [
+              "corridor_subgoal_min_nearest_ped_distance",
+              "route_trace_recovery_min_nearest_ped_distance",
+              "slow_distance_human (deadlock escape and static recenter)"
+            ],
+            "centre_distance_gates": [
+              "near_human_angular_limit_distance"
+            ]
+          }
+        },
+        "kinematics_feasibility": {
+          "commands_evaluated": 52091,
+          "infeasible_native_count": 0,
+          "projected_count": 0,
+          "projection_rate": 0.0,
+          "infeasible_rate": 0.0,
+          "mean_abs_delta_linear": 0.0,
+          "mean_abs_delta_angular": 0.0,
+          "max_abs_delta_linear": 0.0,
+          "max_abs_delta_angular": 0.0
+        },
+        "ammv_feasibility": {
+          "schema_version": "ammv_feasibility.v1",
+          "evidence_kind": "diagnostic_proxy",
+          "proxy_kind": "internal_non_hardware",
+          "status": "available",
+          "episode_count": 300,
+          "commands_evaluated": 52091,
+          "min_stability_margin": 0.2660550458715598,
+          "tip_over_violation": false,
+          "n_curvature_violations": 3038,
+          "feasible": false
+        }
+      }
+    },
+    "observation_noise": {
+      "enabled": false,
+      "profile": "none",
+      "seed": null,
+      "pose_noise_std_m": 0.0,
+      "heading_noise_std_rad": 0.0,
+      "lidar_dropout_prob": 0.0,
+      "lidar_dropout_value": 0.0,
+      "pedestrian_position_noise_std_m": 0.0,
+      "pedestrian_false_negative_prob": 0.0,
+      "pedestrian_occlusion_max_range_m": null,
+      "observation_delay_steps": 0,
+      "pedestrian_false_positive_prob": 0.0,
+      "pedestrian_false_positive_radius_m": 4.0,
+      "pedestrian_false_positive_radius": 0.35,
+      "interpretation": "non_calibrated_benchmark_robustness_noise_not_a_real_sensor_model"
+    },
+    "observation_noise_hash": "0a5609f0b2b1",
+    "tracking_precision": {
+      "enabled": false,
+      "target_motp_m": 0.0,
+      "speed_contract": {
+        "threshold_m": 2.5,
+        "default_speed": 2.0,
+        "defensive_speed": 0.5,
+        "mode": "diagnostic"
+      },
+      "seed_salt": 0,
+      "schema_version": "tracking_precision_contract.v1",
+      "interpretation": "internal_non_hardware_tracking_precision_proxy_not_a_real_sensor_model"
+    },
+    "tracking_precision_hash": "d06cee655fee",
+    "observation_level": "tracked_agents_no_noise",
+    "metrics": {
+      "collision": 65.0,
+      "collision_count": 65.0,
+      "collision_rate": 0.21666666666666667,
+      "collision_status": {
+        "status": "available",
+        "reason": null,
+        "denominator": 300,
+        "source": "episode.metrics.collisions"
+      }
+    },
+    "synthetic_actuation_profile": null,
+    "latency_stress_profile": null,
+    "latency_stress_metrics": null,
+    "provenance": {
+      "protocol_version": "0.1.0",
+      "commit_hash": "22172f6cacc8b3e63825793db604c820ff21080a",
+      "run_id": "2477fce853a24c4082fb7e1f0bb9fb85",
+      "python_version": "3.13.14",
+      "artifact_pointer_status": "local_jsonl_present",
+      "config_identity": {
+        "schema_path": "robot_sf/benchmark/schemas/episode.schema.v1.json",
+        "scenario_path": "docs/context/robsweep/inputs/r1_v1.3.yaml",
+        "scenario_count": 10,
+        "scenario_matrix_hash": "b19d1cccb5839034",
+        "algo": "hybrid_rule_local_planner",
+        "algo_config_path": "docs/context/robsweep/inputs/hybrid_rule_v4_fast_progress_static_escape_legacy.yaml",
+        "benchmark_profile": "experimental",
+        "metric_affecting_config": {
+          "schema": "metric_affecting_run_config.v1",
+          "sensor_noise": {
+            "scan_noise": [
+              0.005,
+              0.002
+            ],
+            "scan_noise_enabled": true
+          },
+          "collision_regime": {
+            "regime": "terminate_on_contact",
+            "peds_have_static_obstacle_forces": true,
+            "peds_have_robot_repulsion": true
+          },
+          "interpretation": "metric_affecting_run_config: run settings that change what reported metrics mean; two result sets are only directly comparable when these settings match",
+          "actuation_envelope": {
+            "schema": "actuation_envelope.v1",
+            "drive_model": "differential_drive",
+            "max_forward_accel_m_s2": 1.0,
+            "max_braking_decel_m_s2": 1.0,
+            "braking_distinct_from_accel": false,
+            "stopping_distance_envelope_m": 2.0,
+            "envelope_formula": "v^2 / (2a) at peak forward speed and max braking deceleration",
+            "peak_forward_speed_m_s": 2.0,
+            "interpretation": "actuation_envelope: enforced acceleration/braking authority and the resulting worst-case stopping distance v^2/(2a); near-miss / TTC readings must be interpreted against this braking capability, not in isolation"
+          }
+        }
+      },
+      "seed_identity": {
+        "suite_key": "default",
+        "total_jobs": 300,
+        "written": 300
+      },
+      "invocation": "scripts/validation/examiner_robustness_20261012.py sweep --workers 8",
+      "result_manifest_path": "docs/context/robsweep/evidence/episodes/r1_v1.3_hybrid_rule_v4_fast_progress_static_escape.jsonl.provenance.json",
+      "result_manifest_status": "available"
+    },
+    "benchmark_availability": {
+      "execution_mode": "adapter",
+      "readiness_status": "adapter",
+      "availability_status": "available",
+      "benchmark_success": true,
+      "availability_reason": null
+    }
+  }
+}

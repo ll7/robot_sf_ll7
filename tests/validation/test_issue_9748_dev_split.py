@@ -36,7 +36,7 @@ def test_checked_in_development_split_passes_canonical_validation() -> None:
 
 def test_checked_in_rows_pin_author_values() -> None:
     rows = CHECKER._load_scenario_rows(
-        ROOT / "configs/scenarios/sets/issue_9748_hybrid_v4_dev_variants_v1.yaml",
+        ROOT / "configs/scenarios/sets/issue_9748_hybrid_v4_dev_variants_v2.yaml",
         label="development scenario matrix",
     )
     by_id = {CHECKER._scenario_id(row, label="test"): row for row in rows}
@@ -235,7 +235,7 @@ def test_tuning_input_hash_closure_binds_release_candidate_matrix_chain() -> Non
         CHECKER._tuning_input_paths(
             config_path=CHECKER.DEFAULT_CONFIG,
             scenario_matrix_path=(
-                ROOT / "configs/scenarios/sets/issue_9748_hybrid_v4_dev_variants_v1.yaml"
+                ROOT / "configs/scenarios/sets/issue_9748_hybrid_v4_dev_variants_v2.yaml"
             ),
             candidate_paths=CHECKER.EXPECTED_PLANNER_CONFIGS,
         )
@@ -252,7 +252,7 @@ def test_release_scenario_overrides_are_not_selected_for_dev_ids(planner_key: st
     config_path = CHECKER.EXPECTED_PLANNER_CONFIGS[planner_key]
     manifest = CHECKER._load_mapping(config_path, label=f"planner config {planner_key}")
     dev_rows = CHECKER._load_scenario_rows(
-        ROOT / "configs/scenarios/sets/issue_9748_hybrid_v4_dev_variants_v1.yaml",
+        ROOT / "configs/scenarios/sets/issue_9748_hybrid_v4_dev_variants_v2.yaml",
         label="development scenario matrix",
     )
     unmatched = {"name": "issue_9748_dev_unmatched_control"}
@@ -276,7 +276,7 @@ def test_release_scenario_overrides_are_not_selected_for_dev_ids(planner_key: st
 
 def test_scenario_validator_rejects_changed_source_map_geometry() -> None:
     rows = CHECKER._load_scenario_rows(
-        ROOT / "configs/scenarios/sets/issue_9748_hybrid_v4_dev_variants_v1.yaml",
+        ROOT / "configs/scenarios/sets/issue_9748_hybrid_v4_dev_variants_v2.yaml",
         label="development scenario matrix",
     )
     mutated = copy.deepcopy(rows)
@@ -289,7 +289,7 @@ def test_scenario_validator_rejects_changed_source_map_geometry() -> None:
 
 def test_scenario_validator_rejects_unapproved_source_setting_change() -> None:
     rows = CHECKER._load_scenario_rows(
-        ROOT / "configs/scenarios/sets/issue_9748_hybrid_v4_dev_variants_v1.yaml",
+        ROOT / "configs/scenarios/sets/issue_9748_hybrid_v4_dev_variants_v2.yaml",
         label="development scenario matrix",
     )
     mutated = copy.deepcopy(rows)
@@ -302,7 +302,7 @@ def test_scenario_validator_rejects_unapproved_source_setting_change() -> None:
 
 def test_scenario_validator_rejects_duplicate_development_ids() -> None:
     rows = CHECKER._load_scenario_rows(
-        ROOT / "configs/scenarios/sets/issue_9748_hybrid_v4_dev_variants_v1.yaml",
+        ROOT / "configs/scenarios/sets/issue_9748_hybrid_v4_dev_variants_v2.yaml",
         label="development scenario matrix",
     )
     mutated = copy.deepcopy(rows)
@@ -320,7 +320,7 @@ def _write_committed_log(
     """Create a frozen-input Git repo and record one log commit after its freeze."""
     source_root = CHECKER.ROOT
     scenario_manifest = (
-        source_root / "configs/scenarios/sets/issue_9748_hybrid_v4_dev_variants_v1.yaml"
+        source_root / "configs/scenarios/sets/issue_9748_hybrid_v4_dev_variants_v2.yaml"
     )
     tracked_inputs = CHECKER._tuning_input_paths(
         config_path=CHECKER.DEFAULT_CONFIG,
@@ -371,7 +371,7 @@ def _write_committed_log(
 
 def _validate_committed_log(path: Path) -> dict:
     scenario_manifest = (
-        CHECKER.ROOT / "configs/scenarios/sets/issue_9748_hybrid_v4_dev_variants_v1.yaml"
+        CHECKER.ROOT / "configs/scenarios/sets/issue_9748_hybrid_v4_dev_variants_v2.yaml"
     )
     return CHECKER._validate_tuning_log(
         path,
@@ -381,7 +381,7 @@ def _validate_committed_log(path: Path) -> dict:
 
 
 def _frozen_provenance() -> dict:
-    scenario_manifest = ROOT / "configs/scenarios/sets/issue_9748_hybrid_v4_dev_variants_v1.yaml"
+    scenario_manifest = ROOT / "configs/scenarios/sets/issue_9748_hybrid_v4_dev_variants_v2.yaml"
     return {
         # Synthetic repository fixtures replace this with their own frozen commit.
         "source_commit": CHECKER._current_source_commit(),
@@ -653,7 +653,7 @@ def test_tuning_log_validates_after_log_is_committed(
 ) -> None:
     repository = tmp_path / "repo"
     scenario_manifest = (
-        CHECKER.ROOT / "configs/scenarios/sets/issue_9748_hybrid_v4_dev_variants_v1.yaml"
+        CHECKER.ROOT / "configs/scenarios/sets/issue_9748_hybrid_v4_dev_variants_v2.yaml"
     )
     tracked_inputs = CHECKER._tuning_input_paths(
         config_path=CHECKER.DEFAULT_CONFIG,
@@ -739,7 +739,7 @@ def test_tuning_log_rejects_source_commit_sibling_to_log_commit(
 ) -> None:
     source_root = CHECKER.ROOT
     scenario_manifest = (
-        source_root / "configs/scenarios/sets/issue_9748_hybrid_v4_dev_variants_v1.yaml"
+        source_root / "configs/scenarios/sets/issue_9748_hybrid_v4_dev_variants_v2.yaml"
     )
     tracked_inputs = CHECKER._tuning_input_paths(
         config_path=CHECKER.DEFAULT_CONFIG,
@@ -814,7 +814,7 @@ def test_tuning_log_rejects_source_commit_sibling_to_log_commit(
     "dependency",
     [
         CHECKER.RELEASE_CONFIG_RELATIVE_PATH,
-        "configs/scenarios/classic_interactions_francis2023_goal_zone_entry_kernel_wrapped_v2.yaml",
+        "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
         "configs/scenarios/archetypes/classic_doorway.yaml",
         "configs/algos/hybrid_rule_v4_clearance_braking.yaml",
         "maps/svg_maps/classic_doorway.svg",
@@ -833,7 +833,7 @@ def test_tuning_log_rejects_changed_transitive_inputs_after_source_commit(
 ) -> None:
     repository = tmp_path / "repo"
     scenario_manifest = (
-        CHECKER.ROOT / "configs/scenarios/sets/issue_9748_hybrid_v4_dev_variants_v1.yaml"
+        CHECKER.ROOT / "configs/scenarios/sets/issue_9748_hybrid_v4_dev_variants_v2.yaml"
     )
     tracked_inputs = CHECKER._tuning_input_paths(
         config_path=CHECKER.DEFAULT_CONFIG,
@@ -893,11 +893,11 @@ def test_tuning_log_rejects_changed_transitive_inputs_after_source_commit(
     "dependency,match",
     [
         (
-            "configs/benchmarks/issue_9748_hybrid_v4_dev_split_v1.yaml",
+            "configs/benchmarks/issue_9748_hybrid_v4_dev_split_v2.yaml",
             "campaign_config_sha256 does not match the current HEAD",
         ),
         (
-            "configs/scenarios/sets/issue_9748_hybrid_v4_dev_variants_v1.yaml",
+            "configs/scenarios/sets/issue_9748_hybrid_v4_dev_variants_v2.yaml",
             "scenario_manifest_sha256 does not match the current HEAD",
         ),
         (

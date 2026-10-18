@@ -792,8 +792,9 @@ def render_durable_comparison_table(
     budget_grid: Sequence[int],
     seeds: Sequence[int],
     issue_5303_diagnostic: bool = False,
+    execution_mode: str = "unknown",
 ) -> str:
-    """Render the issue #5326 durable comparison table (exclusions, failures, stop-rule).
+    """Render a diagnostic comparison table (exclusions, failures, stop-rule).
 
     The table is diagnostic-tier only: it never asserts a benchmark claim and
     fails closed when any row shows fallback/degraded execution or is missing
@@ -833,13 +834,16 @@ def render_durable_comparison_table(
             " and second-context confirmation are intentionally not collected here.\n"
         )
     else:
-        lines.append("## Issue #5326 durable objective-comparison table (diagnostic tier)\n")
+        lines.append("## Adversarial sampler comparison (diagnostic tier)\n")
+        mode_label = {
+            "empirical": "CPU-empirical",
+            "synthetic": "CPU-synthetic",
+        }.get(execution_mode, "unknown execution mode")
         lines.append(
-            "> Claim scope: not paper-facing benchmark evidence. The `--synthetic` CPU path"
-            " is reproducible by construction; the `--empirical` CPU path runs the real"
-            " `pysocialforce` evaluator and produces certified/replayable failures without"
-            " Slurm/GPU. Matched-budget confirmation at paper tier still requires artifact-level"
-            " review of certification/replay/independent-seed evidence.\n"
+            "> Claim boundary: diagnostic-only; not paper-facing benchmark evidence."
+            f" Execution mode: `{mode_label}`. A finite search budget cannot establish that"
+            " no counterexample exists outside the evaluated rows or support a general"
+            " method-superiority claim.\n"
         )
     lines.append("| " + " | ".join(header_cols) + " |")
     lines.append("| " + " | ".join("---" for _ in header_cols) + " |")
@@ -902,12 +906,15 @@ def render_durable_comparison_table(
             " objectives are present under matched budgets."
         )
     else:
+        mode_label = {
+            "empirical": "CPU-empirical",
+            "synthetic": "CPU-synthetic",
+        }.get(execution_mode, "unknown-execution-mode")
         decision = (
-            "**DIRECTION NARROWED (diagnostic).** Both objectives compared under matched"
-            " CPU-synthetic budgets with no degraded execution. This is a contract/structure"
-            " check only; it does not constitute benchmark evidence for the signed-objective"
-            " hypothesis (requires artifact-level confirmation of certification/replay/"
-            "independent-seed evidence)."
+            "**DIRECTION NARROWED (diagnostic).** Configured samplers were compared under"
+            f" matched {mode_label} budgets with no degraded execution. The finite-budget"
+            " result does not establish that no critical candidate exists outside the"
+            " evaluated rows or support a general method-superiority claim."
         )
     lines.append(decision)
 
@@ -930,6 +937,153 @@ def render_durable_comparison_table(
     if report_path is not None:
         lines.append(f"- source report: {report_path.as_posix()}")
     return "\n".join(lines) + "\n"
+
+
+def _stored_comparison_metadata(
+    payload: Any,
+) -> tuple[list[dict[str, Any]], list[str], list[int], list[int]]:
+    """Validate stored comparison metadata before rebuilding row objects."""
+    if not isinstance(payload, dict) or payload.get("schema_version") != (
+        "adversarial-sampler-comparison.v3"
+    ):
+        raise ValueError("stored comparison must use adversarial-sampler-comparison.v3")
+    if "issue_5303_diagnostic" in payload:
+        raise ValueError("stored #5303 diagnostics require their dedicated renderer")
+    raw_rows = payload.get("rows")
+    objectives = payload.get("objectives")
+    budgets = payload.get("budget_grid")
+    seeds = payload.get("seeds")
+    if not isinstance(raw_rows, list) or not isinstance(objectives, list):
+        raise ValueError("stored comparison rows and objectives must be lists")
+    if not isinstance(budgets, list) or not isinstance(seeds, list):
+        raise ValueError("stored comparison budget_grid and seeds must be lists")
+    if any(not isinstance(value, str) or not value for value in objectives):
+        raise ValueError("stored comparison objectives must be non-empty strings")
+    if any(isinstance(value, bool) or not isinstance(value, int) for value in budgets + seeds):
+        raise ValueError("stored comparison budgets and seeds must be integers")
+    if any(not isinstance(row, dict) for row in raw_rows):
+        raise ValueError("stored comparison rows must contain only objects")
+    return raw_rows, objectives, budgets, seeds
+
+
+def _stored_comparison_rows(
+    raw_rows: list[dict[str, Any]], *, repo_root: Path
+) -> list[SamplerComparisonRow]:
+    """Restore typed comparison rows, resolving relative bundle paths at the repo root."""
+    rows: list[SamplerComparisonRow] = []
+    for index, raw_row in enumerate(raw_rows):
+        row_payload = dict(raw_row)
+        caveats = row_payload.get("caveats")
+        if not isinstance(caveats, list) or any(not isinstance(value, str) for value in caveats):
+            raise ValueError(f"stored comparison row {index} caveats must be a string list")
+        row_payload["caveats"] = tuple(caveats)
+        bundle_path = row_payload.get("best_bundle_path")
+        if isinstance(bundle_path, str) and bundle_path and not Path(bundle_path).is_absolute():
+            row_payload["best_bundle_path"] = (repo_root / bundle_path).as_posix()
+        try:
+            rows.append(SamplerComparisonRow(**row_payload))
+        except TypeError as exc:
+            raise ValueError(f"stored comparison row {index} has an invalid shape") from exc
+    return rows
+
+
+def render_stored_comparison(
+    *,
+    comparison_path: Path,
+    output_path: Path,
+    provenance_path: Path | None,
+    repo_root: Path,
+    execution_mode: str,
+) -> dict[str, Any]:
+    """Render a saved comparison without rerunning search or simulation."""
+    if execution_mode not in {"empirical", "synthetic"}:
+        raise ValueError("render execution mode must be empirical or synthetic")
+    named_paths = [("comparison input", comparison_path), ("Markdown output", output_path)]
+    if provenance_path is not None:
+        named_paths.append(("provenance output", provenance_path))
+    for index, (left_name, left_path) in enumerate(named_paths):
+        for right_name, right_path in named_paths[index + 1 :]:
+            if _paths_alias(left_path, right_path):
+                raise ValueError(
+                    "stored comparison render paths must be distinct: "
+                    f"{left_name} and {right_name} refer to the same file"
+                )
+
+    comparison_bytes = comparison_path.read_bytes()
+    payload = json.loads(comparison_bytes)
+    raw_rows, objectives, budgets, seeds = _stored_comparison_metadata(payload)
+    rows = _stored_comparison_rows(raw_rows, repo_root=repo_root)
+    table = render_durable_comparison_table(
+        report_path=Path(_relative_path(comparison_path, repo_root)),
+        rows=rows,
+        objectives=objectives,
+        budget_grid=budgets,
+        seeds=seeds,
+        execution_mode=execution_mode,
+    )
+    table_bytes = table.encode("utf-8")
+    result: dict[str, Any] = {
+        "schema_version": "adversarial-sampler-render-provenance.v1",
+        "comparison_path": _relative_path(comparison_path, repo_root),
+        "comparison_sha256": hashlib.sha256(comparison_bytes).hexdigest(),
+        "markdown_path": _relative_path(output_path, repo_root),
+        "markdown_sha256": hashlib.sha256(table_bytes).hexdigest(),
+        "renderer": "scripts/tools/compare_adversarial_samplers.py",
+        "renderer_commit": _git_head(repo_root),
+        "execution_mode": execution_mode,
+        "row_count": len(rows),
+        "search_or_simulation_rerun": False,
+    }
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_bytes(table_bytes)
+    if provenance_path is not None:
+        provenance_path.parent.mkdir(parents=True, exist_ok=True)
+        result["provenance_path"] = _relative_path(provenance_path, repo_root)
+        result["render_command"] = shlex.join(
+            [
+                "uv",
+                "run",
+                "python",
+                "scripts/tools/compare_adversarial_samplers.py",
+                "--render-existing-json",
+                _relative_path(comparison_path, repo_root),
+                "--repo-root",
+                ".",
+                "--render-execution-mode",
+                execution_mode,
+                "--out-md",
+                _relative_path(output_path, repo_root),
+                "--render-provenance-json",
+                _relative_path(provenance_path, repo_root),
+            ]
+        )
+        provenance_bytes = (json.dumps(result, indent=2, sort_keys=True) + "\n").encode("utf-8")
+        provenance_path.write_bytes(provenance_bytes)
+    return result
+
+
+def _paths_alias(left: Path, right: Path) -> bool:
+    """Return whether two paths resolve to the same file, including links/hard links."""
+    try:
+        if left.resolve(strict=False) == right.resolve(strict=False):
+            return True
+    except (OSError, RuntimeError) as exc:
+        raise ValueError("stored comparison render paths could not be resolved safely") from exc
+
+    try:
+        return left.samefile(right)
+    except FileNotFoundError:
+        return False
+    except OSError as exc:
+        raise ValueError("stored comparison render paths could not be compared safely") from exc
+
+
+def _relative_path(path: Path, root: Path) -> str:
+    """Render a path relative to the repository when possible."""
+    try:
+        return path.resolve().relative_to(root.resolve()).as_posix()
+    except ValueError:
+        return path.as_posix()
 
 
 def _read_signed_property_violations(*, bundle_path: Path | None, objective: str) -> int | None:
@@ -995,6 +1149,58 @@ def _synthetic_evaluator(
         scenario_yaml_path=scenario_yaml_path,
         bundle_path=candidate_dir,
     )
+
+
+def _validate_render_options(args: argparse.Namespace, parser: argparse.ArgumentParser) -> bool:
+    """Validate the render-only mode and report whether it was selected."""
+    if args.render_existing_json is None:
+        if args.render_execution_mode is not None or args.render_provenance_json is not None:
+            parser.error("render-only options require --render-existing-json")
+        return False
+    search_options = (
+        args.manifest,
+        args.output_dir,
+        args.out_json,
+        args.empirical,
+        args.synthetic,
+    )
+    if any(value is not None and value is not False for value in search_options):
+        parser.error("--render-existing-json cannot be combined with search execution options")
+    if args.out_md is None:
+        parser.error("--render-existing-json requires --out-md")
+    if args.render_execution_mode is None:
+        parser.error("--render-existing-json requires --render-execution-mode")
+    if args.issue_5303_diagnostic_only:
+        parser.error("--render-existing-json cannot render issue #5303 diagnostic output")
+    return True
+
+
+def _validate_search_options(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
+    """Validate ordinary search and issue #5303 CLI combinations."""
+    if args.manifest is None and args.output_dir is None:
+        parser.error("--output-dir is required unless --manifest is supplied")
+    if args.empirical and args.synthetic:
+        parser.error("--empirical and --synthetic are mutually exclusive")
+    if not args.issue_5303_diagnostic_only:
+        return
+    if args.manifest is not None:
+        parser.error("--issue-5303-diagnostic-only cannot be combined with --manifest")
+    if args.synthetic:
+        parser.error("--issue-5303-diagnostic-only requires non-synthetic execution")
+    required = {
+        "--algo-config": args.algo_config,
+        "--reference-algo-config": args.reference_algo_config,
+        "--scenario-family": args.scenario_family,
+        "--out-json": args.out_json,
+        "--out-md": args.out_md,
+        "--outcomes-jsonl": args.outcomes_jsonl,
+        "--execution-context-label": args.execution_context_label,
+        "--warm-start-archive": args.warm_start_archive,
+        "--warm-start-record": args.warm_start_record,
+    }
+    missing = [flag for flag, value in required.items() if value is None or value == ""]
+    if missing:
+        parser.error("--issue-5303-diagnostic-only requires " + ", ".join(sorted(missing)))
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
@@ -1133,10 +1339,25 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--out-md",
         type=Path,
         default=None,
-        help=(
-            "Write the durable issue #5326 comparison table (markdown) with exclusions,"
-            " failures, and the stop-rule decision."
-        ),
+        help="Write the durable diagnostic comparison table with exclusions and stop-rule decision.",
+    )
+    parser.add_argument(
+        "--render-existing-json",
+        type=Path,
+        default=None,
+        help="Render a stored v3 comparison JSON without rerunning search or simulation.",
+    )
+    parser.add_argument(
+        "--render-execution-mode",
+        choices=("empirical", "synthetic"),
+        default=None,
+        help="Original execution mode to label when rendering a stored comparison.",
+    )
+    parser.add_argument(
+        "--render-provenance-json",
+        type=Path,
+        default=None,
+        help="Optional machine-readable provenance sidecar for a stored comparison render.",
     )
     parser.add_argument(
         "--outcomes-jsonl",
@@ -1170,29 +1391,9 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help="Certified archive ID to use as a warm start; repeat in frozen archive order.",
     )
     args = parser.parse_args(argv)
-    if args.manifest is None and args.output_dir is None:
-        parser.error("--output-dir is required unless --manifest is supplied")
-    if args.empirical and args.synthetic:
-        parser.error("--empirical and --synthetic are mutually exclusive")
-    if args.issue_5303_diagnostic_only:
-        if args.manifest is not None:
-            parser.error("--issue-5303-diagnostic-only cannot be combined with --manifest")
-        if args.synthetic:
-            parser.error("--issue-5303-diagnostic-only requires non-synthetic execution")
-        required = {
-            "--algo-config": args.algo_config,
-            "--reference-algo-config": args.reference_algo_config,
-            "--scenario-family": args.scenario_family,
-            "--out-json": args.out_json,
-            "--out-md": args.out_md,
-            "--outcomes-jsonl": args.outcomes_jsonl,
-            "--execution-context-label": args.execution_context_label,
-            "--warm-start-archive": args.warm_start_archive,
-            "--warm-start-record": args.warm_start_record,
-        }
-        missing = [flag for flag, value in required.items() if value is None or value == ""]
-        if missing:
-            parser.error("--issue-5303-diagnostic-only requires " + ", ".join(sorted(missing)))
+    if _validate_render_options(args, parser):
+        return args
+    _validate_search_options(args, parser)
     return args
 
 
@@ -1214,6 +1415,80 @@ def _require_issue_5303_preflight_if_requested(
         "issue #5303 diagnostic execution is not authorized; the frozen command "
         "is retained for preflight binding proof only"
     )
+
+
+def _run_render_only_cli(args: argparse.Namespace, *, repo_root: Path) -> int:
+    """Run the saved-comparison renderer from parsed CLI arguments."""
+    comparison_path = args.render_existing_json
+    output_path = args.out_md
+    if comparison_path is None or output_path is None or args.render_execution_mode is None:
+        raise ValueError("render-only CLI arguments are incomplete")
+    if not comparison_path.is_absolute():
+        comparison_path = repo_root / comparison_path
+    if not output_path.is_absolute():
+        output_path = repo_root / output_path
+    provenance_path = args.render_provenance_json
+    if provenance_path is not None and not provenance_path.is_absolute():
+        provenance_path = repo_root / provenance_path
+    result = render_stored_comparison(
+        comparison_path=comparison_path,
+        output_path=output_path,
+        provenance_path=provenance_path,
+        repo_root=repo_root,
+        execution_mode=args.render_execution_mode,
+    )
+    print(json.dumps(result, sort_keys=True))
+    return 0
+
+
+def _comparison_inputs(
+    args: argparse.Namespace, *, repo_root: Path
+) -> tuple[SearchConfig, Sequence[str], Sequence[str], Sequence[int], Sequence[int], Path | None]:
+    """Resolve a manifest or direct CLI invocation into comparison inputs."""
+    if args.manifest is not None:
+        config, objectives, samplers, budgets, seeds = load_package_b_manifest(
+            args.manifest,
+            repo_root=repo_root,
+        )
+        out_json = (
+            args.out_json
+            if args.out_json is None or args.out_json.is_absolute()
+            else repo_root / args.out_json
+        )
+        return config, objectives, samplers, budgets, seeds, out_json
+
+    if args.output_dir is None:
+        raise ValueError("--output-dir is required unless --manifest is supplied")
+    objectives = args.objectives or ["worst_case_snqi"]
+    warm_starts = ()
+    if args.warm_start_archive is not None or args.warm_start_record:
+        if args.warm_start_archive is None or not args.warm_start_record:
+            raise ValueError(
+                "--warm-start-archive and at least one --warm-start-record must be supplied together"
+            )
+        warm_starts = _load_archive_warm_starts(
+            args.warm_start_archive,
+            tuple(args.warm_start_record),
+        )
+    config = SearchConfig.from_files(
+        policy=args.policy,
+        scenario_template=args.scenario_template,
+        search_space=args.search_space,
+        objective=objectives[0],
+        output_dir=args.output_dir,
+        budget=(args.budget or [8])[0],
+        seed=(args.seed or [123])[0],
+        algo_config_path=args.algo_config,
+        horizon=args.horizon,
+        dt=args.dt,
+        require_certification=bool(args.require_certification),
+        benchmark_profile=str(args.benchmark_profile),
+        warm_start=warm_starts,
+    )
+    budgets = (16, 32, 64) if args.package_b_budget_grid and args.budget is None else args.budget
+    seeds = args.seed or [123]
+    samplers = args.samplers or ("random", "coordinate", "optuna", "cmaes")
+    return config, objectives, samplers, budgets, seeds, args.out_json
 
 
 def _resolve_issue_5303_diagnostic_path(value: Path | None, *, repo_root: Path) -> Path | None:
@@ -1302,52 +1577,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Run the sampler comparison CLI."""
     args = parse_args(argv)
     repo_root = args.repo_root.resolve()
+    if args.render_existing_json is not None:
+        return _run_render_only_cli(args, repo_root=repo_root)
     _require_issue_5303_preflight_if_requested(args, repo_root=repo_root)
-    if args.manifest is not None:
-        config, objectives, samplers, budgets, seeds = load_package_b_manifest(
-            args.manifest,
-            repo_root=repo_root,
-        )
-        output_dir = config.output_dir
-        out_json = (
-            args.out_json
-            if args.out_json is None or args.out_json.is_absolute()
-            else repo_root / args.out_json
-        )
-    else:
-        objectives = args.objectives or ["worst_case_snqi"]
-        output_dir = args.output_dir
-        warm_starts = ()
-        if args.warm_start_archive is not None or args.warm_start_record:
-            if args.warm_start_archive is None or not args.warm_start_record:
-                raise ValueError(
-                    "--warm-start-archive and at least one --warm-start-record must be supplied together"
-                )
-            warm_starts = _load_archive_warm_starts(
-                args.warm_start_archive,
-                tuple(args.warm_start_record),
-            )
-        config = SearchConfig.from_files(
-            policy=args.policy,
-            scenario_template=args.scenario_template,
-            search_space=args.search_space,
-            objective=objectives[0],
-            output_dir=output_dir,
-            budget=(args.budget or [8])[0],
-            seed=(args.seed or [123])[0],
-            algo_config_path=args.algo_config,
-            horizon=args.horizon,
-            dt=args.dt,
-            require_certification=bool(args.require_certification),
-            benchmark_profile=str(args.benchmark_profile),
-            warm_start=warm_starts,
-        )
-        budgets = (
-            (16, 32, 64) if args.package_b_budget_grid and args.budget is None else args.budget
-        )
-        seeds = args.seed or [123]
-        samplers = args.samplers or ("random", "coordinate", "optuna", "cmaes")
-        out_json = args.out_json
+    config, objectives, samplers, budgets, seeds, out_json = _comparison_inputs(
+        args, repo_root=repo_root
+    )
 
     rows = run_sampler_comparison(
         config=config,
@@ -1446,6 +1681,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             budget_grid=budgets,
             seeds=seeds,
             issue_5303_diagnostic=diagnostic_context is not None,
+            execution_mode="synthetic" if args.synthetic else "empirical",
         )
         out_md.write_text(table_md, encoding="utf-8")
     print(json.dumps(payload, sort_keys=True))

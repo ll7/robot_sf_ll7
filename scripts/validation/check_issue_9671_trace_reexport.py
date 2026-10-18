@@ -395,7 +395,7 @@ def _validate_steps(key: tuple[str, str, int], row: dict[str, Any], trace: dict[
     count = row.get("steps")
     if isinstance(count, bool) or not isinstance(count, int) or count != len(trace["steps"]):
         raise ValueError(f"trace tuple {key} step count does not match episode")
-    if trace.get("schema_version") != "simulation-step-trace.v1":
+    if trace.get("schema_version") not in {"simulation-step-trace.v1", "simulation-step-trace.v2"}:
         raise ValueError(f"trace tuple {key} has wrong step-trace schema")
     dt = trace.get("dt")
     if (

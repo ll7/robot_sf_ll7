@@ -22,6 +22,7 @@ from loguru import logger
 from PIL import Image  # pillow
 
 from robot_sf.benchmark.plotting_style import apply_latex_style
+from robot_sf.benchmark.runtime_seed_guard import check_simulation_seed
 from robot_sf.benchmark.scenario_generator import (
     AREA_HEIGHT,
     AREA_WIDTH,
@@ -221,6 +222,7 @@ def render_scenario_thumbnail(  # noqa: PLR0913
     ThumbMeta
         Metadata object containing paths to the rendered PNG and optional PDF files.
     """
+    check_simulation_seed(seed, boundary="render_scenario_thumbnail")
     set_global_seed(seed, deterministic=True)
 
     gen = generate_scenario(dict(params), seed=seed)

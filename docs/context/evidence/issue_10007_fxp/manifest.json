@@ -1,0 +1,42 @@
+{
+  "base_head": "1bd98ca26d181fea6fd6e95ef95cd149c9198433",
+  "checkpoint_sha256": {
+    "predictive_proxy_selected_v1-predictive_model.pt": "0e7e775fd09509543761d8326237c4f85b0cc540fb24f98b3c5f8f7c0009fccc",
+    "predictive_proxy_selected_v2_full-predictive_model.pt": "a28aed6d6ad7e1ebf597277ade1cf908efa6da038d0a9fcfdf80c7c31d8d1be1"
+  },
+  "fixed_source_sha256": {
+    "configs/algos/prediction_planner_release_v0_0_8.yaml": "1fbbe7ca4899f6e3420b8908fe63c33d6423cd4cacd2347ab539b69eb2c8f31d",
+    "configs/algos/predictive_mppi_release_v0_0_8.yaml": "30f6f0392bc5f01f733f8fb2507efc2fcb5381e58706c34ec1b3d5ac4eac3c91",
+    "docs/context/evidence/issue_10007_fxp/probe.py": "7d04b50414bd009dc33f05333f36e86719f883a7469bea73f59c4f4f7829a9de",
+    "robot_sf/planner/predictive_mppi.py": "1c268d4a2da87eb5a39fca37b9f09ff638dffebd2307c872548bc7d92c7b6644",
+    "robot_sf/planner/socnav_base.py": "a6b19af22e1be45976ca58a2b521a0f1bc158b4934b7394de580c52d12644934",
+    "robot_sf/planner/socnav_prediction.py": "7d63a94552789debdbd1eb7f62d32f71e0ae004de2805504890bc3700a51453a",
+    "scripts/training/collect_predictive_hardcase_data.py": "61426b82babb1de92442fe65d8ae40fe6cba93e52e5a1eac85a4938ceced64cc",
+    "scripts/training/collect_predictive_planner_data.py": "39efbce55e074cc5fb2c339ef02ae00b7ffe4f1da05e3947ae1336feb4d905b5",
+    "tests/planner/test_prediction_fxp_regressions.py": "95a2fad3984cf2045d7ca6d3d2f36a7f68b199b34854b8ee3fcb2a5d8322583c"
+  },
+  "historical_scope": {
+    "boundary": "This manifest pins the original FXP probe/source bytes, not the final FXP2 source. A2 summary, probe and regression/validation logs describe reverted combined_v2 wiring and do not establish effective static-obstacle handling. A1/A3/A4 findings retained.",
+    "reviewed_head": "2129f53710093d862e0bb4b8024d82ceb5a7879a",
+    "superseded_by": "FXP2 A2 reversion documented in ../../issue_10007_fxp_prediction_defects.md"
+  },
+  "log_normalization": "Versioned base failure log has trailing whitespace removed, the producer checkout prefix replaced by repo-relative paths, and the shared review marker prepended. raw_captures_sha256.red_final.log still pins the original local capture; source identities, failures and numerical observations are unchanged.",
+  "observation_capture_head": "b3fa204dc4eda5004d67e4fcf518f3370fcd0966",
+  "raw_capture_disposition": "Matched observation snapshot, base failure log, focused validation log, summary, probe, source digests and existing portable model release pointers are versioned. Complete scoring JSON and auxiliary logs retained locally outside checkout. No campaign or release artifact produced.",
+  "raw_captures_sha256": {
+    "after.json": "d2568987ea313e50a91e1fdf676f61c28b9c1c6e2cc6032d18e4b9fc64a9a185",
+    "before.json": "a6dae00f7458a720b6fa6c0eb27e8216de4aeb95ec9fa808dce1fe89005789ff",
+    "before.observations.jsonl.gz": "69b5064421d4b0fd46db8144743ba2ff7e7ba9edec7a60f2a1e6390bddd4d4c1",
+    "red_final.log": "36e5d8ff57b279de5635fb8fb4e037de06e2c14d3fa90c989ac9366eda19e547",
+    "validation.log": "5c95b46ee1d08aea8d55dbf274d3f5fed30e92ad4409bba9a55a38f59ff0808b",
+    "velocity_model_v1.log": "abaa2fa0dccfb90c2259eda2353f96da808ceeb942d5411c2168e3a07eac5143",
+    "velocity_model_v2.log": "6e0c5a3b8b66d281b18cdc95e84273e67288717e0f2710c9f2e3ea57c9c8358e"
+  },
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "versioned_artifacts_sha256": {
+    "observations.jsonl.gz": "69b5064421d4b0fd46db8144743ba2ff7e7ba9edec7a60f2a1e6390bddd4d4c1",
+    "regression_base.txt": "9a6990f16a9897093eb0a4878b088b95c3849885c15c4260c174db8c000e515c",
+    "summary.json": "0afbabccff6190828d33e204993f0a4df8ca2f02d7fe051f4f5feb0d780401c8",
+    "validation.txt": "5c95b46ee1d08aea8d55dbf274d3f5fed30e92ad4409bba9a55a38f59ff0808b"
+  }
+}

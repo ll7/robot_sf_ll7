@@ -1,0 +1,24 @@
+{
+  "kind": "config_binding_only",
+  "canonical_release_setting_pair_kernel": "wrapped_v2",
+  "canonical_release_setting_wall_law": "legacy_shifted_gradient_v1",
+  "sanity_pair_kernel": "wrapped_v2",
+  "sanity_wall_law": "legacy_shifted_gradient_v1",
+  "force_radius_m": 0.35,
+  "physical_check_radius_m": 0.4,
+  "inputs": [
+    {
+      "artifact_path": "docs/context/robsweep/evidence/episodes/legacy_goal.jsonl.gz",
+      "sha256": "17a5bcf0f172bb01764cec5d2446f729ceb8eddf4aa71058a1c883f1b9a61c84"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/sanity.json",
+      "sha256": "7e720ef85cbd1daaff78f7bdc49d544689f3b3f90f0d8064ae312236d5d7a67c"
+    },
+    {
+      "artifact_path": "docs/context/robsweep/evidence/crowd_probes.json",
+      "sha256": "e3b7a7882cbd4b216dd9a512aad363318e4a78f032aa2d5797e8f6960bb30a26"
+    }
+  ],
+  "claim_boundary": "Records selector binding, not an empirical fit or a test of the separate short-range development wall law."
+}

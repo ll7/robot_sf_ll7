@@ -10,7 +10,9 @@
 - Threshold: 200 inclusive source lines (def line through end of body; decorators excluded).
 - Findings: **32 functions** over 200 lines on current `main` (top: 1349-line
   `issue_5303_search_promotion_preregistration_v2.preflight_issue_5303_powered_contract`).
-- Full report (SHA-256 `81da165d…`): `output/function_length_audit.json` (ignored, worktree-local).
+- Full report SHA-256 `81da165d…` is recorded, but the report itself was disposable
+  worktree-local scratch and is unavailable. No durable retrieval pointer exists; this receipt
+  preserves only the tracked compact reconciliation.
 - Byte-stable for an unchanged tree; fixture tests pin inclusive-count semantics.
 
 ## Reconciliation vs closed #6456 children

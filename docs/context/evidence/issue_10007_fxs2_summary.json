@@ -1,0 +1,1985 @@
+{
+  "claim_boundary": "development diagnostics and implementation integrity only; no held-out performance, safety or publication claim",
+  "reviewed_head": "1e1b9bcb8dbad2dda7d07db286678bb564e33c81",
+  "runtime_head": "87883083c88b52e41de0db88f65f43f254ab0f37",
+  "base": "b3fa204dc4eda5004d67e4fcf518f3370fcd0966",
+  "decision": {
+    "sacadrl_pref_speed": 1.0,
+    "sacadrl_max_other_agents": 19,
+    "reason": "Both speeds are inside training range; benchmark braking at 1 m/s^2 cannot implement the checkpoint instant stop at 2.0 m/s. Split B/A and D/C isolate collapse to the preference change. Retain working 1.0 m/s and B2.",
+    "reopen_condition": "New controlled split evidence or changed drive dynamics."
+  },
+  "split": {
+    "A": {
+      "pref_speed": 1.0,
+      "observed_agents": 3,
+      "counts": {
+        "success": 11,
+        "collision": 19
+      },
+      "source_sha256": "ecebb81b3e80d6ac99510448c17f05ce1b7d8798fc8d66c7a9e458693748235f",
+      "episodes": [
+        {
+          "arm": "A_pref1_n3",
+          "scenario": "classic_group_crossing_high",
+          "seed": 1001,
+          "outcome": {
+            "route_complete": true,
+            "collision_event": false,
+            "timeout_event": false
+          },
+          "steps": 179,
+          "termination_reason": "success"
+        },
+        {
+          "arm": "A_pref1_n3",
+          "scenario": "classic_group_crossing_high",
+          "seed": 1002,
+          "outcome": {
+            "route_complete": true,
+            "collision_event": false,
+            "timeout_event": false
+          },
+          "steps": 170,
+          "termination_reason": "success"
+        },
+        {
+          "arm": "A_pref1_n3",
+          "scenario": "classic_group_crossing_high",
+          "seed": 1003,
+          "outcome": {
+            "route_complete": true,
+            "collision_event": false,
+            "timeout_event": false
+          },
+          "steps": 182,
+          "termination_reason": "success"
+        },
+        {
+          "arm": "A_pref1_n3",
+          "scenario": "classic_group_crossing_high",
+          "seed": 1004,
+          "outcome": {
+            "route_complete": true,
+            "collision_event": false,
+            "timeout_event": false
+          },
+          "steps": 156,
+          "termination_reason": "success"
+        },
+        {
+          "arm": "A_pref1_n3",
+          "scenario": "classic_group_crossing_high",
+          "seed": 1005,
+          "outcome": {
+            "route_complete": true,
+            "collision_event": false,
+            "timeout_event": false
+          },
+          "steps": 186,
+          "termination_reason": "success"
+        },
+        {
+          "arm": "A_pref1_n3",
+          "scenario": "classic_group_crossing_high",
+          "seed": 1006,
+          "outcome": {
+            "route_complete": true,
+            "collision_event": false,
+            "timeout_event": false
+          },
+          "steps": 171,
+          "termination_reason": "success"
+        },
+        {
+          "arm": "A_pref1_n3",
+          "scenario": "classic_group_crossing_high",
+          "seed": 1007,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 120,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "A_pref1_n3",
+          "scenario": "classic_group_crossing_high",
+          "seed": 1008,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 97,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "A_pref1_n3",
+          "scenario": "classic_group_crossing_high",
+          "seed": 1009,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 130,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "A_pref1_n3",
+          "scenario": "classic_group_crossing_high",
+          "seed": 1010,
+          "outcome": {
+            "route_complete": true,
+            "collision_event": false,
+            "timeout_event": false
+          },
+          "steps": 172,
+          "termination_reason": "success"
+        },
+        {
+          "arm": "A_pref1_n3",
+          "scenario": "classic_doorway_medium",
+          "seed": 1001,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 77,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "A_pref1_n3",
+          "scenario": "classic_doorway_medium",
+          "seed": 1002,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 80,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "A_pref1_n3",
+          "scenario": "classic_doorway_medium",
+          "seed": 1003,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 84,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "A_pref1_n3",
+          "scenario": "classic_doorway_medium",
+          "seed": 1004,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 82,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "A_pref1_n3",
+          "scenario": "classic_doorway_medium",
+          "seed": 1005,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 34,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "A_pref1_n3",
+          "scenario": "classic_doorway_medium",
+          "seed": 1006,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 79,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "A_pref1_n3",
+          "scenario": "classic_doorway_medium",
+          "seed": 1007,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 65,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "A_pref1_n3",
+          "scenario": "classic_doorway_medium",
+          "seed": 1008,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 63,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "A_pref1_n3",
+          "scenario": "classic_doorway_medium",
+          "seed": 1009,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 76,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "A_pref1_n3",
+          "scenario": "classic_doorway_medium",
+          "seed": 1010,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 67,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "A_pref1_n3",
+          "scenario": "classic_head_on_corridor_medium",
+          "seed": 1001,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 154,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "A_pref1_n3",
+          "scenario": "classic_head_on_corridor_medium",
+          "seed": 1002,
+          "outcome": {
+            "route_complete": true,
+            "collision_event": false,
+            "timeout_event": false
+          },
+          "steps": 314,
+          "termination_reason": "success"
+        },
+        {
+          "arm": "A_pref1_n3",
+          "scenario": "classic_head_on_corridor_medium",
+          "seed": 1003,
+          "outcome": {
+            "route_complete": true,
+            "collision_event": false,
+            "timeout_event": false
+          },
+          "steps": 340,
+          "termination_reason": "success"
+        },
+        {
+          "arm": "A_pref1_n3",
+          "scenario": "classic_head_on_corridor_medium",
+          "seed": 1004,
+          "outcome": {
+            "route_complete": true,
+            "collision_event": false,
+            "timeout_event": false
+          },
+          "steps": 305,
+          "termination_reason": "success"
+        },
+        {
+          "arm": "A_pref1_n3",
+          "scenario": "classic_head_on_corridor_medium",
+          "seed": 1005,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 258,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "A_pref1_n3",
+          "scenario": "classic_head_on_corridor_medium",
+          "seed": 1006,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 219,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "A_pref1_n3",
+          "scenario": "classic_head_on_corridor_medium",
+          "seed": 1007,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 147,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "A_pref1_n3",
+          "scenario": "classic_head_on_corridor_medium",
+          "seed": 1008,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 195,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "A_pref1_n3",
+          "scenario": "classic_head_on_corridor_medium",
+          "seed": 1009,
+          "outcome": {
+            "route_complete": true,
+            "collision_event": false,
+            "timeout_event": false
+          },
+          "steps": 333,
+          "termination_reason": "success"
+        },
+        {
+          "arm": "A_pref1_n3",
+          "scenario": "classic_head_on_corridor_medium",
+          "seed": 1010,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 161,
+          "termination_reason": "collision"
+        }
+      ]
+    },
+    "B": {
+      "pref_speed": 2.0,
+      "observed_agents": 3,
+      "counts": {
+        "collision": 28,
+        "success": 2
+      },
+      "source_sha256": "2829c741fcfade41e3c380a0d81ae8dc9345fba731294805b49f7edad103beb7",
+      "episodes": [
+        {
+          "arm": "B_pref2_n3",
+          "scenario": "classic_group_crossing_high",
+          "seed": 1001,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 35,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "B_pref2_n3",
+          "scenario": "classic_group_crossing_high",
+          "seed": 1002,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 32,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "B_pref2_n3",
+          "scenario": "classic_group_crossing_high",
+          "seed": 1003,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 34,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "B_pref2_n3",
+          "scenario": "classic_group_crossing_high",
+          "seed": 1004,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 45,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "B_pref2_n3",
+          "scenario": "classic_group_crossing_high",
+          "seed": 1005,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 61,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "B_pref2_n3",
+          "scenario": "classic_group_crossing_high",
+          "seed": 1006,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 35,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "B_pref2_n3",
+          "scenario": "classic_group_crossing_high",
+          "seed": 1007,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 51,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "B_pref2_n3",
+          "scenario": "classic_group_crossing_high",
+          "seed": 1008,
+          "outcome": {
+            "route_complete": true,
+            "collision_event": false,
+            "timeout_event": false
+          },
+          "steps": 103,
+          "termination_reason": "success"
+        },
+        {
+          "arm": "B_pref2_n3",
+          "scenario": "classic_group_crossing_high",
+          "seed": 1009,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 33,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "B_pref2_n3",
+          "scenario": "classic_group_crossing_high",
+          "seed": 1010,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 36,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "B_pref2_n3",
+          "scenario": "classic_doorway_medium",
+          "seed": 1001,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 45,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "B_pref2_n3",
+          "scenario": "classic_doorway_medium",
+          "seed": 1002,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 48,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "B_pref2_n3",
+          "scenario": "classic_doorway_medium",
+          "seed": 1003,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 41,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "B_pref2_n3",
+          "scenario": "classic_doorway_medium",
+          "seed": 1004,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 35,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "B_pref2_n3",
+          "scenario": "classic_doorway_medium",
+          "seed": 1005,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 28,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "B_pref2_n3",
+          "scenario": "classic_doorway_medium",
+          "seed": 1006,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 45,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "B_pref2_n3",
+          "scenario": "classic_doorway_medium",
+          "seed": 1007,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 41,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "B_pref2_n3",
+          "scenario": "classic_doorway_medium",
+          "seed": 1008,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 39,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "B_pref2_n3",
+          "scenario": "classic_doorway_medium",
+          "seed": 1009,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 41,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "B_pref2_n3",
+          "scenario": "classic_doorway_medium",
+          "seed": 1010,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 41,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "B_pref2_n3",
+          "scenario": "classic_head_on_corridor_medium",
+          "seed": 1001,
+          "outcome": {
+            "route_complete": true,
+            "collision_event": false,
+            "timeout_event": false
+          },
+          "steps": 174,
+          "termination_reason": "success"
+        },
+        {
+          "arm": "B_pref2_n3",
+          "scenario": "classic_head_on_corridor_medium",
+          "seed": 1002,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 107,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "B_pref2_n3",
+          "scenario": "classic_head_on_corridor_medium",
+          "seed": 1003,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 101,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "B_pref2_n3",
+          "scenario": "classic_head_on_corridor_medium",
+          "seed": 1004,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 136,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "B_pref2_n3",
+          "scenario": "classic_head_on_corridor_medium",
+          "seed": 1005,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 117,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "B_pref2_n3",
+          "scenario": "classic_head_on_corridor_medium",
+          "seed": 1006,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 142,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "B_pref2_n3",
+          "scenario": "classic_head_on_corridor_medium",
+          "seed": 1007,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 96,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "B_pref2_n3",
+          "scenario": "classic_head_on_corridor_medium",
+          "seed": 1008,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 96,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "B_pref2_n3",
+          "scenario": "classic_head_on_corridor_medium",
+          "seed": 1009,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 112,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "B_pref2_n3",
+          "scenario": "classic_head_on_corridor_medium",
+          "seed": 1010,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 105,
+          "termination_reason": "collision"
+        }
+      ]
+    },
+    "C": {
+      "pref_speed": 1.0,
+      "observed_agents": 19,
+      "counts": {
+        "success": 14,
+        "collision": 16
+      },
+      "source_sha256": "6c241be7fe5cc564d698421995ae79732d9d8d7736376568f9d29f33b8a003b5",
+      "episodes": [
+        {
+          "arm": "C_pref1_n19",
+          "scenario": "classic_group_crossing_high",
+          "seed": 1001,
+          "outcome": {
+            "route_complete": true,
+            "collision_event": false,
+            "timeout_event": false
+          },
+          "steps": 180,
+          "termination_reason": "success"
+        },
+        {
+          "arm": "C_pref1_n19",
+          "scenario": "classic_group_crossing_high",
+          "seed": 1002,
+          "outcome": {
+            "route_complete": true,
+            "collision_event": false,
+            "timeout_event": false
+          },
+          "steps": 170,
+          "termination_reason": "success"
+        },
+        {
+          "arm": "C_pref1_n19",
+          "scenario": "classic_group_crossing_high",
+          "seed": 1003,
+          "outcome": {
+            "route_complete": true,
+            "collision_event": false,
+            "timeout_event": false
+          },
+          "steps": 183,
+          "termination_reason": "success"
+        },
+        {
+          "arm": "C_pref1_n19",
+          "scenario": "classic_group_crossing_high",
+          "seed": 1004,
+          "outcome": {
+            "route_complete": true,
+            "collision_event": false,
+            "timeout_event": false
+          },
+          "steps": 156,
+          "termination_reason": "success"
+        },
+        {
+          "arm": "C_pref1_n19",
+          "scenario": "classic_group_crossing_high",
+          "seed": 1005,
+          "outcome": {
+            "route_complete": true,
+            "collision_event": false,
+            "timeout_event": false
+          },
+          "steps": 186,
+          "termination_reason": "success"
+        },
+        {
+          "arm": "C_pref1_n19",
+          "scenario": "classic_group_crossing_high",
+          "seed": 1006,
+          "outcome": {
+            "route_complete": true,
+            "collision_event": false,
+            "timeout_event": false
+          },
+          "steps": 172,
+          "termination_reason": "success"
+        },
+        {
+          "arm": "C_pref1_n19",
+          "scenario": "classic_group_crossing_high",
+          "seed": 1007,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 123,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "C_pref1_n19",
+          "scenario": "classic_group_crossing_high",
+          "seed": 1008,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 101,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "C_pref1_n19",
+          "scenario": "classic_group_crossing_high",
+          "seed": 1009,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 129,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "C_pref1_n19",
+          "scenario": "classic_group_crossing_high",
+          "seed": 1010,
+          "outcome": {
+            "route_complete": true,
+            "collision_event": false,
+            "timeout_event": false
+          },
+          "steps": 171,
+          "termination_reason": "success"
+        },
+        {
+          "arm": "C_pref1_n19",
+          "scenario": "classic_doorway_medium",
+          "seed": 1001,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 74,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "C_pref1_n19",
+          "scenario": "classic_doorway_medium",
+          "seed": 1002,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 76,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "C_pref1_n19",
+          "scenario": "classic_doorway_medium",
+          "seed": 1003,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 72,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "C_pref1_n19",
+          "scenario": "classic_doorway_medium",
+          "seed": 1004,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 84,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "C_pref1_n19",
+          "scenario": "classic_doorway_medium",
+          "seed": 1005,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 34,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "C_pref1_n19",
+          "scenario": "classic_doorway_medium",
+          "seed": 1006,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 71,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "C_pref1_n19",
+          "scenario": "classic_doorway_medium",
+          "seed": 1007,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 76,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "C_pref1_n19",
+          "scenario": "classic_doorway_medium",
+          "seed": 1008,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 63,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "C_pref1_n19",
+          "scenario": "classic_doorway_medium",
+          "seed": 1009,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 67,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "C_pref1_n19",
+          "scenario": "classic_doorway_medium",
+          "seed": 1010,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 67,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "C_pref1_n19",
+          "scenario": "classic_head_on_corridor_medium",
+          "seed": 1001,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 116,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "C_pref1_n19",
+          "scenario": "classic_head_on_corridor_medium",
+          "seed": 1002,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 129,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "C_pref1_n19",
+          "scenario": "classic_head_on_corridor_medium",
+          "seed": 1003,
+          "outcome": {
+            "route_complete": true,
+            "collision_event": false,
+            "timeout_event": false
+          },
+          "steps": 337,
+          "termination_reason": "success"
+        },
+        {
+          "arm": "C_pref1_n19",
+          "scenario": "classic_head_on_corridor_medium",
+          "seed": 1004,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 151,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "C_pref1_n19",
+          "scenario": "classic_head_on_corridor_medium",
+          "seed": 1005,
+          "outcome": {
+            "route_complete": true,
+            "collision_event": false,
+            "timeout_event": false
+          },
+          "steps": 317,
+          "termination_reason": "success"
+        },
+        {
+          "arm": "C_pref1_n19",
+          "scenario": "classic_head_on_corridor_medium",
+          "seed": 1006,
+          "outcome": {
+            "route_complete": true,
+            "collision_event": false,
+            "timeout_event": false
+          },
+          "steps": 316,
+          "termination_reason": "success"
+        },
+        {
+          "arm": "C_pref1_n19",
+          "scenario": "classic_head_on_corridor_medium",
+          "seed": 1007,
+          "outcome": {
+            "route_complete": true,
+            "collision_event": false,
+            "timeout_event": false
+          },
+          "steps": 315,
+          "termination_reason": "success"
+        },
+        {
+          "arm": "C_pref1_n19",
+          "scenario": "classic_head_on_corridor_medium",
+          "seed": 1008,
+          "outcome": {
+            "route_complete": true,
+            "collision_event": false,
+            "timeout_event": false
+          },
+          "steps": 317,
+          "termination_reason": "success"
+        },
+        {
+          "arm": "C_pref1_n19",
+          "scenario": "classic_head_on_corridor_medium",
+          "seed": 1009,
+          "outcome": {
+            "route_complete": true,
+            "collision_event": false,
+            "timeout_event": false
+          },
+          "steps": 330,
+          "termination_reason": "success"
+        },
+        {
+          "arm": "C_pref1_n19",
+          "scenario": "classic_head_on_corridor_medium",
+          "seed": 1010,
+          "outcome": {
+            "route_complete": true,
+            "collision_event": false,
+            "timeout_event": false
+          },
+          "steps": 315,
+          "termination_reason": "success"
+        }
+      ]
+    },
+    "D": {
+      "pref_speed": 2.0,
+      "observed_agents": 19,
+      "counts": {
+        "collision": 27,
+        "success": 3
+      },
+      "source_sha256": "25f454822d6e6b87248105b4b9d32e3e7099d2601dc6fc440108a793a210c4c2",
+      "episodes": [
+        {
+          "arm": "D_pref2_n19",
+          "scenario": "classic_group_crossing_high",
+          "seed": 1001,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 35,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "D_pref2_n19",
+          "scenario": "classic_group_crossing_high",
+          "seed": 1002,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 32,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "D_pref2_n19",
+          "scenario": "classic_group_crossing_high",
+          "seed": 1003,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 57,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "D_pref2_n19",
+          "scenario": "classic_group_crossing_high",
+          "seed": 1004,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 44,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "D_pref2_n19",
+          "scenario": "classic_group_crossing_high",
+          "seed": 1005,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 61,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "D_pref2_n19",
+          "scenario": "classic_group_crossing_high",
+          "seed": 1006,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 35,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "D_pref2_n19",
+          "scenario": "classic_group_crossing_high",
+          "seed": 1007,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 53,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "D_pref2_n19",
+          "scenario": "classic_group_crossing_high",
+          "seed": 1008,
+          "outcome": {
+            "route_complete": true,
+            "collision_event": false,
+            "timeout_event": false
+          },
+          "steps": 103,
+          "termination_reason": "success"
+        },
+        {
+          "arm": "D_pref2_n19",
+          "scenario": "classic_group_crossing_high",
+          "seed": 1009,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 54,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "D_pref2_n19",
+          "scenario": "classic_group_crossing_high",
+          "seed": 1010,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 68,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "D_pref2_n19",
+          "scenario": "classic_doorway_medium",
+          "seed": 1001,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 51,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "D_pref2_n19",
+          "scenario": "classic_doorway_medium",
+          "seed": 1002,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 46,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "D_pref2_n19",
+          "scenario": "classic_doorway_medium",
+          "seed": 1003,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 41,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "D_pref2_n19",
+          "scenario": "classic_doorway_medium",
+          "seed": 1004,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 36,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "D_pref2_n19",
+          "scenario": "classic_doorway_medium",
+          "seed": 1005,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 27,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "D_pref2_n19",
+          "scenario": "classic_doorway_medium",
+          "seed": 1006,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 43,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "D_pref2_n19",
+          "scenario": "classic_doorway_medium",
+          "seed": 1007,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 46,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "D_pref2_n19",
+          "scenario": "classic_doorway_medium",
+          "seed": 1008,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 39,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "D_pref2_n19",
+          "scenario": "classic_doorway_medium",
+          "seed": 1009,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 43,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "D_pref2_n19",
+          "scenario": "classic_doorway_medium",
+          "seed": 1010,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 42,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "D_pref2_n19",
+          "scenario": "classic_head_on_corridor_medium",
+          "seed": 1001,
+          "outcome": {
+            "route_complete": true,
+            "collision_event": false,
+            "timeout_event": false
+          },
+          "steps": 171,
+          "termination_reason": "success"
+        },
+        {
+          "arm": "D_pref2_n19",
+          "scenario": "classic_head_on_corridor_medium",
+          "seed": 1002,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 105,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "D_pref2_n19",
+          "scenario": "classic_head_on_corridor_medium",
+          "seed": 1003,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 102,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "D_pref2_n19",
+          "scenario": "classic_head_on_corridor_medium",
+          "seed": 1004,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 136,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "D_pref2_n19",
+          "scenario": "classic_head_on_corridor_medium",
+          "seed": 1005,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 117,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "D_pref2_n19",
+          "scenario": "classic_head_on_corridor_medium",
+          "seed": 1006,
+          "outcome": {
+            "route_complete": true,
+            "collision_event": false,
+            "timeout_event": false
+          },
+          "steps": 167,
+          "termination_reason": "success"
+        },
+        {
+          "arm": "D_pref2_n19",
+          "scenario": "classic_head_on_corridor_medium",
+          "seed": 1007,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 94,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "D_pref2_n19",
+          "scenario": "classic_head_on_corridor_medium",
+          "seed": 1008,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 95,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "D_pref2_n19",
+          "scenario": "classic_head_on_corridor_medium",
+          "seed": 1009,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 113,
+          "termination_reason": "collision"
+        },
+        {
+          "arm": "D_pref2_n19",
+          "scenario": "classic_head_on_corridor_medium",
+          "seed": 1010,
+          "outcome": {
+            "route_complete": false,
+            "collision_event": true,
+            "timeout_event": false
+          },
+          "steps": 103,
+          "termination_reason": "collision"
+        }
+      ]
+    }
+  },
+  "arm_c_replay": {
+    "counts": {
+      "success": 14,
+      "collision": 16
+    },
+    "episodes": [
+      {
+        "arm": "C_pref1_n19",
+        "scenario": "classic_group_crossing_high",
+        "seed": 1001,
+        "outcome": {
+          "route_complete": true,
+          "collision_event": false,
+          "timeout_event": false
+        },
+        "steps": 180,
+        "termination_reason": "success"
+      },
+      {
+        "arm": "C_pref1_n19",
+        "scenario": "classic_group_crossing_high",
+        "seed": 1002,
+        "outcome": {
+          "route_complete": true,
+          "collision_event": false,
+          "timeout_event": false
+        },
+        "steps": 170,
+        "termination_reason": "success"
+      },
+      {
+        "arm": "C_pref1_n19",
+        "scenario": "classic_group_crossing_high",
+        "seed": 1003,
+        "outcome": {
+          "route_complete": true,
+          "collision_event": false,
+          "timeout_event": false
+        },
+        "steps": 183,
+        "termination_reason": "success"
+      },
+      {
+        "arm": "C_pref1_n19",
+        "scenario": "classic_group_crossing_high",
+        "seed": 1004,
+        "outcome": {
+          "route_complete": true,
+          "collision_event": false,
+          "timeout_event": false
+        },
+        "steps": 156,
+        "termination_reason": "success"
+      },
+      {
+        "arm": "C_pref1_n19",
+        "scenario": "classic_group_crossing_high",
+        "seed": 1005,
+        "outcome": {
+          "route_complete": true,
+          "collision_event": false,
+          "timeout_event": false
+        },
+        "steps": 186,
+        "termination_reason": "success"
+      },
+      {
+        "arm": "C_pref1_n19",
+        "scenario": "classic_group_crossing_high",
+        "seed": 1006,
+        "outcome": {
+          "route_complete": true,
+          "collision_event": false,
+          "timeout_event": false
+        },
+        "steps": 172,
+        "termination_reason": "success"
+      },
+      {
+        "arm": "C_pref1_n19",
+        "scenario": "classic_group_crossing_high",
+        "seed": 1007,
+        "outcome": {
+          "route_complete": false,
+          "collision_event": true,
+          "timeout_event": false
+        },
+        "steps": 123,
+        "termination_reason": "collision"
+      },
+      {
+        "arm": "C_pref1_n19",
+        "scenario": "classic_group_crossing_high",
+        "seed": 1008,
+        "outcome": {
+          "route_complete": false,
+          "collision_event": true,
+          "timeout_event": false
+        },
+        "steps": 101,
+        "termination_reason": "collision"
+      },
+      {
+        "arm": "C_pref1_n19",
+        "scenario": "classic_group_crossing_high",
+        "seed": 1009,
+        "outcome": {
+          "route_complete": false,
+          "collision_event": true,
+          "timeout_event": false
+        },
+        "steps": 129,
+        "termination_reason": "collision"
+      },
+      {
+        "arm": "C_pref1_n19",
+        "scenario": "classic_group_crossing_high",
+        "seed": 1010,
+        "outcome": {
+          "route_complete": true,
+          "collision_event": false,
+          "timeout_event": false
+        },
+        "steps": 171,
+        "termination_reason": "success"
+      },
+      {
+        "arm": "C_pref1_n19",
+        "scenario": "classic_doorway_medium",
+        "seed": 1001,
+        "outcome": {
+          "route_complete": false,
+          "collision_event": true,
+          "timeout_event": false
+        },
+        "steps": 74,
+        "termination_reason": "collision"
+      },
+      {
+        "arm": "C_pref1_n19",
+        "scenario": "classic_doorway_medium",
+        "seed": 1002,
+        "outcome": {
+          "route_complete": false,
+          "collision_event": true,
+          "timeout_event": false
+        },
+        "steps": 76,
+        "termination_reason": "collision"
+      },
+      {
+        "arm": "C_pref1_n19",
+        "scenario": "classic_doorway_medium",
+        "seed": 1003,
+        "outcome": {
+          "route_complete": false,
+          "collision_event": true,
+          "timeout_event": false
+        },
+        "steps": 72,
+        "termination_reason": "collision"
+      },
+      {
+        "arm": "C_pref1_n19",
+        "scenario": "classic_doorway_medium",
+        "seed": 1004,
+        "outcome": {
+          "route_complete": false,
+          "collision_event": true,
+          "timeout_event": false
+        },
+        "steps": 84,
+        "termination_reason": "collision"
+      },
+      {
+        "arm": "C_pref1_n19",
+        "scenario": "classic_doorway_medium",
+        "seed": 1005,
+        "outcome": {
+          "route_complete": false,
+          "collision_event": true,
+          "timeout_event": false
+        },
+        "steps": 34,
+        "termination_reason": "collision"
+      },
+      {
+        "arm": "C_pref1_n19",
+        "scenario": "classic_doorway_medium",
+        "seed": 1006,
+        "outcome": {
+          "route_complete": false,
+          "collision_event": true,
+          "timeout_event": false
+        },
+        "steps": 71,
+        "termination_reason": "collision"
+      },
+      {
+        "arm": "C_pref1_n19",
+        "scenario": "classic_doorway_medium",
+        "seed": 1007,
+        "outcome": {
+          "route_complete": false,
+          "collision_event": true,
+          "timeout_event": false
+        },
+        "steps": 76,
+        "termination_reason": "collision"
+      },
+      {
+        "arm": "C_pref1_n19",
+        "scenario": "classic_doorway_medium",
+        "seed": 1008,
+        "outcome": {
+          "route_complete": false,
+          "collision_event": true,
+          "timeout_event": false
+        },
+        "steps": 63,
+        "termination_reason": "collision"
+      },
+      {
+        "arm": "C_pref1_n19",
+        "scenario": "classic_doorway_medium",
+        "seed": 1009,
+        "outcome": {
+          "route_complete": false,
+          "collision_event": true,
+          "timeout_event": false
+        },
+        "steps": 67,
+        "termination_reason": "collision"
+      },
+      {
+        "arm": "C_pref1_n19",
+        "scenario": "classic_doorway_medium",
+        "seed": 1010,
+        "outcome": {
+          "route_complete": false,
+          "collision_event": true,
+          "timeout_event": false
+        },
+        "steps": 67,
+        "termination_reason": "collision"
+      },
+      {
+        "arm": "C_pref1_n19",
+        "scenario": "classic_head_on_corridor_medium",
+        "seed": 1001,
+        "outcome": {
+          "route_complete": false,
+          "collision_event": true,
+          "timeout_event": false
+        },
+        "steps": 116,
+        "termination_reason": "collision"
+      },
+      {
+        "arm": "C_pref1_n19",
+        "scenario": "classic_head_on_corridor_medium",
+        "seed": 1002,
+        "outcome": {
+          "route_complete": false,
+          "collision_event": true,
+          "timeout_event": false
+        },
+        "steps": 129,
+        "termination_reason": "collision"
+      },
+      {
+        "arm": "C_pref1_n19",
+        "scenario": "classic_head_on_corridor_medium",
+        "seed": 1003,
+        "outcome": {
+          "route_complete": true,
+          "collision_event": false,
+          "timeout_event": false
+        },
+        "steps": 337,
+        "termination_reason": "success"
+      },
+      {
+        "arm": "C_pref1_n19",
+        "scenario": "classic_head_on_corridor_medium",
+        "seed": 1004,
+        "outcome": {
+          "route_complete": false,
+          "collision_event": true,
+          "timeout_event": false
+        },
+        "steps": 151,
+        "termination_reason": "collision"
+      },
+      {
+        "arm": "C_pref1_n19",
+        "scenario": "classic_head_on_corridor_medium",
+        "seed": 1005,
+        "outcome": {
+          "route_complete": true,
+          "collision_event": false,
+          "timeout_event": false
+        },
+        "steps": 317,
+        "termination_reason": "success"
+      },
+      {
+        "arm": "C_pref1_n19",
+        "scenario": "classic_head_on_corridor_medium",
+        "seed": 1006,
+        "outcome": {
+          "route_complete": true,
+          "collision_event": false,
+          "timeout_event": false
+        },
+        "steps": 316,
+        "termination_reason": "success"
+      },
+      {
+        "arm": "C_pref1_n19",
+        "scenario": "classic_head_on_corridor_medium",
+        "seed": 1007,
+        "outcome": {
+          "route_complete": true,
+          "collision_event": false,
+          "timeout_event": false
+        },
+        "steps": 315,
+        "termination_reason": "success"
+      },
+      {
+        "arm": "C_pref1_n19",
+        "scenario": "classic_head_on_corridor_medium",
+        "seed": 1008,
+        "outcome": {
+          "route_complete": true,
+          "collision_event": false,
+          "timeout_event": false
+        },
+        "steps": 317,
+        "termination_reason": "success"
+      },
+      {
+        "arm": "C_pref1_n19",
+        "scenario": "classic_head_on_corridor_medium",
+        "seed": 1009,
+        "outcome": {
+          "route_complete": true,
+          "collision_event": false,
+          "timeout_event": false
+        },
+        "steps": 330,
+        "termination_reason": "success"
+      },
+      {
+        "arm": "C_pref1_n19",
+        "scenario": "classic_head_on_corridor_medium",
+        "seed": 1010,
+        "outcome": {
+          "route_complete": true,
+          "collision_event": false,
+          "timeout_event": false
+        },
+        "steps": 315,
+        "termination_reason": "success"
+      }
+    ],
+    "exact_outcome_steps_termination_matches": 30,
+    "scenarios": [
+      "classic_doorway_medium",
+      "classic_group_crossing_high",
+      "classic_head_on_corridor_medium"
+    ],
+    "seeds": [
+      1001,
+      1002,
+      1003,
+      1004,
+      1005,
+      1006,
+      1007,
+      1008,
+      1009,
+      1010
+    ],
+    "outputs_sha256": {
+      "C.jsonl": "6c241be7fe5cc564d698421995ae79732d9d8d7736376568f9d29f33b8a003b5",
+      "C_full.jsonl": "4151d8422c55b1c15ce10830b915d707a9cfd8623dccfea2c3630c1c19d54043"
+    },
+    "files_sha256": {
+      "configs/algos/socnav_release_v0_0_8.yaml": "277c57a45caf213fdc4fb2abdb996062669f9ba05fb4e8adf3e47f90f0429b50",
+      "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml": "8b16cb1ba6155567f31855ec453d596e17e4ed859caf60b6e1092f49b4766ac8",
+      "robot_sf/planner/socnav_sacadrl.py": "4e6200cc9a6000a2eed356160f68b8c2decfadb473188b921f8f72c87b688e8b",
+      "robot_sf/planner/socnav_base.py": "015f4907eb22f59f2becd965fdb256d7069c17f4a0b9b3ef6ab24790ee36a6d3",
+      "robot_sf/planner/socnav_sampling_v2.py": "607196abe2372e9d779fffd4ac94898b9ee15b099605eb037010455590adff36",
+      "robot_sf/robot/differential_drive.py": "ca53fadbe446b13d4e9946510296e5dd8e489667d9d9cf76d648e68bfbca3c1c",
+      "robot_sf/benchmark/map_runner/map_runner.py": "d0340e53167379a2c5e4f77bf3bcb209c50a6dc7e9b0e4dab23e4af1359d238b"
+    },
+    "driver_sha256": "4959fbb9486d96c90a83055b30342358cb5baa41df1fd7f1ae769ae237ca3e55",
+    "wrapper_sha256": "77b6c6fbe54110a9459ef9bf10a71713db3a6efb39f3c3f7a65289d1b3cb97cb",
+    "dependency_versions": {
+      "numpy": "2.4.6",
+      "tensorflow": "2.21.0",
+      "gymnasium": "1.1.1",
+      "scipy": "1.17.1",
+      "numba": "0.67.0"
+    },
+    "checkpoint": {
+      "model_id": "ga3c_cadrl_iros18",
+      "checkpoint_sha256": "a7f9c1b5d4b54173862af75b9606cbead8625a0b526655ad2e8bf32dec31aa96",
+      "hash_source": "computed_tensorflow_checkpoint_bundle",
+      "load_succeeded": true,
+      "fallback_triggered": false,
+      "load_status": "loaded",
+      "load_error": null
+    }
+  },
+  "b4_evidence_boundary": {
+    "before_max_model_discrepancy_m": 2.4278820915350043,
+    "before_false_clear_candidates": 1300,
+    "after_agreement": "by construction: native_candidate mirrors the new _rollout",
+    "execution_match_shown": false,
+    "reason": "Executed commands add penalty scaling and brake limits; planner replans every step."
+  },
+  "validation": {
+    "fixed": "45 passed (original 44 plus oversized-input guard)",
+    "fixed_log_sha256": "a7665eb529991195369ddc9be5b4edab8c8966d096e1a091ac3495b1554b3ecb",
+    "base": "4 failed, 1 passed: restored 1.0 preference intentionally passes; agent capacity and three rollout assertions fail for intended defects",
+    "base_log_sha256": "9d212ab4046e9c00e8fa5f8400b044272b2b105ce4b0500b7c832b6e0016ce61",
+    "reviewed_head_pref_and_capacity_guard": "2 intended failures before fix: 2.0 != 1.0 and DID NOT RAISE ValueError",
+    "ordering_mutation": "reviewer mut.py killed; 17/19 slot position mismatches",
+    "mutation_log_sha256": "3f47be8524cf7b6f8d605429798f296fa3008f5fcc79f986c00cca49c8852ab6",
+    "named_test_nodes": [
+      "tests/planner/test_fxs_release_contract.py::test_release_preferred_speed_reaches_checkpoint_host_input",
+      "tests/planner/test_fxs_release_contract.py::test_release_observes_nineteen_nearest_agents_without_padding_in_sequence",
+      "tests/planner/test_fxs_release_contract.py::test_rollout_first_step_matches_trapezoidal_drive_ramp",
+      "tests/planner/test_fxs_release_contract.py::test_sampling_forecast_uses_bound_angular_acceleration_and_observed_turn_rate",
+      "tests/benchmark/test_issue_9727_socnav_sampling.py::test_default_stays_legacy_and_release_config_opts_in",
+      "tests/benchmark/test_issue_9727_socnav_sampling.py::test_0_0_8_reference_profile_disables_unpublished_repulsion_vector",
+      "tests/benchmark/test_issue_9727_socnav_sampling.py::test_distant_crowd_keeps_heading_near_goal",
+      "tests/benchmark/test_issue_9727_socnav_sampling.py::test_close_pedestrian_avoidance_not_weaker_than_legacy",
+      "tests/benchmark/test_issue_9727_socnav_sampling.py::test_footprint_sweep_keeps_the_driven_arc_off_the_wall",
+      "tests/benchmark/test_issue_9727_socnav_sampling.py::test_speed_near_wall_respects_drive_limit_and_braking_envelope",
+      "tests/benchmark/test_issue_9727_socnav_sampling.py::test_bound_drive_limit_caps_open_space_speed",
+      "tests/benchmark/test_issue_9727_socnav_sampling.py::test_braking_helpers_are_consistent",
+      "tests/benchmark/test_issue_9727_socnav_sampling.py::test_diagnostic_cell_replay_reaches_goal_without_wall_contact",
+      "tests/benchmark/test_issue_9727_socnav_sampling.py::test_obstacle_clearance_handles_frames_and_missing_payloads",
+      "tests/benchmark/test_issue_9727_socnav_sampling.py::test_rollout_respects_drive_limits",
+      "tests/benchmark/test_issue_9727_socnav_sampling.py::test_bind_env_edge_cases",
+      "tests/benchmark/test_issue_9727_socnav_sampling.py::test_goal_path_field_routes_through_the_gap",
+      "tests/benchmark/test_issue_9727_socnav_sampling.py::test_bound_map_steers_around_the_wall",
+      "tests/benchmark/test_issue_9727_socnav_sampling.py::test_all_blocked_moving_robot_brakes_straight",
+      "tests/benchmark/test_issue_9727_socnav_sampling.py::test_all_blocked_stopped_robot_turns_toward_the_open_side",
+      "tests/benchmark/test_issue_9727_socnav_sampling.py::test_all_blocked_stopped_robot_without_exit_holds",
+      "tests/benchmark/test_issue_9727_socnav_sampling.py::test_goal_reached_and_empty_sample_set",
+      "tests/benchmark/test_issue_9727_socnav_sampling.py::test_approaching_pedestrian_blocks_earlier_with_prediction",
+      "tests/benchmark/test_issue_9727_socnav_sampling.py::test_social_force_and_sampling_version_selectors_coexist",
+      "tests/planner/test_release_action_bounds.py::test_orca_release_command_clips_three_metre_preference_to_drive_bound",
+      "tests/planner/test_release_action_bounds.py::test_sacadrl_release_command_clips_speed_and_turn_to_drive_bounds",
+      "tests/test_socnav_sacadrl_adapter.py::test_sacadrl_heuristic_handles_empty_pedestrian_payload",
+      "tests/test_socnav_sacadrl_adapter.py::test_sacadrl_heuristic_handles_malformed_pedestrian_arrays",
+      "tests/planner/test_socnav_sacadrl_module.py::test_actions_and_session_config_cover_cpu_and_non_cpu_paths",
+      "tests/planner/test_socnav_sacadrl_module.py::test_tensorflow_model_wrapper_crops_pads_and_predicts",
+      "tests/planner/test_socnav_sacadrl_module.py::test_normalization_handles_supported_malformed_shapes",
+      "tests/planner/test_socnav_sacadrl_module.py::test_adapter_builds_network_input_and_agent_states",
+      "tests/planner/test_socnav_sacadrl_module.py::test_checkpoint_resolution_hashes_bundle_and_fails_closed",
+      "tests/planner/test_socnav_sacadrl_module.py::test_adapter_model_lifecycle_and_model_backed_plan",
+      "tests/planner/test_socnav_sacadrl_module.py::test_facade_wildcard_import_includes_lazy_public_exports",
+      "tests/planner/test_fxs_release_contract.py::test_checkpoint_rejects_configured_agent_count_above_nineteen"
+    ],
+    "ruff_check": "pass",
+    "ruff_format": "6 files already formatted",
+    "broad_readiness": "unrun: restricted to named nodes and authorized development seeds",
+    "test_files_sha256": {
+      "tests/benchmark/test_issue_9727_socnav_sampling.py": "edb852cd09d362fbed0c62bb93ba28b67a24a64b0b83250a43d5db132012d7cf",
+      "tests/planner/test_fxs_release_contract.py": "70d45111233e7b413480cd9c6066a1790eddd4d394606207b21deaad650ed270",
+      "tests/planner/test_release_action_bounds.py": "d433fef60f1258f7bd97a16180744d5a19bc67dfdda4df0095aa2529b86a4d00",
+      "tests/planner/test_socnav_sacadrl_module.py": "d410ae3f3c6836ec6dd5421625423d8c114f8cb9bd0e939e97b1c8012c16165f",
+      "tests/test_socnav_sacadrl_adapter.py": "484424ded4b3c735047bccb1161f63ca99c61965a4eeca470cebc113ea48b525"
+    }
+  },
+  "limitations": [
+    "Doorway collisions 10/10 in every arm",
+    "Only 4-6 pedestrians in episodes; capacity covered by regression fixture",
+    "Radius outside checkpoint training range and heading-action saturation remain",
+    "Earlier FXS seed-123 validation exception remains excluded; no such seed executed in FXS2"
+  ]
+}

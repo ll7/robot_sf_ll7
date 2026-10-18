@@ -1,0 +1,937 @@
+<!-- AI-GENERATED (10007, 2026-10-01) - NEEDS-REVIEW -->
+# AI-GENERATED NEEDS-REVIEW
+# Diagnostic-only reproduction packet for issue10064; no sealed evaluations.
+# Recreate temporary files under each frozen worktree. Rebuild each venv.
+# Scheduler operations exclusively sbatch/squeue from imech192.
+# Existing model cache locations and hashes are in provenance.json.
+# Never use failed or obsolete-source jobs as behavior evidence.
+
+===== FILE arm0.yaml =====
+name: admfix_dev_gate
+paper_facing: false
+paper_profile_version: paper-matrix-v1
+scenario_matrix: configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml
+comparability_mapping: configs/benchmarks/alyassi_comparability_map_v2.yaml
+route_clearance_certifications: configs/benchmarks/route_clearance_certifications_v1.yaml
+amv_profile:
+  name: amv-paper-v1
+  contract_version: '1'
+  coverage_enforcement: warn
+  required_dimensions:
+    use_case:
+    - delivery_robot
+    - shared_space_micromobility
+    context:
+    - sidewalk
+    - shared_space
+    speed_regime:
+    - walking_speed
+    - scooter_speed
+    maneuver_type:
+    - overtake
+    - crossing
+    - bottleneck
+seed_policy:
+  mode: fixed-list
+  seeds:
+  - 1001
+  - 1002
+  - 1003
+  - 1004
+  - 1005
+snqi_weights: configs/benchmarks/snqi_weights_camera_ready_v3.json
+snqi_baseline: configs/benchmarks/snqi_baseline_camera_ready_v3.json
+snqi_contract:
+  enabled: true
+  enforcement: warn
+  rank_alignment_warn_threshold: 0.5
+  rank_alignment_fail_threshold: 0.3
+  outcome_separation_warn_threshold: 0.05
+  outcome_separation_fail_threshold: 0.0
+  max_component_dominance_warn_threshold: 0.24
+  max_component_dominance_fail_threshold: 0.27
+  calibration_seed: 1001
+  calibration_trials: 6000
+workers: 15
+scenario_horizons: admfix_horizons.yaml
+scenario_horizons_sha256: 3b3d9716746f877b1fe5ba019af6edba56a17038f48c341f138210295c10e650
+dt: 0.1
+record_forces: true
+checkpoint_provenance_enforcement: error
+resume: true
+stop_on_failure: true
+bootstrap_samples: 300
+bootstrap_confidence: 0.95
+bootstrap_seed: 1001
+kinematics_matrix:
+- differential_drive
+export_publication_bundle: false
+include_videos_in_publication: false
+overwrite_publication_bundle: true
+repository_url: https://github.com/ll7/robot_sf_ll7
+release_tag: '{{release_tag}}'
+doi: '{{version_doi}}'
+paper_interpretation_profile: baseline-ready-core
+planners:
+- key: guarded_ppo
+  algo: guarded_ppo
+  planner_group: experimental
+  algo_config: configs/algos/guarded_ppo_release_v0_0_8.yaml
+  benchmark_profile: experimental
+record_planner_decision_trace: true
+record_simulation_step_trace: true
+
+===== FILE arm1.yaml =====
+name: admfix_dev_gate
+paper_facing: false
+paper_profile_version: paper-matrix-v1
+scenario_matrix: configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml
+comparability_mapping: configs/benchmarks/alyassi_comparability_map_v2.yaml
+route_clearance_certifications: configs/benchmarks/route_clearance_certifications_v1.yaml
+amv_profile:
+  name: amv-paper-v1
+  contract_version: '1'
+  coverage_enforcement: warn
+  required_dimensions:
+    use_case:
+    - delivery_robot
+    - shared_space_micromobility
+    context:
+    - sidewalk
+    - shared_space
+    speed_regime:
+    - walking_speed
+    - scooter_speed
+    maneuver_type:
+    - overtake
+    - crossing
+    - bottleneck
+seed_policy:
+  mode: fixed-list
+  seeds:
+  - 1001
+  - 1002
+  - 1003
+  - 1004
+  - 1005
+snqi_weights: configs/benchmarks/snqi_weights_camera_ready_v3.json
+snqi_baseline: configs/benchmarks/snqi_baseline_camera_ready_v3.json
+snqi_contract:
+  enabled: true
+  enforcement: warn
+  rank_alignment_warn_threshold: 0.5
+  rank_alignment_fail_threshold: 0.3
+  outcome_separation_warn_threshold: 0.05
+  outcome_separation_fail_threshold: 0.0
+  max_component_dominance_warn_threshold: 0.24
+  max_component_dominance_fail_threshold: 0.27
+  calibration_seed: 1001
+  calibration_trials: 6000
+workers: 15
+scenario_horizons: admfix_horizons.yaml
+scenario_horizons_sha256: 3b3d9716746f877b1fe5ba019af6edba56a17038f48c341f138210295c10e650
+dt: 0.1
+record_forces: true
+checkpoint_provenance_enforcement: error
+resume: true
+stop_on_failure: true
+bootstrap_samples: 300
+bootstrap_confidence: 0.95
+bootstrap_seed: 1001
+kinematics_matrix:
+- differential_drive
+export_publication_bundle: false
+include_videos_in_publication: false
+overwrite_publication_bundle: true
+repository_url: https://github.com/ll7/robot_sf_ll7
+release_tag: '{{release_tag}}'
+doi: '{{version_doi}}'
+paper_interpretation_profile: baseline-ready-core
+planners:
+- key: predictive_mppi
+  algo: predictive_mppi
+  planner_group: experimental
+  algo_config: configs/algos/predictive_mppi_release_v0_0_8.yaml
+  benchmark_profile: experimental
+record_planner_decision_trace: true
+record_simulation_step_trace: true
+
+===== FILE arm2.yaml =====
+name: admfix_dev_gate
+paper_facing: false
+paper_profile_version: paper-matrix-v1
+scenario_matrix: configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml
+comparability_mapping: configs/benchmarks/alyassi_comparability_map_v2.yaml
+route_clearance_certifications: configs/benchmarks/route_clearance_certifications_v1.yaml
+amv_profile:
+  name: amv-paper-v1
+  contract_version: '1'
+  coverage_enforcement: warn
+  required_dimensions:
+    use_case:
+    - delivery_robot
+    - shared_space_micromobility
+    context:
+    - sidewalk
+    - shared_space
+    speed_regime:
+    - walking_speed
+    - scooter_speed
+    maneuver_type:
+    - overtake
+    - crossing
+    - bottleneck
+seed_policy:
+  mode: fixed-list
+  seeds:
+  - 1001
+  - 1002
+  - 1003
+  - 1004
+  - 1005
+snqi_weights: configs/benchmarks/snqi_weights_camera_ready_v3.json
+snqi_baseline: configs/benchmarks/snqi_baseline_camera_ready_v3.json
+snqi_contract:
+  enabled: true
+  enforcement: warn
+  rank_alignment_warn_threshold: 0.5
+  rank_alignment_fail_threshold: 0.3
+  outcome_separation_warn_threshold: 0.05
+  outcome_separation_fail_threshold: 0.0
+  max_component_dominance_warn_threshold: 0.24
+  max_component_dominance_fail_threshold: 0.27
+  calibration_seed: 1001
+  calibration_trials: 6000
+workers: 15
+scenario_horizons: admfix_horizons.yaml
+scenario_horizons_sha256: 3b3d9716746f877b1fe5ba019af6edba56a17038f48c341f138210295c10e650
+dt: 0.1
+record_forces: true
+checkpoint_provenance_enforcement: error
+resume: true
+stop_on_failure: true
+bootstrap_samples: 300
+bootstrap_confidence: 0.95
+bootstrap_seed: 1001
+kinematics_matrix:
+- differential_drive
+export_publication_bundle: false
+include_videos_in_publication: false
+overwrite_publication_bundle: true
+repository_url: https://github.com/ll7/robot_sf_ll7
+release_tag: '{{release_tag}}'
+doi: '{{version_doi}}'
+paper_interpretation_profile: baseline-ready-core
+planners:
+- key: risk_dwa
+  algo: risk_dwa
+  planner_group: experimental
+  algo_config: configs/algos/risk_dwa_release_v0_0_8.yaml
+  benchmark_profile: experimental
+record_planner_decision_trace: true
+record_simulation_step_trace: true
+
+===== FILE empty_arm0.yaml =====
+name: admfix_dev_gate
+paper_facing: false
+paper_profile_version: paper-matrix-v1
+scenario_matrix: admfix_empty_matrix.yaml
+amv_profile:
+  name: amv-paper-v1
+  contract_version: '1'
+  coverage_enforcement: warn
+  required_dimensions:
+    use_case:
+    - delivery_robot
+    - shared_space_micromobility
+    context:
+    - sidewalk
+    - shared_space
+    speed_regime:
+    - walking_speed
+    - scooter_speed
+    maneuver_type:
+    - overtake
+    - crossing
+    - bottleneck
+seed_policy:
+  mode: fixed-list
+  seeds:
+  - 1001
+  - 1002
+  - 1003
+  - 1004
+  - 1005
+  - 1006
+  - 1007
+  - 1008
+  - 1009
+  - 1010
+snqi_weights: configs/benchmarks/snqi_weights_camera_ready_v3.json
+snqi_baseline: configs/benchmarks/snqi_baseline_camera_ready_v3.json
+snqi_contract:
+  enabled: false
+  enforcement: warn
+  rank_alignment_warn_threshold: 0.5
+  rank_alignment_fail_threshold: 0.3
+  outcome_separation_warn_threshold: 0.05
+  outcome_separation_fail_threshold: 0.0
+  max_component_dominance_warn_threshold: 0.24
+  max_component_dominance_fail_threshold: 0.27
+  calibration_seed: 1001
+  calibration_trials: 6000
+workers: 1
+dt: 0.1
+record_forces: true
+checkpoint_provenance_enforcement: error
+resume: true
+stop_on_failure: true
+bootstrap_samples: 300
+bootstrap_confidence: 0.95
+bootstrap_seed: 1001
+kinematics_matrix:
+- differential_drive
+export_publication_bundle: false
+include_videos_in_publication: false
+overwrite_publication_bundle: true
+repository_url: https://github.com/ll7/robot_sf_ll7
+release_tag: '{{release_tag}}'
+doi: '{{version_doi}}'
+paper_interpretation_profile: baseline-ready-core
+planners:
+- key: guarded_ppo
+  algo: guarded_ppo
+  planner_group: experimental
+  algo_config: configs/algos/guarded_ppo_release_v0_0_8.yaml
+  benchmark_profile: experimental
+record_planner_decision_trace: true
+record_simulation_step_trace: true
+horizon: 400
+
+===== FILE empty_arm1.yaml =====
+name: admfix_dev_gate
+paper_facing: false
+paper_profile_version: paper-matrix-v1
+scenario_matrix: admfix_empty_matrix.yaml
+amv_profile:
+  name: amv-paper-v1
+  contract_version: '1'
+  coverage_enforcement: warn
+  required_dimensions:
+    use_case:
+    - delivery_robot
+    - shared_space_micromobility
+    context:
+    - sidewalk
+    - shared_space
+    speed_regime:
+    - walking_speed
+    - scooter_speed
+    maneuver_type:
+    - overtake
+    - crossing
+    - bottleneck
+seed_policy:
+  mode: fixed-list
+  seeds:
+  - 1001
+  - 1002
+  - 1003
+  - 1004
+  - 1005
+  - 1006
+  - 1007
+  - 1008
+  - 1009
+  - 1010
+snqi_weights: configs/benchmarks/snqi_weights_camera_ready_v3.json
+snqi_baseline: configs/benchmarks/snqi_baseline_camera_ready_v3.json
+snqi_contract:
+  enabled: false
+  enforcement: warn
+  rank_alignment_warn_threshold: 0.5
+  rank_alignment_fail_threshold: 0.3
+  outcome_separation_warn_threshold: 0.05
+  outcome_separation_fail_threshold: 0.0
+  max_component_dominance_warn_threshold: 0.24
+  max_component_dominance_fail_threshold: 0.27
+  calibration_seed: 1001
+  calibration_trials: 6000
+workers: 1
+dt: 0.1
+record_forces: true
+checkpoint_provenance_enforcement: error
+resume: true
+stop_on_failure: true
+bootstrap_samples: 300
+bootstrap_confidence: 0.95
+bootstrap_seed: 1001
+kinematics_matrix:
+- differential_drive
+export_publication_bundle: false
+include_videos_in_publication: false
+overwrite_publication_bundle: true
+repository_url: https://github.com/ll7/robot_sf_ll7
+release_tag: '{{release_tag}}'
+doi: '{{version_doi}}'
+paper_interpretation_profile: baseline-ready-core
+planners:
+- key: predictive_mppi
+  algo: predictive_mppi
+  planner_group: experimental
+  algo_config: configs/algos/predictive_mppi_release_v0_0_8.yaml
+  benchmark_profile: experimental
+record_planner_decision_trace: true
+record_simulation_step_trace: true
+horizon: 400
+
+===== FILE empty_arm2.yaml =====
+name: admfix_dev_gate
+paper_facing: false
+paper_profile_version: paper-matrix-v1
+scenario_matrix: admfix_empty_matrix.yaml
+amv_profile:
+  name: amv-paper-v1
+  contract_version: '1'
+  coverage_enforcement: warn
+  required_dimensions:
+    use_case:
+    - delivery_robot
+    - shared_space_micromobility
+    context:
+    - sidewalk
+    - shared_space
+    speed_regime:
+    - walking_speed
+    - scooter_speed
+    maneuver_type:
+    - overtake
+    - crossing
+    - bottleneck
+seed_policy:
+  mode: fixed-list
+  seeds:
+  - 1001
+  - 1002
+  - 1003
+  - 1004
+  - 1005
+  - 1006
+  - 1007
+  - 1008
+  - 1009
+  - 1010
+snqi_weights: configs/benchmarks/snqi_weights_camera_ready_v3.json
+snqi_baseline: configs/benchmarks/snqi_baseline_camera_ready_v3.json
+snqi_contract:
+  enabled: false
+  enforcement: warn
+  rank_alignment_warn_threshold: 0.5
+  rank_alignment_fail_threshold: 0.3
+  outcome_separation_warn_threshold: 0.05
+  outcome_separation_fail_threshold: 0.0
+  max_component_dominance_warn_threshold: 0.24
+  max_component_dominance_fail_threshold: 0.27
+  calibration_seed: 1001
+  calibration_trials: 6000
+workers: 1
+dt: 0.1
+record_forces: true
+checkpoint_provenance_enforcement: error
+resume: true
+stop_on_failure: true
+bootstrap_samples: 300
+bootstrap_confidence: 0.95
+bootstrap_seed: 1001
+kinematics_matrix:
+- differential_drive
+export_publication_bundle: false
+include_videos_in_publication: false
+overwrite_publication_bundle: true
+repository_url: https://github.com/ll7/robot_sf_ll7
+release_tag: '{{release_tag}}'
+doi: '{{version_doi}}'
+paper_interpretation_profile: baseline-ready-core
+planners:
+- key: risk_dwa
+  algo: risk_dwa
+  planner_group: experimental
+  algo_config: configs/algos/risk_dwa_release_v0_0_8.yaml
+  benchmark_profile: experimental
+record_planner_decision_trace: true
+record_simulation_step_trace: true
+horizon: 400
+
+===== FILE empty_matrix.yaml =====
+scenarios:
+- map_file: admfix_empty.svg
+  name: admfix_empty_world
+  robot_config: {}
+  robot_routes:
+  - goal_id: 0
+    spawn_id: 0
+    waypoints:
+    - - 13.5
+      - 10.0
+    - - 17.5
+      - 10.0
+  seeds:
+  - 1001
+  - 1002
+  - 1003
+  - 1004
+  - 1005
+  - 1006
+  - 1007
+  - 1008
+  - 1009
+  - 1010
+  simulation_config:
+    max_episode_steps: 400
+    ped_density: 0.0
+    social_force_kernel_version: wrapped_v2
+
+===== FILE seedcheck.py =====
+"""Rehearsal seed guard: resolve the exact config through the real campaign loader."""
+import sys
+from pathlib import Path
+from robot_sf.benchmark.camera_ready._config import (
+    load_campaign_config, _load_campaign_scenarios, _resolved_seed_inventory,
+)
+cfg_path = Path(sys.argv[1]).resolve()
+root = Path.cwd().resolve()
+if root.name in {'pr', 'pr2'}:
+    print('SUPERSEDED implementation; exit before any planner or environment step'); sys.exit(99)
+cfg = load_campaign_config(cfg_path, repository_root=root)
+scen = _load_campaign_scenarios(cfg, repository_root=root)
+inv = _resolved_seed_inventory(scen)
+per = sorted({tuple(s.get("seeds") or ()) for s in scen})
+enabled = [p.key for p in cfg.planners if p.enabled]
+print("config:", cfg_path)
+print("seed_policy:", cfg.seed_policy.mode, list(cfg.seed_policy.seeds))
+print("scenarios:", len(scen), "enabled planners:", len(enabled), enabled)
+print("resolved seed inventory:", inv)
+print("distinct per-scenario seed lists:", per)
+HELD = lambda v: 111 <= v <= 140 or 50000 <= v <= 59999
+bad = [s for s in inv if HELD(s)]
+# also scan every scenario dict for any int-valued key named *seed* in the held-out band
+def walk(o, path=""):
+    if isinstance(o, dict):
+        for k, v in o.items():
+            yield from walk(v, f"{path}.{k}")
+    elif isinstance(o, list):
+        for i, v in enumerate(o):
+            yield from walk(v, f"{path}[{i}]")
+    else:
+        yield path, o
+hits = [(s.get("name"), p, v) for s in scen for p, v in walk(s)
+        if "seed" in p.lower() and isinstance(v, int) and not isinstance(v, bool) and HELD(v)]
+print("seed-named fields in held-out band inside resolved scenarios:", hits[:20])
+if bad or hits or not inv or not set(inv) <= set(range(1001, 1011)):
+    print("SEED GUARD FAIL"); sys.exit(3)
+print("SEED GUARD PASS")
+
+===== FILE plangrep.py =====
+"""Scan every JSON/YAML/CSV under a resolved-plan dir for seed-named values in 111..140."""
+import json, sys, re
+from pathlib import Path
+root = Path(sys.argv[1])
+stats_rng = []; hits = []; seeds_seen = set(); files = 0
+def walk(o, path=""):
+    if isinstance(o, dict):
+        for k, v in o.items(): yield from walk(v, f"{path}.{k}")
+    elif isinstance(o, list):
+        for i, v in enumerate(o): yield from walk(v, f"{path}[{i}]")
+    else: yield path, o
+for f in sorted(root.rglob("*")):
+    if not f.is_file(): continue
+    if f.suffix == ".json":
+        files += 1
+        try: data = json.loads(f.read_text())
+        except Exception: continue
+        for p, v in walk(data):
+            leaf = p.lower()
+            if "seed" in leaf and isinstance(v, int) and not isinstance(v, bool):
+                if re.search(r"seeds?(\[\d+\])?$", leaf) or leaf.endswith("seed"):
+                    seeds_seen.add(v)
+                    # statistics RNG seeds (numpy default_rng for bootstrap / SNQI weight
+                    # calibration) never drive a planner or environment step; report them apart.
+                    if 111 <= v <= 140 or 50000 <= v <= 59999:
+                        if leaf.endswith((".calibration_seed", ".bootstrap_seed")):
+                            stats_rng.append((str(f.relative_to(root)), p, v))
+                        else:
+                            hits.append((str(f.relative_to(root)), p, v))
+    elif f.suffix == ".jsonl":
+        files += 1
+        for ln, line in enumerate(f.read_text(errors="ignore").splitlines(), 1):
+            if not line.strip(): continue
+            for p, v in walk(json.loads(line)):
+                leaf = p.lower()
+                if "seed" in leaf and isinstance(v, int) and not isinstance(v, bool) and (111 <= v <= 140 or 50000 <= v <= 59999):
+                    hits.append((str(f.relative_to(root)), ln, p, v))
+    elif f.suffix in (".csv", ".md", ".yaml"):
+        files += 1
+        for ln, line in enumerate(f.read_text(errors="ignore").splitlines(), 1):
+            if re.search(r"seed", line, re.I) and not re.search(r"(calibration|bootstrap)_seed", line) and re.search(r"\b(11[1-9]|12\d|13\d|140|5\d{4})\b", line):
+                hits.append((str(f.relative_to(root)), ln, line[:160]))
+print("files scanned:", files)
+print("seed-keyed integer values seen:", sorted(seeds_seen))
+print("statistics-RNG seeds in band (not episode seeds):", sorted({x[1] for x in stats_rng}))
+print("held-out-band hits:", len(hits))
+for h in hits[:30]: print("  ", h)
+sys.exit(3 if hits else 0)
+
+===== FILE direct_gate.py =====
+"""Dev-only gate via the canonical map runner; no release-success claim."""
+import argparse,json,os,subprocess,sys
+from pathlib import Path
+p=argparse.ArgumentParser();p.add_argument('config');p.add_argument('output');p.add_argument('--workers',type=int,default=15);a=p.parse_args()
+
+# Frozen final source: queued jobs originally named final use the final implementation
+# checkout, with its own rebuilt environment. No active checkout is mutated.
+if Path.cwd().name == 'final':
+ import fcntl,shutil
+ target=Path.home()/'admfix/headde8'
+ with (target/'.uvsync.lock').open('a+') as lock:
+  fcntl.flock(lock,fcntl.LOCK_EX)
+  subprocess.run(['uv','sync','--frozen','--all-extras','--reinstall-package','robot-sf','-q'],cwd=target,check=True)
+ config=target/Path(a.config).name
+ shutil.copyfile(a.config,config);shutil.copyfile(Path.cwd()/'admfix_horizons.yaml',target/'admfix_horizons.yaml')
+ os.chdir(target)
+ os.execv(str(target/'.venv/bin/python'),[str(target/'.venv/bin/python'),__file__,str(config),a.output,'--workers',str(a.workers)])
+sys.path.insert(0,str(Path.cwd()))
+from robot_sf.benchmark.camera_ready._config import load_campaign_config,_load_campaign_scenarios
+from robot_sf.benchmark.map_runner import run_map_batch
+from robot_sf.benchmark.camera_ready.campaign import _scenario_with_kinematics
+
+root=Path.cwd();assert not subprocess.check_output(['git','status','--porcelain','--untracked-files=no'],text=True).strip();subprocess.run([sys.executable,'scripts/dev/check_fast_pysf_runtime.py'],check=True);cfg=load_campaign_config(Path(a.config),repository_root=root);scenarios=_load_campaign_scenarios(cfg,repository_root=root)
+seeds=sorted({s for row in scenarios for s in row['seeds']});print('RESOLVED EPISODE SEEDS',seeds,flush=True);assert seeds and set(seeds)<=set(range(1001,1031));assert all(len(row['seeds'])==len(seeds) for row in scenarios)
+planner=next(p for p in cfg.planners if p.enabled);scenarios=[_scenario_with_kinematics(row,kinematics='differential_drive',holonomic_command_mode=cfg.holonomic_command_mode) for row in scenarios];out=Path(a.output);out.parent.mkdir(parents=True,exist_ok=True)
+manifest={'source':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),'planner':planner.key,'seeds':seeds,'scenario_count':len(scenarios),'resolved_scenarios':scenarios,'config':str(cfg.config_path) if hasattr(cfg,'config_path') else str(a.config),'evidence':'diagnostic-only','release_admission':False}
+(out.parent/'input_manifest.json').write_text(json.dumps(manifest,indent=2,default=str)+'\n')
+# Identical loader, model, map, native drive, rollout and episode-record implementation
+# as the camera-ready campaign, without interpreting its release-level row-status filter
+# (base misclassifies GuardedPPO's native nested fallback_diagnostics dictionary).
+existing=Path.home()/f'admfix/out/base_{["guarded_ppo","predictive_mppi","risk_dwa"].index(planner.key)}/runs/{planner.key}__differential_drive/episodes.jsonl'
+if root.name=='base' and existing.exists() and sum(1 for _ in existing.open())==240:
+ import shutil
+ shutil.copyfile(existing,out)
+ result={'reused_exact_base_campaign':str(existing),'written':240}
+else:
+ result=run_map_batch(scenarios,out,root/'robot_sf/benchmark/schemas/episode.schema.v1.json',
+ scenario_path=root/'scoped_scenarios.json',provenance_scenario_path=cfg.scenario_matrix_path,horizon=cfg.horizon or 0,dt=cfg.dt or 0.0,record_forces=cfg.record_forces,
+ algo=planner.algo,algo_config_path=str(planner.algo_config_path),benchmark_profile=planner.benchmark_profile,
+ workers=a.workers,resume=False,record_planner_decision_trace=True,record_simulation_step_trace=True,
+ observation_mode=planner.observation_mode or cfg.observation_mode,socnav_missing_prereq_policy='fail-fast',snqi_weights=json.loads(cfg.snqi_weights_path.read_text()),snqi_baseline=json.loads(cfg.snqi_baseline_path.read_text()))
+(out.parent/'summary.json').write_text(json.dumps(result,indent=2,default=str)+'\n')
+print('SUMMARY',json.dumps(result,default=str),flush=True)
+rows=[json.loads(l) for l in out.read_text().splitlines() if l.strip()];assert len(rows)==len(scenarios)*len(seeds);assert {r['seed'] for r in rows}==set(seeds)
+assert all(r.get('algorithm_metadata',{}).get('status')=='ok' for r in rows),{r.get('algorithm_metadata',{}).get('status') for r in rows}
+print('DEV GATE ROW AUDIT PASS',len(rows),flush=True)
+
+===== FILE gate.sbatch =====
+#!/bin/bash
+#SBATCH --partition=a30
+#SBATCH --qos=a30-cpu
+#SBATCH --cpus-per-task=16
+#SBATCH --time=04:00:00
+#SBATCH --mem=32G
+#SBATCH --output=producer-home/luttkule/admfix/log/%x-%A-%a.out
+set -euo pipefail
+variant=${1:?}; wt=producer-home/luttkule/admfix/$variant
+export PATH=producer-home/luttkule/.local/bin:$PATH
+export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1 NUMBA_NUM_THREADS=1
+export TF_NUM_INTRAOP_THREADS=1 TF_NUM_INTEROP_THREADS=1 CUDA_VISIBLE_DEVICES=""
+export SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy MPLBACKEND=Agg LOGURU_LEVEL=WARNING
+cd "$wt"
+[[ -z $(git status --porcelain --untracked-files=no) ]]
+echo "head=$(git rev-parse HEAD) job=$SLURM_JOB_ID task=$SLURM_ARRAY_TASK_ID node=$SLURMD_NODENAME start=$(date -Is)"
+( flock 9; uv sync --frozen --all-extras --reinstall-package robot-sf -q ) 9>"$wt/.uvsync.lock"
+config="$wt/admfix_arm${SLURM_ARRAY_TASK_ID}.yaml"
+cp producer-home/luttkule/admfix/tools/arm${SLURM_ARRAY_TASK_ID}.yaml "$config"
+cp producer-home/luttkule/admfix/tools/horizons.yaml "$wt/admfix_horizons.yaml"
+.venv/bin/python producer-home/luttkule/admfix/tools/seedcheck.py "$config"
+.venv/bin/python scripts/tools/run_camera_ready_benchmark.py --config "$config" --output-root producer-home/luttkule/admfix/guard --campaign-id guard_${variant}_${SLURM_ARRAY_TASK_ID} --mode preflight
+.venv/bin/python producer-home/luttkule/admfix/tools/plangrep.py producer-home/luttkule/admfix/guard/guard_${variant}_${SLURM_ARRAY_TASK_ID}
+.venv/bin/python scripts/tools/run_camera_ready_benchmark.py --config "$config" --output-root producer-home/luttkule/admfix/out --campaign-id ${variant}_${SLURM_ARRAY_TASK_ID} --skip-publication-bundle --log-level WARNING
+echo "end=$(date -Is)"
+
+===== FILE direct.sbatch =====
+#!/bin/bash
+#SBATCH --partition=a30
+#SBATCH --qos=a30-cpu
+#SBATCH --cpus-per-task=16
+#SBATCH --time=04:00:00
+#SBATCH --mem=32G
+#SBATCH --output=producer-home/luttkule/admfix/log/%x-%A-%a.out
+set -euo pipefail
+variant=${1:?}; wt=producer-home/luttkule/admfix/$variant
+export PATH=producer-home/luttkule/.local/bin:$PATH
+export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1 NUMBA_NUM_THREADS=1
+export TF_NUM_INTRAOP_THREADS=1 TF_NUM_INTEROP_THREADS=1 CUDA_VISIBLE_DEVICES=""
+export SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy MPLBACKEND=Agg LOGURU_LEVEL=WARNING
+cd "$wt"
+[[ -z $(git status --porcelain --untracked-files=no) ]]
+echo "head=$(git rev-parse HEAD) job=$SLURM_JOB_ID task=$SLURM_ARRAY_TASK_ID node=$SLURMD_NODENAME start=$(date -Is)"
+( flock 9; uv sync --frozen --all-extras --reinstall-package robot-sf -q ) 9>"$wt/.uvsync.lock"
+config="$wt/admfix_arm${SLURM_ARRAY_TASK_ID}.yaml"
+cp producer-home/luttkule/admfix/tools/arm${SLURM_ARRAY_TASK_ID}.yaml "$config"
+cp producer-home/luttkule/admfix/tools/horizons.yaml "$wt/admfix_horizons.yaml"
+.venv/bin/python producer-home/luttkule/admfix/tools/seedcheck.py "$config"
+.venv/bin/python producer-home/luttkule/admfix/tools/direct_gate.py "$config" producer-home/luttkule/admfix/direct/${variant}_${SLURM_ARRAY_TASK_ID}/episodes.jsonl --workers 15
+echo "end=$(date -Is)"
+
+===== FILE empty.sbatch =====
+#!/bin/bash
+#SBATCH --partition=a30
+#SBATCH --qos=a30-cpu
+#SBATCH --cpus-per-task=4
+#SBATCH --time=04:00:00
+#SBATCH --mem=32G
+#SBATCH --output=producer-home/luttkule/admfix/log/%x-%A-%a.out
+set -euo pipefail
+variant=${1:?}; wt=producer-home/luttkule/admfix/$variant
+export PATH=producer-home/luttkule/.local/bin:$PATH
+export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1 NUMBA_NUM_THREADS=1
+export TF_NUM_INTRAOP_THREADS=1 TF_NUM_INTEROP_THREADS=1 CUDA_VISIBLE_DEVICES=""
+export SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy MPLBACKEND=Agg LOGURU_LEVEL=WARNING
+cd "$wt"
+[[ -z $(git status --porcelain --untracked-files=no) ]]
+echo "head=$(git rev-parse HEAD) job=$SLURM_JOB_ID task=$SLURM_ARRAY_TASK_ID node=$SLURMD_NODENAME start=$(date -Is)"
+( flock 9; uv sync --frozen --all-extras --reinstall-package robot-sf -q ) 9>"$wt/.uvsync.lock"
+config="$wt/admfix_empty_arm${SLURM_ARRAY_TASK_ID}.yaml"
+cp producer-home/luttkule/admfix/tools/empty_arm${SLURM_ARRAY_TASK_ID}.yaml "$config"
+cp producer-home/luttkule/admfix/tools/empty.svg "$wt/admfix_empty.svg"
+cp producer-home/luttkule/admfix/tools/empty_matrix.yaml "$wt/admfix_empty_matrix.yaml"
+.venv/bin/python producer-home/luttkule/admfix/tools/seedcheck.py "$config"
+.venv/bin/python scripts/tools/run_camera_ready_benchmark.py --config "$config" --output-root producer-home/luttkule/admfix/guard --campaign-id guard_empty_${variant}_${SLURM_ARRAY_TASK_ID} --mode preflight
+.venv/bin/python producer-home/luttkule/admfix/tools/plangrep.py producer-home/luttkule/admfix/guard/guard_empty_${variant}_${SLURM_ARRAY_TASK_ID}
+export ADMFIX_CAPTURE_DIR=producer-home/luttkule/admfix/captures/$variant
+export ADMFIX_CAPTURE_SHA=$(git rev-parse HEAD)
+.venv/bin/python producer-home/luttkule/admfix/tools/capture_runner.py --config "$config" --output-root producer-home/luttkule/admfix/out --campaign-id empty_${variant}_${SLURM_ARRAY_TASK_ID} --skip-publication-bundle --log-level WARNING
+echo "end=$(date -Is)"
+
+===== FILE extract_gate.py =====
+"""Compact raw episodes without simulating; retain pairing and trace provenance."""
+import argparse,collections,gzip,hashlib,json,math
+from pathlib import Path
+p=argparse.ArgumentParser();p.add_argument('input');p.add_argument('output');a=p.parse_args()
+raw=Path(a.input);out=Path(a.output);out.parent.mkdir(parents=True,exist_ok=True)
+sha=hashlib.sha256();episodes=[];heads=set();counts=collections.Counter();denom=na=frozen=command_zero=0;means=collections.defaultdict(list)
+with gzip.open(out,'wt') as compressed:
+ for bline in raw.open('rb'):
+  sha.update(bline);r=json.loads(bline);assert r['seed'] in range(1001,1011)
+  m=r['algorithm_metadata'];runtime=m.get('planner_runtime',{});assert m.get('status')=='ok',m.get('status')
+  native=m['simulation_step_trace'];checkpoint=runtime.get('checkpoint_provenance',{});foresight=runtime.get('foresight_prediction',{});assert not checkpoint.get('fallback_triggered') and not foresight.get('fallback_used');
+  if r['algo']=='guarded_ppo':assert checkpoint.get('load_succeeded') is True
+  if r['algo']=='predictive_mppi':assert foresight.get('load_status')=='loaded' and foresight.get('observed_checkpoint_sha256')=='0e7e775fd09509543761d8326237c4f85b0cc540fb24f98b3c5f8f7c0009fccc'
+  decisions=m['planner_decision_trace']['steps'];ds={d['step']:d for d in decisions};frames=[]
+  for f in native['steps']:
+   pl=f['planner'];rb=f['robot'];d=ds.get(f['step'],{});selected=pl.get('selected_action',{});pos=rb['position'];peds=f['pedestrians']
+   nearest=min((math.dist(pos,ped['position']) for ped in peds),default=None)
+   ev=d.get('safety_guard',{}).get('selected_evaluation',{})
+   frames.append({'step':f['step'],'t':f['time_s'],'position':pos,'speed':math.hypot(*rb['velocity']),'heading':rb.get('heading'),'selected':selected,'infeasible_branch':bool(pl.get('no_admissible_command') or d.get('safety_guard',{}).get('hard_constraint_violation')),'no_admissible':pl.get('no_admissible_command',d.get('no_admissible_command',False)),'recovery_kind':pl.get('recovery_kind',d.get('recovery_kind')),'recovery_count':pl.get('recovery_command_count',0),'nearest_ped_center':nearest,'goal_distance':d.get('distance_to_goal_m'),'guard_label':d.get('selected_source'),'min_obs_clear':ev.get('min_obs_clear'),'min_ped_clear':ev.get('min_ped_clear'),'goal_progress':d.get('goal_progress')})
+  n=len(frames);assert n>0
+  n_branch=sum(bool(f['infeasible_branch']) for f in frames);n_na=sum(bool(f['no_admissible']) for f in frames);n_frozen=sum(f['speed']<0.01 for f in frames);n_zero=sum(abs(f['selected'].get('linear_velocity',math.inf))<0.001 for f in frames)
+  o=r['outcome'];outcome='C' if o['collision_event'] else 'S' if o['route_complete'] else 'T' if o['timeout_event'] else 'OTHER'
+  counts[outcome]+=1;denom+=n;na+=n_na;frozen+=n_frozen;command_zero+=n_zero
+  for k,v in [('infeasible_branch',n_branch/n),('no_admissible',n_na/n),('frozen',n_frozen/n),('command_zero',n_zero/n)]:means[k].append(v)
+  checkpoint=runtime.get('checkpoint_provenance');forecast={'foresight':m.get('foresight',{}),**{k:v for k,v in runtime.items() if any(x in k for x in ['predictor','checkpoint','fallback_triggered','forecast','foresight'])}}
+  meta={'scenario':r['scenario_id'],'seed':r['seed'],'outcome':outcome,'original_status':r['status'],'termination_reason':r['termination_reason'],'outcome_flags':o,'collision_counts':{k:r['metrics'].get(k) for k in ['ped_collision_count','obstacle_collision_count','agent_collision_count']},'steps':r['steps'],'trace_steps':n,'source':r['git_hash'],'episode_id':r['episode_id'],'config_hash':r['config_hash'],'input_records':r.get('runtime_input_records'),'checkpoint':checkpoint,'forecast':forecast,'infeasible_branch_steps':n_branch,'infeasible_branch_fraction':n_branch/n,'no_admissible_steps':n_na,'frozen_steps':n_frozen,'command_zero_steps':n_zero,'no_admissible_fraction':n_na/n,'frozen_fraction':n_frozen/n,'command_zero_fraction':n_zero/n,'recovery_kinds':dict(collections.Counter(f['recovery_kind'] for f in frames if f['recovery_kind']))}
+  heads.add(r['git_hash']);episodes.append(meta);compressed.write(json.dumps({'episode':meta,'reset':native.get('reset'),'frames':frames},allow_nan=False)+'\n')
+summary={'raw_path':str(raw),'raw_sha256':sha.hexdigest(),'source_shas':sorted(heads),'episodes':len(episodes),'scenarios':len({e['scenario'] for e in episodes}),'seeds':sorted({e['seed'] for e in episodes}),'outcomes':dict(counts),'steps':denom,'no_admissible_steps':na,'frozen_steps':frozen,'command_zero_steps':command_zero,'pooled_fractions':{'no_admissible':na/denom,'frozen':frozen/denom,'command_zero':command_zero/denom},'mean_episode_fractions':{k:sum(v)/len(v) for k,v in means.items()},'episodes_metadata':episodes,'definitions':{'no_admissible':'step diagnostics boolean; mean episode fraction primary','frozen':'physical post-step velocity norm <0.01 m/s; mean episode fraction primary','command_zero':'abs selected linear velocity <0.001 m/s; supplementary'}}
+out.with_suffix('').with_suffix('.json').write_text(json.dumps(summary,indent=2,allow_nan=False)+'\n');print(json.dumps({k:v for k,v in summary.items() if k!='episodes_metadata'},indent=2))
+
+===== FILE analyze_pair.py =====
+"""Analyze dev-only paired artifacts, retaining every changed outcome and trace witnesses."""
+import collections,gzip,json,math,sys,struct
+from pathlib import Path
+R=Path('producer-home/luttkule/admfix_evidence')
+ARMS=['risk_dwa','predictive_mppi','guarded_ppo']
+if '--available' in sys.argv:ARMS=[arm for arm in ARMS if (R/f'base_{arm}.jsonl.gz').exists() and (R/f'pr_{arm}.jsonl.gz').exists()]
+assert ARMS,'No completed pairs'
+BASE='93ba0d75fbecc69ddeb62bbf77a435de385caa3b';HEAD='de8f8a105ab91ad665773bbed204d7d25c9c6c30'
+def load(prefix,arm):
+ p=R/f'{prefix}_{arm}.jsonl.gz'
+ rows=[json.loads(l) for l in gzip.open(p,'rt')]
+ keyed={(r['episode']['scenario'],r['episode']['seed']):r for r in rows}
+ assert len(rows)==len(keyed)==240
+ assert len({k[0] for k in keyed})==48 and {k[1] for k in keyed}==set(range(1001,1006))
+ assert {r['episode']['source'] for r in rows}=={BASE if prefix=='base' else HEAD}
+ assert {r['episode']['outcome'] for r in rows}<={'S','C','T'}
+ return keyed
+
+inner_path=R/'inner_infeasible_verification.json'
+verified_inner={}
+if inner_path.exists():
+ v=json.loads(inner_path.read_text());assert v['all_inner_infeasible'] and v['same_observations']
+ verified_inner={(x['scenario'],x['seed']):x['step'] for x in v['checkpoints']}
+
+def first_divergence(b,p):
+ for i,(x,y) in enumerate(zip(b['frames'],p['frames'])):
+  if any(struct.pack('!d',x['selected'].get(k,0))!=struct.pack('!d',y['selected'].get(k,0)) for k in ('linear_velocity','angular_velocity')):
+   return i
+ return min(len(b['frames']),len(p['frames'])) if len(b['frames'])!=len(p['frames']) else None
+
+def context(row,i):
+ fs=row['frames'];i=min(i,len(fs)-1)
+ return {'first_divergence_window':fs[max(0,i-3):i+7],'terminal_window':fs[-6:]}
+
+transitions=[];samples_pool=[];tables=[];admissible_divergences=[]
+why={('T','S'):'Infeasible recovery restores motion and goal completion within the unchanged budget.',('C','S'):'Recovery changes the trajectory and avoids the baseline collision while completing.',('C','T'):'Recovery avoids the baseline collision, but the robot still exhausts its step budget.',('S','T'):'The recovery trajectory loses goal completion within the unchanged budget.',('S','C'):'Best-effort recovery introduces a collision on a previously successful trajectory.',('T','C'):'Infeasible recovery trades the baseline timeout for a collision.'}
+for arm in ARMS:
+ base=load('base',arm);pr=load('pr',arm);assert base.keys()==pr.keys();tc=collections.Counter();changes=[]
+ for key,b in sorted(base.items()):
+  p=pr[key];be=b['episode'];pe=p['episode'];assert b['reset']==p['reset'],(arm,key,'reset differs')
+  assert be['config_hash']==pe['config_hash'],(arm,key,'resolved episode config differs')
+  assert sorted((x['role'],x['scenario_id'],x['sha256']) for x in be['input_records'])==sorted((x['role'],x['scenario_id'],x['sha256']) for x in pe['input_records']),(arm,key,'map bytes differ')
+  d=first_divergence(b,p)
+  first_b=b['frames'][min(d,len(b['frames'])-1)] if d is not None else None
+  first_p=p['frames'][min(d,len(p['frames'])-1)] if d is not None else None
+  inner_verified=arm=='guarded_ppo' and key in verified_inner and verified_inner[key]==d
+  expected=inner_verified or d is None or first_b['no_admissible'] or first_p['no_admissible'] or (arm=='guarded_ppo' and first_b['guard_label'] in {'fallback_best_effort','stop_best_effort'})
+  if not expected:admissible_divergences.append({'arm':arm,'scenario':key[0],'seed':key[1],'base':first_b,'pr':first_p})
+  before,after=be['outcome'],pe['outcome'];tc[(before,after)]+=1
+  record={'arm':arm,'scenario':key[0],'seed':key[1],'before':before,'after':after,'base_steps':be['steps'],'pr_steps':pe['steps'],'base_no_admissible_fraction':be['no_admissible_fraction'],'pr_no_admissible_fraction':pe['no_admissible_fraction'],'base_frozen_fraction':be['frozen_fraction'],'pr_frozen_fraction':pe['frozen_fraction'],'first_command_divergence_step':d,'first_divergence_base':first_b,'first_divergence_pr':first_p,'base_collision_counts':be['collision_counts'],'pr_collision_counts':pe['collision_counts'],'classification':why.get((before,after),'Unchanged outcome; inspect command and stasis deltas.'),'mechanism_support':'Inner RiskDWA infeasibility verified at identical-observation checkpoints despite the outer guard safe label.' if inner_verified else 'First command divergence is in the infeasible branch.' if d is not None and expected else 'No command divergence.' if d is None else 'Unexpected divergence; gate requires investigation.','cause_confidence':'diagnostic trace association, not a counterfactual safety certificate'}
+  if before!=after:transitions.append(record);changes.append(record)
+  samples_pool.append((record,b,p))
+ table={'arm':arm,'transitions':{f'{k[0]}->{k[1]}':v for k,v in sorted(tc.items())},'changed_outcomes':len(changes)}
+ for prefix in ('base','pr'):
+  s=json.loads((R/f'{prefix}_{arm}.json').read_text())
+  table[prefix]={k:v for k,v in s.items() if k not in {'episodes_metadata','definitions'}}
+  table[prefix]['by_outcome']={}
+  for outcome in ('S','C','T'):
+   subset=[e for e in s['episodes_metadata'] if e['outcome']==outcome]
+   if subset:
+    table[prefix]['by_outcome'][outcome]={'episodes':len(subset),'no_admissible_fraction':sum(e['no_admissible_fraction'] for e in subset)/len(subset),'frozen_fraction':sum(e['frozen_fraction'] for e in subset)/len(subset),'command_zero_fraction':sum(e['command_zero_fraction'] for e in subset)/len(subset),'infeasible_branch_fraction':sum(e['infeasible_branch_fraction'] for e in subset)/len(subset)}
+
+ table['worse_success_count']=table['pr']['outcomes'].get('S',0)<table['base']['outcomes'].get('S',0)
+ table['worse_collision_count']=table['pr']['outcomes'].get('C',0)>table['base']['outcomes'].get('C',0)
+ tables.append(table)
+# Include every regression and at least ten sample traces, adding unchanged controls if necessary.
+priority=lambda item:(0 if item[0]['before']=='S' and item[0]['after']!='S' else 1 if item[0]['before']!='C' and item[0]['after']=='C' else 2 if item[0]['before']!=item[0]['after'] else 3,item[0]['arm'],item[0]['scenario'],item[0]['seed'])
+ordered=sorted(samples_pool,key=priority);selected=ordered[:max(10,sum(priority(x)[0]<2 for x in ordered))]
+samples=[{**r,'base_trace':context(b,r['first_command_divergence_step'] or 0),'pr_trace':context(p,r['first_command_divergence_step'] or 0)} for r,b,p in selected]
+packet={'base_sha':BASE,'behavior_source_sha':HEAD,'diagnostic_only':True,'held_out_stepping':False,'episode_count_per_condition':240*len(ARMS),'complete_matrix':len(ARMS)==3,'episode_seeds':list(range(1001,1006)),'tables':tables,'every_changed_outcome':transitions,'sample_count':len(samples),'trace_samples':samples,'unexpected_admissible_divergences':admissible_divergences,'definitions':{'S':'outcome.route_complete and no collision','C':'outcome.collision_event','T':'outcome.timeout_event without collision or completion','frozen':'mean over episodes of fraction of physical post-step velocity norm <0.01 m/s','no_admissible':'mean over episodes of recorded step boolean; guarded PPO now counts fallback_best_effort as infeasible, whereas base sometimes omitted it'}}
+(R/('paired_analysis.json' if len(ARMS)==3 else 'partial_paired_analysis.json')).write_text(json.dumps(packet,indent=2,allow_nan=False)+'\n')
+print(json.dumps({'tables':tables,'changed':len(transitions),'samples':len(samples),'unexpected_admissible_divergences':len(admissible_divergences)},indent=2))
+assert not admissible_divergences,'Investigate unexpected finite-state command divergence'
+
+===== FILE classify_traces.py =====
+"""Read-only per-flip trace features and evidence-bearing recovery classifications."""
+import collections,gzip,json,math
+from pathlib import Path
+R=Path('producer-home/luttkule/admfix_evidence')
+p=R/'paired_analysis.json';p=p if p.exists() else R/'partial_paired_analysis.json';a=json.loads(p.read_text())
+rows={}
+for arm in {x['arm'] for x in a['tables']}:
+ for condition in ('base','pr'):
+  rows[condition,arm]={(x['episode']['scenario'],x['episode']['seed']):x for x in map(json.loads,gzip.open(R/f'{condition}_{arm}.jsonl.gz','rt'))}
+def features(row):
+ f=row['frames'];run=longest=0
+ for x in f:
+  run=run+1 if x['speed']<0.01 else 0;longest=max(longest,run)
+ nearest=[x['nearest_ped_center'] for x in f if x['nearest_ped_center'] is not None]
+ return {'longest_frozen_steps':longest,'finite_frozen_steps':sum(x['speed']<0.01 and not x['no_admissible'] for x in f),'infeasible_frozen_steps':sum(x['speed']<0.01 and x['no_admissible'] for x in f),'terminal_active_waypoint_distance_m':f[-1]['goal_distance'],'min_ped_center_m':min(nearest,default=None),'terminal_speed_m_s':f[-1]['speed'],'terminal_command':f[-1]['selected'],'terminal_position_m':f[-1]['position'],'recovery_kinds':row['episode']['recovery_kinds'],'path_travelled_m':sum(math.dist(x['position'],y['position']) for x,y in zip(f,f[1:]))}
+verified_path=R/'inner_infeasible_verification.json'
+inner={(x['scenario'],x['seed']):x for x in json.loads(verified_path.read_text())['checkpoints']} if verified_path.exists() else {}
+result=[]
+for x in a['every_changed_outcome']:
+ key=(x['scenario'],x['seed']);b=rows['base',x['arm']][key];p=rows['pr',x['arm']][key];bf=features(b);pf=features(p)
+ assert x['first_command_divergence_step'] is not None
+ d=x['first_command_divergence_step'];bc=b['frames'][d]['selected'];pc=p['frames'][d]['selected'];kind=p['frames'][d]['recovery_kind']
+ if x['before']=='T' and x['after']=='S':
+  x['classification']='Clearance recovery reduces sustained stasis and completes within the unchanged budget.' if bf['longest_frozen_steps']>pf['longest_frozen_steps']+5 else 'Clearance recovery changes steering/path and completes within the unchanged budget; sustained stasis did not improve.'
+ elif x['before']=='S' and x['after']=='T':
+  x['classification']='Clearance-driven steering changes produce longer sustained stasis and lose completion.' if pf['longest_frozen_steps']>bf['longest_frozen_steps']+10 else 'Clearance-driven steering/braking changes the later path or timing and misses goal-zone completion, despite continued motion.'
+ if not kind and x['arm']=='guarded_ppo' and key in inner:kind='inner_'+str(inner[key]['pr_inner']['recovery_kind'])+'; outer_'+str(p['frames'][d]['guard_label'])
+ detail=f"First command divergence at step {d}, base ({bc['linear_velocity']:.4f},{bc['angular_velocity']:.4f}) -> PR ({pc['linear_velocity']:.4f},{pc['angular_velocity']:.4f}), recovery={kind or p['frames'][d]['guard_label']}. "
+ detail+=f"Longest physical freeze {bf['longest_frozen_steps']} -> {pf['longest_frozen_steps']} steps; terminal active-waypoint distance {bf['terminal_active_waypoint_distance_m']:.3f} -> {pf['terminal_active_waypoint_distance_m']:.3f} m. "
+ if x['after']=='C':
+  c=x['pr_collision_counts'];actors=[name for name,n in c.items() if n and n>0];detail+='PR collision counters: '+','.join(actors)+'. '
+ elif x['after']=='T':detail+='PR still exhausts the unchanged authored step budget. '
+ else:detail+='PR completes within the unchanged authored step budget. '
+ detail+=x['classification']
+ if x['arm']=='predictive_mppi' and x['scenario']=='classic_overtaking_low' and x['seed']==1003:
+  detail+=' The first three changed commands are infeasible recovery; the final 116-step zero-command stall has no_admissible=False, showing a later finite-arbitration stasis state on the altered trajectory. Base brake commands coast without reaching rest.'
+ result.append({**x,'classification_detail':detail,'base_features':bf,'pr_features':pf,'distance_convention':'center_center','clearance_convention':'surface_clearance','causal_limit':'Association from paired identical resets and first command divergence in infeasible selection; later trajectory differences are not isolated counterfactual experiments.'})
+(R/'changed_outcome_classifications.json').write_text(json.dumps({'complete_matrix':a['complete_matrix'],'episodes_classified':len(result),'every_changed_outcome':result},indent=2,allow_nan=False)+'\n')
+for x in result:print(f"{x['arm']} | {x['scenario']} | {x['seed']} | {x['before']}->{x['after']} | {x['classification_detail']}")
+
+===== FILE inner_probe.py =====
+"""Replay to recorded divergence checkpoints; expose inner RiskDWA diagnostics."""
+import gzip,importlib,json,os,struct,subprocess,sys,math
+from pathlib import Path
+sys.path.insert(0,str(Path.cwd()))
+import numpy as np
+from robot_sf.benchmark.camera_ready._config import load_campaign_config,_load_campaign_scenarios
+from robot_sf.benchmark.camera_ready.campaign import _scenario_with_kinematics
+from robot_sf.benchmark.map_runner import run_map_batch
+module=importlib.import_module('robot_sf.benchmark.map_runner.map_runner');original=module._build_guarded_ppo_policy
+variant=sys.argv[1];targets=json.loads(Path(sys.argv[2]).read_text());dest=Path(sys.argv[3]);dest.parent.mkdir(parents=True,exist_ok=True)
+assert variant in ('base','pr');assert all(x['seed'] in range(1001,1031) for x in targets)
+root=Path.cwd();source=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip();assert source=={'base':'93ba0d75fbecc69ddeb62bbf77a435de385caa3b','pr':'de8f8a105ab91ad665773bbed204d7d25c9c6c30'}[variant]
+subprocess.run([sys.executable,'scripts/dev/check_fast_pysf_runtime.py'],check=True)
+cfg=load_campaign_config(root/'admfix_arm0.yaml',repository_root=root);scenarios=_load_campaign_scenarios(cfg,repository_root=root);planner=next(p for p in cfg.planners if p.enabled);assert planner.key=='guarded_ppo'
+print('RESOLVED DEV REPLAY SEEDS',sorted({x['seed'] for x in targets}),flush=True)
+active=None;result=[]
+class ProbeComplete(BaseException):pass
+
+def convert(x):
+ if isinstance(x,np.ndarray):
+  flat=x.reshape(-1);indices=np.flatnonzero(flat)
+  return {'shape':list(x.shape),'dtype':str(x.dtype),'indices':indices.tolist(),'values':flat[indices].tolist()}
+ if isinstance(x,np.generic):return convert(x.item())
+ if isinstance(x,float) and not math.isfinite(x):return {'__nonfinite__':repr(x)}
+ if isinstance(x,dict):return {k:convert(v) for k,v in x.items()}
+ if isinstance(x,(list,tuple)):return [convert(v) for v in x]
+ return x
+
+def build(*args,**kwargs):
+ policy,meta=original(*args,**kwargs);step=0
+ print('GUARDED POLICY INSTRUMENTED',active['scenario'],active['seed'],flush=True)
+ def wrapped(obs):
+  nonlocal step
+  command=policy(obs);expected=active[f'{variant}_commands'][step]
+  assert struct.pack('!dd',*command)==struct.pack('!dd',*expected),(active['scenario'],active['seed'],step,command,expected)
+  if step==active['divergence']:
+   stats=policy._planner_stats();inner=stats['fallback_diagnostics']
+   assert inner['no_admissible_command'] is True,(active['scenario'],active['seed'],inner)
+   row={'variant':variant,'source':source,'scenario':active['scenario'],'seed':active['seed'],'step':step,'command':list(command),'inner_diagnostics':convert(inner),'guard_decision':convert(stats['last_decision']),'observation':convert(obs),'matched_recorded_command_prefix':step+1}
+   result.append(row)
+   with gzip.open(dest,'at') as f:f.write(json.dumps(row,allow_nan=False)+'\n')
+   print('INNER INFEASIBLE VERIFIED',active['scenario'],active['seed'],step,command,inner.get('recovery_kind'),flush=True)
+   raise ProbeComplete()
+  step+=1
+  return command
+ wrapped.__dict__.update(policy.__dict__)
+ return wrapped,meta
+module._build_guarded_ppo_policy=build
+for target in targets:
+ active=target;scenario=next(row for row in scenarios if row['name']==target['scenario']);scenario=_scenario_with_kinematics({**scenario,'seeds':[target['seed']]},kinematics='differential_drive',holonomic_command_mode=cfg.holonomic_command_mode)
+ try:
+  run_map_batch([scenario],dest.parent/f'probe_{variant}_unexpected.jsonl',root/'robot_sf/benchmark/schemas/episode.schema.v1.json',scenario_path=root/'scoped_scenarios.json',provenance_scenario_path=cfg.scenario_matrix_path,horizon=cfg.horizon or 0,dt=cfg.dt or 0.,algo=planner.algo,algo_config_path=str(planner.algo_config_path),benchmark_profile=planner.benchmark_profile,workers=1,resume=False,record_planner_decision_trace=False,record_simulation_step_trace=False,observation_mode=planner.observation_mode or cfg.observation_mode,socnav_missing_prereq_policy='fail-fast',snqi_weights=json.loads(cfg.snqi_weights_path.read_text()),snqi_baseline=json.loads(cfg.snqi_baseline_path.read_text()))
+ except ProbeComplete:pass
+ else:raise RuntimeError('Checkpoint was not reached')
+assert len(result)==len(targets)
+print('ALL INNER INFEASIBLE CHECKPOINTS VERIFIED',len(result),flush=True)
+
+===== FILE inner.sbatch =====
+#!/bin/bash
+#SBATCH --partition=a30
+#SBATCH --qos=a30-cpu
+#SBATCH --cpus-per-task=4
+#SBATCH --time=00:30:00
+#SBATCH --mem=16G
+#SBATCH --output=producer-home/luttkule/admfix/log/%x-%A-%a.out
+set -euo pipefail
+variant=base; wt=producer-home/luttkule/admfix/base
+if [[ "$SLURM_ARRAY_TASK_ID" == 1 ]]; then variant=pr; wt=producer-home/luttkule/admfix/headde8; fi
+export PATH=producer-home/luttkule/.local/bin:$PATH
+export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1 NUMBA_NUM_THREADS=1
+export TF_NUM_INTRAOP_THREADS=1 TF_NUM_INTEROP_THREADS=1 CUDA_VISIBLE_DEVICES=""
+export SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy MPLBACKEND=Agg LOGURU_LEVEL=WARNING
+cd "$wt"
+[[ -z $(git status --porcelain --untracked-files=no) ]]
+( flock 9; uv sync --frozen --all-extras --reinstall-package robot-sf -q ) 9>"$wt/.uvsync.lock"
+.venv/bin/python producer-home/luttkule/admfix/tools/inner_probe.py "$variant" producer-home/luttkule/admfix/tools/inner_targets.json producer-home/luttkule/admfix/inner/${variant}.v2.jsonl.gz

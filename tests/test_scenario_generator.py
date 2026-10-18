@@ -54,8 +54,8 @@ BASE_PARAMS = {
 def test_determinism_same_seed():
     """The same params and seed produce identical states, obstacles, groups, and agent counts."""
     p = {**BASE_PARAMS}
-    a = generate_scenario(p, seed=123)
-    b = generate_scenario(p, seed=123)
+    a = generate_scenario(p, seed=1001)
+    b = generate_scenario(p, seed=1001)
     np.testing.assert_allclose(a.state, b.state)
     assert a.obstacles == b.obstacles
     assert a.groups == b.groups

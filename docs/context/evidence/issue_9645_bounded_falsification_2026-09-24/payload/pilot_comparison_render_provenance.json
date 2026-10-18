@@ -1,0 +1,14 @@
+{
+  "comparison_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/pilot_comparison.json",
+  "comparison_sha256": "7c8e7d0f6c74cef38bc776d24d19737176eb9eaebcac99ff1a91faeda302e02d",
+  "execution_mode": "empirical",
+  "markdown_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/pilot_comparison.md",
+  "markdown_sha256": "babd386a061e36cb6326b3f2d58b19b4e83c538fdfb6017a9956080a3a368a12",
+  "provenance_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/pilot_comparison_render_provenance.json",
+  "render_command": "uv run python scripts/tools/compare_adversarial_samplers.py --render-existing-json docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/pilot_comparison.json --repo-root . --render-execution-mode empirical --out-md docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/pilot_comparison.md --render-provenance-json docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/pilot_comparison_render_provenance.json",
+  "renderer": "scripts/tools/compare_adversarial_samplers.py",
+  "renderer_commit": "fcd244a60acba786ff3845aa02fd14d66fc74f17",
+  "row_count": 4,
+  "schema_version": "adversarial-sampler-render-provenance.v1",
+  "search_or_simulation_rerun": false
+}

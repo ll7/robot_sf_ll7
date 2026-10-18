@@ -49,6 +49,11 @@ from robot_sf.prediction.goal_intention import (
 )
 from robot_sf.render.lidar_visual import render_lidar
 from robot_sf.render.sim_state import VisualizableAction, VisualizableSimState
+from robot_sf.robot.action_adapters import (
+    ppo_delta_to_velocity_target,
+    unicycle_velocity_target_to_acceleration,
+)
+from robot_sf.robot.differential_drive import DifferentialDriveSettings
 from robot_sf.robot.robot_state import RobotState
 from robot_sf.robot.rollover_proxy import RolloverProxyParams, rollover_proxy_telemetry
 from robot_sf.sensor.range_sensor import lidar_ray_scan
@@ -116,7 +121,10 @@ def _hash_payload_without_default_goal_policy(value: Any) -> Any:
             key: _hash_payload_without_default_goal_policy(item)
             for key, item in value.items()
             if not (
-                (
+                key == "pedestrian_seed"
+                or (key == "ppo_action_semantics" and item == "acceleration")
+                or (key == "groups" and item is None)
+                or (
                     key == "goal_completion_policy"
                     and (item is None or item == _LEGACY_GOAL_COMPLETION_POLICY)
                 )
@@ -146,6 +154,10 @@ def _stable_config_hash(cfg: EnvSettings) -> str:
         selector_overrides = getattr(sim_config, "_config_hash_overrides", None)
         if callable(selector_overrides):
             config_payload["sim_config"].update(selector_overrides())
+        robot_config = getattr(cfg, "robot_config", None)
+        robot_overrides = getattr(robot_config, "_config_hash_overrides", None)
+        if callable(robot_overrides):
+            config_payload["robot_config"].update(robot_overrides())
         payload = json.dumps(
             _hash_payload_without_default_goal_policy(config_payload),
             sort_keys=True,
@@ -586,6 +598,21 @@ class RobotEnv(BaseEnv):
             self.map_def,
         )
 
+        semantics = getattr(env_config, "ppo_action_semantics", "acceleration")
+        if semantics not in {"acceleration", "velocity_delta"}:
+            raise ValueError(f"Unsupported PPO action semantics: {semantics}")
+        if semantics == "velocity_delta":
+            robot_config = env_config.robot_config
+            if (
+                not isinstance(robot_config, DifferentialDriveSettings)
+                or robot_config.allow_backwards
+            ):
+                raise ValueError("velocity_delta requires a no-reverse differential drive")
+            high = np.array(
+                [robot_config.max_linear_speed, robot_config.max_angular_speed], dtype=np.float32
+            )
+            self.action_space = spaces.Box(low=-high, high=high, dtype=np.float32)
+
         # Debug help
         self.debug_without_robot_movement: bool = bool(
             env_config.sim_config.debug_without_robot_movement
@@ -612,6 +639,9 @@ class RobotEnv(BaseEnv):
         self.config = env_config
         self.grid_config = env_config.grid_config
 
+        # No pedestrian circles have been rasterized before the first regeneration.
+        self._last_grid_ped_radii = np.empty(0, dtype=float)
+
         # Initialize optional occupancy grid
         self.occupancy_grid = self._build_occupancy_grid(env_config)
 
@@ -637,6 +667,7 @@ class RobotEnv(BaseEnv):
             sensor_adapter,
             env_config.sim_config.time_per_step_in_secs,
             env_config.sim_config.sim_time_in_secs,
+            episode_step_limit=env_config.sim_config.episode_step_limit,
         )
 
         # Store last action executed by the robot
@@ -662,23 +693,16 @@ class RobotEnv(BaseEnv):
         self._prime_snqi_proxy_state()
 
     def _apply_reset_seed(self, seed: int | None) -> None:
-        """Record the reset seed and replay directly-constructed crowd sampling (issue #9760).
+        """Rebuild private pedestrian streams and population from the episode seed.
 
-        A directly-constructed env samples its crowd from an unseeded RNG at
-        construction. Its first seeded reset re-runs construction-time
-        population under the seeded context, and subsequent seeded resets repeat
-        that sampling so later reset work consumes the same RNG sequence.
-        Factory-seeded envs (applied_seed already set before reset) keep their
-        construction crowd, preserving legacy replay bytes. Must run inside the
-        seeded RNG context.
+        A seeded reset also restores behavior navigators and their RNG streams;
+        callers may freely use the process-global NumPy generator between steps.
         """
         if seed is None:
             return
-        repopulate_crowd = self.applied_seed is None or self._crowd_established_by_seeded_reset
         self.applied_seed = int(seed)
-        if repopulate_crowd:
-            self.simulator.repopulate_crowd()
-            self._crowd_established_by_seeded_reset = True
+        self.simulator.repopulate_crowd(seed=int(seed))
+        self._crowd_established_by_seeded_reset = True
 
     def _reset_action_latency_queue(self) -> None:
         """Clear queued controls and prime the configured delay with zero commands."""
@@ -747,8 +771,7 @@ class RobotEnv(BaseEnv):
                 f"with key '{self._critic_privileged_state_key}'."
             )
         sim_time_limit = float(getattr(env_config.sim_config, "sim_time_in_secs", 0.0) or 0.0)
-        dt = float(getattr(env_config.sim_config, "time_per_step_in_secs", 0.0) or 0.0)
-        max_sim_steps = int(np.ceil(sim_time_limit / dt)) if dt > 0.0 else 0
+        max_sim_steps = env_config.sim_config.max_sim_steps
         critic_obs_space = spaces.Dict(dict(self.observation_space.spaces))
         low, high = _asymmetric_critic_state_spec(
             critic_obs_space,
@@ -1116,6 +1139,24 @@ class RobotEnv(BaseEnv):
             # Process the action through the simulator only when debug mode is disabled.
             requested_action = tuple(self.simulator.robots[0].parse_action(action))
         action = self._apply_action_latency(requested_action)
+        if (
+            not self.debug_without_robot_movement
+            and getattr(self.config, "ppo_action_semantics", "acceleration") == "velocity_delta"
+        ):
+            # Resolve delayed deltas against the speed and timestep at actuation.
+            robot = self.simulator.robots[0]
+            target = ppo_delta_to_velocity_target(
+                action,
+                np.asarray(robot.current_speed, dtype=np.float32),
+                max_linear_speed=self.config.robot_config.max_linear_speed,
+                max_angular_speed=self.config.robot_config.max_angular_speed,
+            )
+            acceleration = unicycle_velocity_target_to_acceleration(
+                target,
+                np.asarray(robot.current_speed),
+                self.config.sim_config.time_per_step_in_secs,
+            )
+            action = tuple(robot.parse_action(acceleration))
 
         # Perform simulation step
         self.simulator.step_once([action])
@@ -1138,6 +1179,7 @@ class RobotEnv(BaseEnv):
                 ped_radii = np.full(len(ped_positions), 0.35)
             else:
                 ped_radii = np.asarray(ped_radii, dtype=float)
+            self._last_grid_ped_radii = ped_radii.copy()
             # Get updated robot pose (already in RobotPose format: ((x, y), theta))
             robot_pose = self.simulator.robot_poses[0]
             # Regenerate grid (allow grid config to opt into ego frame)
@@ -1266,6 +1308,7 @@ class RobotEnv(BaseEnv):
                     ped_radii = np.full(len(ped_positions), 0.35)
                 else:
                     ped_radii = np.asarray(ped_radii, dtype=float)
+                self._last_grid_ped_radii = ped_radii.copy()
                 # Get robot pose (already in RobotPose format: ((x, y), theta))
                 robot_pose = self.simulator.robot_poses[0]
                 # Generate grid (allow grid config to opt into ego frame)

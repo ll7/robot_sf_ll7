@@ -1,0 +1,16 @@
+scenarios:
+  - name: crossing_ttc_template
+    map_id: classic_cross_trap
+    simulation_config:
+      max_episode_steps: 120
+      ped_density: 0.02
+    robot_config: {}
+    metadata:
+      archetype: adversarial_crossing_ttc
+      flow: cross
+      behavior: generated_stress_test
+      purpose: Base template for programmable adversarial crossing/TTC search.
+      generated_cases_are_benchmark_evidence: false
+      promotion_note: Generated cases remain development stress tests until separately certified and promoted.
+    seeds:
+      - 123

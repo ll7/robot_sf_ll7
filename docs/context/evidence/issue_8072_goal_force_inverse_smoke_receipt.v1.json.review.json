@@ -1,7 +1,9 @@
 {
-  "schema_version": "evidence-review-marker.v1",
   "artifact_path": "docs/context/evidence/issue_8072_goal_force_inverse_smoke_receipt.v1.json",
-  "artifact_sha256": "02f481d942bd86fe023b0bc9ebb7a659ff1e9a82daf94e1837287701986222d2",
+  "artifact_sha256": "cd74c44061a07a3ea04f72555478c9cc3029ef1e7c3f3736655d933680acbc61",
+  "preserved_exact_bytes": false,
   "review_marker": "AI-GENERATED NEEDS-REVIEW",
-  "preserved_exact_bytes": true
+  "schema_version": "evidence-review-marker.v1",
+  "supersedes_artifact_sha256": "02f481d942bd86fe023b0bc9ebb7a659ff1e9a82daf94e1837287701986222d2",
+  "supersession_note": "PR #9836 replaces scratch-root locators and availability metadata; this marker supersedes the prior artifact digest. These are revised bytes, not an exact-byte preservation or new domain approval."
 }

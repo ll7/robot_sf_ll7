@@ -19,7 +19,7 @@ explicitly bounded diagnostic sample and applied zero label mutations.
 ```bash
 uv run python scripts/dev/terminal_label_reconcile.py \
   --inventory terminal --repo ll7/robot_sf_ll7 \
-  --report output/terminal_label_plan.json [--max-items N] [--max-pages N]
+  --report <scratch-root>/terminal_label_plan.json [--max-items N] [--max-pages N]
 ```
 
 - Pages all closed issues and PRs (page-based REST; bounded via `--max-items` when recorded).
@@ -41,7 +41,8 @@ uv run python scripts/dev/terminal_label_reconcile.py \
 - Candidate label removals: 7 `agent`, 1 `dependency:has-blockers`, 100 `merge-ready`, and
   1 `needs-review` (zero applied).
 - Full-report SHA-256: `275b8d4acca8ba65aac9f1dcca03776d431e6c365bf622acda89129f96e9382e`
-  (`output/terminal_label_plan.json`, ignored/worktree-local).
+  (`<scratch-root>/terminal_label_plan.json`; disposable worktree-local, unavailable, and without
+  a durable retrieval pointer).
 - Repository commit: `a7158eb1e8a4782a95b10fa499b4d3b4bc9b3193`; source API: `github-rest-v3`.
 - Zero-mutation proof: inventory mode never calls `add_label`/`remove_label`
   (`test_inventory_zero_mutation_proof`); malformed, error, truncation, and reread-drift fixtures

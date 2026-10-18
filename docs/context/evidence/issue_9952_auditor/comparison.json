@@ -1,0 +1,193 @@
+{
+  "parent_sha": "46809b6bc18caef2a9cd82686e9670c224459c42",
+  "before": {
+    "rows": 20160,
+    "projection": "identical finite scalar/outcome replay; status failure omitted to isolate detectors; no initial-state/trace invented",
+    "scan_counts": {
+      "actuator_mismatch": {
+        "flagged": 0,
+        "clear": 0,
+        "error": 0,
+        "unavailable": 20160
+      },
+      "cohort_multivariate_outlier": {
+        "flagged": 10221,
+        "clear": 9939,
+        "error": 0,
+        "unavailable": 0
+      },
+      "common_mode_anomaly": {
+        "flagged": 0,
+        "clear": 0,
+        "error": 0,
+        "unavailable": 20160
+      },
+      "extreme_measurements": {
+        "flagged": 18202,
+        "clear": 1958,
+        "error": 0,
+        "unavailable": 0
+      },
+      "goal_adjacent_timeout": {
+        "flagged": 0,
+        "clear": 17974,
+        "error": 0,
+        "unavailable": 2186
+      },
+      "initial_reset_anomaly": {
+        "flagged": 0,
+        "clear": 0,
+        "error": 0,
+        "unavailable": 20160
+      },
+      "oscillation_limit_cycle": {
+        "flagged": 0,
+        "clear": 0,
+        "error": 0,
+        "unavailable": 20160
+      },
+      "outcome_metric_contradiction": {
+        "flagged": 0,
+        "clear": 0,
+        "error": 0,
+        "unavailable": 20160
+      },
+      "planner_disagreement": {
+        "flagged": 0,
+        "clear": 0,
+        "error": 0,
+        "unavailable": 20160
+      },
+      "provenance_consistency": {
+        "flagged": 0,
+        "clear": 20160,
+        "error": 0,
+        "unavailable": 0
+      },
+      "seed_outlier": {
+        "flagged": 11203,
+        "clear": 8957,
+        "error": 0,
+        "unavailable": 0
+      },
+      "stuck_no_progress": {
+        "flagged": 0,
+        "clear": 0,
+        "error": 0,
+        "unavailable": 20160
+      },
+      "telemetry_integrity": {
+        "flagged": 0,
+        "clear": 20160,
+        "error": 0,
+        "unavailable": 0
+      },
+      "trajectory_shape_outlier": {
+        "flagged": 0,
+        "clear": 0,
+        "error": 0,
+        "unavailable": 20160
+      }
+    },
+    "seconds": 165.47
+  },
+  "after": {
+    "rows": 20160,
+    "projection": "identical finite scalar/outcome replay; status failure omitted to isolate detectors; no initial-state/trace invented",
+    "scan_counts": {
+      "actuator_mismatch": {
+        "flagged": 0,
+        "clear": 0,
+        "error": 0,
+        "unavailable": 20160
+      },
+      "cohort_multivariate_outlier": {
+        "flagged": 6799,
+        "clear": 13003,
+        "error": 0,
+        "unavailable": 358
+      },
+      "common_mode_anomaly": {
+        "flagged": 0,
+        "clear": 0,
+        "error": 0,
+        "unavailable": 20160
+      },
+      "extreme_measurements": {
+        "flagged": 3430,
+        "clear": 16730,
+        "error": 0,
+        "unavailable": 0
+      },
+      "goal_adjacent_timeout": {
+        "flagged": 0,
+        "clear": 17974,
+        "error": 0,
+        "unavailable": 2186
+      },
+      "initial_reset_anomaly": {
+        "flagged": 0,
+        "clear": 0,
+        "error": 0,
+        "unavailable": 20160
+      },
+      "oscillation_limit_cycle": {
+        "flagged": 0,
+        "clear": 0,
+        "error": 0,
+        "unavailable": 20160
+      },
+      "outcome_metric_contradiction": {
+        "flagged": 0,
+        "clear": 0,
+        "error": 0,
+        "unavailable": 20160
+      },
+      "planner_disagreement": {
+        "flagged": 0,
+        "clear": 0,
+        "error": 0,
+        "unavailable": 20160
+      },
+      "provenance_consistency": {
+        "flagged": 0,
+        "clear": 20160,
+        "error": 0,
+        "unavailable": 0
+      },
+      "seed_outlier": {
+        "flagged": 7651,
+        "clear": 12151,
+        "error": 0,
+        "unavailable": 358
+      },
+      "stuck_no_progress": {
+        "flagged": 0,
+        "clear": 0,
+        "error": 0,
+        "unavailable": 20160
+      },
+      "telemetry_integrity": {
+        "flagged": 0,
+        "clear": 20160,
+        "error": 0,
+        "unavailable": 0
+      },
+      "trajectory_shape_outlier": {
+        "flagged": 0,
+        "clear": 0,
+        "error": 0,
+        "unavailable": 20160
+      }
+    },
+    "seconds": 102.92
+  },
+  "sample": {
+    "cases": 20,
+    "before_supported": 9,
+    "before_flags": 20,
+    "after_supported": 9,
+    "after_flags": 10,
+    "sampling": "targeted: five positive-TTC removals, five zero-MAD removals, ten retained gate findings; not population precision"
+  }
+}

@@ -1580,14 +1580,35 @@ def test_cli_rejects_fifo_control_document_without_blocking(
         command.extend(["--config", str(fifo_path)])
     command.extend(["--output", "fifo-output"])
 
-    completed = subprocess.run(
-        command,
-        capture_output=True,
-        text=True,
-        cwd=repo,
-        check=False,
-        timeout=5,
+    # Observe actual CLI entry after imports without replacing its -m invocation.
+    # The short refusal guard must not charge interpreter/import startup to FIFO I/O.
+    ready = tmp_path / "cli.ready"
+    env = dict(os.environ)
+    env["ROBOT_SF_TEST_CLI_READY"] = str(ready)
+    env["PYTHONPATH"] = os.pathsep.join(
+        [str(repo / "tests/support/cli_readiness"), env.get("PYTHONPATH", ""), str(repo)]
     )
+    with subprocess.Popen(
+        command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, cwd=repo, env=env
+    ) as child:
+        try:
+            startup_deadline = time.monotonic() + 60
+            while not ready.is_file():
+                if child.poll() is not None:
+                    if ready.is_file():
+                        break
+                    stdout, stderr = child.communicate()
+                    pytest.fail(f"CLI exited before entry: {child.returncode}: {stdout} {stderr}")
+                if time.monotonic() >= startup_deadline:
+                    pytest.fail("CLI never reached main within the startup hang guard")
+                time.sleep(0.01)
+            assert ready.read_text(encoding="utf-8") == "CLI_READY\n"
+            stdout, stderr = child.communicate(timeout=5)
+        finally:
+            if child.poll() is None:
+                child.kill()
+                child.communicate(timeout=5)
+    completed = subprocess.CompletedProcess(command, child.returncode, stdout, stderr)
 
     assert completed.returncode == 1
     parsed = component_result_from_dict(json.loads(completed.stdout))

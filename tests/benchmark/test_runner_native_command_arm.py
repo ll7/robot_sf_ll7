@@ -94,7 +94,7 @@ def test_native_command_per_episode_runs_and_validates(tmp_path: Path):
     """A per-episode native-command episode produces a schema-valid record."""
     scenario = _native_command_spec(persistent=False)
     record = run_episode(
-        scenario, seed=111, algo="native_command", horizon=40, dt=0.1, record_forces=False
+        scenario, seed=1001, algo="native_command", horizon=40, dt=0.1, record_forces=False
     )
     schema = load_schema(SCHEMA_PATH)
     validate_episode(record, schema)
@@ -115,7 +115,7 @@ def test_native_command_per_episode_runs_and_validates(tmp_path: Path):
     assert len(diag["planner_step_runtime_seconds"]) > 0
     # Deadlock flag is a boolean present in metrics.
     assert isinstance(record["metrics"]["deadlock"], bool)
-    assert record["metrics"]["deadlock_stall"]["schema_version"] == "deadlock-stall.v1"
+    assert record["metrics"]["deadlock_stall"]["schema_version"] == "deadlock-stall.v2"
     # Command contract provenance recorded.
     assert am["command_contract"]["command_hash_sha256"]
     assert am["command_mode"] == "per_episode_process"
@@ -125,7 +125,7 @@ def test_native_command_persistent_process_runs(tmp_path: Path):
     """Persistent-process mode keeps one child alive and still records runtime."""
     scenario = _native_command_spec(persistent=True)
     record = run_episode(
-        scenario, seed=222, algo="native_command", horizon=30, dt=0.1, record_forces=False
+        scenario, seed=1002, algo="native_command", horizon=30, dt=0.1, record_forces=False
     )
     schema = load_schema(SCHEMA_PATH)
     validate_episode(record, schema)
@@ -227,7 +227,7 @@ def test_native_command_fallback_on_nonzero_exit():
         },
     }
     record = run_episode(
-        bad_spec, seed=9, algo="native_command", horizon=10, dt=0.1, record_forces=False
+        bad_spec, seed=1003, algo="native_command", horizon=10, dt=0.1, record_forces=False
     )
     diag = record["algorithm_metadata"]["planner_diagnostics"]
     # Every step fell back (nonzero exit -> fallback command).
@@ -252,7 +252,7 @@ def test_native_command_timeout_fallback():
         },
     }
     record = run_episode(
-        slow_spec, seed=5, algo="native_command", horizon=3, dt=0.1, record_forces=False
+        slow_spec, seed=1004, algo="native_command", horizon=3, dt=0.1, record_forces=False
     )
     diag = record["algorithm_metadata"]["planner_diagnostics"]
     assert diag["runtime_bound_exits"] == 3
@@ -269,15 +269,21 @@ def test_compute_deadlock_stall_detects_no_progress():
     pos = np.zeros((n, 2), dtype=float)
     pos[:, 0] = np.linspace(0.0, 0.05, n)  # tiny drift, well under progress_eps window
     goal = np.array([10.0, 0.0], dtype=float)
-    ep = type("_Ep", (), {})()
-    ep.robot_pos = pos
-    ep.goal = goal
-    ep.dt = 0.1
-    ep.reached_goal_step = None
+    from robot_sf.benchmark.metrics import EpisodeData
+
+    ep = EpisodeData(
+        pos,
+        np.zeros_like(pos),
+        np.zeros_like(pos),
+        np.zeros((n, 0, 2)),
+        np.zeros((n, 0, 2)),
+        goal,
+        0.1,
+    )
     result = compute_deadlock_stall(ep, window_steps=15, progress_eps_m=0.05)
     assert result["deadlock"] is True
     assert result["stall_window_count"] > 0
-    assert result["schema_version"] == "deadlock-stall.v1"
+    assert result["schema_version"] == "deadlock-stall.v2"
 
 
 def test_compute_deadlock_stall_clear_when_moving():
@@ -288,11 +294,18 @@ def test_compute_deadlock_stall_clear_when_moving():
     pos = np.zeros((n, 2), dtype=float)
     pos[:, 0] = np.linspace(0.0, 9.5, n)
     goal = np.array([10.0, 0.0], dtype=float)
-    ep = type("_Ep", (), {})()
-    ep.robot_pos = pos
-    ep.goal = goal
-    ep.dt = 0.1
-    ep.reached_goal_step = n - 1
+    from robot_sf.benchmark.metrics import EpisodeData
+
+    ep = EpisodeData(
+        pos,
+        np.zeros_like(pos),
+        np.zeros_like(pos),
+        np.zeros((n, 0, 2)),
+        np.zeros((n, 0, 2)),
+        goal,
+        0.1,
+        n - 1,
+    )
     result = compute_deadlock_stall(ep, window_steps=15, progress_eps_m=0.05)
     assert result["deadlock"] is False
     assert result["stall_window_count"] == 0
@@ -310,7 +323,7 @@ def test_native_row_accepted_by_issue_5416_analyzer_diagnostics():
 
     scenario = _native_command_spec(persistent=False)
     record = run_episode(
-        scenario, seed=111, algo="native_command", horizon=40, dt=0.1, record_forces=False
+        scenario, seed=1001, algo="native_command", horizon=40, dt=0.1, record_forces=False
     )
     am = record["algorithm_metadata"]
     # The analyzer's per-row diagnostic parser reads planner_diagnostics from the
@@ -332,13 +345,13 @@ def test_native_command_missing_argv_fails_closed():
         runner_mod._NativeCommandPolicy(argv=[], env={}, timeout_s=1.0, persistent=False)
 
 
-def test_native_command_parser_accepts_holonomic_response():
-    """The standard runner accepts the documented world-frame velocity response."""
+def test_native_command_parser_rejects_holonomic_response():
+    """World-frame velocity keys cannot be silently interpreted as a turn command."""
     policy = runner_mod._NativeCommandPolicy(
         argv=[sys.executable], env={}, timeout_s=1.0, persistent=False
     )
-    command = policy._parse_response('{"vx": 0.5, "vy": -0.25}')
-    assert command.tolist() == [0.5, -0.25]
+    with pytest.raises(ValueError, match="unknown or ambiguous"):
+        policy._parse_response('{"vx": 0.5, "vy": -0.25}')
 
 
 def test_native_command_parser_rejects_nonfinite_response():

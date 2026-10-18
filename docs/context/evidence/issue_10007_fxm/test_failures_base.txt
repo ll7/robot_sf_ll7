@@ -1,0 +1,86 @@
+red_final.log
+E       assert [2.0, 0.0] == [12.0, 3.0]
+E
+E         At index 0 diff: 2.0 != 12.0
+E         Use -v to get more diff
+E       assert True is False
+E       assert True is False
+E       assert 2.0 == 20.0 ± 2.0e-05
+E
+E         comparison failed
+E         Obtained: 2.0
+E         Expected: 20.0 ± 2.0e-05
+E       assert 2.0 == 10.0 ± 1.0e-05
+E
+E         comparison failed
+E         Obtained: 2.0
+E         Expected: 10.0 ± 1.0e-05
+E       assert 0.0 == 0.1 ± 1.0e-07
+E
+E         comparison failed
+E         Obtained: 0.0
+E         Expected: 0.1 ± 1.0e-07
+E       assert 3.0 == 8.0 ± 8.0e-06
+E
+E         comparison failed
+E         Obtained: 3.0
+E         Expected: 8.0 ± 8.0e-06
+E       Failed: DID NOT RAISE ValueError
+E       Failed: DID NOT RAISE ValueError
+E       Failed: DID NOT RAISE ValueError
+E       Failed: DID NOT RAISE ValueError
+E       Failed: DID NOT RAISE ValueError
+E       assert 81.89706857316321 == 81.90206857316322 ± 8.2e-05
+E
+E         comparison failed
+E         Obtained: 81.89706857316321
+E         Expected: 81.90206857316322 ± 8.2e-05
+E       Failed: DID NOT RAISE ValueError
+E       AssertionError: assert None == 'robot-sf-metrics.v2'
+E        +  where None = <built-in method get of dict object at 0x7b97889e02c0>('metric_schema_version')
+E        +    where <built-in method get of dict object at 0x7b97889e02c0> = {'schema_version': 'EpisodeEventLedger.v2', 'scenario_id': 's', 'seed': 1001, 'planner': 'orca', ...}.get
+FAILED tests/benchmark/test_fxm_metric_definitions.py::test_final_route_goal_is_captured_at_reset
+FAILED tests/benchmark/test_fxm_metric_definitions.py::test_slow_steady_approach_is_not_a_deadlock
+FAILED tests/benchmark/test_fxm_metric_definitions.py::test_collision_episode_is_not_a_deadlock
+FAILED tests/benchmark/test_fxm_metric_definitions.py::test_jerk_has_physical_time_units[0.1-20.0]
+FAILED tests/benchmark/test_fxm_metric_definitions.py::test_jerk_has_physical_time_units[0.2-10.0]
+FAILED tests/benchmark/test_fxm_metric_definitions.py::test_first_completed_step_has_positive_elapsed_goal_time
+FAILED tests/benchmark/test_fxm_metric_definitions.py::test_first_segment_is_included_without_adding_safety_samples
+FAILED tests/benchmark/test_fxm_metric_definitions.py::test_old_anchors_cannot_normalize_new_metric_definitions[legacy]
+FAILED tests/benchmark/test_fxm_metric_definitions.py::test_old_anchors_cannot_normalize_new_metric_definitions[v0]
+FAILED tests/benchmark/test_fxm_metric_definitions.py::test_old_anchors_cannot_normalize_new_metric_definitions[v1]
+FAILED tests/benchmark/test_fxm_metric_definitions.py::test_aggregation_rejects_mixed_metric_meanings
+FAILED tests/benchmark/test_fxm_metric_definitions.py::test_calibration_cannot_pool_definitions_or_reuse_legacy_fixed_anchors
+FAILED tests/benchmark/test_fxm_metric_definitions.py::test_real_dev_episode_reset_segment_and_goal_reference
+FAILED tests/benchmark/test_hierarchical_paired_release_analysis.py::test_mixed_metric_definitions_cannot_pool_distance_exposure
+FAILED tests/benchmark/test_hierarchical_paired_release_pipeline.py::test_adapter_preserves_corrected_metric_definition_identity
+15 failed, 1 passed in 3.17s
+
+red_comparator.log
+E       assert 0.0 is None
+FAILED tests/analysis/test_compare_release_0_0_7_to_0_0_8.py::test_changed_definitions_suppress_paired_metric_delta
+1 failed in 16.61s
+
+red_consumers.log
+E       Failed: DID NOT RAISE ValueError
+E       Failed: DID NOT RAISE ValueError
+E       AssertionError: Regex pattern did not match.
+E         Expected regex: 'incompatible metric definitions'
+E         Actual message: 'Episode lacks algorithm metadata required for aggregation.'
+E       Failed: DID NOT RAISE ValueError
+FAILED tests/benchmark/test_fxm_metric_definitions.py::test_old_anchors_cannot_normalize_new_metric_definitions[v0]
+FAILED tests/benchmark/test_fxm_metric_definitions.py::test_old_anchors_cannot_normalize_new_metric_definitions[v1]
+FAILED tests/benchmark/test_fxm_metric_definitions.py::test_aggregation_rejects_mixed_metric_meanings
+FAILED tests/unit/benchmark/test_snqi_v2.py::test_historical_v2_anchors_reject_corrected_physical_metrics
+4 failed, 1 passed, 8 deselected in 4.48s
+
+goal_wiring_red.log (base checkout 073f492abced5dcff749ddfed01c44dc9fd864b7):
+>       assert result.goal_vec.tolist() == [12.0, 3.0]
+E       assert [4.0, 0.0] == [12.0, 3.0]
+FAILED tests/benchmark/test_map_runner_decomposition_helpers.py::test_metric_goal_survives_terminal_waypoint_change
+
+producer_red.log (base checkout 073f492abced5dcff749ddfed01c44dc9fd864b7):
+>       assert values["time_to_goal"] == pytest.approx(0.2)
+E       assert 0.1 == 0.2 ± 2.0e-07
+FAILED tests/benchmark/test_fxm_metric_definitions.py::test_classic_producer_keeps_corrected_time_and_reset_path
+1 failed, 1 passed, 14 deselected in 4.84s

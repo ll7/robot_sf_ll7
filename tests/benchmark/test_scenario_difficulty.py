@@ -568,6 +568,51 @@ def test_build_scenario_difficulty_reports_preview_truncation_and_manifest_missi
     assert analysis["verified_simple_assessment"]["status"] == "manifest_missing"
 
 
+def _three_core_planner_rows() -> list[dict[str, str]]:
+    """Supply the minimum three comparable planners needed for rank assessment."""
+    rows = _planner_rows()[:2]
+    return [*rows, {**rows[0], "planner_key": "social_force", "algo": "social_force"}]
+
+
+def test_verified_simple_assessment_two_planners_is_unavailable(tmp_path: Path) -> None:
+    """Two common planners must not grant a supported/noisy subset decision."""
+    manifest = tmp_path / "verified_simple_subset.yaml"
+    manifest.write_text("scenarios:\n  - name: easy_case\n", encoding="utf-8")
+    assessment = _verified_simple_assessment(
+        [
+            {"planner_key": "goal", "scenario_id": "easy_case", "success_mean": "0.95"},
+            {"planner_key": "orca", "scenario_id": "easy_case", "success_mean": "0.90"},
+        ],
+        _planner_row_index(_planner_rows()[:2]),
+        manifest_path=manifest,
+    )
+    assert assessment["status"] == "insufficient_planner_overlap"
+    assert assessment["rank_correlation"] is None
+    assert assessment["worth_adding"] is None
+
+
+def _with_third_planner(rows: list[dict]) -> list[dict]:
+    """Add a consistently lowest-ranked planner, preserving the fixture's mean noise."""
+    added = []
+    for scenario_id in sorted({row["scenario_id"] for row in rows}):
+        cohort = [row for row in rows if row["scenario_id"] == scenario_id]
+        row = {
+            **cohort[0],
+            "planner_key": "social_force",
+            "algo": "social_force",
+            "success_mean": "0.0",
+        }
+        widths = [
+            float(item["seed_success_ci_half_width"])
+            for item in cohort
+            if "seed_success_ci_half_width" in item
+        ]
+        if widths:
+            row["seed_success_ci_half_width"] = str(sum(widths) / len(widths))
+        added.append(row)
+    return [*rows, *added]
+
+
 def test_verified_simple_assessment_supports_candidate_when_order_is_preserved(
     tmp_path: Path,
 ) -> None:
@@ -579,33 +624,35 @@ def test_verified_simple_assessment_supports_candidate_when_order_is_preserved(
     )
 
     assessment = _verified_simple_assessment(
-        [
-            {
-                "planner_key": "goal",
-                "scenario_id": "easy_case",
-                "success_mean": "0.95",
-                "seed_success_ci_half_width": "0.02",
-            },
-            {
-                "planner_key": "orca",
-                "scenario_id": "easy_case",
-                "success_mean": "0.90",
-                "seed_success_ci_half_width": "0.03",
-            },
-            {
-                "planner_key": "goal",
-                "scenario_id": "hard_case",
-                "success_mean": "0.45",
-                "seed_success_ci_half_width": "0.10",
-            },
-            {
-                "planner_key": "orca",
-                "scenario_id": "hard_case",
-                "success_mean": "0.40",
-                "seed_success_ci_half_width": "0.09",
-            },
-        ],
-        _planner_row_index(_planner_rows()[:2]),
+        _with_third_planner(
+            [
+                {
+                    "planner_key": "goal",
+                    "scenario_id": "easy_case",
+                    "success_mean": "0.95",
+                    "seed_success_ci_half_width": "0.02",
+                },
+                {
+                    "planner_key": "orca",
+                    "scenario_id": "easy_case",
+                    "success_mean": "0.90",
+                    "seed_success_ci_half_width": "0.03",
+                },
+                {
+                    "planner_key": "goal",
+                    "scenario_id": "hard_case",
+                    "success_mean": "0.45",
+                    "seed_success_ci_half_width": "0.10",
+                },
+                {
+                    "planner_key": "orca",
+                    "scenario_id": "hard_case",
+                    "success_mean": "0.40",
+                    "seed_success_ci_half_width": "0.09",
+                },
+            ]
+        ),
+        _planner_row_index(_three_core_planner_rows()),
         manifest_path=manifest,
     )
 
@@ -627,33 +674,35 @@ def test_verified_simple_assessment_marks_candidate_noisy_when_subset_reorders(
     )
 
     assessment = _verified_simple_assessment(
-        [
-            {
-                "planner_key": "goal",
-                "scenario_id": "easy_case",
-                "success_mean": "0.99",
-                "seed_success_ci_half_width": "0.01",
-            },
-            {
-                "planner_key": "orca",
-                "scenario_id": "easy_case",
-                "success_mean": "0.80",
-                "seed_success_ci_half_width": "0.01",
-            },
-            {
-                "planner_key": "goal",
-                "scenario_id": "hard_case",
-                "success_mean": "0.10",
-                "seed_success_ci_half_width": "0.30",
-            },
-            {
-                "planner_key": "orca",
-                "scenario_id": "hard_case",
-                "success_mean": "0.70",
-                "seed_success_ci_half_width": "0.30",
-            },
-        ],
-        _planner_row_index(_planner_rows()[:2]),
+        _with_third_planner(
+            [
+                {
+                    "planner_key": "goal",
+                    "scenario_id": "easy_case",
+                    "success_mean": "0.99",
+                    "seed_success_ci_half_width": "0.01",
+                },
+                {
+                    "planner_key": "orca",
+                    "scenario_id": "easy_case",
+                    "success_mean": "0.80",
+                    "seed_success_ci_half_width": "0.01",
+                },
+                {
+                    "planner_key": "goal",
+                    "scenario_id": "hard_case",
+                    "success_mean": "0.10",
+                    "seed_success_ci_half_width": "0.30",
+                },
+                {
+                    "planner_key": "orca",
+                    "scenario_id": "hard_case",
+                    "success_mean": "0.70",
+                    "seed_success_ci_half_width": "0.30",
+                },
+            ]
+        ),
+        _planner_row_index(_three_core_planner_rows()),
         manifest_path=manifest,
     )
 
@@ -672,57 +721,59 @@ def test_build_scenario_difficulty_supports_verified_simple_candidate_with_overl
     )
 
     analysis = build_scenario_difficulty_analysis(
-        planner_rows=_planner_rows()[:2],
-        scenario_breakdown_rows=[
-            {
-                "planner_key": "goal",
-                "algo": "goal",
-                "scenario_family": "easy_family",
-                "scenario_id": "easy_case",
-                "episodes": "3",
-                "success_mean": "0.95",
-                "collisions_mean": "0.00",
-                "near_misses_mean": "0.05",
-                "time_to_goal_norm_mean": "0.30",
-                "snqi_mean": "0.30",
-            },
-            {
-                "planner_key": "orca",
-                "algo": "orca",
-                "scenario_family": "easy_family",
-                "scenario_id": "easy_case",
-                "episodes": "3",
-                "success_mean": "0.90",
-                "collisions_mean": "0.00",
-                "near_misses_mean": "0.10",
-                "time_to_goal_norm_mean": "0.35",
-                "snqi_mean": "0.20",
-            },
-            {
-                "planner_key": "goal",
-                "algo": "goal",
-                "scenario_family": "hard_family",
-                "scenario_id": "hard_case",
-                "episodes": "3",
-                "success_mean": "0.35",
-                "collisions_mean": "0.45",
-                "near_misses_mean": "0.70",
-                "time_to_goal_norm_mean": "0.85",
-                "snqi_mean": "-0.40",
-            },
-            {
-                "planner_key": "orca",
-                "algo": "orca",
-                "scenario_family": "hard_family",
-                "scenario_id": "hard_case",
-                "episodes": "3",
-                "success_mean": "0.40",
-                "collisions_mean": "0.35",
-                "near_misses_mean": "0.65",
-                "time_to_goal_norm_mean": "0.80",
-                "snqi_mean": "-0.30",
-            },
-        ],
+        planner_rows=_three_core_planner_rows(),
+        scenario_breakdown_rows=_with_third_planner(
+            [
+                {
+                    "planner_key": "goal",
+                    "algo": "goal",
+                    "scenario_family": "easy_family",
+                    "scenario_id": "easy_case",
+                    "episodes": "3",
+                    "success_mean": "0.95",
+                    "collisions_mean": "0.00",
+                    "near_misses_mean": "0.05",
+                    "time_to_goal_norm_mean": "0.30",
+                    "snqi_mean": "0.30",
+                },
+                {
+                    "planner_key": "orca",
+                    "algo": "orca",
+                    "scenario_family": "easy_family",
+                    "scenario_id": "easy_case",
+                    "episodes": "3",
+                    "success_mean": "0.90",
+                    "collisions_mean": "0.00",
+                    "near_misses_mean": "0.10",
+                    "time_to_goal_norm_mean": "0.35",
+                    "snqi_mean": "0.20",
+                },
+                {
+                    "planner_key": "goal",
+                    "algo": "goal",
+                    "scenario_family": "hard_family",
+                    "scenario_id": "hard_case",
+                    "episodes": "3",
+                    "success_mean": "0.35",
+                    "collisions_mean": "0.45",
+                    "near_misses_mean": "0.70",
+                    "time_to_goal_norm_mean": "0.85",
+                    "snqi_mean": "-0.40",
+                },
+                {
+                    "planner_key": "orca",
+                    "algo": "orca",
+                    "scenario_family": "hard_family",
+                    "scenario_id": "hard_case",
+                    "episodes": "3",
+                    "success_mean": "0.40",
+                    "collisions_mean": "0.35",
+                    "near_misses_mean": "0.65",
+                    "time_to_goal_norm_mean": "0.80",
+                    "snqi_mean": "-0.30",
+                },
+            ]
+        ),
         seed_variability_payload=_seed_payload(),
         preview_payload=_preview_payload(),
         verified_simple_manifest_path=manifest,
@@ -823,8 +874,8 @@ def test_build_scenario_difficulty_marks_verified_simple_candidate_noisy_when_re
     ]
 
     analysis = build_scenario_difficulty_analysis(
-        planner_rows=_planner_rows()[:2],
-        scenario_breakdown_rows=scenario_rows,
+        planner_rows=_three_core_planner_rows(),
+        scenario_breakdown_rows=_with_third_planner(scenario_rows),
         seed_variability_payload=seed_payload,
         preview_payload=_preview_payload(),
         verified_simple_manifest_path=manifest,
@@ -848,13 +899,15 @@ def test_verified_simple_assessment_does_not_claim_support_without_noise_evidenc
     )
 
     assessment = _verified_simple_assessment(
-        [
-            {"planner_key": "goal", "scenario_id": "easy_case", "success_mean": "0.95"},
-            {"planner_key": "orca", "scenario_id": "easy_case", "success_mean": "0.90"},
-            {"planner_key": "goal", "scenario_id": "hard_case", "success_mean": "0.45"},
-            {"planner_key": "orca", "scenario_id": "hard_case", "success_mean": "0.40"},
-        ],
-        _planner_row_index(_planner_rows()[:2]),
+        _with_third_planner(
+            [
+                {"planner_key": "goal", "scenario_id": "easy_case", "success_mean": "0.95"},
+                {"planner_key": "orca", "scenario_id": "easy_case", "success_mean": "0.90"},
+                {"planner_key": "goal", "scenario_id": "hard_case", "success_mean": "0.45"},
+                {"planner_key": "orca", "scenario_id": "hard_case", "success_mean": "0.40"},
+            ]
+        ),
+        _planner_row_index(_three_core_planner_rows()),
         manifest_path=manifest,
     )
 

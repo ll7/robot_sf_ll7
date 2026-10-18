@@ -1,0 +1,29 @@
+{
+  "outcome_incidence": {
+    "rows": 840,
+    "statuses": {
+      "flagged": 453,
+      "clear": 387
+    },
+    "differences": 0,
+    "first_differences": []
+  },
+  "planner_cohort_shift": {
+    "rows": 840,
+    "statuses": {
+      "flagged": 690,
+      "clear": 150
+    },
+    "differences": 0,
+    "first_differences": []
+  },
+  "horizon_consistency": {
+    "rows": 840,
+    "statuses": {
+      "clear": 800,
+      "flagged": 40
+    },
+    "differences": 0,
+    "first_differences": []
+  }
+}

@@ -22,12 +22,10 @@ control/treatment telemetry, measured activation traces, an attempt ledger, and
 preserved receipts. Nothing here is campaign or evidence-admission authority,
 and no benchmark, planner, or simulator semantics are changed.
 
-Known fixture-path limitation (observed, not worked around): a
-``single_pedestrian_start_delay_offset`` intervention holds the pedestrian but
-the canonical release path leaves ``max_speeds`` at zero, so the delayed
-pedestrian never moves. Such candidates resolve to ``unavailable`` with reason
-``intervention_not_executable`` instead of synthesizing motion. Simulator
-behavior itself is out of scope for this leaf.
+Start-delay activation is derived from executed pedestrian motion-onset and
+displacement telemetry. A delay candidate whose measured telemetry does not
+show the configured onset shift with actual motion remains ``unavailable``;
+this component never synthesizes motion.
 """
 
 from __future__ import annotations
@@ -113,7 +111,6 @@ SUPPORTED_FACTORS = (
     "single_pedestrian_speed_offset",
     "single_pedestrian_start_delay_offset",
 )
-EXECUTABLE_FACTORS = ("single_pedestrian_speed_offset",)
 SUPPORTED_MEASUREMENTS = (
     "min_robot_ped_distance_m",
     "ped_mean_speed_m_s",
@@ -1158,6 +1155,7 @@ def _execute_episode_job(job: dict[str, Any]) -> dict[str, Any]:
             return {"status": "error", "error": identity_error}
         import numpy as np  # noqa: PLC0415 - lazy: keep module import light
 
+        from robot_sf.benchmark.runtime_seed_guard import check_simulation_seed  # noqa: PLC0415 - lazy: child-process sim stack
         from robot_sf.common.seed import set_global_seed  # noqa: PLC0415 - lazy: child-process sim stack
         from robot_sf.gym_env.unified_config import RobotSimulationConfig  # noqa: PLC0415 - lazy: child-process sim stack
         from robot_sf.nav.global_route import GlobalRoute  # noqa: PLC0415 - lazy: child-process sim stack
@@ -1170,6 +1168,7 @@ def _execute_episode_job(job: dict[str, Any]) -> dict[str, Any]:
         from robot_sf.sim.sim_config import SimulationSettings  # noqa: PLC0415 - lazy: child-process sim stack
         from robot_sf.sim.simulator import init_simulators  # noqa: PLC0415 - lazy: child-process sim stack
 
+        check_simulation_seed(job["seed"], boundary="review_execute episode")
         set_global_seed(int(job["seed"]))
         horizon = int(job["horizon_steps"])
         robot_speed = float(job["robot_speed_m_s"])
@@ -1213,6 +1212,7 @@ def _execute_episode_job(job: dict[str, Any]) -> dict[str, Any]:
         env_config = RobotSimulationConfig(
             map_pool=MapDefinitionPool(map_defs={"srev22-tiny-crossing": map_def}),
             sim_config=SimulationSettings(
+                pedestrian_seed=int(job["seed"]),
                 difficulty=0,
                 ped_density_by_difficulty=[0.0],
                 population_size=1,
@@ -1476,14 +1476,133 @@ def _intervention_update(
         return None, "dt_s exceeds the fixture bound of 5.0 s"
     if control_delay + float(delay_delta) < 0.0:
         return None, "updated start delay would be negative"
-    # Observed canonical-simulator limitation: the start-delay release path leaves
-    # max_speeds at zero, so the delayed pedestrian never moves. Never synthesize
-    # motion; report the candidate as unavailable instead.
-    return None, (
-        "intervention_not_executable: the canonical single-pedestrian start-delay "
-        "release path holds max_speeds at zero, so the delayed pedestrian never "
-        "moves on the fixture path; refusing to synthesize motion"
+    return {
+        "ped_speed_m_s": control_speed,
+        "ped_start_delay_s": control_delay + float(delay_delta),
+    }, None
+
+
+def _scheduled_start_delay_steps(delay_s: float) -> int:
+    """Count release ticks using the simulator's repeated-subtraction schedule.
+
+    Returns:
+        Number of simulator ticks until the configured delay reaches zero.
+    """
+    remaining_s = delay_s
+    steps = 0
+    while remaining_s > 0.0:
+        remaining_s = max(0.0, remaining_s - _DT_S)
+        steps += 1
+    return steps
+
+
+def _configured_onset_shift_steps(control_delay_s: float, treatment_delay_s: float) -> int:
+    """Map configured delays to their discrete telemetry onset-step shift.
+
+    Returns:
+        Difference between treatment and control release-tick counts.
+    """
+    return _scheduled_start_delay_steps(treatment_delay_s) - _scheduled_start_delay_steps(
+        control_delay_s
     )
+
+
+def _activation_flags(
+    *,
+    factor: str,
+    control_metrics: dict[str, Any],
+    treatment_metrics: dict[str, Any],
+    motion_epsilon_m: float,
+    activation_speed_tolerance_m_s: float,
+    control_delay_s: float,
+    treatment_delay_s: float,
+) -> tuple[bool, bool]:
+    """Derive activation flags from executed telemetry for one pair.
+
+    Returns:
+        Control and treatment activation flags, in that order.
+    """
+    control_activated = float(control_metrics["ped_displacement_m"]) > motion_epsilon_m
+    if factor == "single_pedestrian_start_delay_offset":
+        expected_onset_shift = _configured_onset_shift_steps(control_delay_s, treatment_delay_s)
+        measured_onset_shift = int(treatment_metrics["ped_motion_onset_step"]) - int(
+            control_metrics["ped_motion_onset_step"]
+        )
+        treatment_activated = (
+            control_activated
+            and float(treatment_metrics["ped_displacement_m"]) > motion_epsilon_m
+            and expected_onset_shift != 0
+            and measured_onset_shift == expected_onset_shift
+        )
+    else:
+        treatment_activated = (
+            abs(
+                float(treatment_metrics["ped_mean_speed_m_s"])
+                - float(control_metrics["ped_mean_speed_m_s"])
+            )
+            > activation_speed_tolerance_m_s
+        )
+    return control_activated, treatment_activated
+
+
+def _start_delay_unavailable_reason(
+    *,
+    control_metrics: dict[str, Any],
+    treatment_metrics: dict[str, Any],
+    motion_epsilon_m: float,
+    control_delay_s: float,
+    treatment_delay_s: float,
+) -> str:
+    """Describe a start-delay candidate whose measured telemetry did not activate.
+
+    Returns:
+        Typed reason with the measured and configured onset evidence.
+    """
+    control_onset = int(control_metrics["ped_motion_onset_step"])
+    treatment_onset = int(treatment_metrics["ped_motion_onset_step"])
+    observed_shift = treatment_onset - control_onset
+    expected_shift = _configured_onset_shift_steps(control_delay_s, treatment_delay_s)
+    displacement = float(treatment_metrics["ped_displacement_m"])
+    if displacement <= motion_epsilon_m:
+        return (
+            "intervention_not_activated: treatment pedestrian displacement "
+            f"{displacement:.6f} m did not exceed motion_epsilon_m {motion_epsilon_m:.6f} m "
+            f"(control onset {control_onset}, treatment onset {treatment_onset}, "
+            f"configured onset shift {expected_shift} steps)"
+        )
+    if expected_shift == 0:
+        return (
+            "intervention_not_activated: configured start-delay offset did not change "
+            f"the discrete release step (measured onset shift {observed_shift} steps, "
+            f"treatment displacement {displacement:.6f} m)"
+        )
+    return (
+        "intervention_not_activated: measured pedestrian motion onset shift "
+        f"{observed_shift} steps did not match configured start-delay shift "
+        f"{expected_shift} steps (control onset {control_onset}, treatment onset "
+        f"{treatment_onset}, treatment displacement {displacement:.6f} m)"
+    )
+
+
+def _treatment_start_delay_s(
+    candidate_id: str, *, config: ExecuteConfig, recipe: dict[str, Any]
+) -> float:
+    """Resolve the validated start-delay treatment value for resume verification.
+
+    Returns:
+        Effective treatment start delay in seconds.
+    """
+    control_conditions = recipe["control_conditions"]
+    control_delay = float(control_conditions.get("ped_start_delay_s", 0.0))
+    update, reason = _intervention_update(
+        "single_pedestrian_start_delay_offset",
+        config.intervention_parameters.get(candidate_id),
+        control_speed=float(control_conditions.get("ped_speed_m_s", 1.0)),
+        control_delay=control_delay,
+    )
+    if update is None or reason is not None:
+        raise ValueError("start-delay treatment parameters are invalid")
+    return float(update["ped_start_delay_s"])
 
 
 def _specs_match_except(
@@ -1592,6 +1711,12 @@ def _verify_resume_envelope(  # noqa: C901, PLR0912, PLR0915
         for trace in traces
         if isinstance(trace.get("intervention_id"), str)
     }
+    candidate_factors = {
+        str(candidate["intervention_id"]): str(candidate.get("factor", ""))
+        for candidate in recipe.get("interventions", [])
+        if isinstance(candidate, dict) and isinstance(candidate.get("intervention_id"), str)
+    }
+    attempt_backed_unavailable_ids: set[str] = set()
     measurement, _measurement_error = _measurement_for_recipe(recipe)
     has_complete = any(report.get("status") == "complete" for report in reports)
     if has_complete and measurement is None:
@@ -1603,22 +1728,124 @@ def _verify_resume_envelope(  # noqa: C901, PLR0912, PLR0915
         candidate_id = str(report.get("intervention_id", ""))
         status = report.get("status")
         if status == "unavailable":
-            if any(cid == candidate_id for cid, _kind in attempt_index):
+            control_entry = attempt_index.get((candidate_id, "control"))
+            treatment_entry = attempt_index.get((candidate_id, "treatment"))
+            if control_entry is None and treatment_entry is None:
+                if candidate_id in traces_by_id:
+                    raise ReviewExecuteError(
+                        [
+                            f"cannot resume: unavailable candidate {candidate_id} has an activation trace"
+                        ]
+                    )
+                if any(cid == candidate_id for cid, _kind in attempt_index):
+                    raise ReviewExecuteError(
+                        [
+                            f"cannot resume: candidate report {candidate_id} is inconsistent with attempts"
+                        ]
+                    )
+                if any(
+                    key in report
+                    for key in (
+                        "control_metrics",
+                        "treatment_metrics",
+                        "control_activated",
+                        "treatment_activated",
+                    )
+                ):
+                    raise ReviewExecuteError(
+                        [f"cannot resume: candidate report {candidate_id} metrics are inconsistent"]
+                    )
+                continue
+            if candidate_factors.get(candidate_id) != "single_pedestrian_start_delay_offset":
                 raise ReviewExecuteError(
                     [
-                        f"cannot resume: candidate report {candidate_id} is inconsistent with attempts"
+                        f"cannot resume: unavailable candidate {candidate_id} is inconsistent with attempts"
                     ]
                 )
-            if "control_metrics" in report or "treatment_metrics" in report:
+            if (
+                control_entry is None
+                or treatment_entry is None
+                or control_entry.get("status") != "ok"
+                or treatment_entry.get("status") != "ok"
+            ):
                 raise ReviewExecuteError(
-                    [f"cannot resume: candidate report {candidate_id} metrics are inconsistent"]
+                    [f"cannot resume: unavailable candidate {candidate_id} is not reproducible"]
                 )
+            control_metrics = control_entry.get("metrics")
+            treatment_metrics = treatment_entry.get("metrics")
+            report_control = report.get("control_metrics")
+            report_treatment = report.get("treatment_metrics")
+            if (
+                not isinstance(control_metrics, dict)
+                or not isinstance(treatment_metrics, dict)
+                or not isinstance(report_control, dict)
+                or not isinstance(report_treatment, dict)
+                or _canonical_digest(report_control) != _canonical_digest(control_metrics)
+                or _canonical_digest(report_treatment) != _canonical_digest(treatment_metrics)
+            ):
+                raise ReviewExecuteError(
+                    [
+                        f"cannot resume: unavailable candidate {candidate_id} metrics are inconsistent"
+                    ]
+                )
+            if report.get("factor") != candidate_factors[candidate_id]:
+                raise ReviewExecuteError(
+                    [f"cannot resume: unavailable candidate {candidate_id} factor is inconsistent"]
+                )
+            control_delay = float(recipe["control_conditions"].get("ped_start_delay_s", 0.0))
+            try:
+                treatment_delay = _treatment_start_delay_s(
+                    candidate_id, config=config, recipe=recipe
+                )
+                expected_control_activated, expected_treatment_activated = _activation_flags(
+                    factor="single_pedestrian_start_delay_offset",
+                    control_metrics=control_metrics,
+                    treatment_metrics=treatment_metrics,
+                    motion_epsilon_m=config.motion_epsilon_m,
+                    activation_speed_tolerance_m_s=config.activation_speed_tolerance_m_s,
+                    control_delay_s=control_delay,
+                    treatment_delay_s=treatment_delay,
+                )
+                expected_control_robot_activated = (
+                    float(control_metrics["robot_displacement_m"]) > config.motion_epsilon_m
+                )
+                expected_reason = _start_delay_unavailable_reason(
+                    control_metrics=control_metrics,
+                    treatment_metrics=treatment_metrics,
+                    motion_epsilon_m=config.motion_epsilon_m,
+                    control_delay_s=control_delay,
+                    treatment_delay_s=treatment_delay,
+                )
+            except (KeyError, TypeError, ValueError):
+                raise ReviewExecuteError(
+                    [
+                        f"cannot resume: unavailable candidate {candidate_id} activation is inconsistent"
+                    ]
+                ) from None
+            if (
+                expected_treatment_activated
+                or not expected_control_activated
+                or not expected_control_robot_activated
+                or report.get("control_activated") is not expected_control_activated
+                or report.get("treatment_activated") is not False
+                or report.get("reason") != expected_reason
+            ):
+                raise ReviewExecuteError(
+                    [
+                        f"cannot resume: unavailable candidate {candidate_id} activation is inconsistent"
+                    ]
+                )
+            attempt_backed_unavailable_ids.add(candidate_id)
             continue
         control_entry = attempt_index.get((candidate_id, "control"))
         treatment_entry = attempt_index.get((candidate_id, "treatment"))
         report_control = report.get("control_metrics")
         report_treatment = report.get("treatment_metrics")
         if status == "complete":
+            if report.get("factor") != candidate_factors.get(candidate_id):
+                raise ReviewExecuteError(
+                    [f"cannot resume: candidate report {candidate_id} factor is inconsistent"]
+                )
             if (
                 control_entry is None
                 or treatment_entry is None
@@ -1645,15 +1872,21 @@ def _verify_resume_envelope(  # noqa: C901, PLR0912, PLR0915
                     [f"cannot resume: candidate report {candidate_id} metrics are inconsistent"]
                 )
             try:
-                expected_control_activated = (
-                    float(control_metrics["ped_displacement_m"]) > config.motion_epsilon_m
+                factor = candidate_factors.get(candidate_id, "")
+                control_delay = float(recipe["control_conditions"].get("ped_start_delay_s", 0.0))
+                treatment_delay = (
+                    _treatment_start_delay_s(candidate_id, config=config, recipe=recipe)
+                    if factor == "single_pedestrian_start_delay_offset"
+                    else control_delay
                 )
-                expected_treatment_activated = (
-                    abs(
-                        float(treatment_metrics["ped_mean_speed_m_s"])
-                        - float(control_metrics["ped_mean_speed_m_s"])
-                    )
-                    > config.activation_speed_tolerance_m_s
+                expected_control_activated, expected_treatment_activated = _activation_flags(
+                    factor=factor,
+                    control_metrics=control_metrics,
+                    treatment_metrics=treatment_metrics,
+                    motion_epsilon_m=config.motion_epsilon_m,
+                    activation_speed_tolerance_m_s=config.activation_speed_tolerance_m_s,
+                    control_delay_s=control_delay,
+                    treatment_delay_s=treatment_delay,
                 )
             except (KeyError, TypeError, ValueError):
                 raise ReviewExecuteError(
@@ -1714,9 +1947,12 @@ def _verify_resume_envelope(  # noqa: C901, PLR0912, PLR0915
     for trace in traces:
         candidate_id = str(trace.get("intervention_id", ""))
         report = reports_by_id.get(candidate_id)
-        if report is None or report.get("status") != "complete":
+        if report is None or (
+            report.get("status") != "complete"
+            and candidate_id not in attempt_backed_unavailable_ids
+        ):
             raise ReviewExecuteError(
-                [f"cannot resume: activation trace {candidate_id} has no complete report"]
+                [f"cannot resume: activation trace {candidate_id} has no measured report"]
             )
         control_entry = attempt_index.get((candidate_id, "control"))
         treatment_entry = attempt_index.get((candidate_id, "treatment"))
@@ -1744,15 +1980,23 @@ def _verify_resume_envelope(  # noqa: C901, PLR0912, PLR0915
                 [f"cannot resume: activation trace {candidate_id} metrics are inconsistent"]
             )
         try:
-            expected_control_activated = (
-                float(control_metrics["ped_displacement_m"]) > config.motion_epsilon_m
+            factor = candidate_factors.get(candidate_id, "")
+            if report.get("factor") != factor or trace.get("factor") != factor:
+                raise ValueError("activation factor does not match recipe")
+            control_delay = float(recipe["control_conditions"].get("ped_start_delay_s", 0.0))
+            treatment_delay = (
+                _treatment_start_delay_s(candidate_id, config=config, recipe=recipe)
+                if factor == "single_pedestrian_start_delay_offset"
+                else control_delay
             )
-            expected_treatment_activated = (
-                abs(
-                    float(treatment_metrics["ped_mean_speed_m_s"])
-                    - float(control_metrics["ped_mean_speed_m_s"])
-                )
-                > config.activation_speed_tolerance_m_s
+            expected_control_activated, expected_treatment_activated = _activation_flags(
+                factor=factor,
+                control_metrics=control_metrics,
+                treatment_metrics=treatment_metrics,
+                motion_epsilon_m=config.motion_epsilon_m,
+                activation_speed_tolerance_m_s=config.activation_speed_tolerance_m_s,
+                control_delay_s=control_delay,
+                treatment_delay_s=treatment_delay,
             )
         except (KeyError, TypeError, ValueError):
             raise ReviewExecuteError(
@@ -1773,6 +2017,11 @@ def _verify_resume_envelope(  # noqa: C901, PLR0912, PLR0915
             )
     for candidate_id, report in reports_by_id.items():
         if report.get("status") == "complete" and candidate_id not in traces_by_id:
+            raise ReviewExecuteError(
+                [f"cannot resume: activation trace {candidate_id} is inconsistent"]
+            )
+    for candidate_id in attempt_backed_unavailable_ids:
+        if candidate_id not in traces_by_id:
             raise ReviewExecuteError(
                 [f"cannot resume: activation trace {candidate_id} is inconsistent"]
             )
@@ -2040,6 +2289,7 @@ class _Executor:
             seen_traces.add(candidate_id)
             validated_traces.append(dict(trace))
 
+        measured_unavailable_ids: set[str] = set()
         for report in validated_reports:
             candidate_id = report["intervention_id"]
             matching_attempts = [
@@ -2069,6 +2319,47 @@ class _Executor:
                     raise ReviewExecuteError(
                         [f"cannot resume: complete candidate {candidate_id} metrics are invalid"]
                     )
+            elif report["status"] == "unavailable":
+                has_metrics = any(key in report for key in ("control_metrics", "treatment_metrics"))
+                if has_metrics:
+                    if (
+                        {entry["kind"] for entry in matching_attempts} != {"control", "treatment"}
+                        or any(entry["status"] != "ok" for entry in matching_attempts)
+                        or not isinstance(report.get("control_metrics"), dict)
+                        or not isinstance(report.get("treatment_metrics"), dict)
+                        or report.get("nonintervened_config_match") is not True
+                        or not isinstance(report.get("control_activated"), bool)
+                        or report.get("treatment_activated") is not False
+                        or not str(report.get("reason", "")).startswith(
+                            "intervention_not_activated:"
+                        )
+                    ):
+                        raise ReviewExecuteError(
+                            [
+                                f"cannot resume: unavailable candidate {candidate_id} is not reproducible"
+                            ]
+                        )
+                    if any(
+                        not isinstance(report.get(key), dict)
+                        or set(report[key]) != REQUIRED_TELEMETRY_METRICS
+                        or any(
+                            not _is_finite_number(report[key][metric])
+                            for metric in REQUIRED_TELEMETRY_METRICS
+                        )
+                        for key in ("control_metrics", "treatment_metrics")
+                    ):
+                        raise ReviewExecuteError(
+                            [
+                                f"cannot resume: unavailable candidate {candidate_id} metrics are invalid"
+                            ]
+                        )
+                    measured_unavailable_ids.add(candidate_id)
+                elif matching_attempts or any(
+                    key in report for key in ("control_activated", "treatment_activated")
+                ):
+                    raise ReviewExecuteError(
+                        [f"cannot resume: unavailable candidate {candidate_id} is not reproducible"]
+                    )
             elif report["status"] == "failed":
                 for key in ("control_metrics", "treatment_metrics"):
                     if key in report and (
@@ -2082,11 +2373,15 @@ class _Executor:
                         raise ReviewExecuteError(
                             [f"cannot resume: candidate report {candidate_id} metrics are invalid"]
                         )
-        if seen_traces != {
-            report["intervention_id"]
-            for report in validated_reports
-            if report["status"] == "complete"
-        }:
+        if (
+            seen_traces
+            != {
+                report["intervention_id"]
+                for report in validated_reports
+                if report["status"] == "complete"
+            }
+            | measured_unavailable_ids
+        ):
             raise ReviewExecuteError(["cannot resume: activation traces do not match reports"])
         _verify_resume_envelope(
             attempts=validated_attempts,
@@ -2375,11 +2670,47 @@ class _Executor:
         treatment_metrics = treatment_attempt["metrics"]
         metric_name = str(measurement["name"])
         expected_direction = str(measurement["expected_direction"])
-        control_activated = control_metrics["ped_displacement_m"] > self.config.motion_epsilon_m
-        treatment_activated = (
-            abs(treatment_metrics["ped_mean_speed_m_s"] - control_metrics["ped_mean_speed_m_s"])
-            > self.config.activation_speed_tolerance_m_s
+        control_activated, treatment_activated = _activation_flags(
+            factor=factor,
+            control_metrics=control_metrics,
+            treatment_metrics=treatment_metrics,
+            motion_epsilon_m=self.config.motion_epsilon_m,
+            activation_speed_tolerance_m_s=self.config.activation_speed_tolerance_m_s,
+            control_delay_s=control_spec["ped_start_delay_s"],
+            treatment_delay_s=treatment_spec["ped_start_delay_s"],
         )
+        if factor == "single_pedestrian_start_delay_offset" and not treatment_activated:
+            unavailable_reason = _start_delay_unavailable_reason(
+                control_metrics=control_metrics,
+                treatment_metrics=treatment_metrics,
+                motion_epsilon_m=self.config.motion_epsilon_m,
+                control_delay_s=control_spec["ped_start_delay_s"],
+                treatment_delay_s=treatment_spec["ped_start_delay_s"],
+            )
+            self._traces.append(
+                {
+                    "schema_version": ACTIVATION_TRACE_SCHEMA_VERSION,
+                    "intervention_id": candidate_id,
+                    "factor": factor,
+                    "control_activated": control_activated,
+                    "treatment_activated": treatment_activated,
+                    "control_metrics": control_metrics,
+                    "treatment_metrics": treatment_metrics,
+                }
+            )
+            report = {
+                "intervention_id": candidate_id,
+                "factor": factor,
+                "status": "unavailable",
+                "reason": unavailable_reason,
+                "control_metrics": control_metrics,
+                "treatment_metrics": treatment_metrics,
+                "control_activated": control_activated,
+                "treatment_activated": treatment_activated,
+                "nonintervened_config_match": True,
+            }
+            self._record_candidate_report(report)
+            return report
         pair_result = evaluate_counterfactual_pair(
             {
                 "mechanism_activated": control_activated,

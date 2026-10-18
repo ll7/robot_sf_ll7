@@ -14,7 +14,7 @@ fail-closed preflight as ``gh-pr-merger``:
   - a current ``pr-metadata: reconciled @ <digest>`` trailer binding the
     final PR title/body to the review evidence,
   - a successful ``changed-coverage-gate`` check on the exact live PR head, or
-    a proven docs-only changed-file set covered by CI's ``paths-ignore`` rules,
+    a proven docs-only changed-file set covered by CI's internal admission manifest,
   - no unresolved actionable review threads,
   - no outstanding explicitly requested reviewers,
   - no unexpired trusted exact-head ``review-claim`` held by an active review

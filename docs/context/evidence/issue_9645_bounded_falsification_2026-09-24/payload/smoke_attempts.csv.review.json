@@ -1,0 +1,7 @@
+{
+  "artifact_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/smoke_attempts.csv",
+  "artifact_sha256": "0ee5d2f26352fa0c487b7b5c5dd2a96443a9238072fb5f12c3e140568a454a6b",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "evidence-review-marker.v1"
+}

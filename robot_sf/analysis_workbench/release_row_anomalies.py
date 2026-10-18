@@ -39,7 +39,8 @@ from robot_sf.benchmark.event_ledger import EPISODE_EVENT_LEDGER_SCHEMA_VERSION
 
 SCHEMA_VERSION = "release-row-anomalies.v1"
 DETECTOR_VERSION = "1.0.1"
-COLLISION_DETECTOR_VERSION = "1.1.0"
+COLLISION_DETECTOR_VERSION = "1.1.1"
+ORBIT_DETECTOR_VERSION = "1.1.0"
 DEFAULT_CONFIG: dict[str, Any] = {
     "short_collision_max_steps": 20,
     "same_step_max_steps": 20,
@@ -427,6 +428,29 @@ def _collision_integer_count(value: object) -> tuple[int | None, str | None]:
     return None, "missing_or_nonfinite"
 
 
+def _typed_ledger_identity_problems(row: Mapping[str, Any], ledger: Mapping[str, Any]) -> list[str]:
+    """Bind typed reconciliation to the episode that produced it.
+
+    Returns:
+        Named identity mismatches; arm labels may differ from runtime algorithms.
+    """
+    problems: list[str] = []
+    identity = {
+        "scenario_id": row["scenario_id"],
+        "seed": row["seed"],
+        "planner": str(row.get("algo") or row.get("planner") or "unknown"),
+        "software_commit": str(row["git_hash"]) if row.get("git_hash") is not None else None,
+    }
+    for field, expected in identity.items():
+        if (
+            field not in ledger
+            or ledger[field] != expected
+            or (field == "seed" and type(ledger[field]) is not int)
+        ):
+            problems.append(f"ledger_{field}_mismatch")
+    return problems
+
+
 def _typed_ledger_collision_problems(row: Mapping[str, Any], total: int | None) -> list[str]:
     """Check equivalent typed-ledger fields without counting exact events.
 
@@ -440,6 +464,7 @@ def _typed_ledger_collision_problems(row: Mapping[str, Any], total: int | None) 
     if ledger["schema_version"] != EPISODE_EVENT_LEDGER_SCHEMA_VERSION:
         return ["unsupported_event_ledger_schema"]
     problems: list[str] = []
+    problems.extend(_typed_ledger_identity_problems(row, ledger))
     reconciliation = ledger.get("reconciliation")
     exact = ledger.get("exact_events")
     if not isinstance(reconciliation, Mapping):
@@ -655,7 +680,11 @@ def _new_finding(  # noqa: PLR0913
         "finding_id": _finding_id(detector_id, scope, source),
         "detector_id": detector_id,
         "detector_version": (
-            COLLISION_DETECTOR_VERSION if detector_id == COLLISION_DETECTOR_ID else DETECTOR_VERSION
+            COLLISION_DETECTOR_VERSION
+            if detector_id == COLLISION_DETECTOR_ID
+            else ORBIT_DETECTOR_VERSION
+            if detector_id == "orbit_zero_progress"
+            else DETECTOR_VERSION
         ),
         "reason_code": reason,
         "scenario_id": scenario_id,
@@ -711,7 +740,7 @@ def release_row_registry(config: Mapping[str, Any] | None = None) -> DetectorReg
         "same_step_all_planners": "All complete planner arms fail one cell at the same early step.",
         "short_collision": "A collision terminates within the configured step bound.",
         "impossible_contact_speed": "Recorded relative contact speed exceeds a physical limit.",
-        "orbit_zero_progress": "Recorded curvature, displacement, progress, or deadlock indicates a stall.",
+        "orbit_zero_progress": "Recorded curvature, displacement, progress, or deadlock_stall windows indicate a stall.",
         "pedestrian_free_baseline_regression": "Paired pedestrian-free success is worse than blind goal.",
         "universal_failure_unannotated": "Every planner fails a cell without root-cause annotation.",
         "invalid_run_preflight_mismatch": "Episode invalid_run differs from scenario-seed preflight.",
@@ -753,6 +782,8 @@ def release_row_registry(config: Mapping[str, Any] | None = None) -> DetectorReg
             version=(
                 COLLISION_DETECTOR_VERSION
                 if detector_id == COLLISION_DETECTOR_ID
+                else ORBIT_DETECTOR_VERSION
+                if detector_id == "orbit_zero_progress"
                 else DETECTOR_VERSION
             ),
             required_capabilities=("episode",),
@@ -785,12 +816,29 @@ def analyze_release_rows(  # noqa: C901, PLR0912, PLR0915
     """
 
     settings = _configured(config)
-    registry = release_row_registry(settings)
     records, observed_planners = _rows(rows)
+    # Source manifests declare the denominator; legacy defaults describe only
+    # the historical pedestrian comparison cohort.
+    if (
+        source
+        and "planner_ids" in source
+        and (config is None or "pedestrian_aware_planners" not in config)
+    ):
+        roster = sorted(_unique_string_ids(source["planner_ids"], "source.planner_ids"))
+        settings["pedestrian_aware_planners"] = [
+            planner for planner in roster if planner != settings["baseline_planner"]
+        ]
+    registry = release_row_registry(settings)
     try:
         source_info = json.loads(canonical_json(dict(source or {})))
     except (AuditContractError, TypeError, ValueError, RecursionError) as error:
         raise ReleaseRowError("source identity must be strict JSON") from error
+    if (
+        source
+        and "planner_ids" in source
+        and (config is None or "pedestrian_aware_planners" not in config)
+    ):
+        source_info["cohort_source"] = "manifest_planner_ids"
     source_info["detector_registry_digest"] = registry.digest
     expected_planners = source_info.get("planner_ids", observed_planners)
     if (
@@ -1007,17 +1055,22 @@ def analyze_release_rows(  # noqa: C901, PLR0912, PLR0915
             path_length = _finite(metrics.get("socnavbench_path_length"))
             displacement, displacement_source = _displacement(row)
             progress_ratio = _progress_ratio(row)
-            deadlock = metrics.get("deadlock")
-            if deadlock is not None and type(deadlock) is not bool:
-                raise ReleaseRowError("metrics.deadlock must be a boolean when present")
+            stall = metrics.get("deadlock_stall")
+            stall_count = None
+            if isinstance(stall, Mapping) and stall.get("status") == "ok":
+                stall_count = _finite(stall.get("stall_window_count"))
+                if stall_count is None or stall_count < 0 or not stall_count.is_integer():
+                    raise ReleaseRowError(
+                        "deadlock_stall.stall_window_count must be a nonnegative integer"
+                    )
             if curvature is None:
                 missingness["curvature_unavailable"] += 1
             if path_length is None:
                 missingness["path_length_unavailable"] += 1
             if displacement is None:
                 missingness["displacement_unavailable"] += 1
-            if deadlock is None:
-                missingness["deadlock_unavailable"] += 1
+            if stall_count is None:
+                missingness["deadlock_stall_unavailable"] += 1
             if progress_ratio is None:
                 missingness["progress_ratio_unavailable"] += 1
             orbit = (
@@ -1038,7 +1091,10 @@ def analyze_release_rows(  # noqa: C901, PLR0912, PLR0915
                 and progress_ratio <= settings["max_progress_ratio"]
                 and path_length >= settings["min_orbit_path_length_m"]
             )
-            if orbit or zero_progress or low_progress_ratio or deadlock is True:
+            deadlock_stall = (
+                stall_count is not None and stall_count > 0 and not row["outcome"]["route_complete"]
+            )
+            if orbit or zero_progress or low_progress_ratio or deadlock_stall:
                 append(
                     _new_finding(
                         "orbit_zero_progress",
@@ -1052,14 +1108,14 @@ def analyze_release_rows(  # noqa: C901, PLR0912, PLR0915
                             "displacement_m": displacement,
                             "displacement_source": displacement_source,
                             "progress_ratio": progress_ratio,
-                            "deadlock": deadlock,
+                            "deadlock_stall_window_count": stall_count,
                             "signatures": [
                                 name
                                 for name, active in (
                                     ("high_curvature", orbit),
                                     ("low_displacement", zero_progress),
                                     ("low_progress_ratio", low_progress_ratio),
-                                    ("deadlock", deadlock is True),
+                                    ("deadlock_stall", deadlock_stall),
                                 )
                                 if active
                             ],

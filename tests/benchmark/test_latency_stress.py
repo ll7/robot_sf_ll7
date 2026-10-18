@@ -344,7 +344,11 @@ def test_harness_with_actual_planners(monkeypatch: pytest.MonkeyPatch) -> None:
             return None
 
     map_def = MagicMock()
-    dummy_config = type("Cfg", (), {"sim_config": type("SC", (), {"time_per_step_in_secs": 0.1})()})
+    dummy_config = type(
+        "Cfg",
+        (),
+        {"sim_config": type("SC", (), {"time_per_step_in_secs": 0.1, "max_sim_steps": 2})()},
+    )
 
     monkeypatch.setattr(
         "robot_sf.benchmark.map_runner.map_runner._build_env_config",

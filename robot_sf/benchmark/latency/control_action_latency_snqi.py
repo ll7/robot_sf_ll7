@@ -56,6 +56,10 @@ from robot_sf.benchmark.latency.control_action_latency_preflight import (
     AXIS_KEY,
     REQUIRED_LATENCY_STEPS,
 )
+from robot_sf.benchmark.metric_definitions import (
+    LEGACY_METRIC_SCHEMA_VERSION,
+    metric_schema_version,
+)
 from robot_sf.benchmark.snqi.compute import compute_snqi
 from robot_sf.errors import RobotSfError
 from robot_sf.evidence.writers import review_marker_comment, review_marker_json
@@ -180,6 +184,7 @@ INPUT_COLUMNS: tuple[str, ...] = (
     "near_miss_rate",
     "steps",
     "comfort_exposure_mean",
+    "metric_schema_version",
 )
 
 #: Execution modes that count as native benchmark-success rows (issue #691 policy,
@@ -254,6 +259,7 @@ class SnqiLatencyInput:
     comfort_exposure_mean: float
     classification: str
     exclusion_reason: str | None
+    metric_schema_version: str = LEGACY_METRIC_SCHEMA_VERSION
 
 
 def _coerce_int(value: Any) -> int | None:
@@ -378,6 +384,7 @@ def classify_input_row(row: Mapping[str, Any]) -> SnqiLatencyInput:
         comfort_exposure_mean=comfort if comfort is not None else float("nan"),
         classification=classification,
         exclusion_reason="; ".join(reasons) if reasons else None,
+        metric_schema_version=metric_schema_version(row),
     )
 
 
@@ -425,6 +432,7 @@ def derive_inputs_from_raw_rows(rows: Sequence[Mapping[str, Any]]) -> list[SnqiL
         metrics = row.get("metrics")
         metric_map = metrics if isinstance(metrics, Mapping) else {}
         promoted = {
+            "metric_schema_version": metric_schema_version(row),
             "planner_group": row.get("planner_group"),
             "planner": row.get("planner"),
             "latency_step": _latency_step_from_raw(row),
@@ -493,7 +501,11 @@ def load_input_rows(input_path: str | Path) -> list[SnqiLatencyInput]:
         raise SnqiLatencyAnalysisError(f"durable input {path} is not valid CSV: {exc}") from exc
     if reader.fieldnames is None:
         raise SnqiLatencyAnalysisError(f"durable input {path} has no header row")
-    missing = [column for column in INPUT_COLUMNS if column not in reader.fieldnames]
+    missing = [
+        column
+        for column in INPUT_COLUMNS
+        if column != "metric_schema_version" and column not in reader.fieldnames
+    ]
     if missing:
         raise SnqiLatencyAnalysisError(
             f"durable input {path} is missing required columns: {missing}"
@@ -502,6 +514,8 @@ def load_input_rows(input_path: str | Path) -> list[SnqiLatencyInput]:
     for record in records:
         # Coerce numeric fields that CSV stores as strings.
         coerced: dict[str, Any] = dict(record)
+        if not coerced.get("metric_schema_version"):
+            coerced.pop("metric_schema_version", None)
         for key in ("latency_step", "seed", "steps"):
             coerced[key] = _coerce_csv_int(record.get(key), key=key, path=path)
         for key in ("latency_ms", "time_to_goal_norm", "near_miss_rate", "comfort_exposure_mean"):
@@ -579,6 +593,7 @@ def write_input_rows(
                     "near_miss_rate": entry.near_miss_rate,
                     "steps": entry.steps,
                     "comfort_exposure_mean": entry.comfort_exposure_mean,
+                    "metric_schema_version": entry.metric_schema_version,
                 }
             )
     return path
@@ -827,9 +842,10 @@ def _execution_mode_for_group(inputs: Sequence[SnqiLatencyInput]) -> list[dict[s
 # ---------------------------------------------------------------------------
 
 
-def _snqi_metrics(entry: SnqiLatencyInput) -> dict[str, float | int | bool]:
+def _snqi_metrics(entry: SnqiLatencyInput) -> dict[str, Any]:
     """Build the SNQI-v0 metrics dict for one input row (matches input_mapping)."""
     return {
+        "metric_schema_version": entry.metric_schema_version,
         "success": entry.success,
         "time_to_goal_norm": entry.time_to_goal_norm,
         "collisions": int(bool(entry.collision)),

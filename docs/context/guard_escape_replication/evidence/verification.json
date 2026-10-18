@@ -1,0 +1,49 @@
+{
+  "schema": "guard-escape-replication.verification.v1",
+  "status": "diagnostic-only",
+  "passed": true,
+  "episodes": 2160,
+  "seed_blocks": 30,
+  "cells": 18,
+  "arms": 4,
+  "exclusions": 0,
+  "duplicates": 0,
+  "missing_slots": 0,
+  "execution_census": {
+    "adapter": 2160,
+    "native": 0,
+    "fallback": 0,
+    "degraded": 0
+  },
+  "declared_adapter": "HybridRuleLocalPlannerAdapter",
+  "robot_kinematics": "differential_drive",
+  "rates_byte_identical_on_reproduction": 48,
+  "contrasts_byte_identical_on_reproduction": 36,
+  "interval_pairs": 84,
+  "analyzer_unchanged": true,
+  "archived_acquisition_analyzer_csvs_byte_identical": true,
+  "independent_primary_max_absolute_error_proportion": 1.1102230246251565e-16,
+  "negative_controls_rejected": [
+    "missing_pair",
+    "duplicate_pair",
+    "fallback",
+    "factor_binding",
+    "contradictory_success",
+    "unregistered_seed"
+  ],
+  "registration_files_unchanged": true,
+  "push_precedes_acquisition": true,
+  "primary_complete_before_analysis": true,
+  "new_simulation_run": true,
+  "independent_seed_sets": true,
+  "manuscript_admission": false,
+  "not_run": [
+    "Full runtime test suite: no runtime edits; actual full factorial is task-specific executable validation",
+    "New identity/smoke episodes: preregistered complete run only, unchanged original runtime"
+  ],
+  "full_run_wandb_upload_attempts": 1,
+  "wandb_cold_readback_sha256_verified": true,
+  "ruff_version": "0.16.10",
+  "ruff_check_and_format_passed": true,
+  "documentation_ai_config_check_passed": true
+}

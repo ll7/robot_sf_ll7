@@ -57,9 +57,14 @@ class RobotState:
     sim_time_elapsed: float = field(init=False, default=0.0)
     timestep: int = field(init=False, default=0)
 
+    episode_step_limit: int | None = field(default=None, kw_only=True)
+    """Optional integer episode budget supplied directly by the environment config."""
+
     @property
     def max_sim_steps(self) -> int:
-        """Calculates the maximum number of simulation steps based on time limit."""
+        """Return the explicit step budget, or the ceiling of the duration-based limit."""
+        if self.episode_step_limit is not None:
+            return self.episode_step_limit
         return ceil(self.sim_time_limit / self.d_t)
 
     @property

@@ -34,6 +34,13 @@ from robot_sf.benchmark.runner import run_episode
 from robot_sf.render.audit_workbench import ServiceAuditWorkbenchFacade
 from robot_sf.render.audit_workbench_launch import open_live_audit_workbench
 
+# Every wait in this file is event based: a blocking socket read returns as soon
+# as the server answers and ``serve_forever``/``join`` return on shutdown.  This
+# value only bounds a genuine hang so CI fails instead of blocking.  It is a
+# hang guard, not a performance assertion; loaded self-hosted runners may take
+# far longer than a few seconds for a healthy request.
+HANG_GUARD_SECONDS = 60.0
+
 FIXTURE = (
     Path(__file__).resolve().parents[1]
     / "fixtures"
@@ -263,7 +270,7 @@ def test_live_related_cases_accepts_verified_source_row_alias(tmp_path: Path) ->
     server_thread = threading.Thread(target=opened.server.serve_forever, daemon=True)
     server_thread.start()
     try:
-        with urlopen(opened.url, timeout=15) as response:
+        with urlopen(opened.url, timeout=HANG_GUARD_SECONDS) as response:
             browser_cookie = response.headers["Set-Cookie"].split(";", 1)[0]
         parsed = urlsplit(opened.url)
         origin = f"{parsed.scheme}://{parsed.netloc}"
@@ -279,7 +286,7 @@ def test_live_related_cases_accepts_verified_source_row_alias(tmp_path: Path) ->
                 },
                 method="POST",
             )
-            with urlopen(request, timeout=15) as response:
+            with urlopen(request, timeout=HANG_GUARD_SECONDS) as response:
                 return json.load(response)
 
         selected = post("next", {"expected_selection_revision": 0, "operation_id": "next-peer"})
@@ -305,7 +312,7 @@ def test_live_related_cases_accepts_verified_source_row_alias(tmp_path: Path) ->
         assert related["membership_boundary"] == "candidates_are_unconfirmed"
     finally:
         opened.server.shutdown()
-        server_thread.join(timeout=5)
+        server_thread.join(timeout=HANG_GUARD_SECONDS)
         opened.close()
 
 
@@ -333,10 +340,19 @@ def test_live_http_publication_uses_canonical_finding_and_append_only_provider(
     provider = _LiveGitHubProvider()
     opened.service.github_provider = provider
     session = next(iter(opened.service._sessions.values()))
+    serving_ready = threading.Event()
+    service_actions = opened.server.service_actions
+
+    def signal_serving_ready() -> None:
+        service_actions()
+        serving_ready.set()
+
+    opened.server.service_actions = signal_serving_ready
     server_thread = threading.Thread(target=opened.server.serve_forever, daemon=True)
     server_thread.start()
     try:
-        with urlopen(opened.url, timeout=15) as response:
+        assert serving_ready.wait(HANG_GUARD_SECONDS), "HTTP serving loop never became ready"
+        with urlopen(opened.url, timeout=HANG_GUARD_SECONDS) as response:
             browser_cookie = response.headers["Set-Cookie"].split(";", 1)[0]
         parsed = urlsplit(opened.url)
         origin = f"{parsed.scheme}://{parsed.netloc}"
@@ -352,7 +368,7 @@ def test_live_http_publication_uses_canonical_finding_and_append_only_provider(
                 },
                 method="POST",
             )
-            with urlopen(request, timeout=30) as response:
+            with urlopen(request, timeout=HANG_GUARD_SECONDS) as response:
                 return json.load(response)
 
         selected = post("next", {"expected_selection_revision": 0, "operation_id": "sync-next"})
@@ -391,7 +407,8 @@ def test_live_http_publication_uses_canonical_finding_and_append_only_provider(
         assert sync["scientific_claim_allowed"] is False
     finally:
         opened.server.shutdown()
-        server_thread.join(timeout=5)
+        server_thread.join(timeout=HANG_GUARD_SECONDS)
+        assert not server_thread.is_alive(), "HTTP serving thread did not stop"
         opened.close()
 
 
@@ -510,7 +527,7 @@ def test_live_next_projects_only_scanner_admitted_native_scene(  # noqa: PLR0915
     server_thread = threading.Thread(target=opened.server.serve_forever, daemon=True)
     server_thread.start()
     try:
-        with urlopen(opened.url, timeout=5) as response:
+        with urlopen(opened.url, timeout=HANG_GUARD_SECONDS) as response:
             browser_cookie = response.headers["Set-Cookie"].split(";", 1)[0]
         parsed = urlsplit(opened.url)
         origin = f"{parsed.scheme}://{parsed.netloc}"
@@ -534,7 +551,7 @@ def test_live_next_projects_only_scanner_admitted_native_scene(  # noqa: PLR0915
         )
         # The native-scene projection is intentionally an integration path;
         # allow the bounded slow lane under xdist before closing the store.
-        with urlopen(request, timeout=30) as response:
+        with urlopen(request, timeout=HANG_GUARD_SECONDS) as response:
             selected = json.load(response)
         assert selected["status"] == "complete" and selected["presentation_status"] == "selected", (
             selected.get("reason")
@@ -614,7 +631,7 @@ def test_live_next_projects_only_scanner_admitted_native_scene(  # noqa: PLR0915
             },
             method="POST",
         )
-        with urlopen(save_request, timeout=5) as response:
+        with urlopen(save_request, timeout=HANG_GUARD_SECONDS) as response:
             saved = json.load(response)
         assert saved["presentation_status"] == "saved", saved
         finding_request = Request(
@@ -639,7 +656,7 @@ def test_live_next_projects_only_scanner_admitted_native_scene(  # noqa: PLR0915
             },
             method="POST",
         )
-        with urlopen(finding_request, timeout=5) as response:
+        with urlopen(finding_request, timeout=HANG_GUARD_SECONDS) as response:
             finding = json.load(response)
         assert finding["presentation_status"] == "saved", finding
         assert finding["finding"]["status"] == "proposed"
@@ -715,7 +732,7 @@ def test_live_next_projects_only_scanner_admitted_native_scene(  # noqa: PLR0915
         _assert_native_annotation_provenance(reopened["annotations"][0], source_entry)
     finally:
         opened.server.shutdown()
-        server_thread.join(timeout=5)
+        server_thread.join(timeout=HANG_GUARD_SECONDS)
         opened.close()
 
 
@@ -899,3 +916,40 @@ def test_real_service_facade_saved_record_read_rejects_wrong_context_and_source(
         assert valid["records"] == []
     finally:
         service.close()
+
+
+def test_http_publication_waits_for_serving_loop_before_first_request(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A delayed serving thread must not consume the first HTTP request's budget."""
+    import time
+
+    observed_ready = threading.Event()
+    real_open = open_live_audit_workbench
+    real_urlopen = urlopen
+
+    def delayed_open(*args: Any, **kwargs: Any) -> Any:
+        opened = real_open(*args, **kwargs)
+        real_serve = opened.server.serve_forever
+        real_iteration = opened.server.service_actions
+
+        def observe_iteration() -> None:
+            real_iteration()
+            observed_ready.set()
+
+        def delayed_serve(*args: Any, **kwargs: Any) -> None:
+            # Fault injection, not synchronization: model a loaded runner's startup delay.
+            time.sleep(0.1)
+            real_serve(*args, **kwargs)
+
+        opened.server.service_actions = observe_iteration
+        opened.server.serve_forever = delayed_serve
+        return opened
+
+    def request_after_ready(*args: Any, **kwargs: Any) -> Any:
+        assert observed_ready.is_set(), "HTTP request issued before the serving loop was ready"
+        return real_urlopen(*args, **kwargs)
+
+    monkeypatch.setitem(globals(), "open_live_audit_workbench", delayed_open)
+    monkeypatch.setitem(globals(), "urlopen", request_after_ready)
+    test_live_http_publication_uses_canonical_finding_and_append_only_provider(tmp_path)

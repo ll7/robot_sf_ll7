@@ -56,6 +56,7 @@ def test_cli_run_with_snqi_flags(tmp_path: Path, capsys):
 
     # Write simple baseline stats JSON (med/p95 per metric)
     baseline = {
+        "_metadata": {"metric_schema_version": "robot-sf-metrics.v2"},
         "collisions": {"med": 0.0, "p95": 1.0},
         "near_misses": {"med": 0.0, "p95": 1.0},
         "force_exceed_events": {"med": 0.0, "p95": 1.0},

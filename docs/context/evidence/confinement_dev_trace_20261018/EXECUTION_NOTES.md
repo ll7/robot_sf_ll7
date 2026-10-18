@@ -20,7 +20,11 @@ independent measurement of integration velocity.
 Four initial first-batch simulations could not be serialized because unchanged producer
 aggregate metrics contained inf. No complete records were accepted; all partial bytes and
 the launch receipt were preserved. A failing regression preceded the null-encoding fix,
-which follows native JSONL semantics for undefined aggregate metrics. Those four identities
+which uses strict-JSON null for undefined aggregate metrics. The native writer instead permits
+Infinity; the wrapper is not byte/schema-equivalent there. The only observed native-schema
+exception is the unused optional metrics.min_separation_corrupted_m. A stored-record schema
+allows null for that field; native-schema validation omits only that null optional field
+in a validation projection and fails on every other exception. Raw records stay unchanged. Those four identities
 were restarted with the same inputs. Final acquisition accounts for 2,700 accepted episodes
 plus four failed storage attempts, never outcome-based extra sampling.
 

@@ -41,7 +41,7 @@ def now():
 
 
 def safe(value):
-    """Use null for undefined aggregate metrics, as the native JSONL writer does."""
+    """Use strict-JSON null for undefined aggregate metrics in the diagnostic wrapper."""
     if hasattr(value, "tolist"):
         return safe(value.tolist())
     if isinstance(value, dict):

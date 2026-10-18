@@ -81,7 +81,7 @@ def test_campaign_seeds_are_exactly_development_schedule():
     assert not module.allowed_seed(111) and not module.allowed_seed(1121)
 
 
-def test_campaign_serializes_nonfinite_metrics_like_native_writer():
+def test_campaign_serializes_nonfinite_unused_metric_as_null():
     spec = importlib.util.spec_from_file_location(
         "campaign", Path(__file__).parents[1] / "scripts/dev/confinement_dev_trace_campaign.py"
     )

@@ -3,10 +3,15 @@
 # seed-holdout: synthetic-fixture begin
 
 import ast
+import difflib
+import subprocess
 from pathlib import Path
 
 import pytest
+import yaml
 
+from robot_sf.adversarial.config import SearchSpaceConfig
+from robot_sf.benchmark import seed_bands
 from scripts.validation.check_seed_holdout_diff import check_diff
 
 
@@ -98,13 +103,13 @@ def test_yaml_seed_range_forms_fail(tmp_path: Path, added: str) -> None:
     )
 
 
-def test_unrelated_yaml_range_below_seed_sibling_passes(tmp_path: Path) -> None:
+def test_unrelated_yaml_range_below_seed_sibling_is_checked(tmp_path: Path) -> None:
     path = "configs/adversarial/pilot.yaml"
     file = tmp_path / path
     file.parent.mkdir(parents=True)
     file.write_text("scenario_seed:\n  min: 1001\nstart_x:\n  min: 123\n")
     diff = f"diff --git a/{path} b/{path}\n+++ b/{path}\n@@ -3,0 +4 @@\n+  min: 123\n"
-    assert check_diff(diff, tmp_path) == []
+    assert [(f.line, f.text) for f in check_diff(diff, tmp_path)] == [(4, "min: 123")]
 
 
 def test_named_seed_list_fails(tmp_path: Path) -> None:
@@ -118,7 +123,7 @@ def test_long_yaml_seed_list_continuation_fails(tmp_path: Path) -> None:
     file.parent.mkdir(parents=True)
     file.write_text("seeds:\n" + "".join(f"  - {seed}\n" for seed in range(111, 140)) + "  - 140\n")
     diff = f"diff --git a/{path} b/{path}\n+++ b/{path}\n@@ -30,0 +31 @@\n+  - 140\n"
-    assert len(check_diff(diff, tmp_path)) == 1
+    assert {f.line for f in check_diff(diff, tmp_path)} == set(range(2, 32))
 
 
 def test_multiline_parametrize_fails(tmp_path: Path) -> None:
@@ -646,7 +651,7 @@ def test_added_yaml_bound_uses_unchanged_sibling(tmp_path):
     target.parent.mkdir(parents=True)
     target.write_text("scenario_seed:\n  min: 50030\n  max: 50040\n")
     diff = f"+++ b/{path}\n@@ -3 +3 @@\n-  max: 50035\n+  max: 50040\n"
-    assert len(check_diff(diff, tmp_path)) == 1
+    assert {f.line for f in check_diff(diff, tmp_path)} == {2, 3}
 
 
 @pytest.mark.parametrize(
@@ -659,6 +664,7 @@ def test_added_yaml_bound_uses_unchanged_sibling(tmp_path):
         "configs/benchmarks/releases/three_width_doorway_release_0_0_8_v1.template.yaml",
         "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_three_width_doorway_v2.yaml",
         "tests/benchmark/test_sealed_source_pins.py",
+        "tests/validation/test_seed_hardening.py",
     ],
 )
 def test_legitimate_sealed_names_are_allowlisted(tmp_path, path):
@@ -972,6 +978,211 @@ def test_imported_runner_alias_binding(tmp_path, import_line, consumer):
     source = import_line + "\nfor s in range(111, 141):\n    " + consumer + "\n"
     _write(tmp_path, path, source)
     assert check_diff(_file_diff(path, source), tmp_path)
+
+
+# seed-holdout: synthetic-fixture end
+
+
+# seed-holdout: synthetic-fixture begin
+
+
+def versions(mode, lo, hi):
+    bounds = f"b: &b {{min: {lo}, max: {hi}}}\n"
+    dev = "d: &d {min: 1001, max: 1003}\n"
+    if mode == "range_alias_continuation":
+        before = bounds + "variables:\n  scenario_seed:\n    {min: 1001, max: 1003}\n"
+        after = bounds + "variables:\n  scenario_seed:\n    *b\n"
+    elif mode == "flow_merge_sequence_continuation":
+        before = bounds + dev + "variables:\n  scenario_seed:\n    <<: [\n      *d\n    ]\n"
+        after = before.replace("      *d", "      *b,\n      *d")
+    elif mode == "block_merge_sequence_continuation":
+        before = bounds + dev + "variables:\n  scenario_seed:\n    <<:\n      - *d\n"
+        after = before.replace("      - *d", "      - *b\n      - *d")
+    elif mode == "bound_alias":
+        before = (
+            f"l: &l {lo}\nh: &h {hi}\nvariables:\n  scenario_seed:\n    min: {hi}\n    max: *h\n"
+        )
+        after = before.replace(f"    min: {hi}", "    min: *l")
+    else:
+        before = bounds + "variables:\n  scenario_seed:\n    min: 1001\n    max: 1003\n"
+        after = bounds + "variables:\n  scenario_seed:\n    ? <<\n    : *b\n"
+    return before, after
+
+
+def parse(source):
+    values = {name: {"min": 0, "max": 1} for name in ("start_x", "start_y", "goal_x", "goal_y")}
+    values.update(yaml.safe_load(source)["variables"])
+    return SearchSpaceConfig.from_mapping(values).scenario_seed
+
+
+def overlaps(bounds):
+    return any(bounds.min <= s <= bounds.max for s in seed_bands.HELD_OUT_SEEDS)
+
+
+@pytest.mark.parametrize("band", ["RETIRED_EVAL_SEEDS_0_0_7", "EVAL_SEEDS_0_0_8"])
+@pytest.mark.parametrize(
+    "mode",
+    [
+        "range_alias_continuation",
+        "flow_merge_sequence_continuation",
+        "block_merge_sequence_continuation",
+        "bound_alias",
+        "explicit_merge_key",
+    ],
+)
+def test_inherited_range_alias_requires_refusal(tmp_path, band, mode):
+    seeds = getattr(seed_bands, band)
+    before, after = versions(mode, min(seeds) - 1, max(seeds) + 1)
+    assert not overlaps(parse(before)), "baseline must not activate held-out ranges"
+    assert overlaps(parse(after)), "consumer must actually resolve a held-out range"
+    path = "configs/probe.yaml"
+    (tmp_path / "configs").mkdir()
+    target = tmp_path / path
+    diff = "".join(
+        difflib.unified_diff(
+            before.splitlines(True),
+            after.splitlines(True),
+            fromfile="a/" + path,
+            tofile="b/" + path,
+        )
+    )
+    _, dev_after = versions(mode, 1001, 1003)
+    target.write_text(dev_after)
+    assert not overlaps(parse(dev_after))
+    target.write_text(after)
+    assert check_diff(diff, tmp_path), "valid inherited held-out range passed the diff guard"
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "value: &v 1001\n",
+        "value: &v [1001, 1003]\n",
+        "value: &v {x: 1001}\n",
+        "value: &v\n  - 1001\ncopy: *v\n",
+        "value: &v {x: 1001}\nother: {<<: *v}\n",
+        "value: &v {x: 1001}\nother:\n  ? <<\n  : *v\n",
+    ],
+)
+def test_new_yaml_indirection_is_refused_even_with_dev_values(tmp_path, source):
+    path = "configs/probe.yaml"
+    _write(tmp_path, path, source)
+    findings = check_diff(_file_diff(path, source), tmp_path)
+    assert findings
+    assert all(f.path == path and f.line > 0 for f in findings)
+    assert any("indirection is not allowed in seed-bearing configs" in f.text for f in findings)
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "value: '&v *v <<'\n",
+        'value: "*v"\n',
+        "# &v *v <<\nvalue: 1001\n",
+        "value: |\n  &v *v <<\n",
+    ],
+)
+def test_yaml_indirection_lookalikes_are_plain_text(tmp_path, source):
+    path = "configs/probe.yaml"
+    _write(tmp_path, path, source)
+    assert check_diff(_file_diff(path, source), tmp_path) == []
+
+
+@pytest.mark.parametrize("band", ["RETIRED_EVAL_SEEDS_0_0_7", "EVAL_SEEDS_0_0_8"])
+@pytest.mark.parametrize(
+    "shape",
+    [
+        "value: '{seed}'",
+        "value: '{seed}.0'",
+        "value: {seed}.0",
+        "value:\n  - '{seed}'",
+        "value: ['{low}', '{high}']",
+        "value: {{start: '{low}', stop: '{high}'}}",
+        "value: {{min: '{low}', max: '{high}'}}",
+        "value: {{low: '{low}', high: '{high}'}}",
+        "value: {{start: '{low}', end: '{high}'}}",
+        "value: {{lower: '{low}', upper: '{high}'}}",
+        "value: {{first: '{low}', last: '{high}'}}",
+        "value: ['{low}.5', '{high}.5']",
+        "value: {{min: {low}.5, max: {high}.5}}",
+    ],
+)
+def test_yaml_resolved_semantics_refuse_holdout_without_seed_key(tmp_path, band, shape):
+    seeds = getattr(seed_bands, band)
+    source = shape.format(seed=min(seeds), low=min(seeds) - 1, high=max(seeds) + 1) + "\n"
+    path = "configs/probe.yaml"
+    _write(tmp_path, path, source)
+    assert check_diff(_file_diff(path, source), tmp_path)
+
+
+def test_yaml_semantics_inspect_unchanged_values_in_changed_file(tmp_path):
+    path = "configs/probe.yaml"
+    before = "value: '111'\nlabel: old\n"
+    after = before.replace("old", "new")
+    _write(tmp_path, path, after)
+    diff = "".join(
+        difflib.unified_diff(
+            before.splitlines(True),
+            after.splitlines(True),
+            fromfile="a/" + path,
+            tofile="b/" + path,
+        )
+    )
+    assert check_diff(diff, tmp_path)
+
+
+@pytest.mark.parametrize("source", ["value: [\n", "value: !unknown 1001\n"])
+def test_yaml_unparseable_document_fails_closed(tmp_path, source):
+    path = "configs/probe.yaml"
+    _write(tmp_path, path, source)
+    assert check_diff(_file_diff(path, source), tmp_path)
+
+
+@pytest.mark.parametrize("change", ["unrelated", "anchor", "alias", "merge", "heldout", "range"])
+def test_yaml_base_indirection_must_remain_byte_identical(tmp_path, change, monkeypatch):
+    path = "configs/probe.yaml"
+    before = "value: &v {min: 1001, max: 1003}\ncopy: *v\nmerged: {<<: *v}\nlabel: old\n"
+    _write(tmp_path, path, before)
+    for args in (
+        ["init", "-q"],
+        ["add", path],
+        ["-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-qm", "base"],
+    ):
+        subprocess.run(["git", "-C", str(tmp_path), *args], check=True, capture_output=True)
+    after = before.replace("old", "new")
+    if change == "anchor":
+        after = after.replace("&v", "&v ")
+    elif change == "alias":
+        after = after.replace("copy: *v", "copy:  *v")
+    elif change == "merge":
+        after = after.replace("<<:", "<< :")
+    elif change == "heldout":
+        after += "other: '111'\n"
+    elif change == "range":
+        after = after.replace("1001", "110").replace("1003", "142")
+    _write(tmp_path, path, after)
+    subprocess.run(["git", "-C", str(tmp_path), "add", path], check=True, capture_output=True)
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(tmp_path),
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.invalid",
+            "commit",
+            "-qm",
+            "change",
+        ],
+        check=True,
+        capture_output=True,
+    )
+    from scripts.validation import check_seed_holdout_diff as guard
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("sys.argv", ["guard", "--base-ref", "HEAD^", "--head-ref", "HEAD"])
+    assert guard.main() == (0 if change == "unrelated" else 1)
 
 
 # seed-holdout: synthetic-fixture end

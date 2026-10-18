@@ -46,7 +46,7 @@ explicitly does not claim geometrical impossibility. In particular, a nearby
 wall, force response, or observed limit cycle is diagnostic context rather
 than a reachability proof.
 
-## Scalar and systematic sensitivity (engine v1.5)
+## Scalar and systematic sensitivity (engine v1.6)
 
 Physical scalar measurements cannot be nested objects, booleans, strings or
 non-finite numbers. `extreme_measurements` reports
@@ -83,8 +83,28 @@ in `unbounded_metric_names` and return `unavailable / bounds_not_declared` unles
 another measured violation already flags. They never yield a bounds-confirmed clear.
 Named terminal-outcome and validity booleans are accepted; a
 boolean physical measurement is malformed. The source-admission layer still
-rejects unexpected non-finite raw rows; documented sentinel normalization is
-unchanged.
+rejects unexpected non-finite raw rows. Before validation, the offline adapter
+maps documented metric NaN sentinels to null in `metrics` and
+`operational_metrics`, preserving the source bytes and recording each path,
+`source_token: NaN`, and `reason: documented_undefined_metric` in
+`audit_adapter_missingness`. Its explicit allowlist covers success-only time and
+path metrics (`time_to_goal`, `time_to_goal_norm_success_only`,
+`time_to_goal_ideal_ratio`, `path_efficiency`), `aggregated_time`, the documented
+pedestrian distance/clearance metrics and `time_to_collision_min`, force and
+per-pedestrian force quantiles, `ped_force_mean`, `force_exceed_events`,
+`comfort_exposure`, `force_gradient_norm_mean`, and the optional signal measurements
+`signal_min_distance_to_stop_line_before_crossing_m` and
+`signal_delay_after_green_onset_s`. Signal measurements may be undefined when
+signal metadata or the relevant crossing/phase observation is absent; normalization
+does not change `signal_metrics_evidence` or establish signal availability. The structured
+`force_quantiles.q50/q90/q95` copies, including the supported flattened record,
+use the same rule. Definitions and missing-input conditions remain owned by
+[the metric specification](../dev/issues/social-navigation-benchmark/metrics_spec.md)
+and `benchmark.metrics`; normalization does not establish why a recorded value
+was undefined. Other NaN paths, invalid value types, and positive/negative
+infinity remain errors. Existing context-gated disabled-tracking and
+pedestrian-free predicted-separation rules retain their own reasons.
+Engine v1.7 invalidates prior detector cache entries for this admission change.
 
 All cohort detectors require complete row admission. The scan separately indexes
 rejected observations (invalid, unsupported, duplicate, or missing) before forming

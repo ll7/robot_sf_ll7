@@ -147,3 +147,18 @@ def test_resume_adopts_only_complete_verified_identities():
     }
     with pytest.raises(ValueError, match="unexpected"):
         module.remaining_identities(expected, {("different", 1091, "orca")})
+
+
+def test_missing_actor_observation_breaks_crossing_segment():
+    ped = {"id": "slot-0", "position": [-0.1, 0], "velocity": [0, 0]}
+    trace = {
+        "dt": 0.1,
+        "reset": {"pedestrians": [ped]},
+        "steps": [
+            {"time_s": 0.1, "pedestrians": [{**ped, "position": [0.3, 0]}]},
+            {"time_s": 0.2, "pedestrians": []},
+            {"time_s": 0.3, "pedestrians": [{**ped, "position": [1.1, 0], "velocity": [4, 0]}]},
+        ],
+    }
+    record = {"algorithm_metadata": {"simulation_step_trace": trace}}
+    assert not MODULE.episode_indicators(record, [P])["traversal"]

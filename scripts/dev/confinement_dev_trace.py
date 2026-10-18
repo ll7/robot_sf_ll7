@@ -149,7 +149,8 @@ def episode_indicators(record, passages):
                     "time": step["time_s"],
                     "position": ped["position"],
                     "velocity": ped["velocity"],
-                    "boundary": key in excluded,
+                    "boundary": key in excluded
+                    or (bool(fs) and step["time_s"] - fs[-1]["time"] > trace["dt"] + 1e-9),
                     "first_step_sentinel": step_index == 0,
                 }
             )

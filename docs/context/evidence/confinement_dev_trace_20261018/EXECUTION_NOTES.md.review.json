@@ -1,0 +1,7 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/confinement_dev_trace_20261018/EXECUTION_NOTES.md",
+  "artifact_sha256": "ac2a12b70204286facf22332b95857c9191e3bf2901e35d4c5d2fb26e5fb043b",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW"
+}

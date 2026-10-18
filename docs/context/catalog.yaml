@@ -8181,3 +8181,7 @@ entries:
   status: evidence
   freshness: evidence
   area: training_evidence
+- path: docs/context/evidence/confinement_dev_trace_20261018
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence

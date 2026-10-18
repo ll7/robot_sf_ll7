@@ -63,8 +63,7 @@ including zero is inconclusive about persistence. Zero/empty strata are unavaila
 Bootstrap **10,000** draws, `random.Random(42)`, sampling 30 complete development seed blocks
 with replacement. Use the SAME draws jointly across all cells/configurations/groups/strata.
 Recompute stratum numerators and denominators inside each draw, and contrasts from that
-replicate's two rates. This follows ll7/diss `scripts/dev/diss_s20_s30_rank_stability.py`
-at `98358209c41ae9fda313ccf63816662ae4da3ed1`: sorted indices
+replicate's two rates. This follows [the pinned ll7/diss seed-block implementation](https://github.com/ll7/diss/blob/98358209c41ae9fda313ccf63816662ae4da3ed1/scripts/dev/diss_s20_s30_rank_stability.py): sorted indices
 `round(0.025*B)-1` and `round(0.975*B)` (zero-based). Report empty-replicate counts;
 if any denominator vanishes in a replicate, flag the interval and use only defined draws
 with the same rounded percentile convention on their count. These are percentile 95%

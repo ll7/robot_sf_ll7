@@ -1,7 +1,7 @@
 {
   "schema_version": "evidence-review-marker.v1",
   "artifact_path": "docs/context/evidence/confinement_dev_trace_20261018/PLAN.md",
-  "artifact_sha256": "4ac52a74840e8020060bcfff514dfa65e829ed21861b8d3ce2d0bb7ef630296d",
+  "artifact_sha256": "229398e853093024ae78d750d8a2289ff30729f3debb2eab2305a398e09e69a5",
   "preserved_exact_bytes": true,
   "review_marker": "AI-GENERATED NEEDS-REVIEW"
 }

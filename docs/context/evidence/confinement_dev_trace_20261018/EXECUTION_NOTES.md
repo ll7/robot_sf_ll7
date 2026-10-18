@@ -37,3 +37,9 @@ Actor denominators refer to stable simulator slots within each episode. Respawn 
 break crossing and stationarity segments, and a both-neck traversal must occur without an
 intervening respawn. Counts never bridge missing actor observations or large discontinuities.
 The hallway and cross-trap operational passages are not literal doorway claims.
+
+The current tracked policies.json additionally repeats each original `path` as
+`resolved_path` for the evidence-registry linter. The configuration paths/hashes/contents
+are unchanged; the exact preregistration JSON at the plan commit and the frozen runtime
+copy remain preserved. This fixes six hash_without_artifact_path findings without changing
+the registry baseline or scientific inputs.

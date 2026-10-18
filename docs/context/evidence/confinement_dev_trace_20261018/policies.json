@@ -7,7 +7,8 @@
     "config": {
       "max_linear_speed": 2.0,
       "max_angular_speed": 1.0
-    }
+    },
+    "resolved_path": "configs/algos/orca_release_v0_0_8.yaml"
   },
   {
     "key": "socnav_sampling",
@@ -22,7 +23,8 @@
       "sampling_footprint_margin": 0.0,
       "sampling_pedestrian_prediction": false,
       "sampling_braking_envelope": false
-    }
+    },
+    "resolved_path": "configs/algos/socnav_sampling_release_v0_0_8.yaml"
   },
   {
     "key": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
@@ -84,7 +86,8 @@
         "tuning_status": "untuned",
         "tuning_scope": "outside_pre_registered_9748_search"
       }
-    }
+    },
+    "resolved_path": "configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4_s30_h600_release_0_0_8_frozen.yaml"
   },
   {
     "key": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
@@ -146,7 +149,8 @@
         "tuning_status": "untuned",
         "tuning_scope": "outside_pre_registered_9748_search"
       }
-    }
+    },
+    "resolved_path": "configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard_v4_s30_h600_release_0_0_8_frozen.yaml"
   },
   {
     "key": "hybrid_rule_v4_fast_progress_static_escape",
@@ -195,7 +199,8 @@
         "effective_config_sha256": "06cfc1dd8825a3a7ef0401489a004e7e2e9072247396d770b68477b0dd788a3d",
         "freeze_decision_url": "https://github.com/ll7/robot_sf_ll7/issues/9748#issuecomment-5884539753"
       }
-    }
+    },
+    "resolved_path": "configs/policy_search/candidates/hybrid_rule_v4_fast_progress_static_escape_s30_h600_release_0_0_8_frozen.yaml"
   },
   {
     "key": "hybrid_rule_v4_fast_progress_static_escape_continuous",
@@ -262,6 +267,7 @@
         "effective_config_sha256": "569bd63d6c5f808bf00681d713ab93af0c0207930230fe94ca1a8007fe82cc4c",
         "freeze_decision_url": "https://github.com/ll7/robot_sf_ll7/issues/9748#issuecomment-5884539753"
       }
-    }
+    },
+    "resolved_path": "configs/policy_search/candidates/hybrid_rule_v4_fast_progress_static_escape_continuous_s30_h600_release_0_0_8_frozen.yaml"
   }
 ]

@@ -1,7 +1,7 @@
 {
   "schema_version": "evidence-review-marker.v1",
   "artifact_path": "docs/context/evidence/confinement_dev_trace_20261018/policies.json",
-  "artifact_sha256": "cbcb72e32d4e7210a7a16109e14f6552c43068d0f076550d91b5ba78922929e5",
+  "artifact_sha256": "d148db90b16631e3301c4519edc7326a4e906b2039b9395a766927cdcfa32d34",
   "preserved_exact_bytes": true,
   "review_marker": "AI-GENERATED NEEDS-REVIEW"
 }

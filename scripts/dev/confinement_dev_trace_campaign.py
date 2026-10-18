@@ -13,6 +13,7 @@ import gzip
 import hashlib
 import importlib.metadata
 import json
+import math
 import os
 import platform
 import shutil
@@ -40,13 +41,15 @@ def now():
 
 
 def safe(value):
-    """Convert simulator NumPy scalars without discarding nonfinite evidence."""
+    """Use null for undefined aggregate metrics, as the native JSONL writer does."""
     if hasattr(value, "tolist"):
         return safe(value.tolist())
     if isinstance(value, dict):
         return {str(k): safe(v) for k, v in value.items()}
     if isinstance(value, (tuple, list)):
         return [safe(v) for v in value]
+    if isinstance(value, float) and not math.isfinite(value):
+        return None
     if isinstance(value, Path):
         return str(value)
     return value

@@ -79,3 +79,12 @@ def test_campaign_seeds_are_exactly_development_schedule():
     spec.loader.exec_module(module)
     assert module.allowed_seed(1091) and module.allowed_seed(1120)
     assert not module.allowed_seed(111) and not module.allowed_seed(1121)
+
+
+def test_campaign_serializes_nonfinite_metrics_like_native_writer():
+    spec = importlib.util.spec_from_file_location(
+        "campaign", Path(__file__).parents[1] / "scripts/dev/confinement_dev_trace_campaign.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    assert module.safe({"unobserved_metric": float("inf")}) == {"unobserved_metric": None}

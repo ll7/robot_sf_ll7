@@ -650,6 +650,19 @@ def _credential_reference_tokens(value: str) -> Iterator[tuple[str, str]]:
             yield "symbol", char
 
 
+def _root_references(tokens: list[tuple[str, str]]) -> list[tuple[str, int]]:
+    """Locate case-folded reference roots, excluding dotted/bracket properties and literals.
+
+    Plain bracket keys have already become property tokens. Computed-key
+    expressions can still contain independent context roots and must be inspected.
+    """
+    return [
+        (text.casefold(), index)
+        for index, (kind, text) in enumerate(tokens)
+        if kind == "identifier" and (index == 0 or tokens[index - 1] != ("symbol", "."))
+    ]
+
+
 def _credential_context_references(value: str) -> tuple[bool, bool, bool]:
     """Match case-folded credentials and contexts with bounded token lookahead.
 
@@ -687,38 +700,39 @@ def _credential_context_references(value: str) -> tuple[bool, bool, bool]:
             else:
                 normalised.append(tokens[index])
             index += 1
-    # Plain bracket keys are property tokens; dotted names cannot start a context reference.
-    unsafe_secrets = any(
-        (kind, token) == ("identifier", "secrets")
-        and (index == 0 or normalised[index - 1] != ("symbol", "."))
-        and not (
-            index + 2 < len(normalised)
-            and normalised[index + 1] == ("symbol", ".")
-            and normalised[index + 2][0] in {"identifier", "property"}
-        )
-        for index, (kind, token) in enumerate(normalised)
-    )
-    # Retain the existing parenthesis-free view and all its step refusals.
-    normalised = [item for item in normalised if item not in {("symbol", "("), ("symbol", ")")}]
+    # Keep a linear index map into the existing parenthesis-free step view.
+    step_tokens: list[tuple[str, str]] = []
+    step_indices: list[int] = []
+    for item in normalised:
+        step_indices.append(len(step_tokens))
+        if item not in {("symbol", "("), ("symbol", ")")}:
+            step_tokens.append(item)
     broad = False
-    for index, (kind, token) in enumerate(normalised):
-        if kind != "identifier" or token != "steps":
-            continue
-        # At most six lookahead tokens: no growing suffix copies or rescans.
-        tail = [text for _, text in normalised[index + 1 : index + 7]]
-        direct |= tail[:2] == [".", "router-token"]
-        broad |= (
-            not tail
-            or tail[0] != "."
-            or tail[:2] == [".", "*"]
-            or (index > 0 and normalised[index - 1] == ("identifier", "tojson"))
-            or (
-                len(tail) >= 4
-                and tail[0] == "."
-                and tail[2:4] == [".", "outputs"]
-                and (len(tail) < 6 or tail[4] != "." or tail[5] == "*")
+    unsafe_secrets = False
+    for context, index in _root_references(normalised):
+        if context == "secrets":
+            unsafe_secrets |= not (
+                index + 2 < len(normalised)
+                and normalised[index + 1] == ("symbol", ".")
+                and normalised[index + 2][0] in {"identifier", "property"}
             )
-        )
+        elif context == "steps":
+            index = step_indices[index]
+            # At most six lookahead tokens: no growing suffix copies or rescans.
+            tail = [text for _, text in step_tokens[index + 1 : index + 7]]
+            direct |= tail[:2] == [".", "router-token"]
+            broad |= (
+                not tail
+                or tail[0] != "."
+                or tail[:2] == [".", "*"]
+                or (index > 0 and step_tokens[index - 1] == ("identifier", "tojson"))
+                or (
+                    len(tail) >= 4
+                    and tail[0] == "."
+                    and tail[2:4] == [".", "outputs"]
+                    and (len(tail) < 6 or tail[4] != "." or tail[5] == "*")
+                )
+            )
     return broad, direct, unsafe_secrets
 
 
@@ -1009,6 +1023,57 @@ def test_token_reference_rejects_computed_secrets_and_quoted_credentials(express
         ("${{ format('it''s }} safe', 1, -2.5) }}", False),
         ("${{ secrets['OTHER_KEY'] }}", False),
         ("${{ (SeCrEtS)['OTHER_KEY'] }}", False),
+        ("${{ format('it''s ROBOT_SF_ROUTER_APP_KEY', 'x') }}", True),
+        ("${{ format('it''s }} {0}', join(StEpS.*.outputs.token, ',')) }}", True),
+        (
+            "${{ secrets[format('{0}{1}', format('{0}_{1}', 'ROBOT_SF', 'ROUTER'), format('_{0}_{1}', 'APP', 'KEY'))] }}",
+            True,
+        ),
+        ("${{ format('unterminated ROBOT_SF_ROUTER_APP_KEY", True),
+        (
+            "${{ format('{0}: {1}', format('it''s }} {0}', steps['route'].outputs.fast_feedback), format('{0}', 0xFA)) }}",
+            False,
+        ),
+        (
+            "before ${{ format('it''s }} okay', 1) }} middle ${{ steps.route.outputs.fast_feedback }} after",
+            False,
+        ),
+        ("${{ ((secrets))['OTHER_KEY'] }}", False),
+        ("${{ format('{0} {1} {2}', 0xFF, -2.5e+3, steps.route.outputs.fast_feedback) }}", False),
+        ("${{ join((StEpS).*.outputs.token, '|') }}", True),
+        ("${{ format('a''}}b{0}', toJSON((SeCrEtS))) }}", True),
+        (
+            "${{ secrets[format('{0}_{1}', format('{0}_{1}', 'ROBOT', 'SF'), format('{0}_{1}', 'ROUTER', format('{0}_{1}', 'APP', 'KEY')))] }}",
+            True,
+        ),
+        ("${{ format('before '' ROBOT_SF_ROUTER_APP_''KEY after', 0) }}", True),
+        ("${{ format('a''}} ROBOT_SF_ROUTER_APP_KEY", True),
+        (
+            "${{ format('{0}/{1}', format('a''''b }} {0}', secrets['OTHER_KEY']), steps['route']['outputs']['fast_feedback']) }}",
+            False,
+        ),
+        ("${{ format('{0}', secrets['']) }}", False),
+        (
+            "${{ format('secrets }} steps {0}', format('it''s {0}', steps.route.outputs.fast_feedback)) }}",
+            False,
+        ),
+        ("${{ format('it''s }} harmless', 1) }} / ${{ toJSON((secrets)) }}", True),
+        ("${{ steps.route.outputs.steps }}", False),
+        ("${{ steps['route']['outputs']['steps'] }}", False),
+        ("${{ github.event.inputs.steps }}", False),
+        ("${{ github.event.inputs['steps'] }}", False),
+        ("${{ format('a''}}{0}', format('{0}', github.event.inputs.steps)) }}", False),
+        ("${{ format('a''}}{0}', format('{0}', github.event.inputs['steps'])) }}", False),
+        (
+            "${{ format('{0}/{1}', github.event.inputs.secrets, format('a''}}{0}', toJSON(secrets))) }}",
+            True,
+        ),
+        ("${{ secrets[format('a''}}{0}', format('{0}', github.event.inputs.secrets))] }}", True),
+        ("${{ format('a''''}} robot_sf_router_app_key", True),
+        (
+            "${{ format('{0}/{1}', format('it''''s }} secrets steps {0}', secrets['OTHER_KEY']), github.event.inputs['secrets']) }}",
+            False,
+        ),
     ],
 )
 def test_token_reference_reviewer_corpus(expression: str, should_reject: bool) -> None:
@@ -1148,3 +1213,53 @@ def test_scalar_properties_named_secrets_retain_complete_boundary_acceptance(
     _, probe = _token_steps(workflow)
     probe.setdefault("env", {})["ROUTER_DEBUG_SNAPSHOT"] = expression
     _assert_router_app_token_boundary(workflow)
+
+
+@pytest.mark.parametrize("context", ["steps", "secrets"])
+@pytest.mark.parametrize("mixed_case", [False, True], ids=["lower", "mixed"])
+@pytest.mark.parametrize(
+    ("expression", "should_reject"),
+    [
+        ("${{ steps.route.outputs.CONTEXT }}", False),
+        ("${{ steps['route']['outputs']['CONTEXT'] }}", False),
+        ("${{ github.event.inputs.CONTEXT }}", False),
+        ("${{ github.event.inputs['CONTEXT'] }}", False),
+        ("${{ format('a''}}{0}', format('{0}', github.event.inputs.CONTEXT)) }}", False),
+        ("${{ format('a''}}{0}', format('{0}', github.event.inputs['CONTEXT'])) }}", False),
+        ("${{ format('CONTEXT', 'safe') }}", False),
+        ("${{ CONTEXT }}", True),
+        ("${{ CONTEXT.* }}", True),
+        ("${{ CONTEXT[format('OTHER_{0}', 'KEY')] }}", True),
+        ("${{ toJSON(CONTEXT) }}", True),
+    ],
+    ids=[
+        "output-dot",
+        "output-bracket",
+        "input-dot",
+        "input-bracket",
+        "nested-dot",
+        "nested-bracket",
+        "literal",
+        "whole",
+        "wildcard",
+        "computed",
+        "serialised",
+    ],
+)
+def test_context_root_and_scalar_property_boundary_matrix(
+    context: str,
+    mixed_case: bool,
+    expression: str,
+    should_reject: bool,
+) -> None:
+    """Every inspected context distinguishes scalar property names from unsafe roots."""
+    if mixed_case:
+        context = "".join(char.upper() if index % 2 else char for index, char in enumerate(context))
+    workflow = yaml.safe_load(CI_WORKFLOW.read_text(encoding="utf-8"))
+    _, probe = _token_steps(workflow)
+    probe.setdefault("env", {})["ROUTER_DEBUG_SNAPSHOT"] = expression.replace("CONTEXT", context)
+    if should_reject:
+        with pytest.raises(AssertionError, match="must not escape"):
+            _assert_router_app_token_boundary(workflow)
+    else:
+        _assert_router_app_token_boundary(workflow)

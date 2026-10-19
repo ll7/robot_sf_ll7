@@ -1,5 +1,137 @@
 # Behaviour receipt gate integration
 
+## Frozen train candidates and external evidence (v3)
+
+The v3 path removes the receipt-commit cycle. It is a proposed gate change until
+independent adversarial review accepts the exact implementation head and the
+integration owner separately adopts it. A worker must not activate its own gate
+change. Legacy v2 transport below remains supported with its existing restrictions.
+
+The gate prints JSON with `train_state` and `merge_blocked`, then its existing
+human-readable verdict. `--train-state` accepts the following scheduling states;
+it does not grant a review, domain approval, or permission to merge.
+
+| State | Meaning |
+| --- | --- |
+| `admitted` | Component review and cheap admission checks permit train scheduling. |
+| `WAITING_FOR_TRAIN` | A reviewed component awaits its complete behaviour receipt. |
+| `candidate` | The combined candidate and its manifests are frozen. |
+| `executing` | Evidence acquisition is running for that frozen candidate. |
+| `blocked` | A defect, missing policy inventory, invalid evidence, or identity mismatch needs resolution. |
+| `ready` | Complete evidence and a fresh combined-head verdict permit promotion checking. |
+
+An absent receipt remains a **nonzero blocking result**. When that is the only
+missing item, report `WAITING_FOR_TRAIN`, not a coding verdict of FIX. Duplicate
+or rejected receipts are blocked. Other review/CI/domain blockers remain the
+responsibility of their existing owners; this gate cannot certify their absence.
+Explicit candidate/executing phases are retained while receipt admission waits.
+Keep one candidate validating or awaiting promotion and one batch preparing;
+late additions require a new candidate. Scheduling ownership stays with the train
+owner; this validator neither dispatches work nor changes PR readiness labels.
+
+### Freeze and assemble
+
+Use the base-owned `scripts/ci/behaviour_receipt.py` entrypoint. Before execution,
+prepare a `behaviour-candidate.v1` manifest with these required fields:
+
+- `candidate_sha`, `base_sha`, `candidate_tree`: full Git commit/tree identities.
+- `components`: original `{pr, head_sha, reviews}` records; each review carries
+  `{head_sha, verdict: "accepted", uri}`. Original component heads must remain
+  ancestors of the assembled candidate. Squash assembly without those preserved
+  heads is refused. Component reviews never replace combined-head review.
+- `suite_sha256`: canonical JSON digest of the trusted scope inventory.
+- `config_sha256`: canonical JSON digest of the complete resolved configuration
+  manifest, including asset/checkpoint/environment input identities from preflight.
+- `baseline_sha256`: canonical JSON digest of the full receipt baseline object.
+- `evaluation_policy_sha256`: `scripts.ci.frozen_candidate.policy_digest()`, hashing
+  the trusted validator, receipt schema and frozen-candidate policy file bytes.
+
+Canonical JSON uses sorted keys and `separators=(",", ":")`, encoded as UTF-8.
+The caller supplies the complete effective config manifest; these identity checks
+cannot discover missing runtime dependencies. Production preflight owns that proof.
+Freeze writes once outside the source checkout and refuses an existing output:
+
+```bash
+uv run python scripts/ci/behaviour_receipt.py freeze \
+  --input "$MANIFEST_INPUT" --output "$FROZEN_MANIFEST" \
+  --candidate "$CANDIDATE_SHA" --expected-base "$BASE_SHA"
+```
+
+After execution, supply the existing full `behaviour-change-receipt.v1` object,
+the resolved config manifest, and `episode_executions`: one record per receipt row,
+with `arm`, `map`, `seed`, `source_sha`, `execution_sha256`. Preserve the actual
+execution identity supplied by the producer. V3 initially requires every source,
+the scheduler source and audit source to equal the candidate SHA; cross-source
+reuse is deliberately deferred. Assemble outside the source checkout:
+
+```bash
+uv run python scripts/ci/behaviour_receipt.py assemble \
+  --repo ll7/robot_sf_ll7 --manifest "$FROZEN_MANIFEST" \
+  --receipt "$FULL_RECEIPT" --config "$RESOLVED_CONFIG" \
+  --executions "$EPISODE_IDENTITIES" --output "$EVIDENCE_JSON"
+```
+
+The envelope is `behaviour-candidate-evidence.v1`, containing `manifest`,
+`receipt`, `config`, `episode_executions`, and canonical `receipt_sha256` and
+`episode_executions_sha256`. Assembly applies the full existing validator; it
+cannot issue an independent verdict. The receipt must already contain an accepted
+exact-candidate refute review. Write failures may leave a partial output: reject
+it on JSON/digest validation and create a new output; never overwrite a freeze.
+
+Publish exactly one `evidence.json` in a same-repository Actions artifact using
+immutable artifact upload (v4 or later), from a workflow run whose head is the
+candidate. The independently adopted acquisition/publishing workflow owns upload,
+retention and independent review; these commands perform no upload or status
+write. Keep long-lived copies under the evidence owner's custody. Expired or
+missing artifacts fail closed and require a new immutable publication at the same
+candidate; no receipt-only source commit is needed.
+
+The PR body carries only the reference (numeric artifact ID, archive-byte SHA-256,
+and canonical frozen-manifest SHA-256):
+
+```text
+<!-- behaviour-change-receipt:v3
+{"artifact_id": 123, "sha256": "<archive sha256>", "manifest_sha256": "<manifest sha256>"}
+-->
+```
+
+The base-owned PR gate fetches that artifact by ID through GitHub's API using
+`actions: read`. It checks the run's candidate SHA, non-expiration, metadata and
+archive digests, bounded decoded size, and exactly one `evidence.json` entry.
+It verifies every manifest binding, complete episode identities, full receipt
+coverage, classifications, baseline, and exact-head refute verdict. Mixed v2/v3
+references and duplicates are refused. Source-owned policy never replaces base
+policy. The existing blocking PR check supplies the verdict; evidence publication
+does not require a new commit. Changing classifications requires a new immutable
+artifact and refreshed independent evidence review at the same frozen source.
+
+### Read-only promotion check
+
+```bash
+uv run python scripts/ci/behaviour_receipt.py promotion \
+  --repo ll7/robot_sf_ll7 --reference "$REFERENCE_JSON" \
+  --candidate "$CANDIDATE_SHA" --expected-base "$BASE_SHA" \
+  --landed "$PROPOSED_LANDED_SHA" --receipt-sha256 "$RECEIPT_SHA256" \
+  --executions-sha256 "$EXECUTIONS_SHA256"
+```
+
+The checker reads live main from GitHub, revalidates the exact artifact and
+candidate verdict, compares the proposed landed tree with the candidate tree,
+and compares receipt/execution digests with the promoter's expected values.
+Unexplained mismatches fail closed. A different landed commit with an identical
+tree is recorded as an explicit mapping; it is **not** claimed to have executed.
+A changed integration candidate needs a new artifact binding and a fresh exact-head
+verdict, even when its tree matches an earlier candidate. Verdicts never transfer.
+
+This command does not update refs, merge, publish statuses, or mark PRs ready.
+Its result always has `merge_authorized: false`. The independent promotion owner
+must serialize promotion, retain this mapping and evidence, and use an atomic
+compare-and-swap against the expected main base. A read-only preflight cannot
+prevent main from moving after its final read. Existing CI, domain, release and
+independent review gates still apply.
+
+## Legacy committed transport (v2)
+
 Behaviour PRs carry a compact `<!-- behaviour-change-receipt:v2 ... -->` JSON
 header in their GitHub body. Rows and detailed classifications live in a committed
 `receipts/behaviour/*.json` file, read from the event's exact PR source SHA.

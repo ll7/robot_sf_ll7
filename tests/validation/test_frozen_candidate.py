@@ -935,3 +935,131 @@ def test_shadow_failure_cannot_veto_a_valid_existing_receipt(monkeypatch, tmp_pa
     assert gate.check_receipt(body, ["robot_sf/planner/policy.py"], "ll7/robot_sf_ll7") == []
     report = gate.report_external(body, "ll7/robot_sf_ll7", "origin/main")
     assert report["state"] == "blocked" and report["merge_authorized"] is False
+
+
+@pytest.fixture
+def legacy_cli(monkeypatch, tmp_path):
+    """Bind a real production diff to a committed, valid legacy receipt."""
+    from tests.validation.test_behaviour_receipt_run_identity import _body, _run_receipt
+
+    root = tmp_path / "source"
+    git = _git_repo(root)
+    base = _commit_file(root, git, "README.md", "base\n", "base")
+    _commit_file(root, git, "robot_sf/planner/policy.py", "# change\n", "production change")
+    _, header, _ = _run_receipt(monkeypatch, root)
+    event = tmp_path / "event.json"
+    args = [
+        "--github-event-path",
+        str(event),
+        "--repo-root",
+        str(root),
+        "--base-ref",
+        base,
+    ]
+
+    def write_event(body):
+        event.write_text(
+            json.dumps(
+                {
+                    "repository": {"full_name": "ll7/robot_sf_ll7"},
+                    "pull_request": {"head": {"sha": header["head_sha"]}, "body": body},
+                }
+            )
+        )
+
+    return args, write_event, _body(header)
+
+
+@pytest.mark.parametrize("runner", ["in_process", "subprocess"])
+@pytest.mark.parametrize("has_v2", [True, False])
+@pytest.mark.parametrize(
+    "reference",
+    [None, "{invalid json}", "[" * 15000 + "0" + "]" * 15000],
+    ids=["absent", "malformed", "deep"],
+)
+def test_cli_shadow_decode_failure_preserves_v2_admission(
+    legacy_cli, capsys, runner, has_v2, reference
+):
+    """Deep or malformed shadow JSON cannot change the real legacy CLI result."""
+    args, write_event, legacy_body = legacy_cli
+    body = legacy_body if has_v2 else ""
+    if reference is not None:
+        body += "\n<!-- behaviour-change-receipt:v3\n" + reference + "\n-->"
+    assert len(body) < 65536
+    write_event(body)
+    capsys.readouterr()
+    if runner == "in_process":
+        returncode = gate.main(args)
+        output = capsys.readouterr().out
+    else:
+        # Only external release lookup and synthetic scope are substituted. Git
+        # history, payload decoding/validation and CLI admission remain real.
+        command = (
+            "import sys; from pathlib import Path; from scripts.ci import behaviour_receipt as gate; "
+            "gate.SCOPE_PATH = Path(sys.argv.pop(1)) / 'scope.json'; "
+            "gate.latest_release = lambda repo: '0.0.7'; "
+            "gate.release_source = lambda release: 'c' * 40; "
+            "raise SystemExit(gate.main())"
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", command, args[3], *args],
+            cwd=Path(__file__).resolve().parents[2],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        returncode, output = result.returncode, result.stdout
+        assert not result.stderr, result.stderr
+    assert returncode == (0 if has_v2 else 1), output
+    lines = output.splitlines()
+    admission = json.loads(lines[0])
+    assert admission["merge_blocked"] is (not has_v2)
+    assert admission["merge_authorized"] is False
+    if not has_v2:
+        assert admission["train_state"] == "WAITING_FOR_TRAIN"
+        assert "WAITING_FOR_TRAIN:" in output
+    if reference is not None:
+        report = json.loads(lines[1])["preflight"]
+        assert report["state"] == "blocked"
+        assert report["mode"] == "shadow"
+        assert report["merge_authorized"] is False
+        assert report["reason"]
+
+
+@pytest.mark.parametrize("stage", ["load_external", "validate_evidence"])
+@pytest.mark.parametrize("error", [RecursionError, RuntimeError, AssertionError, MemoryError])
+def test_shadow_contains_nonfatal_validation_exceptions(monkeypatch, legacy_cli, stage, error):
+    """Unexpected decoder or validator failures remain blocked shadow reports."""
+    from scripts.ci import frozen_candidate as frozen
+
+    args, _, body = legacy_cli
+    monkeypatch.setattr(frozen, "load_external", lambda *args: {})
+
+    def fail(*args):
+        raise error("shadow failure")
+
+    monkeypatch.setattr(frozen, stage, fail)
+    report = gate.report_external(
+        body + "\n<!-- behaviour-change-receipt:v3\n{}\n-->", "ll7/robot_sf_ll7", args[-1]
+    )
+    assert report == {
+        "mode": "shadow",
+        "state": "blocked",
+        "merge_authorized": False,
+        "reason": "shadow failure",
+    }
+
+
+@pytest.mark.parametrize("error", [KeyboardInterrupt, SystemExit])
+def test_shadow_preserves_process_interrupts(monkeypatch, error):
+    """The report-only boundary contains Exception, never process control signals."""
+    from scripts.ci import frozen_candidate as frozen
+
+    def fail(*args):
+        raise error
+
+    monkeypatch.setattr(frozen, "load_external", fail)
+    with pytest.raises(error):
+        gate.report_external(
+            "<!-- behaviour-change-receipt:v3\n{}\n-->", "ll7/robot_sf_ll7", "origin/main"
+        )

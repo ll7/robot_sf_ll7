@@ -541,10 +541,10 @@ def check_receipt(
 
 def report_external(body: str, repo: str, base_ref: str) -> dict:
     """Evaluate v3 evidence in shadow mode without changing merge admission."""
-    from scripts.ci import frozen_candidate
-
     result = {"mode": "shadow", "state": "blocked", "merge_authorized": False}
     try:
+        from scripts.ci import frozen_candidate
+
         external = re.findall(r"<!--\s*behaviour-change-receipt:v3\s*\n(.*?)-->", body, re.DOTALL)
         frozen_candidate.require(len(external) == 1, "external reference missing or duplicated")
         frozen_candidate.require(len(body) <= 65536, "PR body exceeds GitHub limit")
@@ -561,14 +561,9 @@ def report_external(body: str, repo: str, base_ref: str) -> dict:
             release,
             release_source(release),
         )
-    except (
-        OSError,
-        ValueError,
-        KeyError,
-        TypeError,
-        subprocess.SubprocessError,
-        zipfile.BadZipFile,
-    ) as exc:
+    except Exception as exc:  # noqa: BLE001 - No report-only failure may veto v2 admission.
+        # Includes RecursionError from deeply nested JSON or validation; process
+        # control signals (KeyboardInterrupt/SystemExit) remain uncaught.
         result["reason"] = str(exc)
         return result
     result["state"] = "ready"

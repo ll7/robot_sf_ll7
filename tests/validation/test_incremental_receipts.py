@@ -498,7 +498,7 @@ def test_contract_uses_production_batch_preflight_gates(tmp_path, monkeypatch):
 
 
 def _comparison_fixture(tmp_path, monkeypatch, *, mismatched_definitions=False):
-    from robot_sf.benchmark.receipt_stages import stage_key
+    from robot_sf.benchmark.receipt_stages import atomic_json, publish_episode, stage_key
     from scripts.validation import compare_behaviour_rows as comparator
 
     head_dir, baseline_dir = tmp_path / "head", tmp_path / "baseline"
@@ -520,7 +520,11 @@ def _comparison_fixture(tmp_path, monkeypatch, *, mismatched_definitions=False):
         )
         data[directory] = {
             ("goal", "slot", seed): {
+                "outcome": {"route_complete": True},
                 "git_hash": source,
+                "episode_id": f"slot-{seed}",
+                "scenario_id": "slot",
+                "seed": seed,
                 "metrics": {
                     "metric_schema_version": "robot-sf-metrics.v2",
                     "success": True,
@@ -529,6 +533,22 @@ def _comparison_fixture(tmp_path, monkeypatch, *, mismatched_definitions=False):
             }
             for seed in range(1001, 1031)
         }
+        run = directory / "campaigns/empty_world_main/runs/goal__differential_drive"
+        run.mkdir(parents=True)
+        atomic_json(
+            run / "receipt_execution.json",
+            {
+                "schema_version": "receipt-execution.v1",
+                "source_sha": source,
+                "execution_key": stage_key("execution", execution),
+                "run_id": str(directory),
+            },
+        )
+        for row in data[directory].values():
+            publish_episode(run / "episodes.jsonl", {}, row)
+        (run / "episodes.jsonl").write_text(
+            "".join(json.dumps(row) + "\n" for row in data[directory].values())
+        )
     monkeypatch.setattr(comparator.producer, "_load_sweep_rows", lambda directory: data[directory])
     return comparator, head_dir, baseline_dir
 
@@ -867,3 +887,31 @@ def test_preflight_error_releases_output_lock_even_with_retained_traceback(tmp_p
     with pytest.raises(RuntimeError, match="constructor failure"):
         sweep.main(argv)
     assert first.value.__traceback__ is not None
+
+
+def test_comparison_refuses_edited_view_with_unchanged_completion(tmp_path, monkeypatch):
+    """A mutable raw/summary edit cannot override the atomic observation commit."""
+    comparator, head, baseline = _comparison_fixture(tmp_path, monkeypatch)
+    raw = head / "campaigns/empty_world_main/runs/goal__differential_drive/episodes.jsonl"
+    rows = comparator.producer._load_sweep_rows(head)
+    rows[("goal", "slot", 1001)]["metrics"]["success"] = False
+    raw.write_text("".join(json.dumps(row) + "\n" for row in rows.values()))
+    with pytest.raises(ValueError, match="completion"):
+        comparator.compare(
+            head, baseline, {"arms": ["goal"], "maps": ["slot"]}, tmp_path / "comparison.json"
+        )
+
+
+def test_comparison_refuses_wrong_execution_completion(tmp_path, monkeypatch):
+    """A same-source observation cannot be assigned another assets/config execution key."""
+    comparator, head, baseline = _comparison_fixture(tmp_path, monkeypatch)
+    marker = (
+        head / "campaigns/empty_world_main/runs/goal__differential_drive/receipt_execution.json"
+    )
+    descriptor = json.loads(marker.read_bytes())
+    descriptor["execution_key"] = "f" * 64
+    marker.write_text(json.dumps(descriptor))
+    with pytest.raises(ValueError, match="completion"):
+        comparator.compare(
+            head, baseline, {"arms": ["goal"], "maps": ["slot"]}, tmp_path / "comparison.json"
+        )

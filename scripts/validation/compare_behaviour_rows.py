@@ -9,25 +9,87 @@ without claiming arbitrary trajectory rescoring is available.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 
 from robot_sf.benchmark.metric_definitions import (
     require_uniform_metric_schema,
 )
-from robot_sf.benchmark.receipt_stages import atomic_json, encode_row, file_digest, stage_key
+from robot_sf.benchmark.receipt_stages import (
+    atomic_json,
+    canonical_bytes,
+    encode_row,
+    file_digest,
+    stage_key,
+)
 from scripts.ci import make_behaviour_receipt as producer
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
 def _inventory(directory: Path) -> dict[str, str]:
-    paths = [*directory.rglob("*.jsonl"), directory / "contract.json"]
+    paths = [
+        *directory.rglob("*.jsonl"),
+        directory / "contract.json",
+        *directory.glob("campaigns/*/runs/*/receipt_execution.json"),
+        *directory.glob("campaigns/*/runs/*/completed/*.json"),
+    ]
     return {
         str(path.relative_to(directory)): file_digest(path)
         for path in sorted(paths)
         if path.is_file()
     }
+
+
+def _verify_completion_views(directory: Path, contract: dict, rows: dict) -> None:  # noqa: C901 - custody checks remain fail-closed in one read-only pass.
+    """Verify rebuildable views against the authoritative journal without changing inputs."""
+    committed = {}
+    for raw_path in sorted(directory.glob("campaigns/*/runs/*/episodes.jsonl")):
+        marker = raw_path.parent / "receipt_execution.json"
+        if not marker.is_file():
+            raise ValueError("comparison requires atomic completion provenance")
+        descriptor = json.loads(marker.read_bytes())
+        if descriptor.get("schema_version") != "receipt-execution.v1" or any(
+            descriptor.get(key) != contract[key] for key in ("execution_key", "source_sha")
+        ):
+            raise ValueError("completion execution provenance differs from contract")
+        seen = set()
+        for line in raw_path.read_text().splitlines():
+            if not line.strip():
+                continue
+            raw = json.loads(line)
+            episode_id = raw["episode_id"]
+            name = hashlib.sha256(episode_id.encode()).hexdigest() + ".json"
+            path = raw_path.parent / "completed" / name
+            if not path.is_file():
+                raise ValueError("raw observation has no atomic completion")
+            record = json.loads(path.read_bytes())
+            encoded = canonical_bytes(encode_row(raw))
+            if (
+                record.get("schema_version") != "receipt-episode.v1"
+                or record.get("episode_id") != episode_id
+                or any(
+                    record.get(key) != descriptor.get(key)
+                    for key in ("execution_key", "source_sha", "run_id")
+                )
+                or record.get("row_sha256") != hashlib.sha256(encoded).hexdigest()
+                or canonical_bytes(record.get("row")) != encoded
+            ):
+                raise ValueError("completion checksum or provenance differs from raw observation")
+            key = (raw_path.parent.name.split("__")[0], raw["scenario_id"], raw["seed"])
+            if key in committed or name in seen:
+                raise ValueError("duplicate completion observation")
+            committed[key] = encoded
+            seen.add(name)
+        if seen != {path.name for path in raw_path.parent.glob("completed/*.json")}:
+            raise ValueError("completion journal and rebuilt view differ")
+    if set(committed) != set(rows):
+        raise ValueError("completion journal and comparison row identities differ")
+    for key, row in rows.items():
+        raw = {key: value for key, value in row.items() if key != "execution_status"}
+        if canonical_bytes(encode_row(raw)) != committed[key]:
+            raise ValueError("comparison row differs from atomic completion")
 
 
 def _scoring_contract(directory: Path, rows: dict) -> dict:
@@ -53,6 +115,7 @@ def _scoring_contract(directory: Path, rows: dict) -> dict:
         recorded = row.get("metrics", {}).get("metric_definitions_sha256")
         if recorded is not None and recorded != definitions:
             raise ValueError("row metric definitions differ from producing contract")
+    _verify_completion_views(directory, contract, rows)
     return {
         "source_sha": source,
         "execution_key": contract["execution_key"],

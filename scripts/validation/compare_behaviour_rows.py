@@ -15,7 +15,7 @@ from pathlib import Path
 from robot_sf.benchmark.metric_definitions import (
     require_uniform_metric_schema,
 )
-from robot_sf.benchmark.receipt_stages import atomic_json, file_digest, stage_key
+from robot_sf.benchmark.receipt_stages import atomic_json, encode_row, file_digest, stage_key
 from scripts.ci import make_behaviour_receipt as producer
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -94,7 +94,9 @@ def compare(head_dir: Path, baseline_dir: Path, scope: dict, output: Path) -> di
         label: stage_key(
             "scoring",
             {
-                "sorted_row_digests": sorted(stage_key("row", row) for row in data.values()),
+                "sorted_row_digests": sorted(
+                    stage_key("row", encode_row(row)) for row in data.values()
+                ),
                 **scoring[label],
             },
         )
@@ -105,7 +107,7 @@ def compare(head_dir: Path, baseline_dir: Path, scope: dict, output: Path) -> di
         {
             "scoring_keys": scoring_keys,
             "baseline_digest": stage_key(
-                "baseline", sorted(stage_key("row", row) for row in baseline.values())
+                "baseline", sorted(stage_key("row", encode_row(row)) for row in baseline.values())
             ),
             "comparator_bundle": {
                 "producer": file_digest(Path(producer.__file__)),

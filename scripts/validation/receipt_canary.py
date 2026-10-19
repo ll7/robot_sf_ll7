@@ -7,7 +7,12 @@ import json
 from pathlib import Path
 
 from robot_sf.benchmark.receipt_contract import episode_inputs
-from robot_sf.benchmark.receipt_stages import atomic_json, stage_key
+from robot_sf.benchmark.receipt_stages import (
+    atomic_json,
+    compare_episode_observation,
+    encode_row,
+    stage_key,
+)
 
 
 def run_canary(derived: list[tuple], output: Path, source_sha: str, steps: int) -> int:  # noqa: C901
@@ -21,7 +26,6 @@ def run_canary(derived: list[tuple], output: Path, source_sha: str, steps: int) 
     from robot_sf.benchmark.camera_ready._config import _load_campaign_scenarios
     from robot_sf.benchmark.map_runner import map_runner as runner
     from robot_sf.benchmark.schema_validator import load_schema
-    from scripts.ci import make_behaviour_receipt as producer
     from scripts.validation import run_empty_world_sweep as sweep
 
     root = Path(__file__).resolve().parents[2]
@@ -55,7 +59,7 @@ def run_canary(derived: list[tuple], output: Path, source_sha: str, steps: int) 
         runner._write_validated(path, schema, row)
         # Consume persisted bytes through the same reader and outcome comparator.
         persisted = json.loads(path.read_text().splitlines()[-1])
-        producer.compare_episode_observation(persisted, persisted)
+        compare_episode_observation(persisted, persisted)
         rows.append(persisted)
         return row
 
@@ -109,7 +113,7 @@ def run_canary(derived: list[tuple], output: Path, source_sha: str, steps: int) 
         "coverage": coverage,
         "episodes": len(rows),
         "finalization": finalization,
-        "comparison_key": stage_key("canary-comparison", rows),
+        "comparison_key": stage_key("canary-comparison", [encode_row(row) for row in rows]),
     }
     atomic_json(output / "canary.json", report)
     print(

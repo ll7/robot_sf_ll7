@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import math
 import os
 import tempfile
 from pathlib import Path
@@ -17,6 +18,42 @@ from typing import Any
 from jsonschema import ValidationError
 
 DESCRIPTOR = "receipt_execution.json"
+
+
+def encode_row(value: Any) -> Any:
+    """Losslessly encode non-finite observation sentinels as explicit versioned JSON tags.
+
+    Returns:
+        Standard JSON data with a reserved tag for unbounded/undefined numeric observations.
+    """
+    if isinstance(value, float) and not math.isfinite(value):
+        return {
+            "$receipt_float.v1": "nan" if math.isnan(value) else "+inf" if value > 0 else "-inf"
+        }
+    if isinstance(value, dict):
+        if "$receipt_float.v1" in value:
+            raise ValueError("reserved receipt numeric tag in raw observation")
+        return {key: encode_row(child) for key, child in value.items()}
+    if isinstance(value, list):
+        return [encode_row(child) for child in value]
+    return value
+
+
+def decode_row(value: Any) -> Any:
+    """Restore the observation's original numeric semantics for the production reader.
+
+    Returns:
+        Original row values, including infinity/NaN sentinels.
+    """
+    if isinstance(value, dict):
+        if set(value) == {"$receipt_float.v1"}:
+            return {"nan": float("nan"), "+inf": float("inf"), "-inf": -float("inf")}[
+                value["$receipt_float.v1"]
+            ]
+        return {key: decode_row(child) for key, child in value.items()}
+    if isinstance(value, list):
+        return [decode_row(child) for child in value]
+    return value
 
 
 def canonical_bytes(value: Any) -> bytes:
@@ -89,7 +126,7 @@ def validate_row(row: dict, schema: dict) -> None:
     from robot_sf.benchmark.map_runner.map_runner_jsonl import write_validated_to_handle  # noqa: PLC0415 - defer heavy runtime imports until the stage executes.
 
     write_validated_to_handle(io.StringIO(), schema, row)
-    canonical_bytes(row)
+    canonical_bytes(encode_row(row))
 
 
 def find_receipt_file(out_path: Path, name: str = DESCRIPTOR) -> Path | None:
@@ -125,8 +162,8 @@ def publish_episode(out_path: Path, schema: dict, row: dict) -> bool:
         "schema_version": "receipt-episode.v1",
         **{key: descriptor[key] for key in ("execution_key", "source_sha", "run_id")},
         "episode_id": episode_id,
-        "row_sha256": hashlib.sha256(canonical_bytes(row)).hexdigest(),
-        "row": row,
+        "row_sha256": hashlib.sha256(canonical_bytes(encode_row(row))).hexdigest(),
+        "row": encode_row(row),
     }
     name = hashlib.sha256(episode_id.encode()).hexdigest() + ".json"
     atomic_json(out_path.parent / "completed" / name, record, immutable=True)
@@ -161,12 +198,13 @@ def recover_episodes(out_path: Path, schema: dict, descriptor: dict) -> list[dic
                 for key in ("execution_key", "source_sha", "run_id")
             ):
                 raise ValueError("completion provenance mismatch")
-            row = record["row"]
+            row = decode_row(record["row"])
             validate_row(row, schema)
             episode_id = row["episode_id"]
             if (
                 record["episode_id"] != episode_id
-                or record["row_sha256"] != hashlib.sha256(canonical_bytes(row)).hexdigest()
+                or record["row_sha256"]
+                != hashlib.sha256(canonical_bytes(encode_row(row))).hexdigest()
             ):
                 raise ValueError("completion checksum mismatch")
             if path.stem != hashlib.sha256(episode_id.encode()).hexdigest() or episode_id in seen:
@@ -182,7 +220,7 @@ def recover_episodes(out_path: Path, schema: dict, descriptor: dict) -> list[dic
     try:
         with os.fdopen(descriptor_fd, "wb") as handle:
             for row in rows:
-                handle.write(canonical_bytes(row) + b"\n")
+                handle.write((json.dumps(row, sort_keys=True) + "\n").encode())
             handle.flush()
             os.fsync(handle.fileno())
         os.replace(temporary, out_path)
@@ -228,4 +266,22 @@ def rebuild_receipt_summary_inputs(ctx: Any, execution: Any) -> Any:
         adapter_samples_seen=samples,
         runtime_algorithm_contract=runtime,
         feasibility_totals=totals,
+    )
+
+
+def compare_episode_observation(head: dict, baseline: dict) -> tuple[bool, int, bool, int]:
+    """Compare observations through the pinned producer's outcome semantics.
+
+    Returns:
+        Head/baseline success and collision observations after metric compatibility checks.
+    """
+    from robot_sf.benchmark.metric_definitions import require_uniform_metric_schema  # noqa: PLC0415
+    from scripts.ci import make_behaviour_receipt as producer  # noqa: PLC0415
+
+    require_uniform_metric_schema([head, baseline])
+    return (
+        producer._row_success(head),
+        producer._row_collisions(head),
+        producer._row_success(baseline),
+        producer._row_collisions(baseline),
     )

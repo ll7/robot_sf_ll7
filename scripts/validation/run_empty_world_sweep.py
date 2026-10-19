@@ -149,7 +149,7 @@ def _git(*args: str) -> str:
     ).stdout.strip()
 
 
-def verify_head(head_sha: str) -> str:
+def verify_head(head_sha: str, *, acquisition_paths: tuple[str, ...] = ()) -> str:
     """Confirm the checkout holds the tree of ``head_sha`` (plus this sweep's own files).
 
     Returns:
@@ -159,7 +159,7 @@ def verify_head(head_sha: str) -> str:
         RuntimeError: If the tree differs from the tested head or the worktree is dirty.
     """
     full = _git("rev-parse", "--verify", f"{head_sha}^{{commit}}")
-    excludes = [f":(exclude){p}" for p in SWEEP_OWN_PATHS]
+    excludes = [f":(exclude){p}" for p in (*SWEEP_OWN_PATHS, *acquisition_paths)]
     diff = _git("diff", "--name-only", full, "HEAD", "--", ".", *excludes)
     if diff:
         raise RuntimeError(f"checkout differs from tested head {full}: {diff.splitlines()[:5]}")
@@ -852,7 +852,7 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def main(argv: list[str] | None = None) -> int:  # noqa: C901, PLR0915
+def main(argv: list[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0915
     """Run the sweep.
 
     Returns:
@@ -862,8 +862,23 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901, PLR0915
     args = _parse_args(argv)
 
     seeds = assert_dev_seeds(args.seeds)  # abort before anything else happens
-    full_sha = verify_head(args.head_sha)
     sys.path.insert(0, str(REPO_ROOT))
+    manifest = args.output_dir.resolve() / "harness.json"
+    if manifest.is_file() and json.loads(manifest.read_bytes()).get("bundle_files"):
+        record = json.loads(manifest.read_bytes())
+        relative = "scripts/validation/receipt_harness.py"
+        committed_helper = subprocess.check_output(
+            ["git", "show", f"{record['harness_source_sha']}:{relative}"], cwd=REPO_ROOT
+        )
+        if (REPO_ROOT / relative).read_bytes() != committed_helper:
+            raise ValueError("acquisition bundle verifier differs from its committed source")
+        from scripts.validation.receipt_harness import verify_bundle
+
+        runtime = _git("rev-parse", "--verify", f"{args.head_sha}^{{commit}}")
+        allowed = verify_bundle(REPO_ROOT, args.output_dir.resolve(), runtime)
+        full_sha = verify_head(args.head_sha, acquisition_paths=allowed)
+    else:
+        full_sha = verify_head(args.head_sha)
     from loguru import logger
 
     logger.remove()

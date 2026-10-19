@@ -315,7 +315,12 @@ identities remain bound to their producers. Events requiring classification rema
 and the output explicitly says `admission: not_evaluated`.
 
 All existing receipt/audit/classification/exact-head review gates remain in force. This tooling
-provides no partial-coverage admission, review exemption, or automatic promotion. Historical
-single-file harness pins are not complete incremental acquisition bundles: a runtime source
-must contain the compatible receipt modules and batch API, or its incremental preflight fails
-closed. Do not copy newer simulator/planner code over an older runtime to make it pass.
+provides no partial-coverage admission, review exemption, or automatic promotion. For a historical baseline, explicitly pin `--sweep-harness-source-sha` to this reviewed
+acquisition tooling. The installer copies its receipt modules and applies a bounded acquisition
+patch to the historical batch/writer/resume functions. It preserves the historical policy and
+simulator implementation. `harness.json` binds original and installed digests for every file;
+the sweep independently reconstructs the overlay from committed objects before exempting those
+exact bytes from runtime-source verification. An incompatible patch or unrelated local edit is
+refused. This is an explicitly recorded development reconstruction, never unchanged archived data.
+Non-finite observation sentinels (for example infinite empty-world clearance) use versioned,
+lossless numeric tags in completion JSON and are restored when rebuilding the production JSONL.

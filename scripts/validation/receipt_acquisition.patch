@@ -1,0 +1,123 @@
+diff --git a/robot_sf/benchmark/camera_ready/_resume_plan.py b/robot_sf/benchmark/camera_ready/_resume_plan.py
+index 2a27d0b54..ac2cf793c 100644
+--- a/robot_sf/benchmark/camera_ready/_resume_plan.py
++++ b/robot_sf/benchmark/camera_ready/_resume_plan.py
+@@ -276,7 +276,7 @@ def _validate_resume_runtime_identities(
+                 )
+ 
+ 
+-def build_resume_plan(
++def build_resume_plan(  # noqa: C901 - journal recovery also rebuilds completed arm summaries.
+     runs_dir: Path,
+     *,
+     planners: list[dict[str, Any]],
+@@ -336,6 +336,10 @@ def build_resume_plan(
+ 
+             episodes_remaining = max(0, expected_jobs - episodes_found)
+             verdict = _build_verdict_str(episodes_found, expected_jobs)
++            if verdict == "skip-complete" and (arm_dir / "receipt_execution.json").is_file():
++                # Atomic observations survive the arm-summary write. Rebuild reporting from
++                # the banked rows; the batch's missing-only filter schedules zero episodes.
++                verdict = f"continue-from-{episodes_found}"
+ 
+             verdicts.append(
+                 ArmResumeVerdict(
+diff --git a/robot_sf/benchmark/map_runner/map_runner.py b/robot_sf/benchmark/map_runner/map_runner.py
+index 269d7d1fa..33648b993 100644
+--- a/robot_sf/benchmark/map_runner/map_runner.py
++++ b/robot_sf/benchmark/map_runner/map_runner.py
+@@ -2,6 +2,7 @@
+ 
+ from __future__ import annotations
+ 
++import json
+ import math
+ from collections.abc import Iterator, Mapping
+ from concurrent.futures import ProcessPoolExecutor, as_completed
+@@ -2578,6 +2579,10 @@ def _write_validated_to_handle(
+     record: dict[str, Any],
+ ) -> None:
+     """Validate one episode record and append it to an open JSONL handle."""
++    from robot_sf.benchmark.receipt_stages import publish_episode  # noqa: PLC0415
++
++    if isinstance(getattr(handle, "name", None), str):
++        publish_episode(Path(handle.name), schema, record)
+     _write_jsonl_record(handle, schema, record)
+ 
+ 
+@@ -3370,11 +3375,21 @@ def _compute_resume_identity_payload(
+ 
+ def _filter_resumed_jobs(ctx: _BatchContext) -> None:
+     """Filter already-completed jobs when resuming a batch."""
+-    existing = index_existing(ctx.out_path)
+-    if not existing:
++    existing = index_existing(ctx.out_path) if ctx.out_path.exists() else set()
++    from robot_sf.benchmark.receipt_stages import find_receipt_file  # noqa: PLC0415
++
++    dispatch_path = find_receipt_file(ctx.out_path, "receipt_dispatch.json")
++    dispatch = json.loads(dispatch_path.read_bytes()) if dispatch_path is not None else None
++    if dispatch is not None:
++        descriptor = json.loads(find_receipt_file(ctx.out_path).read_bytes())
++        if dispatch["execution_key"] != descriptor["execution_key"]:
++            raise ValueError("receipt dispatch execution key differs")
++    if not existing and dispatch is None:
+         return
+     filtered_jobs: list[tuple[dict[str, Any], int]] = []
+     for sc, seed in ctx.jobs:
++        if dispatch is not None and seed not in dispatch["seeds"]:
++            continue
+         identity_payload = _compute_resume_identity_payload(ctx, sc, seed)
+         if _compute_map_episode_id(identity_payload, seed) not in existing:
+             filtered_jobs.append((sc, seed))
+@@ -3545,7 +3560,10 @@ def _execute_and_summarize(ctx: _BatchContext) -> dict[str, Any]:
+     Returns:
+         Final summary dict from the completed batch.
+     """
++    from robot_sf.benchmark.receipt_stages import rebuild_receipt_summary_inputs  # noqa: PLC0415
++
+     batch_execution = _dispatch_batch_execution(ctx)
++    batch_execution = rebuild_receipt_summary_inputs(ctx, batch_execution)
+     return _build_final_summary(ctx, batch_execution)
+ 
+ 
+@@ -3555,6 +3573,7 @@ def run_map_batch(  # noqa: PLR0913
+     schema_path: str | Path,
+     *,
+     batch_config: MapBatchConfig | None = None,
++    preflight_only: bool = False,
+     scenario_path: str | Path | None = None,
+     provenance_scenario_path: str | Path | None = None,
+     horizon: int | None = None,
+@@ -3662,7 +3681,16 @@ def run_map_batch(  # noqa: PLR0913
+     _run_preflight_pipeline(ctx)
+     if ctx.preflight.get("status") == "skipped":
+         return _build_skipped_summary(ctx)
+-    if resume and ctx.out_path.exists():
++    if preflight_only:
++        return {
++            "preflight_complete": True,
++            "jobs": len(ctx.jobs),
++            "scenarios": len(ctx.filtered),
++            "preflight": ctx.preflight,
++        }
++    from robot_sf.benchmark.receipt_stages import find_receipt_file  # noqa: PLC0415
++
++    if resume and (ctx.out_path.exists() or find_receipt_file(ctx.out_path) is not None):
+         _filter_resumed_jobs(ctx)
+     return _execute_and_summarize(ctx)
+ 
+diff --git a/robot_sf/benchmark/map_runner/map_runner_batch_runner.py b/robot_sf/benchmark/map_runner/map_runner_batch_runner.py
+index 28b2f14cc..1c638d061 100644
+--- a/robot_sf/benchmark/map_runner/map_runner_batch_runner.py
++++ b/robot_sf/benchmark/map_runner/map_runner_batch_runner.py
+@@ -261,6 +261,10 @@ def _parallel_execute_map_jobs(  # noqa: PLR0913
+                     adapter_native_steps=adapter_native_steps,
+                     adapter_adapted_steps=adapter_adapted_steps,
+                 )
++                # Publish immediately: an interrupted arm must retain finished futures.
++                from robot_sf.benchmark.receipt_stages import publish_episode  # noqa: PLC0415
++
++                publish_episode(out_path, schema, rec)
+                 results_by_idx[idx] = rec
+             except Exception as exc:  # pragma: no cover  # noqa: BLE001 - batch job isolation
+                 logger.exception(

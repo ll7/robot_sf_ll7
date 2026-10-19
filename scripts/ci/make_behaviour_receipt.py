@@ -888,6 +888,9 @@ def _install_sweep_harness(
         raise ValueError("refusing to overwrite uncommitted sweep harness")
     output_dir.mkdir(parents=True, exist_ok=True)
     manifest = output_dir / "harness.json"
+    from scripts.validation.receipt_harness import bundle_contents, install_bundle
+
+    bundle = bundle_contents(repo_root, runtime_source_sha, source)
     record = _json_bytes(
         {
             "schema_version": "behaviour-sweep-harness.v1",
@@ -897,11 +900,15 @@ def _install_sweep_harness(
             "harness_sha256": hashlib.sha256(harness).hexdigest(),
             "original_harness_sha256": hashlib.sha256(original).hexdigest(),
             "comparison": "development_reconstruction",
+            **(bundle[1] if bundle is not None else {}),
         }
     )
     if manifest.exists() and manifest.read_bytes() != record:
         raise ValueError("existing sweep harness provenance differs; use a fresh work directory")
-    target.write_bytes(harness)
+    if bundle is not None:
+        install_bundle(checkout, bundle[0], bundle[1])
+    else:
+        target.write_bytes(harness)
     manifest.write_bytes(record)
 
 
@@ -992,6 +999,7 @@ def _submit_sbatch_sweep(  # noqa: PLR0913
                 "set -euo pipefail",
                 f"cd -- {shlex.quote(str(checkout))}",
                 "test -f scripts/validation/run_empty_world_sweep.py",
+                'export PYTHONPATH="$PWD:$PWD/fast-pysf${PYTHONPATH:+:$PYTHONPATH}"',
                 "export OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1",
                 shlex.join(cmd),
                 "",
@@ -1561,16 +1569,14 @@ def _execution_evidence(row: dict[str, Any]) -> dict[str, Any]:
 
 
 def compare_episode_observation(head: dict, baseline: dict) -> tuple[bool, int, bool, int]:
-    """Compare scored observations using the production metric meaning guard."""
-    from robot_sf.benchmark.metric_definitions import require_uniform_metric_schema
+    """Compare scored observations using the pinned acquisition outcome contract.
 
-    require_uniform_metric_schema([head, baseline])
-    return (
-        _row_success(head),
-        _row_collisions(head),
-        _row_success(baseline),
-        _row_collisions(baseline),
-    )
+    Returns:
+        Head/baseline success and collision observations.
+    """
+    from robot_sf.benchmark.receipt_stages import compare_episode_observation as compare
+
+    return compare(head, baseline)
 
 
 def build_rows_and_classifications(

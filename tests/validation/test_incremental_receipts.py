@@ -122,6 +122,7 @@ def test_scheduler_pins_working_directory_and_checks_helpers(tmp_path, monkeypat
     )
     script = (work / "behaviour_receipt_head.sbatch").read_text()
     assert "test -f" in script, "missing production helper must fail before a trajectory"
+    assert 'export PYTHONPATH="$PWD:$PWD/fast-pysf' in script
 
 
 def test_generated_campaign_enables_missing_only_resume(tmp_path):
@@ -578,3 +579,115 @@ def test_native_goal_readback_includes_instantiated_kinematics():
         item["parameters"].get("max_linear_speed") is not None
         for item in observed["owned_configurations"]
     )
+
+
+def test_completion_preserves_unbounded_empty_world_metric(tmp_path):
+    """Infinite empty-world clearance is losslessly preserved without invalid JSON records."""
+    import math
+
+    from robot_sf.benchmark.receipt_stages import atomic_json, publish_episode, recover_episodes
+
+    descriptor = {
+        "schema_version": "receipt-execution.v1",
+        "source_sha": "a" * 40,
+        "execution_key": "b" * 64,
+        "run_id": "fixture",
+    }
+    path = tmp_path / "episodes.jsonl"
+    atomic_json(tmp_path / "receipt_execution.json", descriptor, immutable=True)
+    row = {
+        "episode_id": "one",
+        "scenario_id": "slot",
+        "seed": 1001,
+        "metrics": {"success": False, "clearing_distance_min": float("inf")},
+    }
+    assert publish_episode(path, {}, row)
+    restored = recover_episodes(path, {}, descriptor)
+    assert len(restored) == 1
+    assert math.isinf(restored[0]["metrics"]["clearing_distance_min"])
+    completion_bytes = next((tmp_path / "completed").glob("*.json")).read_text()
+    assert "Infinity" not in completion_bytes
+
+
+def test_guarded_child_planner_defaults_are_read_back():
+    """Guard fallback/prior planners have independent effective configurations."""
+    from dataclasses import dataclass
+
+    from robot_sf.benchmark.receipt_contract import _policy_readback
+
+    @dataclass
+    class Config:
+        limit: int
+
+    guard = SimpleNamespace(
+        config=Config(99),
+        fallback_adapter=SimpleNamespace(config=Config(11)),
+        prior_adapter=SimpleNamespace(config=Config(22)),
+    )
+    observed = _policy_readback(SimpleNamespace(_planner_adapter=guard))
+    limits = {item["parameters"].get("limit") for item in observed["owned_configurations"]}
+    assert {11, 22, 99} <= limits
+
+
+def test_pinned_harness_installs_bounded_acquisition_bundle(tmp_path):
+    """Historical runtime policy stays byte-identical while acquisition APIs are overlaid."""
+    import subprocess
+
+    from scripts.ci import make_behaviour_receipt as producer
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+
+    def git(*args):
+        return subprocess.check_output(["git", *args], cwd=repo, text=True).strip()
+
+    git("init", "-b", "main")
+    git("config", "user.name", "Test")
+    git("config", "user.email", "test@example.invalid")
+    runtime_paths = [
+        "robot_sf/benchmark/map_runner/map_runner.py",
+        "robot_sf/benchmark/map_runner/map_runner_batch_runner.py",
+        "robot_sf/benchmark/camera_ready/_resume_plan.py",
+    ]
+    script = repo / "scripts/validation/run_empty_world_sweep.py"
+    script.parent.mkdir(parents=True)
+    script.write_text("# old harness\n")
+    for relative in runtime_paths:
+        path = repo / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("ORIGINAL_POLICY = 1\n")
+    git("add", "scripts", "robot_sf")
+    git("commit", "-m", "runtime")
+    baseline = git("rev-parse", "HEAD")
+    script.write_text("# new harness\n")
+    patched = repo / runtime_paths[0]
+    patched.write_text("ORIGINAL_POLICY = 1\nPREFLIGHT_ONLY = True\n")
+    patch = subprocess.check_output(["git", "diff", "--", runtime_paths[0]], cwd=repo)
+    (repo / "scripts/validation/receipt_acquisition.patch").write_bytes(patch)
+    modules = [
+        "robot_sf/benchmark/receipt_stages.py",
+        "robot_sf/benchmark/receipt_contract.py",
+        "scripts/validation/receipt_canary.py",
+        "scripts/validation/receipt_harness.py",
+        "scripts/validation/compare_behaviour_rows.py",
+    ]
+    for relative in modules:
+        (repo / relative).write_text("# acquisition module\n")
+    git("add", "scripts", "robot_sf")
+    git("commit", "-m", "acquisition bundle")
+    harness = git("rev-parse", "HEAD")
+    work = tmp_path / "work"
+    checkout = producer._ensure_worktree(repo, work, "baseline", baseline)
+    producer._install_sweep_harness(repo, checkout, tmp_path / "out", baseline, harness)
+    assert (checkout / modules[0]).is_file(), "single-script pins omit required acquisition modules"
+    assert (
+        checkout / runtime_paths[0]
+    ).read_text() == "ORIGINAL_POLICY = 1\nPREFLIGHT_ONLY = True\n"
+    manifest = json.loads((tmp_path / "out/harness.json").read_bytes())
+    assert manifest.get("bundle_files"), "every installed acquisition byte must be source-bound"
+    from scripts.validation.receipt_harness import verify_bundle
+
+    assert runtime_paths[0] in verify_bundle(checkout, tmp_path / "out", baseline)
+    (checkout / runtime_paths[0]).write_text("ORIGINAL_POLICY = 2\nPREFLIGHT_ONLY = True\n")
+    with pytest.raises(ValueError, match="differs from committed overlay"):
+        verify_bundle(checkout, tmp_path / "out", baseline)

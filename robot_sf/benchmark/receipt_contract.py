@@ -165,6 +165,8 @@ def _policy_objects(policy: Any) -> list[Any]:
             "_foresight",
             "_predictive_foresight",
             "_adapter",
+            "fallback_adapter",
+            "prior_adapter",
             "_planner_close",
             "_planner_reset",
             "_planner_bind_env",
@@ -530,6 +532,9 @@ def compile_contract(
     # Sign the producer and installed runtime, including metric code used during execution.
     execution = {
         "source_sha": source_sha,
+        "acquisition_bundle": json.loads((output_dir / "harness.json").read_bytes())
+        if (output_dir / "harness.json").is_file()
+        else None,
         "harness_sha256": file_digest(root / "scripts/validation/run_empty_world_sweep.py"),
         "environment": environment_identity(),
         "selected_episode_ids": selected,

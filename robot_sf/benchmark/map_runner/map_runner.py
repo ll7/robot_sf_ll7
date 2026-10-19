@@ -3381,7 +3381,7 @@ def _filter_resumed_jobs(ctx: _BatchContext) -> None:
     dispatch_path = find_receipt_file(ctx.out_path, "receipt_dispatch.json")
     dispatch = json.loads(dispatch_path.read_bytes()) if dispatch_path is not None else None
     if dispatch is not None:
-        descriptor = json.loads(find_receipt_file(ctx.out_path).read_bytes())
+        descriptor = json.loads(cast("Path", find_receipt_file(ctx.out_path)).read_bytes())
         if dispatch["execution_key"] != descriptor["execution_key"]:
             raise ValueError("receipt dispatch execution key differs")
     if not existing and dispatch is None:

@@ -13,6 +13,7 @@ import os
 import subprocess
 import tempfile
 from pathlib import Path
+from typing import cast
 
 SCRIPT = "scripts/validation/run_empty_world_sweep.py"
 PATCH = "scripts/validation/receipt_acquisition.patch"
@@ -47,8 +48,8 @@ def _digest(value: bytes | None) -> str | None:
 
 
 def _patched_files(repo: Path, runtime: str, harness: str, patch: bytes) -> dict[str, bytes]:
-    originals = {name: _blob(repo, runtime, name) for name in RUNTIME_PATHS}
-    desired = {name: _blob(repo, harness, name) for name in RUNTIME_PATHS}
+    originals = {name: cast("bytes", _blob(repo, runtime, name)) for name in RUNTIME_PATHS}
+    desired = {name: cast("bytes", _blob(repo, harness, name)) for name in RUNTIME_PATHS}
     if originals == desired:
         return originals
     # Limit patch input and output to the audited acquisition files. Never substitute an
@@ -86,7 +87,7 @@ def bundle_contents(repo: Path, runtime: str, harness: str) -> tuple[dict[str, b
     patch = _blob(repo, harness, PATCH, optional=True)
     if patch is None:
         return None
-    files = {name: _blob(repo, harness, name) for name in (SCRIPT, *MODULES)}
+    files = {name: cast("bytes", _blob(repo, harness, name)) for name in (SCRIPT, *MODULES)}
     files.update(_patched_files(repo, runtime, harness, patch))
     manifest = {
         "acquisition_patch_sha256": _digest(patch),

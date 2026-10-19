@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 import json
 from pathlib import Path
+from typing import Any, cast
 
 from robot_sf.benchmark.receipt_contract import episode_inputs
 from robot_sf.benchmark.receipt_stages import (
@@ -56,7 +57,7 @@ def run_canary(derived: list[tuple], output: Path, source_sha: str, steps: int) 
             },
             immutable=True,
         )
-        runner._write_validated(path, schema, row)
+        runner._write_validated(path, schema, cast("dict[str, Any]", row))
         # Consume persisted bytes through the same reader and outcome comparator.
         persisted = json.loads(path.read_text().splitlines()[-1])
         compare_episode_observation(persisted, persisted)

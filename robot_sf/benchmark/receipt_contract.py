@@ -329,12 +329,13 @@ def inspect_construction(scenario: dict, seed: int, **kwargs: Any) -> dict:
         env = episode.make_robot_env(config=ctx.config, seed=seed, debug=False)
         if contract.planner_bind_env:
             contract.planner_bind_env(env)
+        native_env: Any = env.unwrapped
         return {
             "resolved_policy": plain(ctx.policy_cfg),
-            "simulator": plain(env.unwrapped.simulator.config),
-            "robot": plain(env.unwrapped.simulator.robots[0].config),
+            "simulator": plain(native_env.simulator.config),
+            "robot": plain(native_env.simulator.robots[0].config),
             "environment": {
-                name: plain(getattr(env.unwrapped.config, name))
+                name: plain(getattr(native_env.config, name))
                 for name in ("observation_mode", "robot_config", "sim_config")
             },
             "planner": _policy_readback(contract.policy_fn),

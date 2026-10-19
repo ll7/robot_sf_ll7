@@ -33,7 +33,7 @@ import sys
 import time
 from pathlib import Path
 from pickle import UnpicklingError
-from typing import Any
+from typing import Any, cast
 
 import yaml
 
@@ -999,7 +999,10 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0915
                     "execution_error": f"{type(error).__name__} during campaign execution",
                 }
             campaign_root = Path(
-                result.get("campaign_root") or out_dir / "campaigns" / f"empty_world_{suite}"
+                cast(
+                    "str | Path",
+                    result.get("campaign_root") or out_dir / "campaigns" / f"empty_world_{suite}",
+                )
             )
             rows, axes = reconcile_execution(
                 cfg,

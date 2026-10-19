@@ -23,7 +23,7 @@ index 2a27d0b54..ac2cf793c 100644
              verdicts.append(
                  ArmResumeVerdict(
 diff --git a/robot_sf/benchmark/map_runner/map_runner.py b/robot_sf/benchmark/map_runner/map_runner.py
-index 269d7d1fa..2e22e5eb0 100644
+index 269d7d1fa..7c6940178 100644
 --- a/robot_sf/benchmark/map_runner/map_runner.py
 +++ b/robot_sf/benchmark/map_runner/map_runner.py
 @@ -2,6 +2,7 @@
@@ -57,7 +57,7 @@ index 269d7d1fa..2e22e5eb0 100644
 +    dispatch_path = find_receipt_file(ctx.out_path, "receipt_dispatch.json")
 +    dispatch = json.loads(dispatch_path.read_bytes()) if dispatch_path is not None else None
 +    if dispatch is not None:
-+        descriptor = json.loads(find_receipt_file(ctx.out_path).read_bytes())
++        descriptor = json.loads(cast("Path", find_receipt_file(ctx.out_path)).read_bytes())
 +        if dispatch["execution_key"] != descriptor["execution_key"]:
 +            raise ValueError("receipt dispatch execution key differs")
 +    if not existing and dispatch is None:

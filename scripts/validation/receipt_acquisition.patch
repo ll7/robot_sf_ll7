@@ -4,22 +4,22 @@ index 2a27d0b54..ac2cf793c 100644
 +++ b/robot_sf/benchmark/camera_ready/_resume_plan.py
 @@ -276,7 +276,7 @@ def _validate_resume_runtime_identities(
                  )
- 
- 
+
+
 -def build_resume_plan(
 +def build_resume_plan(  # noqa: C901 - journal recovery also rebuilds completed arm summaries.
      runs_dir: Path,
      *,
      planners: list[dict[str, Any]],
 @@ -336,6 +336,10 @@ def build_resume_plan(
- 
+
              episodes_remaining = max(0, expected_jobs - episodes_found)
              verdict = _build_verdict_str(episodes_found, expected_jobs)
 +            if verdict == "skip-complete" and (arm_dir / "receipt_execution.json").is_file():
 +                # Atomic observations survive the arm-summary write. Rebuild reporting from
 +                # the banked rows; the batch's missing-only filter schedules zero episodes.
 +                verdict = f"continue-from-{episodes_found}"
- 
+
              verdicts.append(
                  ArmResumeVerdict(
 diff --git a/robot_sf/benchmark/map_runner/map_runner.py b/robot_sf/benchmark/map_runner/map_runner.py
@@ -27,9 +27,9 @@ index 269d7d1fa..33648b993 100644
 --- a/robot_sf/benchmark/map_runner/map_runner.py
 +++ b/robot_sf/benchmark/map_runner/map_runner.py
 @@ -2,6 +2,7 @@
- 
+
  from __future__ import annotations
- 
+
 +import json
  import math
  from collections.abc import Iterator, Mapping
@@ -43,10 +43,10 @@ index 269d7d1fa..33648b993 100644
 +    if isinstance(getattr(handle, "name", None), str):
 +        publish_episode(Path(handle.name), schema, record)
      _write_jsonl_record(handle, schema, record)
- 
- 
+
+
 @@ -3370,11 +3375,21 @@ def _compute_resume_identity_payload(
- 
+
  def _filter_resumed_jobs(ctx: _BatchContext) -> None:
      """Filter already-completed jobs when resuming a batch."""
 -    existing = index_existing(ctx.out_path)
@@ -78,8 +78,8 @@ index 269d7d1fa..33648b993 100644
      batch_execution = _dispatch_batch_execution(ctx)
 +    batch_execution = rebuild_receipt_summary_inputs(ctx, batch_execution)
      return _build_final_summary(ctx, batch_execution)
- 
- 
+
+
 @@ -3555,6 +3573,7 @@ def run_map_batch(  # noqa: PLR0913
      schema_path: str | Path,
      *,
@@ -105,7 +105,7 @@ index 269d7d1fa..33648b993 100644
 +    if resume and (ctx.out_path.exists() or find_receipt_file(ctx.out_path) is not None):
          _filter_resumed_jobs(ctx)
      return _execute_and_summarize(ctx)
- 
+
 diff --git a/robot_sf/benchmark/map_runner/map_runner_batch_runner.py b/robot_sf/benchmark/map_runner/map_runner_batch_runner.py
 index 28b2f14cc..1c638d061 100644
 --- a/robot_sf/benchmark/map_runner/map_runner_batch_runner.py

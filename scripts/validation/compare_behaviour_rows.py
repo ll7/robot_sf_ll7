@@ -58,6 +58,7 @@ def _scoring_contract(directory: Path, rows: dict) -> dict:
         "execution_key": contract["execution_key"],
         "metric_schema_version": contract["metric_schema_version"],
         "metric_definitions_sha256": definitions,
+        "metric_semantics_sha256": execution.get("metric_semantics_sha256", definitions),
         "scorer_bundle": execution.get("scorer_bundle", {"complete_producing_source_sha": source}),
         "mode": "execution-time-metrics",
     }
@@ -83,10 +84,7 @@ def compare(head_dir: Path, baseline_dir: Path, scope: dict, output: Path) -> di
         "head": _scoring_contract(head_dir, head),
         "baseline": _scoring_contract(baseline_dir, baseline),
     }
-    if (
-        scoring["head"]["metric_definitions_sha256"]
-        != scoring["baseline"]["metric_definitions_sha256"]
-    ):
+    if scoring["head"]["metric_semantics_sha256"] != scoring["baseline"]["metric_semantics_sha256"]:
         raise ValueError("incompatible metric definitions in producing scoring contracts")
     if any(contract["metric_schema_version"] != version for contract in scoring.values()):
         raise ValueError("row metric schema differs from producing scoring contract")

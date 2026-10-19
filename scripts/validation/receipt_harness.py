@@ -26,7 +26,7 @@ MODULES = (
     "robot_sf/benchmark/receipt_contract.py",
     "scripts/validation/receipt_canary.py",
     "scripts/validation/receipt_harness.py",
-    "scripts/validation/compare_behaviour_rows.py",
+    "configs/benchmarks/releases/behaviour_gate_0_1_0.json",
 )
 
 

@@ -1177,18 +1177,15 @@ def _load_sweep_rows(sweep_dir: Path) -> dict[tuple[str, str, int], dict[str, An
 
 
 def _row_success(row: dict[str, Any]) -> bool:
-    if "success" in row:
-        return bool(row["success"])
-    metrics = row.get("metrics") or {}
-    outcome = row.get("outcome") or {}
-    return bool(metrics.get("success") or outcome.get("route_complete"))
+    from robot_sf.benchmark.receipt_stages import observation_success
+
+    return observation_success(row)
 
 
 def _row_collisions(row: dict[str, Any]) -> int:
-    if row.get("collisions") is not None:
-        return int(row["collisions"])
-    metrics = row.get("metrics") or {}
-    return int(metrics.get("total_collision_count", metrics.get("collisions", 0)) or 0)
+    from robot_sf.benchmark.receipt_stages import observation_collisions
+
+    return observation_collisions(row)
 
 
 def _runtime_objects(
@@ -1889,9 +1886,10 @@ def _prepare_sweeps(  # noqa: C901 - paired acquisition modes and preflight admi
         for field in ("row_schema_sha256", "metric_schema_version"):
             if contracts[0][field] != contracts[1][field]:
                 raise ValueError("paired preflight contract row/metric schema mismatch")
-        if (
-            contracts[0]["execution"]["metric_definitions_sha256"]
-            != contracts[1]["execution"]["metric_definitions_sha256"]
+        if contracts[0]["execution"].get(
+            "metric_semantics_sha256", contracts[0]["execution"].get("metric_definitions_sha256")
+        ) != contracts[1]["execution"].get(
+            "metric_semantics_sha256", contracts[1]["execution"].get("metric_definitions_sha256")
         ):
             raise ValueError("paired preflight contract metric semantics mismatch")
     if args.mode == "local":

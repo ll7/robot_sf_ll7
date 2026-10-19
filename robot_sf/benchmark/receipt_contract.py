@@ -470,11 +470,8 @@ def compile_contract(
 
     Returns:
         The validated stage result."""
+    from robot_sf.benchmark import metric_definitions  # noqa: PLC0415
     from robot_sf.benchmark.camera_ready._config import _load_campaign_scenarios  # noqa: PLC0415 - defer heavy runtime imports until the stage executes.
-    from robot_sf.benchmark.metric_definitions import (  # noqa: PLC0415 - stage-local heavy dependency.
-        METRIC_SCHEMA_VERSION,
-        metric_definitions_sha256,
-    )
 
     selected = selected_episode_ids(derived)
     expected = expected_episode_ids(root)
@@ -529,7 +526,18 @@ def compile_contract(
                         }
                     )
     assets = input_digests(root, [snapshots, [plain(cfg) for _, _, _, cfg in derived]])
-    # Sign the producer and installed runtime, including metric code used during execution.
+    # Hash the historical metric implementation without substituting newer metric code.
+    metric_sources = {
+        relative: file_digest(root / relative)
+        for relative in (
+            "robot_sf/benchmark/metrics.py",
+            "robot_sf/benchmark/metric_definitions.py",
+            "robot_sf/benchmark/constants.py",
+            "robot_sf/benchmark/robot_force_contract.py",
+            "robot_sf/benchmark/map_runner/map_runner_episode.py",
+        )
+    }
+    declared_digest = getattr(metric_definitions, "metric_definitions_sha256", None)
     execution = {
         "source_sha": source_sha,
         "acquisition_bundle": json.loads((output_dir / "harness.json").read_bytes())
@@ -540,7 +548,9 @@ def compile_contract(
         "selected_episode_ids": selected,
         "effective_inputs": snapshots,
         "assets": assets,
-        "metric_definitions_sha256": metric_definitions_sha256(),
+        "metric_definitions_sha256": declared_digest() if declared_digest is not None else None,
+        "metric_semantics_sha256": stage_key("metric-semantics", metric_sources),
+        "metric_semantics_sources": metric_sources,
     }
     return {
         "schema_version": "receipt-contract.v1",
@@ -554,7 +564,7 @@ def compile_contract(
         "row_schema_sha256": file_digest(
             root / "robot_sf/benchmark/schemas/episode.schema.v1.json"
         ),
-        "metric_schema_version": METRIC_SCHEMA_VERSION,
+        "metric_schema_version": metric_definitions.METRIC_SCHEMA_VERSION,
         "disk": disk,
     }
 

@@ -670,10 +670,12 @@ def test_pinned_harness_installs_bounded_acquisition_bundle(tmp_path):
         "scripts/validation/receipt_canary.py",
         "scripts/validation/receipt_harness.py",
         "scripts/validation/compare_behaviour_rows.py",
+        "configs/benchmarks/releases/behaviour_gate_0_1_0.json",
     ]
     for relative in modules:
+        (repo / relative).parent.mkdir(parents=True, exist_ok=True)
         (repo / relative).write_text("# acquisition module\n")
-    git("add", "scripts", "robot_sf")
+    git("add", "scripts", "robot_sf", "configs")
     git("commit", "-m", "acquisition bundle")
     harness = git("rev-parse", "HEAD")
     work = tmp_path / "work"
@@ -691,3 +693,98 @@ def test_pinned_harness_installs_bounded_acquisition_bundle(tmp_path):
     (checkout / runtime_paths[0]).write_text("ORIGINAL_POLICY = 2\nPREFLIGHT_ONLY = True\n")
     with pytest.raises(ValueError, match="differs from committed overlay"):
         verify_bundle(checkout, tmp_path / "out", baseline)
+
+
+def test_goal_canary_uses_final_destination_not_current_waypoint(tmp_path, monkeypatch):
+    """A multi-waypoint route's first target is not its terminal goal fixture."""
+    from robot_sf.benchmark.camera_ready_campaign import load_campaign_config
+    from robot_sf.benchmark.map_runner import map_runner as runner
+    from robot_sf.training.scenario_loader import build_robot_config_from_scenario
+    from scripts.validation.receipt_canary import run_canary
+
+    path, scenarios = sweep.build_derived_inputs(
+        "main",
+        seeds=[1001],
+        arms=["goal"],
+        scenarios_filter=["classic_bottleneck_low"],
+        workers=1,
+        out_dir=tmp_path / "inputs",
+        step_trace=True,
+    )
+
+    def worker(scenario, seed, **kwargs):
+        build_robot_config_from_scenario(scenario, scenario_path=kwargs["scenario_path"])
+        hook = kwargs.get("pair_reset_hook")
+        name = hook.__name__ if hook else "timeout"
+        if name == "at_goal":
+            nav = SimpleNamespace(waypoints=[(1.0, 1.0), (9.0, 9.0)], waypoint_id=0, pos=(0.0, 0.0))
+            poses = []
+            sim = SimpleNamespace(
+                robot_navs=[nav],
+                goal_pos=[(1.0, 1.0)],
+                robots=[SimpleNamespace(reset_state=poses.append)],
+            )
+            hook(SimpleNamespace(unwrapped=SimpleNamespace(simulator=sim)), {})
+            assert poses[0][0] == (9.0, 9.0), (
+                "current waypoint cannot finalize a multi-waypoint route"
+            )
+        return {
+            "episode_id": scenario["name"],
+            "scenario_id": scenario["name"],
+            "seed": seed,
+            "metrics": {"success": name == "at_goal", "collisions": int(name == "at_boundary")},
+            "outcome": {
+                "timeout_event": name == "timeout",
+                "collision_event": name == "at_boundary",
+            },
+        }
+
+    def write(path, schema, row):
+        with path.open("a") as handle:
+            handle.write(json.dumps(row) + "\n")
+
+    monkeypatch.setattr(runner, "_run_map_episode", worker)
+    monkeypatch.setattr(runner, "_write_validated", write)
+    assert (
+        run_canary(
+            [("main", path, scenarios, load_campaign_config(path))],
+            tmp_path / "canary",
+            "a" * 40,
+            2,
+        )
+        == 0
+    )
+
+
+def test_historical_runtime_without_definition_digest_still_gets_a_bound_contract(
+    tmp_path, monkeypatch
+):
+    """Missing newer provenance APIs cannot prevent inspection of historical metric sources."""
+    from robot_sf.benchmark import metric_definitions, receipt_contract
+    from robot_sf.benchmark.camera_ready_campaign import load_campaign_config
+    from robot_sf.benchmark.map_runner import map_runner as runner
+
+    path, scenarios = sweep.build_derived_inputs(
+        "main",
+        seeds=[1001],
+        arms=["goal"],
+        scenarios_filter=["classic_bottleneck_low"],
+        workers=1,
+        out_dir=tmp_path,
+        step_trace=True,
+    )
+    monkeypatch.delattr(metric_definitions, "metric_definitions_sha256")
+    monkeypatch.setattr(receipt_contract, "inspect_construction", lambda *args, **kwargs: {})
+    monkeypatch.setattr(
+        runner, "run_map_batch", lambda scenarios, **kwargs: {"preflight_complete": True, "jobs": 1}
+    )
+    contract = receipt_contract.compile_contract(
+        [("main", path, scenarios, load_campaign_config(path))],
+        source_sha="a" * 40,
+        root=REPO_ROOT,
+        output_dir=tmp_path,
+        minimum_free_bytes=0,
+        full_roster=False,
+    )
+    assert contract["execution"]["metric_definitions_sha256"] is None
+    assert len(contract["execution"]["metric_semantics_sha256"]) == 64

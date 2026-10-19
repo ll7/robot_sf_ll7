@@ -269,19 +269,44 @@ def rebuild_receipt_summary_inputs(ctx: Any, execution: Any) -> Any:
     )
 
 
+def observation_success(row: dict) -> bool:
+    """Read the existing receipt success semantics from raw or flattened observations.
+
+    Returns:
+        Whether the observation reports completed navigation.
+    """
+    if "success" in row:
+        return bool(row["success"])
+    return bool(
+        (row.get("metrics") or {}).get("success")
+        or (row.get("outcome") or {}).get("route_complete")
+    )
+
+
+def observation_collisions(row: dict) -> int:
+    """Read the existing receipt collision semantics without newer producer dependencies.
+
+    Returns:
+        Recorded collision count.
+    """
+    if row.get("collisions") is not None:
+        return int(row["collisions"])
+    metrics = row.get("metrics") or {}
+    return int(metrics.get("total_collision_count", metrics.get("collisions", 0)) or 0)
+
+
 def compare_episode_observation(head: dict, baseline: dict) -> tuple[bool, int, bool, int]:
-    """Compare observations through the pinned producer's outcome semantics.
+    """Compare observations through the shared receipt outcome semantics.
 
     Returns:
         Head/baseline success and collision observations after metric compatibility checks.
     """
     from robot_sf.benchmark.metric_definitions import require_uniform_metric_schema  # noqa: PLC0415
-    from scripts.ci import make_behaviour_receipt as producer  # noqa: PLC0415
 
     require_uniform_metric_schema([head, baseline])
     return (
-        producer._row_success(head),
-        producer._row_collisions(head),
-        producer._row_success(baseline),
-        producer._row_collisions(baseline),
+        observation_success(head),
+        observation_collisions(head),
+        observation_success(baseline),
+        observation_collisions(baseline),
     )

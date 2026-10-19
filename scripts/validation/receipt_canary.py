@@ -79,7 +79,7 @@ def run_canary(derived: list[tuple], output: Path, source_sha: str, steps: int) 
     def at_goal(env, _obs):
         sim = env.unwrapped.simulator
         nav = sim.robot_navs[0]
-        goal = tuple(sim.goal_pos[0])
+        goal = tuple(nav.waypoints[-1])
         nav.waypoint_id = len(nav.waypoints) - 1
         nav.pos = goal
         sim.robots[0].reset_state((goal, 0.0))

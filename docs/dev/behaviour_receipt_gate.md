@@ -324,3 +324,9 @@ exact bytes from runtime-source verification. An incompatible patch or unrelated
 refused. This is an explicitly recorded development reconstruction, never unchanged archived data.
 Non-finite observation sentinels (for example infinite empty-world clearance) use versioned,
 lossless numeric tags in completion JSON and are restored when rebuilding the production JSONL.
+
+For historical runtimes without a declared definitions digest, the contract records that absence
+and hashes the actual metric implementation files. It never copies current metric code over the
+historical implementation. Paired preflight rejects incompatible semantic source bundles even
+when a version label is unchanged. Run standalone comparisons from the reviewed acquisition
+checkout; historical runtime overlays contain only the modules needed for acquisition.

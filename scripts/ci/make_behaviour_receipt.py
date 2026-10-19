@@ -806,7 +806,7 @@ def _release_source(repo_root: Path, baseline: str) -> str:
         return _full_sha(repo_root, f"refs/tags/{baseline}")
 
 
-def _sweep_command(
+def _sweep_command(  # noqa: PLR0913
     source_sha: str,
     output_dir: Path,
     seeds: list[int],
@@ -816,6 +816,7 @@ def _sweep_command(
     workers: int,
     check_only: bool,
     canary: bool = False,
+    first_seed_only: bool = False,
 ) -> list[str]:
     cmd = [
         "uv",
@@ -841,6 +842,8 @@ def _sweep_command(
         cmd.append("--check-only")
     if canary:
         cmd.append("--canary")
+    if first_seed_only:
+        cmd.append("--first-seed-only")
     return cmd
 
 
@@ -955,6 +958,7 @@ def _submit_sbatch_sweep(  # noqa: PLR0913
     sweep_harness_source_sha: str | None = None,
     check_only: bool = False,
     canary: bool = False,
+    first_seed_only: bool = False,
 ) -> SweepRun:
     checkout = _ensure_worktree(repo_root, work_dir, label, source_sha).resolve()
     if canary and workers > 2:
@@ -974,6 +978,7 @@ def _submit_sbatch_sweep(  # noqa: PLR0913
         workers=workers,
         check_only=check_only,
         canary=canary,
+        first_seed_only=first_seed_only,
     )
     script = work_dir / f"behaviour_receipt_{label}.sbatch"
     script.write_text(
@@ -1580,6 +1585,14 @@ def build_rows_and_classifications(
     from robot_sf.benchmark.metric_definitions import require_uniform_metric_schema
 
     require_uniform_metric_schema([*head_rows.values(), *baseline_rows.values()])
+    expected = {
+        (arm, slot, seed)
+        for arm in scope["arms"]
+        for slot in scope["maps"]
+        for seed in DEFAULT_SEEDS
+    }
+    if set(head_rows) - expected or set(baseline_rows) - expected:
+        raise ValueError("unexpected episode identities in comparison inputs")
     rows: list[dict[str, Any]] = []
     classifications: list[dict[str, Any]] = []
     for arm in scope["arms"]:
@@ -1782,6 +1795,7 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--receipt-id", required=True)
     parser.add_argument("--mode", choices=("existing", "local", "sbatch"), default="existing")
     parser.add_argument("--submit-only", action="store_true")
+    parser.add_argument("--first-seed-only", action="store_true")
     parser.add_argument("--head-sweep-dir", type=Path)
     parser.add_argument("--baseline-sweep-dir", type=Path)
     parser.add_argument("--work-dir", type=Path, default=Path("output/behaviour_receipt"))
@@ -1828,7 +1842,7 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def _prepare_sweeps(
+def _prepare_sweeps(  # noqa: C901 - paired acquisition modes and preflight admission.
     args: argparse.Namespace, repo_root: Path, baseline_source: str
 ) -> tuple[SweepRun, SweepRun]:
     seeds = _check_seed_range(list(args.seeds))
@@ -1854,6 +1868,26 @@ def _prepare_sweeps(
                 job_id=args.baseline_job_id,
             ),
         )
+    if not args.check_only and not getattr(args, "canary", False):
+        contracts = []
+        for label, source in (("head", args.head_sha), ("baseline", baseline_source)):
+            path = work_dir / "sweeps" / label / "contract.json"
+            if not path.is_file():
+                raise ValueError(
+                    "paired execution requires both preflight contracts; submit --check-only first"
+                )
+            contract = json.loads(path.read_bytes())
+            if contract.get("source_sha") != source or not contract.get("full_roster"):
+                raise ValueError("preflight contract source/full-roster differs")
+            contracts.append(contract)
+        for field in ("row_schema_sha256", "metric_schema_version"):
+            if contracts[0][field] != contracts[1][field]:
+                raise ValueError("paired preflight contract row/metric schema mismatch")
+        if (
+            contracts[0]["execution"]["metric_definitions_sha256"]
+            != contracts[1]["execution"]["metric_definitions_sha256"]
+        ):
+            raise ValueError("paired preflight contract metric semantics mismatch")
     if args.mode == "local":
         return (
             _run_local_sweep(
@@ -1894,6 +1928,7 @@ def _prepare_sweeps(
             sweep_harness_source_sha=args.sweep_harness_source_sha,
             check_only=args.check_only,
             canary=getattr(args, "canary", False),
+            first_seed_only=getattr(args, "first_seed_only", False),
         ),
         _submit_sbatch_sweep(
             repo_root,
@@ -1907,6 +1942,7 @@ def _prepare_sweeps(
             sweep_harness_source_sha=args.sweep_harness_source_sha,
             check_only=args.check_only,
             canary=getattr(args, "canary", False),
+            first_seed_only=getattr(args, "first_seed_only", False),
         ),
     )
 
@@ -1947,7 +1983,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     baseline_source = _release_source(repo_root, baseline_release)
     scheduler, baseline = _prepare_sweeps(args, repo_root, baseline_source)
-    if args.submit_only:
+    if args.submit_only or args.check_only or args.canary:
         print(json.dumps({"head_job_id": scheduler.job_id, "baseline_job_id": baseline.job_id}))
         return 0
     scope = _load_scope(args.scope_path)

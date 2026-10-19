@@ -2,6 +2,7 @@
 
 import json
 from dataclasses import replace
+from types import SimpleNamespace
 
 import pytest
 
@@ -159,3 +160,157 @@ def test_comparator_refuses_incompatible_row_meanings():
             classification_class="known_limitation",
             evidence_base_uri="https://example.org/evidence",
         )
+
+
+def test_runtime_input_digest_mismatch_refused_before_collection(tmp_path):
+    """Read-back assets must match the digest captured by the real resolver."""
+    from robot_sf.benchmark.receipt_contract import input_digests
+
+    asset = tmp_path / "map.svg"
+    asset.write_bytes(b"changed geometry")
+    with pytest.raises(ValueError, match="digest"):
+        input_digests(tmp_path, [{"path": str(asset), "sha256": "0" * 64}])
+
+
+def test_atomic_json_accepts_canonical_sequences(tmp_path):
+    """The runtime package inventory must survive canonical JSON publication."""
+    from robot_sf.benchmark.receipt_stages import atomic_json
+
+    atomic_json(tmp_path / "record.json", {"packages": [("numpy", "1")]})
+    assert json.loads((tmp_path / "record.json").read_bytes()) == {"packages": [["numpy", "1"]]}
+
+
+def test_comparator_refuses_extra_episode_rows():
+    """Unexpected rows cannot be silently discarded when constructing a full comparison."""
+    from scripts.ci import make_behaviour_receipt as producer
+
+    expected = {
+        ("goal", "slot", seed): {"success": True, "collisions": 0}
+        for seed in producer.DEFAULT_SEEDS
+    }
+    head = {**expected, ("goal", "unexpected", 1001): {"success": True, "collisions": 0}}
+    with pytest.raises(ValueError, match="unexpected.*episode"):
+        producer.build_rows_and_classifications(
+            head,
+            expected,
+            {"arms": ["goal"], "maps": ["slot"]},
+            classification_class="known_limitation",
+            evidence_base_uri="https://example.org/evidence",
+        )
+
+
+def test_completed_collisions_and_timeouts_resume_without_retry(tmp_path, monkeypatch):
+    """The atomic journal rehydrates completed failures, not just successful navigation."""
+    from robot_sf.benchmark.map_runner import map_runner as runner
+    from robot_sf.benchmark.receipt_stages import atomic_json, publish_episode, recover_episodes
+
+    descriptor = {
+        "schema_version": "receipt-execution.v1",
+        "source_sha": "a" * 40,
+        "execution_key": "b" * 64,
+        "run_id": "fixture",
+    }
+    path = tmp_path / "episodes.jsonl"
+    atomic_json(tmp_path / "receipt_execution.json", descriptor, immutable=True)
+    collision = {
+        "episode_id": "collision",
+        "scenario_id": "slot",
+        "seed": 1001,
+        "metrics": {"success": False, "collisions": 1},
+        "outcome": {"collision_event": True},
+    }
+    timeout = {
+        "episode_id": "timeout",
+        "scenario_id": "slot",
+        "seed": 1002,
+        "metrics": {"success": False, "collisions": 0},
+        "outcome": {"timeout_event": True},
+    }
+    assert publish_episode(path, {}, collision)
+    assert publish_episode(path, {}, timeout)
+    path.write_text('{"torn":')
+    rows = recover_episodes(path, {}, descriptor)
+    assert {row["episode_id"] for row in rows} == {"collision", "timeout"}
+    ctx = SimpleNamespace(out_path=path, jobs=[({}, 1001), ({}, 1002), ({}, 1003)])
+    monkeypatch.setattr(runner, "_compute_resume_identity_payload", lambda *args: {})
+    monkeypatch.setattr(
+        runner,
+        "_compute_map_episode_id",
+        lambda payload, seed: {1001: "collision", 1002: "timeout", 1003: "missing"}[seed],
+    )
+    runner._filter_resumed_jobs(ctx)
+    assert ctx.jobs == [({}, 1003)]
+    with pytest.raises(ValueError, match="same-source"):
+        recover_episodes(path, {}, {**descriptor, "source_sha": "c" * 40})
+
+
+def test_corrupt_completion_is_preserved_and_requeued(tmp_path):
+    """A checksum failure preserves diagnosis and reruns only the invalid observation."""
+    from robot_sf.benchmark.receipt_stages import atomic_json, publish_episode, recover_episodes
+
+    descriptor = {
+        "schema_version": "receipt-execution.v1",
+        "source_sha": "a" * 40,
+        "execution_key": "b" * 64,
+        "run_id": "fixture",
+    }
+    path = tmp_path / "episodes.jsonl"
+    atomic_json(tmp_path / "receipt_execution.json", descriptor, immutable=True)
+    row = {"episode_id": "one", "scenario_id": "slot", "seed": 1001, "metrics": {"success": False}}
+    publish_episode(path, {}, row)
+    completion = next((tmp_path / "completed").glob("*.json"))
+    record = json.loads(completion.read_bytes())
+    record["row"]["seed"] = 1002
+    completion.write_text(json.dumps(record))
+    assert recover_episodes(path, {}, descriptor) == []
+    assert len(list((tmp_path / "invalid").glob("*.json"))) == 1
+    assert publish_episode(path, {}, row)
+    assert recover_episodes(path, {}, descriptor) == [row]
+
+
+def test_first_seed_dispatch_keeps_full_campaign_contract(tmp_path, monkeypatch):
+    """A first-seed stage schedules one seed without changing the execution identity."""
+    from robot_sf.benchmark.map_runner import map_runner as runner
+
+    path = tmp_path / "episodes.jsonl"
+    path.write_text("")
+    descriptor = {
+        "schema_version": "receipt-execution.v1",
+        "source_sha": "a" * 40,
+        "execution_key": "b" * 64,
+        "run_id": "fixture",
+    }
+    (tmp_path / "receipt_execution.json").write_text(json.dumps(descriptor))
+    (tmp_path / "receipt_dispatch.json").write_text(
+        json.dumps({"execution_key": "b" * 64, "seeds": [1001]})
+    )
+    ctx = SimpleNamespace(out_path=path, jobs=[({}, 1001), ({}, 1002)])
+    monkeypatch.setattr(runner, "_compute_resume_identity_payload", lambda *args: {})
+    monkeypatch.setattr(runner, "_compute_map_episode_id", lambda payload, seed: str(seed))
+    runner._filter_resumed_jobs(ctx)
+    assert ctx.jobs == [({}, 1001)]
+
+
+def test_paired_submission_requires_compatible_preflight_contracts(tmp_path, monkeypatch):
+    """The long paired submission cannot race ahead of its schema/contract preflight."""
+    from scripts.ci import make_behaviour_receipt as producer
+
+    args = producer._parse_args(
+        [
+            "--head-sha",
+            "a" * 40,
+            "--receipt-id",
+            "fixture",
+            "--mode",
+            "sbatch",
+            "--work-dir",
+            str(tmp_path),
+        ]
+    )
+    submitted = []
+    monkeypatch.setattr(
+        producer, "_submit_sbatch_sweep", lambda *args, **kwargs: submitted.append(True)
+    )
+    with pytest.raises(ValueError, match="preflight contract"):
+        producer._prepare_sweeps(args, tmp_path, "b" * 40)
+    assert submitted == []

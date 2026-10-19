@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import math
 from collections.abc import Iterator, Mapping
 from concurrent.futures import ProcessPoolExecutor, as_completed
@@ -3375,10 +3376,18 @@ def _compute_resume_identity_payload(
 def _filter_resumed_jobs(ctx: _BatchContext) -> None:
     """Filter already-completed jobs when resuming a batch."""
     existing = index_existing(ctx.out_path)
-    if not existing:
+    dispatch_path = ctx.out_path.parent / "receipt_dispatch.json"
+    dispatch = json.loads(dispatch_path.read_bytes()) if dispatch_path.is_file() else None
+    if dispatch is not None:
+        descriptor = json.loads((ctx.out_path.parent / "receipt_execution.json").read_bytes())
+        if dispatch["execution_key"] != descriptor["execution_key"]:
+            raise ValueError("receipt dispatch execution key differs")
+    if not existing and dispatch is None:
         return
     filtered_jobs: list[tuple[dict[str, Any], int]] = []
     for sc, seed in ctx.jobs:
+        if dispatch is not None and seed not in dispatch["seeds"]:
+            continue
         identity_payload = _compute_resume_identity_payload(ctx, sc, seed)
         if _compute_map_episode_id(identity_payload, seed) not in existing:
             filtered_jobs.append((sc, seed))

@@ -835,6 +835,11 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         "--summarize-only", action="store_true", help="Rewrite tables from existing campaigns"
     )
     parser.add_argument("--check-only", action="store_true", help="Derive inputs, verify, stop")
+    parser.add_argument(
+        "--first-seed-only",
+        action="store_true",
+        help="Execute first seed within the unchanged full contract; resume with the same inputs",
+    )
     parser.add_argument("--minimum-free-bytes", type=int, default=1024**3)
     parser.add_argument(
         "--canary",
@@ -923,7 +928,9 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901, PLR0915
 
             return run_canary(derived, out_dir / "canary", full_sha, args.canary_steps)
         if not args.check_only:
-            prepare_completion_views(derived, out_dir, contract)
+            prepare_completion_views(
+                derived, out_dir, contract, first_seed_only=args.first_seed_only
+            )
     for suite, cfg_path, scenarios, cfg in derived:
         if args.summarize_only:
             root = out_dir / "campaigns" / f"empty_world_{suite}"
@@ -981,10 +988,18 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901, PLR0915
             result,
             step_trace=not args.no_step_trace,
         )
-        incomplete_execution |= not axes["complete"]
+        stage_complete = axes["complete"]
+        if args.first_seed_only:
+            first_seed_rows = [row for row in rows if row["seed"] == min(seeds)]
+            stage_complete = bool(first_seed_rows) and all(
+                row.get("_sweep_execution_status") == "written" for row in first_seed_rows
+            )
+        incomplete_execution |= not stage_complete
         meta = {
             "suite": suite,
             "head_sha": full_sha,
+            "execution_key": contract["execution_key"],
+            "first_seed_only": args.first_seed_only,
             "sweep_harness_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
             "seeds": seeds,
             "workers": args.workers,

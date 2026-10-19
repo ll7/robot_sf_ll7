@@ -67,7 +67,7 @@ def atomic_json(path: Path, value: Any, *, immutable: bool = False) -> None:
             handle.write(payload)
             handle.flush()
             os.fsync(handle.fileno())
-        if json.loads(Path(temporary).read_bytes()) != value:
+        if canonical_bytes(json.loads(Path(temporary).read_bytes())) != canonical_bytes(value):
             raise ValueError("temporary receipt JSON failed validation")
         if immutable:
             try:

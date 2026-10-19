@@ -282,15 +282,31 @@ def environment_identity() -> dict:
     }
 
 
-def input_digests(root: Path, snapshots: Any) -> dict[str, str]:
+def input_digests(root: Path, snapshots: Any) -> dict[str, str]:  # noqa: C901 - inspect nested effective inputs.
     """Digest resolved files and check declared runtime-input checksums.
 
     Returns:
         The validated stage result."""
     paths: set[Path] = set()
 
-    def visit(value: Any) -> None:
+    def visit(value: Any) -> None:  # noqa: C901 - recursive asset inventory.
         if isinstance(value, dict):
+            from robot_sf.models.registry import get_registry_entry, resolve_model_path  # noqa: PLC0415
+
+            for key in ("model_id", "predictive_model_id"):
+                model_id = value.get(key)
+                if isinstance(model_id, str) and model_id:
+                    checkpoint = resolve_model_path(model_id, allow_download=False).resolve()
+                    entry = get_registry_entry(model_id)
+                    expected = (entry.get("github_release") or {}).get("sha256")
+                    if expected and file_digest(checkpoint) != expected:
+                        raise ValueError("registry checkpoint digest mismatch")
+                    paths.add(checkpoint)
+            if isinstance(value.get("path"), str) and isinstance(value.get("sha256"), str):
+                candidate = Path(value["path"])
+                candidate = candidate if candidate.is_absolute() else root / candidate
+                if not candidate.is_file() or file_digest(candidate) != value["sha256"]:
+                    raise ValueError("runtime asset digest mismatch")
             for child in value.values():
                 visit(child)
         elif isinstance(value, list):
@@ -430,9 +446,11 @@ def compile_contract(
     }
 
 
-def prepare_completion_views(derived: list[tuple], output_dir: Path, contract: dict) -> None:
+def prepare_completion_views(
+    derived: list[tuple], output_dir: Path, contract: dict, *, first_seed_only: bool = False
+) -> None:
     """Recover immutable rows before the campaign's normal missing-job filter runs."""
-    from robot_sf.benchmark.receipt_stages import recover_episodes  # noqa: PLC0415 - defer heavy runtime imports until the stage executes.
+    from robot_sf.benchmark.receipt_stages import atomic_json, recover_episodes  # noqa: PLC0415 - defer heavy runtime imports until the stage executes.
     from robot_sf.benchmark.schema_validator import load_schema  # noqa: PLC0415 - defer heavy runtime imports until the stage executes.
 
     schema = load_schema(Path(__file__).parent / "schemas/episode.schema.v1.json")
@@ -449,3 +467,11 @@ def prepare_completion_views(derived: list[tuple], output_dir: Path, contract: d
                     "run_id": str(output_dir.resolve()),
                 }
                 recover_episodes(directory / "episodes.jsonl", schema, descriptor)
+                seeds = list(cfg.seed_policy.seeds)
+                atomic_json(
+                    directory / "receipt_dispatch.json",
+                    {
+                        "execution_key": contract["execution_key"],
+                        "seeds": [min(seeds)] if first_seed_only else seeds,
+                    },
+                )

@@ -504,29 +504,9 @@ def check_receipt(
             return [
                 "BLOCKER: reviewed scope inventory is not installed; merge the release integration owner's inventory before enabling this gate"
             ]
-        external = re.findall(r"<!--\s*behaviour-change-receipt:v3\s*\n(.*?)-->", body, re.DOTALL)
+        # External v3 reports never replace or veto the existing v2 merge
+        # receipt during shadow rollout. The report is evaluated separately.
         matches = re.findall(r"<!--\s*behaviour-change-receipt:v2\s*\n(.*?)-->", body, re.DOTALL)
-        if external:
-            from scripts.ci import frozen_candidate
-
-            _require(len(external) == 1 and not matches, "duplicated or mixed receipt transports")
-            _require(len(body) <= 65536, "PR body exceeds GitHub limit")
-            head = current_head()
-            reference = json.loads(external[0])
-            envelope = frozen_candidate.load_external(reference, repo, head)
-            release = latest_release(repo)
-            frozen_candidate.validate_evidence(
-                envelope,
-                reference,
-                head,
-                subprocess.check_output(
-                    ["git", "rev-parse", base_ref], cwd=ROOT, text=True
-                ).strip(),
-                json.loads(SCOPE_PATH.read_text()),
-                release,
-                release_source(release),
-            )
-            return []
         if len(matches) > 1:
             return [
                 "BLOCKER: blocked: behaviour receipt missing or duplicated for a behaviour-changing PR"
@@ -557,6 +537,42 @@ def check_receipt(
             f"BLOCKER: behaviour receipt rejected ({type(exc).__name__}); verify scope, exact head, baseline, job, payload digest and classification inventory"
         ]
     return []
+
+
+def report_external(body: str, repo: str, base_ref: str) -> dict:
+    """Evaluate v3 evidence in shadow mode without changing merge admission."""
+    from scripts.ci import frozen_candidate
+
+    result = {"mode": "shadow", "state": "blocked", "merge_authorized": False}
+    try:
+        external = re.findall(r"<!--\s*behaviour-change-receipt:v3\s*\n(.*?)-->", body, re.DOTALL)
+        frozen_candidate.require(len(external) == 1, "external reference missing or duplicated")
+        frozen_candidate.require(len(body) <= 65536, "PR body exceeds GitHub limit")
+        head = current_head()
+        reference = json.loads(external[0])
+        envelope = frozen_candidate.load_external(reference, repo, head)
+        release = latest_release(repo)
+        frozen_candidate.validate_evidence(
+            envelope,
+            reference,
+            head,
+            subprocess.check_output(["git", "rev-parse", base_ref], cwd=ROOT, text=True).strip(),
+            json.loads(SCOPE_PATH.read_text()),
+            release,
+            release_source(release),
+        )
+    except (
+        OSError,
+        ValueError,
+        KeyError,
+        TypeError,
+        subprocess.SubprocessError,
+        zipfile.BadZipFile,
+    ) as exc:
+        result["reason"] = str(exc)
+        return result
+    result["state"] = "ready"
+    return result
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -614,7 +630,28 @@ def main(argv: list[str] | None = None) -> int:
         )
     elif state == "WAITING_FOR_TRAIN":
         state = "admitted"
-    print(json.dumps({"train_state": state, "merge_blocked": bool(blockers)}, sort_keys=True))
+    print(
+        json.dumps(
+            {
+                "mode": "shadow",
+                "train_state": state,
+                "merge_blocked": bool(blockers),
+                "merge_authorized": False,
+            },
+            sort_keys=True,
+        )
+    )
+    if "behaviour-change-receipt:v3" in (pr.get("body") or ""):
+        print(
+            json.dumps(
+                {
+                    "preflight": report_external(
+                        pr["body"], event["repository"]["full_name"], args.base_ref
+                    )
+                },
+                sort_keys=True,
+            )
+        )
     for blocker in blockers:
         print(blocker)
     if not blockers:

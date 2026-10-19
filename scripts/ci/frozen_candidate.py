@@ -15,12 +15,99 @@ import re
 import subprocess
 import zipfile
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
+from urllib.parse import quote
 
 from scripts.ci import behaviour_receipt as gate
 
 TRAIN_STATES = ("admitted", "WAITING_FOR_TRAIN", "candidate", "executing", "blocked", "ready")
 MAX_ARCHIVE_BYTES = 40 * 1024 * 1024
+# Base-owned adoption policy. No worker-selected repository, reviewer, or CLI
+# override is trusted. An independent adoption change must configure these.
+OWNER_REPOSITORY = ""
+FREEZE_OWNER_IDS: frozenset[int] = frozenset()
+EVIDENCE_OWNER_IDS: frozenset[int] = frozenset()
+ACQUISITION_OWNER_IDS: frozenset[int] = frozenset()
+
+
+def load_owner_record(tag: str, owners: frozenset[int]) -> tuple[dict, dict]:
+    """Resolve an independently published immutable release asset, never notes.
+
+    Immutable release tags cannot be reused, even after deletion. Assets are
+    locked; release notes remain editable and therefore carry no authority.
+    """
+    require(
+        re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", OWNER_REPOSITORY) and bool(owners),
+        "independent record owner is not configured",
+    )
+    endpoint = f"repos/{OWNER_REPOSITORY}/releases/tags/{quote(tag, safe='')}"
+    metadata = json.loads(subprocess.check_output(["gh", "api", endpoint]))
+    require(
+        metadata["immutable"] is True
+        and metadata["draft"] is False
+        and metadata["tag_name"] == tag
+        and metadata["author"]["id"] in owners,
+        "independent record is not immutable or has an unauthorized owner",
+    )
+    assets = [asset for asset in metadata["assets"] if asset["name"] == "record.json"]
+    require(len(assets) == 1, "independent record asset missing or duplicated")
+    asset = assets[0]
+    require(
+        type(asset["id"]) is int
+        and asset["id"] > 0
+        and asset["uploader"]["id"] in owners
+        and 0 < asset["size"] <= gate.MAX_ROWS_BYTES,
+        "independent record asset owner/size mismatch",
+    )
+    raw = subprocess.check_output(
+        [
+            "gh",
+            "api",
+            f"repos/{OWNER_REPOSITORY}/releases/assets/{asset['id']}",
+            "-H",
+            "Accept: application/octet-stream",
+        ]
+    )
+    require(
+        len(raw) == asset["size"]
+        and asset["digest"] == "sha256:" + hashlib.sha256(raw).hexdigest(),
+        "independent record asset digest mismatch",
+    )
+    return json.loads(raw), metadata
+
+
+def evidence_binding(envelope: dict) -> dict:
+    """Name reviewed content without a verdict or its self-referential digest."""
+    receipt = {key: value for key, value in envelope["receipt"].items() if key != "refute_review"}
+    return {
+        "candidate_sha": envelope["manifest"]["candidate_sha"],
+        "manifest_sha256": digest(envelope["manifest"]),
+        "content_sha256": digest(receipt),
+        "episode_executions_sha256": digest(envelope["episode_executions"]),
+    }
+
+
+def validate_acceptance(envelope: dict) -> None:
+    """Require evidence-owner acceptance separately from the source review."""
+    binding = evidence_binding(envelope)
+    try:
+        record, _ = load_owner_record(
+            "artifact/behaviour-verdict-" + digest(binding), EVIDENCE_OWNER_IDS
+        )
+        require(
+            record
+            == {
+                "schema_version": "behaviour-evidence-acceptance.v1",
+                "verdict": "accepted",
+                **binding,
+            },
+            "stale or mismatched verdict",
+        )
+    except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as exc:
+        raise gate.TrainEvidenceError(
+            "independent evidence acceptance missing or mismatched"
+        ) from exc
 
 
 def digest(value: object) -> str:
@@ -110,6 +197,73 @@ def validate_manifest(manifest: dict, head: str, base: str) -> None:
         require(gate._digest(manifest[key], 64), "invalid manifest digest")
 
 
+def resolve_freeze(manifest: dict) -> dict:
+    """Read the one owner-published record for this candidate/train identity.
+
+    The output path is only a local copy. The immutable, non-reusable owner tag
+    supplies uniqueness and remains authoritative at assembly and promotion.
+    """
+    train = manifest["train_id"]
+    require(
+        isinstance(train, str) and re.fullmatch(r"[A-Za-z0-9_-]{1,64}", train),
+        "invalid train identity",
+    )
+    tag = f"artifact/behaviour-freeze-{train}-{manifest['candidate_sha']}"
+    record, metadata = load_owner_record(tag, FREEZE_OWNER_IDS)
+    require(
+        record == {"schema_version": "behaviour-freeze-record.v1", "manifest": manifest},
+        "manifest differs from original freeze",
+    )
+    require(type(metadata["id"]) is int and metadata["id"] > 0, "invalid freeze record ID")
+    return metadata
+
+
+def validate_acquisitions(envelope: dict, freeze: dict) -> None:
+    """Resolve acquisition-owner identities pinned to the pre-execution freeze.
+
+    These records must be emitted from actual acquisition observations by that
+    owner. Envelope authors cannot manufacture a trusted acquisition record.
+    """
+    manifest = envelope["manifest"]
+    pin = {
+        "candidate_sha": manifest["candidate_sha"],
+        "train_id": manifest["train_id"],
+        "manifest_sha256": digest(manifest),
+        "freeze_record_id": freeze["id"],
+    }
+    seen = set()
+    for execution in envelope["episode_executions"]:
+        require(
+            all(execution.get(k) == v for k, v in pin.items() if k != "candidate_sha"),
+            "acquisition freeze identity mismatch",
+        )
+        identity = execution["execution_sha256"]
+        if identity in seen:
+            continue
+        seen.add(identity)
+        record, metadata = load_owner_record(
+            "artifact/behaviour-execution-" + identity, ACQUISITION_OWNER_IDS
+        )
+        require(
+            record
+            == {
+                "schema_version": "behaviour-acquisition.v1",
+                **pin,
+                "execution_sha256": identity,
+                "started_at": record["started_at"],
+            },
+            "acquisition owner identity mismatch",
+        )
+        # Immutable publication precedes acquisition, not merely evidence upload.
+        started = datetime.fromisoformat(record["started_at"])
+        require(
+            started.tzinfo is not None
+            and started >= datetime.fromisoformat(freeze["published_at"])
+            and datetime.fromisoformat(metadata["published_at"]) >= started,
+            "acquisition predates original freeze",
+        )
+
+
 def validate_evidence(
     envelope: dict,
     reference: dict,
@@ -161,6 +315,9 @@ def validate_evidence(
         raise gate.TrainEvidenceError("receipt schema mismatch") from exc
     except ValueError as exc:
         raise gate.TrainEvidenceError(str(exc)) from exc
+    freeze = resolve_freeze(manifest)
+    validate_acquisitions(envelope, freeze)
+    validate_acceptance(envelope)
     return envelope
 
 
@@ -233,6 +390,11 @@ def check_promotion(
         git("rev-parse", f"{landed}^{{tree}}") == envelope["manifest"]["candidate_tree"],
         "landed tree mismatch",
     )
+    parents = git("show", "-s", "--format=%P", landed).split()
+    require(
+        landed == head or parents in ([expected_base], [expected_base, head]),
+        "landing history must be the candidate, a squash on expected main, or a merge of expected main and candidate",
+    )
     require(receipt_sha256 == envelope["receipt_sha256"], "promotion receipt digest mismatch")
     require(
         executions_sha256 == envelope["episode_executions_sha256"],
@@ -241,6 +403,7 @@ def check_promotion(
     # A new integration head is a new candidate. A landed mapping is not a verdict transfer.
     return {
         "state": "ready",
+        "mode": "shadow",
         "candidate_sha": head,
         "expected_base": expected_base,
         "landed_sha": landed,
@@ -306,6 +469,7 @@ def assemble_main(argv: list[str] | None = None) -> int:
         json.dumps(
             {
                 "state": "ready",
+                "mode": "shadow",
                 "candidate_sha": manifest["candidate_sha"],
                 "manifest_sha256": digest(manifest),
                 "receipt_sha256": digest(receipt),
@@ -318,7 +482,7 @@ def assemble_main(argv: list[str] | None = None) -> int:
 
 
 def freeze_main(argv: list[str] | None = None) -> int:
-    """Write an immutable manifest outside the source checkout before execution."""
+    """Resolve the owner freeze and write a local external copy before execution."""
     parser = argparse.ArgumentParser(description=freeze_main.__doc__)
     parser.add_argument("--input", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
@@ -332,6 +496,7 @@ def freeze_main(argv: list[str] | None = None) -> int:
             manifest["evaluation_policy_sha256"] == policy_digest(),
             "evaluation policy digest mismatch",
         )
+        freeze = resolve_freeze(manifest)
         write_external(args.output, manifest)
     except FileExistsError:
         print(json.dumps({"state": "blocked", "reason": "frozen manifest already exists"}))
@@ -343,6 +508,7 @@ def freeze_main(argv: list[str] | None = None) -> int:
         json.dumps(
             {
                 "state": "candidate",
+                "freeze_record_id": freeze["id"],
                 "candidate_sha": args.candidate,
                 "manifest_sha256": digest(manifest),
             }
@@ -392,7 +558,16 @@ def main(argv: list[str] | None = None) -> int:
         subprocess.SubprocessError,
         zipfile.BadZipFile,
     ) as exc:
-        print(json.dumps({"state": "blocked", "reason": str(exc), "merge_authorized": False}))
+        print(
+            json.dumps(
+                {
+                    "state": "blocked",
+                    "mode": "shadow",
+                    "reason": str(exc),
+                    "merge_authorized": False,
+                }
+            )
+        )
         return 1
     print(json.dumps(result, sort_keys=True))
     return 0

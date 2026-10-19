@@ -9,6 +9,7 @@ import subprocess
 import sys
 import zipfile
 from pathlib import Path
+from urllib.parse import unquote
 
 import pytest
 
@@ -29,6 +30,41 @@ def digest(value):
     return hashlib.sha256(
         json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
     ).hexdigest()
+
+
+def owner_output(cmd, owner_records, transport):
+    """Serve independently controlled release assets for synthetic API transport."""
+    endpoint = cmd[2]
+    if "/assets/" in endpoint:
+        return json.dumps(owner_records["download"]).encode()
+    tag = unquote(endpoint.split("/releases/tags/", 1)[1])
+    if tag not in owner_records:
+        raise subprocess.CalledProcessError(1, cmd)
+    record = owner_records[tag]
+    owner_records["download"] = record
+    raw = json.dumps(record).encode()
+    record_metadata = {
+        "id": 71,
+        "immutable": True,
+        "draft": False,
+        "tag_name": tag,
+        "author": {"id": 23},
+        "published_at": "2026-01-01T00:00:00Z"
+        if "behaviour-freeze-" in tag
+        else "2026-01-03T00:00:00Z",
+        "assets": [
+            {
+                "id": 91,
+                "name": "record.json",
+                "size": len(raw),
+                "uploader": {"id": 23},
+                "digest": "sha256:" + hashlib.sha256(raw).hexdigest(),
+            }
+        ],
+    }
+    if transport.get("owner_tag_contains", "") in tag:
+        record_metadata.update(transport.get("owner_metadata", {}))
+    return json.dumps(record_metadata).encode()
 
 
 @pytest.fixture
@@ -65,6 +101,7 @@ def candidate(monkeypatch, tmp_path):
     }
     manifest = {
         "schema_version": "behaviour-candidate.v1",
+        "train_id": "synthetic-train",
         "candidate_sha": head,
         "base_sha": base,
         "candidate_tree": git("rev-parse", f"{head}^{{tree}}"),
@@ -81,6 +118,9 @@ def candidate(monkeypatch, tmp_path):
             "seed": row["seed"],
             "source_sha": head,
             "execution_sha256": "e" * 64,
+            "train_id": manifest["train_id"],
+            "manifest_sha256": digest(manifest),
+            "freeze_record_id": 71,
         }
         for row in receipt["rows"]
     ]
@@ -93,23 +133,68 @@ def candidate(monkeypatch, tmp_path):
         "receipt_sha256": digest(receipt),
         "episode_executions_sha256": digest(executions),
     }
+    from scripts.ci import frozen_candidate as frozen
+
+    monkeypatch.setattr(frozen, "OWNER_REPOSITORY", "example/independent-records", raising=False)
+    monkeypatch.setattr(frozen, "EVIDENCE_OWNER_IDS", frozenset({23}), raising=False)
+    monkeypatch.setattr(frozen, "FREEZE_OWNER_IDS", frozenset({23}), raising=False)
+    monkeypatch.setattr(frozen, "ACQUISITION_OWNER_IDS", frozenset({23}), raising=False)
+    # The owner publishes one immutable freeze before any execution. Later
+    # envelope publication and review do not modify that original record.
+    owner_records = {
+        f"artifact/behaviour-freeze-{manifest['train_id']}-{head}": {
+            "schema_version": "behaviour-freeze-record.v1",
+            "manifest": json.loads(json.dumps(manifest)),
+        },
+        "artifact/behaviour-execution-" + "e" * 64: {
+            "schema_version": "behaviour-acquisition.v1",
+            "candidate_sha": head,
+            "train_id": manifest["train_id"],
+            "manifest_sha256": digest(manifest),
+            "freeze_record_id": 71,
+            "execution_sha256": "e" * 64,
+            "started_at": "2026-01-02T00:00:00Z",
+        },
+    }
+
+    def review():
+        # Independent fixture owner: compute the documented tuple without using
+        # the production binding helper. Publishing alone never refreshes this.
+        binding = {
+            "candidate_sha": manifest["candidate_sha"],
+            "manifest_sha256": digest(manifest),
+            "content_sha256": digest({k: v for k, v in receipt.items() if k != "refute_review"}),
+            "episode_executions_sha256": digest(executions),
+        }
+        tag = "artifact/behaviour-verdict-" + digest(binding)
+        owner_records[tag] = {
+            "schema_version": "behaviour-evidence-acceptance.v1",
+            "verdict": "accepted",
+            **binding,
+        }
+
+    review()
     real_output = subprocess.check_output
     observed = []
     transport = {}
 
     def publish():
+        # Every publication has a distinct immutable artifact ID. Replacement
+        # attacks must not rely on rewriting an already published artifact.
+        artifact_id = transport.get("publication_id", 700) + 1
+        transport["publication_id"] = artifact_id
         raw = json.dumps(envelope).encode()
         archive = io.BytesIO()
         with zipfile.ZipFile(archive, "w") as z:
             z.writestr("evidence.json", raw)
         blob = archive.getvalue()
         reference = {
-            "artifact_id": 123,
+            "artifact_id": artifact_id,
             "sha256": hashlib.sha256(blob).hexdigest(),
             "manifest_sha256": digest(manifest),
         }
         metadata = {
-            "id": 123,
+            "id": artifact_id,
             "expired": False,
             "digest": "sha256:" + reference["sha256"],
             "size_in_bytes": len(blob),
@@ -119,6 +204,9 @@ def candidate(monkeypatch, tmp_path):
         def output(cmd, *args, **kwargs):
             if cmd[:2] == ["gh", "api"]:
                 observed.append(cmd)
+                endpoint = cmd[2]
+                if "/releases/" in endpoint:
+                    return owner_output(cmd, owner_records, transport)
                 if cmd[-1].endswith("/git/ref/heads/main"):
                     sha = transport.get("remote_main", git("rev-parse", "refs/remotes/origin/main"))
                     return json.dumps({"object": {"sha": sha}}).encode()
@@ -130,6 +218,7 @@ def candidate(monkeypatch, tmp_path):
         monkeypatch.setattr(subprocess, "check_output", output)
         return "<!-- behaviour-change-receipt:v3\n" + json.dumps(reference) + "\n-->"
 
+    publish()  # Install transport before freeze or other CLI calls.
     return {
         "git": git,
         "base": base,
@@ -140,7 +229,15 @@ def candidate(monkeypatch, tmp_path):
         "observed": observed,
         "transport": transport,
         "root": tmp_path,
+        "review": review,
+        "owner_records": owner_records,
     }
+
+
+def shadow_blockers(body, changed_files, repo, base_ref):
+    report = gate.report_external(body, repo, base_ref)
+    assert report["mode"] == "shadow" and report["merge_authorized"] is False
+    return [] if report["state"] == "ready" else ["blocked: " + report["reason"]]
 
 
 def test_external_evidence_does_not_change_candidate(candidate):
@@ -159,18 +256,18 @@ def test_external_evidence_does_not_change_candidate(candidate):
         }
     ]
     candidate["envelope"]["receipt_sha256"] = digest(receipt)
+    candidate["review"]()
     body = candidate["publish"]()
     before = candidate["git"]("rev-parse", "HEAD")
     assert (
-        gate.check_receipt(
-            body, ["robot_sf/planner/goal.py"], "ll7/robot_sf_ll7", candidate["base"]
-        )
+        shadow_blockers(body, ["robot_sf/planner/goal.py"], "ll7/robot_sf_ll7", candidate["base"])
         == []
     )
     receipt["classifications"][0]["evidence"] = "https://example.org/reviewed-trace.json"
+    candidate["review"]()
     candidate["envelope"]["receipt_sha256"] = digest(receipt)
     assert (
-        gate.check_receipt(
+        shadow_blockers(
             candidate["publish"](),
             ["robot_sf/planner/goal.py"],
             "ll7/robot_sf_ll7",
@@ -250,7 +347,7 @@ def test_external_refusals(candidate, fault, reason):  # noqa: C901 - independen
         else:
             env["receipt"]["rows"][0]["fallback"] = True
         env["receipt_sha256"] = digest(env["receipt"])
-    blockers = gate.check_receipt(
+    blockers = shadow_blockers(
         candidate["publish"](), ["robot_sf/planner/goal.py"], "ll7/robot_sf_ll7", candidate["base"]
     )
     assert len(blockers) == 1
@@ -300,6 +397,7 @@ def test_train_state_is_explicit(candidate, capsys, phase):
         result = exc.code
     output = capsys.readouterr().out
     assert result == 1 and '"merge_blocked": true' in output
+    assert '"mode": "shadow"' in output and '"merge_authorized": false' in output
     expected = phase if phase in {"candidate", "executing", "blocked"} else "WAITING_FOR_TRAIN"
     assert f'"train_state": "{expected}"' in output
 
@@ -414,7 +512,7 @@ def test_artifact_read_permission_is_explicit():
 )
 def test_external_artifact_transport_refusals(candidate, metadata, reason):
     candidate["transport"]["metadata"] = metadata
-    result = gate.check_receipt(
+    result = shadow_blockers(
         candidate["publish"](), ["robot_sf/planner/goal.py"], "ll7/robot_sf_ll7", candidate["base"]
     )
     assert len(result) == 1 and "blocked" in result[0] and reason in result[0]
@@ -532,6 +630,7 @@ def test_base_owned_standalone_gate_reads_external_candidate(candidate):
         f"#!{sys.executable}\n"
         + """import json, sys
 from pathlib import Path
+from urllib.parse import unquote
 root = Path(__file__).resolve().parents[1]
 endpoint = sys.argv[2]
 if endpoint.endswith("/releases"):
@@ -569,6 +668,270 @@ else:
         check=False,
         env={**os.environ, "PATH": str(tools) + os.pathsep + os.environ["PATH"]},
     )
-    assert result.returncode == 0, result.stdout + result.stderr
-    assert '"merge_blocked": false' in result.stdout
-    assert "accepted or out of scope" in result.stdout
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert '"merge_blocked": true' in result.stdout
+    assert '"preflight":' in result.stdout and '"mode": "shadow"' in result.stdout
+    assert "independent record owner is not configured" in result.stdout
+
+
+@pytest.mark.parametrize("replacement", ["results", "executions"])
+def test_replacement_evidence_requires_new_independent_acceptance(candidate, replacement):
+    """Another immutable publication cannot inherit acceptance of different evidence."""
+    from scripts.ci import frozen_candidate as frozen
+
+    env = candidate["envelope"]
+    ref = json.loads(candidate["publish"]().split("\n")[1])
+    prior_artifact = ref["artifact_id"]
+    scope = json.loads(gate.SCOPE_PATH.read_text())
+    frozen.validate_evidence(
+        env, ref, candidate["head"], candidate["base"], scope, "0.0.7", "c" * 40
+    )
+    if replacement == "results":
+        receipt = env["receipt"]
+        row = receipt["rows"][0]
+        row["success"] = False
+        receipt["totals"]["new_failures"] = 1
+        receipt["classifications"] = [
+            {
+                "arm": row["arm"],
+                "map": row["map"],
+                "seed": row["seed"],
+                "kind": "success_to_failure",
+                "class": "known_limitation",
+                "count": 1,
+                "evidence": "https://example.org/replacement.json",
+            }
+        ]
+        env["receipt_sha256"] = digest(receipt)
+    else:
+        original = candidate["owner_records"]["artifact/behaviour-execution-" + "e" * 64]
+        candidate["owner_records"]["artifact/behaviour-execution-" + "f" * 64] = {
+            **original,
+            "execution_sha256": "f" * 64,
+        }
+        for row in env["episode_executions"]:
+            row["execution_sha256"] = "f" * 64
+        env["episode_executions_sha256"] = digest(env["episode_executions"])
+    ref = json.loads(candidate["publish"]().split("\n")[1])
+    assert ref["artifact_id"] != prior_artifact
+    with pytest.raises(gate.TrainEvidenceError, match="independent evidence acceptance"):
+        frozen.validate_evidence(
+            env, ref, candidate["head"], candidate["base"], scope, "0.0.7", "c" * 40
+        )
+
+
+@pytest.mark.parametrize("replacement", ["overwritten_file", "second_output"])
+def test_freeze_identity_survives_local_manifest_replacement(candidate, capsys, replacement):
+    """A new file or publication cannot replace the owner's original train freeze."""
+    from scripts.ci import frozen_candidate as frozen
+
+    env = candidate["envelope"]
+    source = candidate["root"] / "manifest-input.json"
+    source.write_text(json.dumps(env["manifest"]))
+    target = candidate["root"].parent / (candidate["root"].name + "-original.json")
+    args = [
+        "freeze",
+        "--input",
+        str(source),
+        "--output",
+        str(target),
+        "--candidate",
+        candidate["head"],
+        "--expected-base",
+        candidate["base"],
+    ]
+    assert gate.main(args) == 0, capsys.readouterr().out
+    env["config"] = {"changed_after_freeze": True}
+    env["manifest"]["config_sha256"] = digest(env["config"])
+    candidate["review"]()  # Even a fresh evidence review cannot replace a freeze.
+    if replacement == "second_output":
+        source.write_text(json.dumps(env["manifest"]))
+        args[args.index("--output") + 1] = str(target.with_suffix(".second.json"))
+        assert gate.main(args) == 1, "same candidate/train was frozen twice"
+        assert "original freeze" in capsys.readouterr().out
+    else:
+        target.write_text(json.dumps(env["manifest"]))
+        env["manifest"] = json.loads(target.read_text())
+    ref = json.loads(candidate["publish"]().split("\n")[1])
+    with pytest.raises(gate.TrainEvidenceError, match="original freeze"):
+        frozen.validate_evidence(
+            env,
+            ref,
+            candidate["head"],
+            candidate["base"],
+            json.loads(gate.SCOPE_PATH.read_text()),
+            "0.0.7",
+            "c" * 40,
+        )
+
+
+@pytest.mark.parametrize("shape", ["orphan", "unrelated_parent"])
+def test_promotion_rejects_same_tree_unrelated_history(candidate, shape):
+    """A same-tree landing must still preserve the expected main history."""
+    from scripts.ci import frozen_candidate as frozen
+
+    env, git = candidate["envelope"], candidate["git"]
+    tree = env["manifest"]["candidate_tree"]
+    orphan = git("commit-tree", tree, "-m", "unrelated root")
+    landed = (
+        orphan
+        if shape == "orphan"
+        else git("commit-tree", tree, "-p", orphan, "-m", "unrelated child")
+    )
+    identity = frozen.PromotionIdentity(
+        candidate["head"],
+        candidate["base"],
+        candidate["base"],
+        landed,
+        env["receipt_sha256"],
+        env["episode_executions_sha256"],
+    )
+    candidate["publish"]()
+    with pytest.raises(gate.TrainEvidenceError, match="landing history"):
+        frozen.check_promotion(
+            env,
+            {"manifest_sha256": digest(env["manifest"])},
+            identity,
+            json.loads(gate.SCOPE_PATH.read_text()),
+            "0.0.7",
+            "c" * 40,
+        )
+
+
+def test_v3_alone_never_replaces_the_existing_merge_receipt(candidate):
+    """Even fully validated external evidence is report-only during rollout."""
+    blockers = gate.check_receipt(
+        candidate["publish"](), ["robot_sf/planner/goal.py"], "ll7/robot_sf_ll7", candidate["base"]
+    )
+    assert blockers and "WAITING_FOR_TRAIN" in blockers[0]
+
+
+@pytest.mark.parametrize(
+    ("metadata", "reason"),
+    [
+        ({"immutable": False}, "not immutable"),
+        ({"draft": True}, "not immutable"),
+        ({"author": {"id": 99}}, "unauthorized owner"),
+        ({"tag_name": "replacement"}, "not immutable"),
+    ],
+)
+def test_untrusted_freeze_record_cannot_certify_evidence(candidate, metadata, reason):
+    """PR-controlled references cannot confer freeze-owner authority."""
+    from scripts.ci import frozen_candidate as frozen
+
+    candidate["transport"].update(owner_tag_contains="behaviour-freeze-", owner_metadata=metadata)
+    ref = json.loads(candidate["publish"]().split("\n")[1])
+    with pytest.raises(gate.TrainEvidenceError, match=reason):
+        frozen.validate_evidence(
+            candidate["envelope"],
+            ref,
+            candidate["head"],
+            candidate["base"],
+            json.loads(gate.SCOPE_PATH.read_text()),
+            "0.0.7",
+            "c" * 40,
+        )
+
+
+def test_evidence_verdict_is_resolved_through_independent_owner(candidate):
+    """An envelope-author verdict or unauthorized publication is insufficient."""
+    from scripts.ci import frozen_candidate as frozen
+
+    candidate["transport"].update(
+        owner_tag_contains="behaviour-verdict-", owner_metadata={"author": {"id": 99}}
+    )
+    ref = json.loads(candidate["publish"]().split("\n")[1])
+    with pytest.raises(gate.TrainEvidenceError, match="independent evidence acceptance"):
+        frozen.validate_evidence(
+            candidate["envelope"],
+            ref,
+            candidate["head"],
+            candidate["base"],
+            json.loads(gate.SCOPE_PATH.read_text()),
+            "0.0.7",
+            "c" * 40,
+        )
+
+
+@pytest.mark.parametrize("field", ["train_id", "manifest_sha256", "freeze_record_id"])
+def test_execution_inventory_must_pin_the_original_freeze(candidate, field):
+    """A fresh evidence verdict cannot authorize a different acquisition freeze."""
+    from scripts.ci import frozen_candidate as frozen
+
+    env = candidate["envelope"]
+    env["episode_executions"][0][field] = "replacement"
+    env["episode_executions_sha256"] = digest(env["episode_executions"])
+    candidate["review"]()
+    ref = json.loads(candidate["publish"]().split("\n")[1])
+    with pytest.raises(gate.TrainEvidenceError, match="acquisition freeze identity mismatch"):
+        frozen.validate_evidence(
+            env,
+            ref,
+            candidate["head"],
+            candidate["base"],
+            json.loads(gate.SCOPE_PATH.read_text()),
+            "0.0.7",
+            "c" * 40,
+        )
+
+
+def test_acquisition_cannot_predate_the_independent_freeze(candidate):
+    """An owner must publish the frozen identity before observed execution starts."""
+    from scripts.ci import frozen_candidate as frozen
+
+    record = candidate["owner_records"]["artifact/behaviour-execution-" + "e" * 64]
+    record["started_at"] = "2025-12-31T00:00:00Z"
+    ref = json.loads(candidate["publish"]().split("\n")[1])
+    with pytest.raises(gate.TrainEvidenceError, match="acquisition predates original freeze"):
+        frozen.validate_evidence(
+            candidate["envelope"],
+            ref,
+            candidate["head"],
+            candidate["base"],
+            json.loads(gate.SCOPE_PATH.read_text()),
+            "0.0.7",
+            "c" * 40,
+        )
+
+
+@pytest.mark.parametrize("shape", ["squash", "merge"])
+def test_same_tree_landing_mapping_preserves_expected_main(candidate, shape):
+    """The history check retains the intentional source-to-landed SHA mapping."""
+    from scripts.ci import frozen_candidate as frozen
+
+    env, git = candidate["envelope"], candidate["git"]
+    args = ["commit-tree", env["manifest"]["candidate_tree"], "-p", candidate["base"]]
+    if shape == "merge":
+        args += ["-p", candidate["head"]]
+    landed = git(*args, "-m", "same tree landing")
+    candidate["publish"]()
+    result = frozen.check_promotion(
+        env,
+        {"manifest_sha256": digest(env["manifest"])},
+        frozen.PromotionIdentity(
+            candidate["head"],
+            candidate["base"],
+            candidate["base"],
+            landed,
+            env["receipt_sha256"],
+            env["episode_executions_sha256"],
+        ),
+        json.loads(gate.SCOPE_PATH.read_text()),
+        "0.0.7",
+        "c" * 40,
+    )
+    assert result["state"] == "ready" and result.get("mode") == "shadow"
+    assert (
+        result["merge_authorized"] is False and result["execution_source_sha"] == candidate["head"]
+    )
+
+
+def test_shadow_failure_cannot_veto_a_valid_existing_receipt(monkeypatch, tmp_path):
+    """A malformed v3 report does not block valid v2 merge evidence."""
+    from tests.validation.test_behaviour_receipt_run_identity import _body, _run_receipt
+
+    _, header, _ = _run_receipt(monkeypatch, tmp_path)
+    body = _body(header) + "\n<!-- behaviour-change-receipt:v3\n{invalid json}\n-->"
+    assert gate.check_receipt(body, ["robot_sf/planner/policy.py"], "ll7/robot_sf_ll7") == []
+    report = gate.report_external(body, "ll7/robot_sf_ll7", "origin/main")
+    assert report["state"] == "blocked" and report["merge_authorized"] is False

@@ -815,6 +815,7 @@ def _sweep_command(
     scenarios: list[str] | None,
     workers: int,
     check_only: bool,
+    canary: bool = False,
 ) -> list[str]:
     cmd = [
         "uv",
@@ -838,6 +839,8 @@ def _sweep_command(
         cmd.extend(["--scenarios", *scenarios])
     if check_only:
         cmd.append("--check-only")
+    if canary:
+        cmd.append("--canary")
     return cmd
 
 
@@ -950,8 +953,12 @@ def _submit_sbatch_sweep(  # noqa: PLR0913
     scenarios: list[str] | None,
     workers: int,
     sweep_harness_source_sha: str | None = None,
+    check_only: bool = False,
+    canary: bool = False,
 ) -> SweepRun:
-    checkout = _ensure_worktree(repo_root, work_dir, label, source_sha)
+    checkout = _ensure_worktree(repo_root, work_dir, label, source_sha).resolve()
+    if canary and workers > 2:
+        raise ValueError("receipt canary is limited to 1-2 CPUs")
     output_dir = work_dir / "sweeps" / label
     output_dir.mkdir(parents=True, exist_ok=True)
     if sweep_harness_source_sha:
@@ -965,7 +972,8 @@ def _submit_sbatch_sweep(  # noqa: PLR0913
         arms=arms,
         scenarios=scenarios,
         workers=workers,
-        check_only=False,
+        check_only=check_only,
+        canary=canary,
     )
     script = work_dir / f"behaviour_receipt_{label}.sbatch"
     script.write_text(
@@ -974,16 +982,21 @@ def _submit_sbatch_sweep(  # noqa: PLR0913
                 "#!/usr/bin/env bash",
                 f"#SBATCH --job-name=behaviour-{label}",
                 f"#SBATCH --output={output_dir / 'slurm-%j.out'}",
-                "#SBATCH --time=24:00:00",
+                "#SBATCH --time=" + ("00:14:00" if canary or check_only else "24:00:00"),
+                f"#SBATCH --cpus-per-task={workers}",
                 "set -euo pipefail",
-                f"cd {checkout}",
+                f"cd -- {shlex.quote(str(checkout))}",
+                "test -f scripts/validation/run_empty_world_sweep.py",
+                "export OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1",
                 shlex.join(cmd),
                 "",
             ]
         ),
         encoding="utf-8",
     )
-    job_id = subprocess.check_output(["sbatch", "--parsable", str(script)], text=True).strip()
+    job_id = subprocess.check_output(
+        ["sbatch", "--parsable", f"--chdir={checkout}", str(script)], text=True
+    ).strip()
     submission = {
         "schema_version": "behaviour-sweep-submission.v1",
         "label": label,
@@ -1542,6 +1555,19 @@ def _execution_evidence(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def compare_episode_observation(head: dict, baseline: dict) -> tuple[bool, int, bool, int]:
+    """Compare scored observations using the production metric meaning guard."""
+    from robot_sf.benchmark.metric_definitions import require_uniform_metric_schema
+
+    require_uniform_metric_schema([head, baseline])
+    return (
+        _row_success(head),
+        _row_collisions(head),
+        _row_success(baseline),
+        _row_collisions(baseline),
+    )
+
+
 def build_rows_and_classifications(
     head_rows: dict[tuple[str, str, int], dict[str, Any]],
     baseline_rows: dict[tuple[str, str, int], dict[str, Any]],
@@ -1551,6 +1577,9 @@ def build_rows_and_classifications(
     evidence_base_uri: str,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, int]]:
     """Join head/baseline sweep rows into gate payload rows and classifications."""
+    from robot_sf.benchmark.metric_definitions import require_uniform_metric_schema
+
+    require_uniform_metric_schema([*head_rows.values(), *baseline_rows.values()])
     rows: list[dict[str, Any]] = []
     classifications: list[dict[str, Any]] = []
     for arm in scope["arms"]:
@@ -1563,10 +1592,9 @@ def build_rows_and_classifications(
                     raise ValueError(f"baseline sweep omitted {key}")
                 head = head_rows[key]
                 baseline = baseline_rows[key]
-                success = _row_success(head)
-                collisions = _row_collisions(head)
-                baseline_success = _row_success(baseline)
-                baseline_collisions = _row_collisions(baseline)
+                success, collisions, baseline_success, baseline_collisions = (
+                    compare_episode_observation(head, baseline)
+                )
                 rows.append(
                     {
                         "arm": arm,
@@ -1764,6 +1792,11 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--arms", nargs="*")
     parser.add_argument("--scenarios", nargs="*")
     parser.add_argument("--check-only", action="store_true")
+    parser.add_argument(
+        "--canary",
+        action="store_true",
+        help="Tiny scheduler integration probe outside receipt namespace",
+    )
     parser.add_argument("--head-artifact-uri", default=f"{PLACEHOLDER_EVIDENCE_URI}/head")
     parser.add_argument("--head-artifact-sha256")
     parser.add_argument("--baseline-artifact-uri", default=f"{PLACEHOLDER_EVIDENCE_URI}/baseline")
@@ -1859,6 +1892,8 @@ def _prepare_sweeps(
             scenarios=args.scenarios,
             workers=args.workers,
             sweep_harness_source_sha=args.sweep_harness_source_sha,
+            check_only=args.check_only,
+            canary=getattr(args, "canary", False),
         ),
         _submit_sbatch_sweep(
             repo_root,
@@ -1870,6 +1905,8 @@ def _prepare_sweeps(
             scenarios=args.scenarios,
             workers=args.workers,
             sweep_harness_source_sha=args.sweep_harness_source_sha,
+            check_only=args.check_only,
+            canary=getattr(args, "canary", False),
         ),
     )
 

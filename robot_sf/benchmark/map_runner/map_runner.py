@@ -2578,6 +2578,10 @@ def _write_validated_to_handle(
     record: dict[str, Any],
 ) -> None:
     """Validate one episode record and append it to an open JSONL handle."""
+    from robot_sf.benchmark.receipt_stages import publish_episode  # noqa: PLC0415
+
+    if isinstance(getattr(handle, "name", None), str):
+        publish_episode(Path(handle.name), schema, record)
     _write_jsonl_record(handle, schema, record)
 
 

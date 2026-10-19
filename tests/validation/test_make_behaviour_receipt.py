@@ -83,7 +83,11 @@ def _raw_row(seed, *, failing=False):
         "scenario_id": "open",
         "seed": seed,
         "steps": 1,
-        "metrics": {"success": not (failing and seed == 1001), "total_collision_count": 0},
+        "metrics": {
+            "metric_schema_version": "robot-sf-metrics.v2",
+            "success": not (failing and seed == 1001),
+            "total_collision_count": 0,
+        },
         "algorithm_metadata": {
             "status": "ok",
             "planner_kinematics": {"execution_mode": "native"},

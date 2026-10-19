@@ -1,0 +1,451 @@
+"""Compile receipt contracts through the same resolver and constructors as map episodes."""
+
+from __future__ import annotations
+
+import dataclasses
+import enum
+import importlib.metadata
+import inspect
+import json
+import os
+import platform
+import shutil
+import tempfile
+from pathlib import Path
+from typing import Any
+
+from robot_sf.benchmark.receipt_stages import file_digest, stage_key
+
+
+def plain(value: Any) -> Any:
+    """Snapshot effective configuration without object addresses or mutable references.
+
+    Returns:
+        The validated stage result."""
+    if dataclasses.is_dataclass(value) and not isinstance(value, type):
+        return {
+            field.name: plain(getattr(value, field.name)) for field in dataclasses.fields(value)
+        }
+    if isinstance(value, dict):
+        return {str(key): plain(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [plain(item) for item in value]
+    if isinstance(value, (set, frozenset)):
+        return sorted(plain(item) for item in value)
+    if isinstance(value, enum.Enum):
+        return plain(value.value)
+    if isinstance(value, Path):
+        return str(value)
+    if hasattr(value, "tolist"):
+        return plain(value.tolist())
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    raise ValueError(f"unsupported effective configuration type: {type(value).__name__}")
+
+
+def check_metric_contract(cfg: Any) -> None:
+    """Reject historical normalization before constructing the first environment."""
+    from robot_sf.benchmark.metric_definitions import (  # noqa: PLC0415 - stage-local heavy dependency.
+        METRIC_SCHEMA_VERSION,
+        require_anchor_compatibility,
+    )
+
+    for path in (cfg.snqi_baseline_path,):
+        if path is not None:
+            require_anchor_compatibility(
+                {"metric_schema_version": METRIC_SCHEMA_VERSION}, json.loads(path.read_bytes())
+            )
+    if cfg.snqi_v2_spec is not None:
+        require_anchor_compatibility(
+            {"metric_schema_version": METRIC_SCHEMA_VERSION}, cfg.snqi_v2_spec.provenance()
+        )
+
+
+def selected_episode_ids(derived: list[tuple]) -> list[list[Any]]:
+    """Expand the real selected matrix and reject duplicate or missing combinations.
+
+    Returns:
+        The validated stage result."""
+    ids, seen = [], set()
+    for suite, _path, scenarios, cfg in derived:
+        declared_seeds = list(cfg.seed_policy.seeds)
+        for scenario in scenarios:
+            if sorted(scenario["seeds"]) != sorted(declared_seeds):
+                raise ValueError("missing or duplicate scenario/seed combination")
+            for planner in cfg.planners:
+                for kin in cfg.kinematics_matrix:
+                    for seed in declared_seeds:
+                        identity = (
+                            planner.key,
+                            kin,
+                            scenario.get("id") or scenario.get("scenario_id") or scenario["name"],
+                            seed,
+                        )
+                        if identity in seen:
+                            raise ValueError("duplicate episode combination")
+                        seen.add(identity)
+                        ids.append([suite, *identity])
+    return sorted(ids)
+
+
+def expected_episode_ids(root: Path) -> list[list[Any]]:
+    """Expand the authoritative promotion roster independently of a selected execution slice.
+
+    Returns:
+        The validated stage result."""
+    from scripts.validation.run_empty_world_sweep import assert_dev_seeds  # noqa: PLC0415 - defer heavy runtime imports until the stage executes.
+
+    scope = json.loads(
+        (root / "configs/benchmarks/releases/behaviour_gate_0_1_0.json").read_bytes()
+    )
+    arms, slots, seeds = scope["arms"], scope["maps"], assert_dev_seeds(list(range(1001, 1031)))
+    if len(arms) != len(set(arms)) or len(slots) != len(set(slots)):
+        raise ValueError("duplicate arm or scenario in promotion contract")
+    ids = [[arm, slot, seed] for arm in arms for slot in slots for seed in seeds]
+    if len(arms) != 14 or len(slots) != 51 or len(ids) != 21420:
+        raise ValueError("missing promotion combinations: expected 14 arms x 51 slots x 30 seeds")
+    return sorted(ids)
+
+
+def check_output(root: Path, *, minimum_free_bytes: int) -> dict:
+    """Exercise actual create/fsync/rename paths and check the declared storage budget.
+
+    Returns:
+        The validated stage result."""
+    root.mkdir(parents=True, exist_ok=True)
+    if root.is_symlink() or not root.is_dir():
+        raise ValueError("receipt output must be a real directory")
+    usage = shutil.disk_usage(root)
+    if usage.free < minimum_free_bytes:
+        raise ValueError("insufficient receipt output disk space")
+    descriptor, temporary = tempfile.mkstemp(prefix=".receipt-path-check-", dir=root)
+    target = Path(temporary + ".published")
+    try:
+        with os.fdopen(descriptor, "wb") as handle:
+            handle.write(b"receipt-path-check\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, target)
+        if target.read_bytes() != b"receipt-path-check\n":
+            raise ValueError("receipt output readback failed")
+    finally:
+        Path(temporary).unlink(missing_ok=True)
+        target.unlink(missing_ok=True)
+    return {"minimum_free_bytes": minimum_free_bytes, "free_bytes_at_preflight": usage.free}
+
+
+def _loaded_predictors(policy: Any) -> list[Any]:
+    """Find the actual adapter-owned predictor without constructing a parallel guard model.
+
+    Returns:
+        The validated stage result."""
+    from robot_sf.planner.socnav_prediction import PredictionPlannerAdapter  # noqa: PLC0415 - defer heavy runtime imports until the stage executes.
+
+    result, pending, seen = [], [policy], set()
+    while pending:
+        item = pending.pop()
+        if id(item) in seen:
+            continue
+        seen.add(id(item))
+        if isinstance(item, PredictionPlannerAdapter):
+            result.append(item)
+        for name in (
+            "_planner_adapter",
+            "_predictor",
+            "predictor",
+            "_planner",
+            "planner",
+            "_foresight",
+            "_predictive_foresight",
+        ):
+            child = getattr(item, name, None)
+            if child is not None:
+                pending.append(child)
+    return result
+
+
+def _forecast_readback(policy: Any) -> list[dict]:
+    """Check requested horizons against the loaded model's own declared and actual capability.
+
+    Returns:
+        The validated stage result."""
+    import torch  # noqa: PLC0415 - defer heavy runtime imports until the stage executes.
+
+    observations = []
+    for predictor in _loaded_predictors(policy):
+        model = predictor._ensure_model()
+        if model is None:
+            raise ValueError("receipt predictor did not load its checkpoint")
+        declared = int(model.config.horizon_steps)
+        state, mask, *_ = predictor._build_model_input({})
+        with torch.no_grad():
+            output = model(
+                torch.from_numpy(state[None]).to(predictor._device),
+                torch.from_numpy(mask[None]).to(predictor._device),
+            )
+        actual = int(output["future_positions"].shape[-2])
+        requests = [int(predictor.config.predictive_horizon_steps)]
+        if predictor.config.predictive_adaptive_horizon_enabled:
+            requests.append(
+                requests[0] + max(0, int(predictor.config.predictive_horizon_boost_steps))
+            )
+        adapter = getattr(policy, "_planner_adapter", None)
+        if adapter is not None and hasattr(adapter.config, "horizon_steps"):
+            requests.append(int(adapter.config.horizon_steps))
+        if actual != declared or any(not 1 <= request <= declared for request in requests):
+            raise ValueError(
+                f"forecast capability mismatch: requested={requests}, declared={declared}, actual={actual}; never clamp"
+            )
+        observations.append({"requested": requests, "declared": declared, "actual": actual})
+    return observations
+
+
+def inspect_construction(scenario: dict, seed: int, **kwargs: Any) -> dict:
+    """Construct real episode context, policy, simulator; read back their effective parameters.
+
+    No reset or step is performed. Signature binding deliberately uses the production defaults;
+    context resolution and policy construction are the very helpers used by run_map_episode.
+
+    Returns:
+        The validated stage result."""
+    from robot_sf.benchmark.map_runner import map_runner as runner  # noqa: PLC0415 - defer heavy runtime imports until the stage executes.
+    from robot_sf.benchmark.map_runner import map_runner_episode as episode  # noqa: PLC0415 - defer heavy runtime imports until the stage executes.
+
+    values = inspect.signature(episode.run_map_episode).bind(
+        scenario, seed, policy_builder=runner._build_policy, **kwargs
+    )
+    values.apply_defaults()
+    records: list[dict[str, str]] = []
+    arguments = dict(values.arguments)
+    arguments["runtime_input_records"] = records
+    ctx = episode._resolve_episode_run_context(
+        **{
+            name: arguments[name]
+            for name in inspect.signature(episode._resolve_episode_run_context).parameters
+        }
+    )
+    contract = episode._prepare_policy_and_observation_contract(
+        scenario=ctx.scenario,
+        algo=ctx.algo,
+        policy_cfg=ctx.policy_cfg,
+        config=ctx.config,
+        observation_mode=arguments["observation_mode"],
+        observation_level=arguments["observation_level"],
+        robot_kinematics=ctx.robot_kinematics,
+        robot_command_mode=ctx.robot_command_mode,
+        adapter_impact_eval=arguments["adapter_impact_eval"],
+        benchmark_track=ctx.benchmark_track,
+        track_schema_version=ctx.track_schema_version,
+        actuation_profile=ctx.actuation_profile,
+        policy_builder=runner._build_policy,
+    )
+    env = None
+    try:
+        forecasts = _forecast_readback(contract.policy_fn)
+        env = episode.make_robot_env(config=ctx.config, seed=seed, debug=False)
+        if contract.planner_bind_env:
+            contract.planner_bind_env(env)
+        adapter = getattr(contract.policy_fn, "_planner_adapter", None)
+        return {
+            "resolved_policy": plain(ctx.policy_cfg),
+            "simulator": plain(env.unwrapped.simulator.config),
+            "robot": plain(env.unwrapped.simulator.robots[0].config),
+            "environment": {
+                name: plain(getattr(env.unwrapped.config, name))
+                for name in ("observation_mode", "robot_config", "sim_config")
+            },
+            "planner": plain(adapter.config)
+            if adapter is not None and hasattr(adapter, "config")
+            else plain(contract.algo_meta),
+            "forecast_capabilities": forecasts,
+            "runtime_inputs": records,
+            "effective_horizon": ctx.horizon_val,
+        }
+    finally:
+        if env is not None:
+            env.close()
+        if contract.planner_close:
+            contract.planner_close()
+
+
+def environment_identity() -> dict:
+    """Conservatively bind the installed runtime rather than guessing a dependency subset.
+
+    Returns:
+        The validated stage result."""
+    return {
+        "python": platform.python_version(),
+        "platform": platform.platform(),
+        "packages": sorted(
+            (dist.metadata["Name"], dist.version) for dist in importlib.metadata.distributions()
+        ),
+    }
+
+
+def input_digests(root: Path, snapshots: Any) -> dict[str, str]:
+    """Digest resolved files and check declared runtime-input checksums.
+
+    Returns:
+        The validated stage result."""
+    paths: set[Path] = set()
+
+    def visit(value: Any) -> None:
+        if isinstance(value, dict):
+            for child in value.values():
+                visit(child)
+        elif isinstance(value, list):
+            for child in value:
+                visit(child)
+        elif isinstance(value, str) and len(value) < 4096:
+            candidate = Path(value)
+            candidate = candidate if candidate.is_absolute() else root / candidate
+            if candidate.is_file():
+                paths.add(candidate.resolve())
+
+    visit(snapshots)
+    return {str(path): file_digest(path) for path in sorted(paths)}
+
+
+def episode_inputs(cfg: Any, arm: Any, scenario: dict, kin: str, root: Path) -> tuple[dict, dict]:
+    """Apply the campaign's own kinematics, horizon and profile bindings to a slot.
+
+    Returns:
+        The validated stage result."""
+    from robot_sf.benchmark.camera_ready._config import (  # noqa: PLC0415 - stage-local heavy dependency.
+        _apply_fixed_campaign_horizon,
+        _scenario_with_kinematics,
+    )
+    from robot_sf.benchmark.camera_ready.campaign import (  # noqa: PLC0415 - stage-local heavy dependency.
+        _latency_stress_metadata,
+        _resolve_arm_safety_wrapper,
+        _synthetic_actuation_metadata,
+    )
+
+    horizon = arm.horizon_override if arm.horizon_override is not None else cfg.horizon
+    dt = arm.dt_override if arm.dt_override is not None else cfg.dt
+    scoped = _scenario_with_kinematics(
+        scenario, kinematics=kin, holonomic_command_mode=cfg.holonomic_command_mode
+    )
+    if cfg.telemetry is not None:
+        scoped["telemetry"] = dict(cfg.telemetry)
+    scoped = _apply_fixed_campaign_horizon(
+        [scoped],
+        horizon=horizon,
+        horizon_policy=cfg.horizon_policy,
+        protocol_version=cfg.protocol_version,
+    )[0]
+    return scoped, {
+        "horizon": horizon or 0,
+        "dt": dt or 0.0,
+        "record_forces": cfg.record_forces,
+        "snqi_weights": json.loads(cfg.snqi_weights_path.read_bytes())
+        if cfg.snqi_weights_path
+        else None,
+        "snqi_baseline": json.loads(cfg.snqi_baseline_path.read_bytes())
+        if cfg.snqi_baseline_path
+        else None,
+        "algo": arm.algo,
+        "scenario_path": root / "scoped_scenarios.json",
+        "algo_config_path": str(arm.algo_config_path) if arm.algo_config_path else None,
+        "adapter_impact_eval": arm.adapter_impact_eval,
+        "observation_mode": arm.observation_mode or cfg.observation_mode,
+        "observation_noise": cfg.observation_noise,
+        "synthetic_actuation_profile": _synthetic_actuation_metadata(
+            cfg.synthetic_actuation_profile
+        ),
+        "latency_stress_profile": _latency_stress_metadata(cfg.latency_stress_profile, dt=dt),
+        "safety_wrapper": _resolve_arm_safety_wrapper(cfg=cfg, planner=arm),
+        "record_simulation_step_trace": cfg.record_simulation_step_trace,
+        "record_planner_decision_trace": cfg.record_planner_decision_trace,
+    }
+
+
+def compile_contract(
+    derived: list[tuple],
+    *,
+    source_sha: str,
+    root: Path,
+    output_dir: Path,
+    minimum_free_bytes: int,
+    full_roster: bool,
+) -> dict:
+    """Freeze all identities before the first trajectory and retain construction readback.
+
+    Returns:
+        The validated stage result."""
+    from robot_sf.benchmark.camera_ready._config import _load_campaign_scenarios  # noqa: PLC0415 - defer heavy runtime imports until the stage executes.
+    from robot_sf.benchmark.metric_definitions import (  # noqa: PLC0415 - stage-local heavy dependency.
+        METRIC_SCHEMA_VERSION,
+        metric_definitions_sha256,
+    )
+
+    selected = selected_episode_ids(derived)
+    expected = expected_episode_ids(root)
+    if full_roster and sorted([arm, slot, seed] for _, arm, _, slot, seed in selected) != expected:
+        raise ValueError("missing or unexpected full promotion combination")
+    disk = check_output(output_dir, minimum_free_bytes=minimum_free_bytes)
+    snapshots = []
+    for suite, cfg_path, _scenarios, cfg in derived:
+        for arm in cfg.planners:
+            for kin in cfg.kinematics_matrix or ("differential_drive",):
+                for scenario in _load_campaign_scenarios(cfg):
+                    scoped, kwargs = episode_inputs(cfg, arm, scenario, kin, root)
+                    snapshot = inspect_construction(scoped, min(scoped["seeds"]), **kwargs)
+                    snapshots.append(
+                        {
+                            "suite": suite,
+                            "arm": arm.key,
+                            "kinematics": kin,
+                            "slot": scenario.get("id")
+                            or scenario.get("scenario_id")
+                            or scenario["name"],
+                            "effective": snapshot,
+                        }
+                    )
+    assets = input_digests(root, [snapshots, [plain(cfg) for _, _, _, cfg in derived]])
+    # Sign the producer and installed runtime, including metric code used during execution.
+    execution = {
+        "source_sha": source_sha,
+        "harness_sha256": file_digest(root / "scripts/validation/run_empty_world_sweep.py"),
+        "environment": environment_identity(),
+        "selected_episode_ids": selected,
+        "effective_inputs": snapshots,
+        "assets": assets,
+        "metric_definitions_sha256": metric_definitions_sha256(),
+    }
+    return {
+        "schema_version": "receipt-contract.v1",
+        "source_sha": source_sha,
+        "execution_key": stage_key("execution", execution),
+        "execution": execution,
+        "expected_episode_ids": expected,
+        "expected_episodes": len(expected),
+        "selected_episodes": len(selected),
+        "full_roster": full_roster,
+        "row_schema_sha256": file_digest(
+            root / "robot_sf/benchmark/schemas/episode.schema.v1.json"
+        ),
+        "metric_schema_version": METRIC_SCHEMA_VERSION,
+        "disk": disk,
+    }
+
+
+def prepare_completion_views(derived: list[tuple], output_dir: Path, contract: dict) -> None:
+    """Recover immutable rows before the campaign's normal missing-job filter runs."""
+    from robot_sf.benchmark.receipt_stages import recover_episodes  # noqa: PLC0415 - defer heavy runtime imports until the stage executes.
+    from robot_sf.benchmark.schema_validator import load_schema  # noqa: PLC0415 - defer heavy runtime imports until the stage executes.
+
+    schema = load_schema(Path(__file__).parent / "schemas/episode.schema.v1.json")
+    for suite, _path, _scenarios, cfg in derived:
+        for arm in cfg.planners:
+            for kin in cfg.kinematics_matrix or ("differential_drive",):
+                directory = (
+                    output_dir / "campaigns" / f"empty_world_{suite}" / "runs" / f"{arm.key}__{kin}"
+                )
+                descriptor = {
+                    "schema_version": "receipt-execution.v1",
+                    "source_sha": contract["source_sha"],
+                    "execution_key": contract["execution_key"],
+                    "run_id": str(output_dir.resolve()),
+                }
+                recover_episodes(directory / "episodes.jsonl", schema, descriptor)

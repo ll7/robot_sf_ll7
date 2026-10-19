@@ -88,6 +88,8 @@ def assert_dev_seeds(seeds: Any) -> list[int]:
                 f"seed {seed} is outside the development range {DEV_SEED_MIN}-{DEV_SEED_MAX} "
                 "(retired 111-140 and the sealed 0.0.8 seeds remain held out); aborting"
             )
+        if seed in checked:
+            raise SeedGuardError(f"duplicate development seed {seed}")
         checked.append(seed)
     return checked
 
@@ -373,7 +375,7 @@ def build_derived_inputs(  # noqa: C901
         _write_authored_horizon_schedule(payload, scenarios, out_dir, suite)
     payload["seed_policy"] = {"mode": "fixed-list", "seeds": list(seeds)}
     payload["workers"] = int(workers)
-    payload["resume"] = False
+    payload["resume"] = True
     payload["stop_on_failure"] = False
     payload["export_publication_bundle"] = False
     # Dev diagnostics emit v2 rows; historical width anchors use v1 metrics.
@@ -811,8 +813,12 @@ def describe_trace(campaign_root: Path) -> str:
 
 def _preflight_receipt_inputs(derived: list[tuple]) -> None:
     """Check every selected suite before starting the first collection."""
+    from robot_sf.benchmark.receipt_contract import check_metric_contract, selected_episode_ids
+
     for _suite, _cfg_path, _scenarios, cfg in derived:
+        check_metric_contract(cfg)
         assert_forecast_support(cfg)
+    selected_episode_ids(derived)
 
 
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
@@ -829,12 +835,19 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         "--summarize-only", action="store_true", help="Rewrite tables from existing campaigns"
     )
     parser.add_argument("--check-only", action="store_true", help="Derive inputs, verify, stop")
+    parser.add_argument("--minimum-free-bytes", type=int, default=1024**3)
+    parser.add_argument(
+        "--canary",
+        action="store_true",
+        help="Isolated short integration probes; never receipt episodes",
+    )
+    parser.add_argument("--canary-steps", type=int, choices=range(1, 6), default=2)
     parser.add_argument("--no-step-trace", action="store_true")
     parser.add_argument("--arm-isolation", choices=("in_process", "subprocess"), default=None)
     return parser.parse_args(argv)
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: list[str] | None = None) -> int:  # noqa: C901, PLR0915
     """Run the sweep.
 
     Returns:
@@ -858,6 +871,14 @@ def main(argv: list[str] | None = None) -> int:
     suites = list(SUITES) if args.suite == "both" else [args.suite]
     out_dir = args.output_dir.resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
+    import fcntl
+
+    lock = (out_dir / ".receipt.lock").open("a")
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError as error:
+        lock.close()
+        raise ValueError("receipt output already has an active writer") from error
     started = time.time()
     trace_notes: list[str] = []
     incomplete_execution = False
@@ -877,6 +898,32 @@ def main(argv: list[str] | None = None) -> int:
     # can inspect the generated receipt even when the initial preflight fails.
     if not args.summarize_only:
         _preflight_receipt_inputs(derived)
+        from robot_sf.benchmark.receipt_contract import compile_contract, prepare_completion_views
+        from robot_sf.benchmark.receipt_stages import atomic_json
+
+        contract = compile_contract(
+            derived,
+            source_sha=full_sha,
+            root=REPO_ROOT,
+            output_dir=out_dir,
+            minimum_free_bytes=args.minimum_free_bytes,
+            full_roster=args.suite == "both"
+            and not args.arms
+            and not args.scenarios
+            and sorted(seeds) == list(range(DEV_SEED_MIN, DEV_SEED_MAX + 1)),
+        )
+        contract_path = out_dir / "contract.json"
+        if contract_path.exists():
+            previous = json.loads(contract_path.read_bytes())
+            if previous["execution_key"] != contract["execution_key"]:
+                raise ValueError("receipt execution/source differs; same-source continuation only")
+        atomic_json(contract_path, contract)
+        if args.canary:
+            from scripts.validation.receipt_canary import run_canary
+
+            return run_canary(derived, out_dir / "canary", full_sha, args.canary_steps)
+        if not args.check_only:
+            prepare_completion_views(derived, out_dir, contract)
     for suite, cfg_path, scenarios, cfg in derived:
         if args.summarize_only:
             root = out_dir / "campaigns" / f"empty_world_{suite}"

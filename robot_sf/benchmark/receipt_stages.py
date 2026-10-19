@@ -73,7 +73,7 @@ def atomic_json(path: Path, value: Any, *, immutable: bool = False) -> None:
             try:
                 os.link(temporary, path)
             except FileExistsError:
-                if path.read_bytes() != payload:
+                if canonical_bytes(json.loads(path.read_bytes())) != canonical_bytes(value):
                     raise ValueError(
                         "immutable receipt record differs; refusing overwrite"
                     ) from None
@@ -92,18 +92,32 @@ def validate_row(row: dict, schema: dict) -> None:
     canonical_bytes(row)
 
 
+def find_receipt_file(out_path: Path, name: str = DESCRIPTOR) -> Path | None:
+    """Resolve an arm's acquisition marker, including the pre-arm campaign marker.
+
+    Returns:
+        Closest receipt file within the arm, runs directory or campaign root.
+    """
+    for directory in [out_path.parent, out_path.parent.parent, out_path.parent.parent.parent]:
+        candidate = directory / name
+        if candidate.is_file():
+            return candidate
+    return None
+
+
 def publish_episode(out_path: Path, schema: dict, row: dict) -> bool:
     """Commit completed observations, including collisions/timeouts, before JSONL append.
 
     Returns:
         The validated stage result."""
-    descriptor_path = out_path.parent / DESCRIPTOR
-    if not descriptor_path.is_file():
+    descriptor_path = find_receipt_file(out_path)
+    if descriptor_path is None:
         return False
     descriptor = json.loads(descriptor_path.read_bytes())
     if descriptor.get("schema_version") != "receipt-execution.v1":
         raise ValueError("unsupported receipt execution descriptor")
     validate_row(row, schema)
+    atomic_json(out_path.parent / DESCRIPTOR, descriptor, immutable=True)
     episode_id = row.get("episode_id")
     if not isinstance(episode_id, str) or not episode_id:
         raise ValueError("completion requires an episode identity")
@@ -176,3 +190,42 @@ def recover_episodes(out_path: Path, schema: dict, descriptor: dict) -> list[dic
     finally:
         Path(temporary).unlink(missing_ok=True)
     return rows
+
+
+def rebuild_receipt_summary_inputs(ctx: Any, execution: Any) -> Any:
+    """Fold every banked observation through the production metadata aggregator.
+
+    Returns:
+        Batch execution inputs for reporting, without scheduling an episode.
+    """
+    from robot_sf.benchmark.map_runner import map_runner as runner  # noqa: PLC0415
+    from robot_sf.benchmark.map_runner import map_runner_batch_runner as batches  # noqa: PLC0415
+
+    if find_receipt_file(ctx.out_path) is None:
+        return execution
+    rows = [json.loads(line) for line in ctx.out_path.read_text().splitlines() if line.strip()]
+    totals = batches._initial_feasibility_totals()
+    samples, native, adapted, runtime = False, 0, 0, None
+    for row in rows:
+        validate_row(row, ctx.schema)
+        samples, native, adapted, runtime = batches._fold_worker_metadata(
+            row,
+            apply_worker_metadata_bridge=runner._apply_worker_metadata_bridge,
+            feasibility_totals=totals,
+            runtime_algorithm_contract=runtime,
+            adapter_samples_seen=samples,
+            adapter_native_steps=native,
+            adapter_adapted_steps=adapted,
+        )
+    ctx.jobs = runner._build_seed_jobs(
+        ctx.filtered, suite_seeds=ctx.suite_seeds, suite_key=ctx.suite_key
+    )
+    return execution._replace(
+        wrote=len(rows),
+        episode_records=rows,
+        adapter_native_steps=native,
+        adapter_adapted_steps=adapted,
+        adapter_samples_seen=samples,
+        runtime_algorithm_contract=runtime,
+        feasibility_totals=totals,
+    )

@@ -134,21 +134,28 @@ def check_output(root: Path, *, minimum_free_bytes: int) -> dict:
     return {"minimum_free_bytes": minimum_free_bytes, "free_bytes_at_preflight": usage.free}
 
 
-def _loaded_predictors(policy: Any) -> list[Any]:
-    """Find the actual adapter-owned predictor without constructing a parallel guard model.
+def _policy_objects(policy: Any) -> list[Any]:
+    """Traverse owned adapters, bound lifecycle hooks and real policy closures.
 
     Returns:
-        The validated stage result."""
-    from robot_sf.planner.socnav_prediction import PredictionPlannerAdapter  # noqa: PLC0415 - defer heavy runtime imports until the stage executes.
-
+        Distinct live objects owned by the constructed policy.
+    """
     result, pending, seen = [], [policy], set()
     while pending:
         item = pending.pop()
         if id(item) in seen:
             continue
         seen.add(id(item))
-        if isinstance(item, PredictionPlannerAdapter):
-            result.append(item)
+        result.append(item)
+        if inspect.isfunction(item):
+            pending.extend(
+                value
+                for value in inspect.getclosurevars(item).nonlocals.values()
+                if not isinstance(value, (str, int, float, bool, dict, list, tuple, type(None)))
+            )
+        owner = getattr(item, "__self__", None)
+        if owner is not None:
+            pending.append(owner)
         for name in (
             "_planner_adapter",
             "_predictor",
@@ -157,11 +164,86 @@ def _loaded_predictors(policy: Any) -> list[Any]:
             "planner",
             "_foresight",
             "_predictive_foresight",
+            "_adapter",
+            "_planner_close",
+            "_planner_reset",
+            "_planner_bind_env",
+            "_planner_stats",
         ):
             child = getattr(item, name, None)
             if child is not None:
                 pending.append(child)
     return result
+
+
+def _loaded_predictors(policy: Any) -> list[Any]:
+    """Find actual predictor instances, including nested/closure-only learned planners.
+
+    Returns:
+        Constructed predictor adapters owned by the policy.
+    """
+    from robot_sf.planner.socnav_prediction import PredictionPlannerAdapter  # noqa: PLC0415
+
+    return [item for item in _policy_objects(policy) if isinstance(item, PredictionPlannerAdapter)]
+
+
+def _captured_parameters(item: Any) -> dict:
+    """Read native policy function defaults and bound scalar inputs.
+
+    Returns:
+        Captured effective scalar parameters.
+    """
+    captured = {}
+    if inspect.isfunction(item):
+        for name, parameter in inspect.signature(item).parameters.items():
+            if parameter.default is not inspect.Parameter.empty and isinstance(
+                parameter.default, (str, int, float, bool)
+            ):
+                captured[item.__qualname__ + ".default." + name] = plain(parameter.default)
+        for name, value in inspect.getclosurevars(item).nonlocals.items():
+            if isinstance(value, (str, int, float, bool)):
+                captured[item.__qualname__ + "." + name] = plain(value)
+    return captured
+
+
+def _policy_readback(policy: Any) -> dict:
+    """Read owned planner configuration rather than substituting authored metadata.
+
+    Returns:
+        Actual object configurations and primitive values captured by native policies.
+    """
+    configurations, captured = [], {}
+    for item in _policy_objects(policy):
+        if dataclasses.is_dataclass(item) and not isinstance(item, type):
+            parameters = plain(item)
+            parameters.update(
+                {
+                    name: value
+                    for name, value in vars(item).items()
+                    if name not in parameters and isinstance(value, (str, int, float, bool))
+                }
+            )
+            configurations.append(
+                {
+                    "type": type(item).__module__ + "." + type(item).__name__,
+                    "field": "constructed_object",
+                    "parameters": parameters,
+                }
+            )
+        for field in ("config", "cfg", "_config"):
+            config = getattr(item, field, None)
+            if dataclasses.is_dataclass(config) or isinstance(config, dict):
+                configurations.append(
+                    {
+                        "type": type(item).__module__ + "." + type(item).__name__,
+                        "field": field,
+                        "parameters": plain(config),
+                    }
+                )
+        captured.update(_captured_parameters(item))
+    if not configurations and not captured:
+        raise ValueError("constructed planner has no observable effective configuration")
+    return {"owned_configurations": configurations, "captured_parameters": captured}
 
 
 def _forecast_readback(policy: Any) -> list[dict]:
@@ -245,7 +327,6 @@ def inspect_construction(scenario: dict, seed: int, **kwargs: Any) -> dict:
         env = episode.make_robot_env(config=ctx.config, seed=seed, debug=False)
         if contract.planner_bind_env:
             contract.planner_bind_env(env)
-        adapter = getattr(contract.policy_fn, "_planner_adapter", None)
         return {
             "resolved_policy": plain(ctx.policy_cfg),
             "simulator": plain(env.unwrapped.simulator.config),
@@ -254,9 +335,7 @@ def inspect_construction(scenario: dict, seed: int, **kwargs: Any) -> dict:
                 name: plain(getattr(env.unwrapped.config, name))
                 for name in ("observation_mode", "robot_config", "sim_config")
             },
-            "planner": plain(adapter.config)
-            if adapter is not None and hasattr(adapter, "config")
-            else plain(contract.algo_meta),
+            "planner": _policy_readback(contract.policy_fn),
             "forecast_capabilities": forecasts,
             "runtime_inputs": records,
             "effective_horizon": ctx.horizon_val,
@@ -400,12 +479,41 @@ def compile_contract(
     if full_roster and sorted([arm, slot, seed] for _, arm, _, slot, seed in selected) != expected:
         raise ValueError("missing or unexpected full promotion combination")
     disk = check_output(output_dir, minimum_free_bytes=minimum_free_bytes)
+    from robot_sf.benchmark.map_runner import map_runner as runner  # noqa: PLC0415
+
     snapshots = []
     for suite, cfg_path, _scenarios, cfg in derived:
+        resolved = _load_campaign_scenarios(cfg)
         for arm in cfg.planners:
             for kin in cfg.kinematics_matrix or ("differential_drive",):
-                for scenario in _load_campaign_scenarios(cfg):
-                    scoped, kwargs = episode_inputs(cfg, arm, scenario, kin, root)
+                inputs = [episode_inputs(cfg, arm, scenario, kin, root) for scenario in resolved]
+                kwargs = inputs[0][1]
+                admitted = runner.run_map_batch(
+                    [scoped for scoped, _ in inputs],
+                    out_path=output_dir
+                    / "construction_preflight"
+                    / suite
+                    / f"{arm.key}__{kin}"
+                    / "episodes.jsonl",
+                    schema_path=root / "robot_sf/benchmark/schemas/episode.schema.v1.json",
+                    provenance_scenario_path=cfg.scenario_matrix_path,
+                    benchmark_profile=arm.benchmark_profile,
+                    socnav_missing_prereq_policy=(
+                        "fail-fast"
+                        if cfg.checkpoint_provenance_enforcement == "error"
+                        else arm.socnav_missing_prereq_policy
+                    ),
+                    preflight_only=True,
+                    workers=1,
+                    resume=False,
+                    **kwargs,
+                )
+                expected_jobs = sum(len(scoped["seeds"]) for scoped, _ in inputs)
+                if not admitted.get("preflight_complete") or admitted["jobs"] != expected_jobs:
+                    raise ValueError(
+                        "production batch preflight skipped or omitted receipt combinations"
+                    )
+                for scenario, (scoped, kwargs) in zip(resolved, inputs, strict=True):
                     snapshot = inspect_construction(scoped, min(scoped["seeds"]), **kwargs)
                     snapshots.append(
                         {
@@ -455,23 +563,23 @@ def prepare_completion_views(
 
     schema = load_schema(Path(__file__).parent / "schemas/episode.schema.v1.json")
     for suite, _path, _scenarios, cfg in derived:
+        campaign = output_dir / "campaigns" / f"empty_world_{suite}"
+        descriptor = {
+            "schema_version": "receipt-execution.v1",
+            "source_sha": contract["source_sha"],
+            "execution_key": contract["execution_key"],
+            "run_id": str(output_dir.resolve()),
+        }
+        atomic_json(campaign / "receipt_execution.json", descriptor, immutable=True)
+        seeds = list(cfg.seed_policy.seeds)
+        dispatch = {
+            "execution_key": contract["execution_key"],
+            "seeds": [min(seeds)] if first_seed_only else seeds,
+        }
+        atomic_json(campaign / "receipt_dispatch.json", dispatch)
         for arm in cfg.planners:
             for kin in cfg.kinematics_matrix or ("differential_drive",):
-                directory = (
-                    output_dir / "campaigns" / f"empty_world_{suite}" / "runs" / f"{arm.key}__{kin}"
-                )
-                descriptor = {
-                    "schema_version": "receipt-execution.v1",
-                    "source_sha": contract["source_sha"],
-                    "execution_key": contract["execution_key"],
-                    "run_id": str(output_dir.resolve()),
-                }
-                recover_episodes(directory / "episodes.jsonl", schema, descriptor)
-                seeds = list(cfg.seed_policy.seeds)
-                atomic_json(
-                    directory / "receipt_dispatch.json",
-                    {
-                        "execution_key": contract["execution_key"],
-                        "seeds": [min(seeds)] if first_seed_only else seeds,
-                    },
-                )
+                directory = campaign / "runs" / f"{arm.key}__{kin}"
+                if directory.exists():
+                    recover_episodes(directory / "episodes.jsonl", schema, descriptor)
+                    atomic_json(directory / "receipt_dispatch.json", dispatch)

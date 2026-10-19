@@ -8,6 +8,8 @@ import pytest
 
 from scripts.validation import run_empty_world_sweep as sweep
 
+REPO_ROOT = sweep.REPO_ROOT
+
 
 def test_duplicate_development_seeds_refused_before_collection():
     """Duplicate seeds must not collapse into an apparently complete census."""
@@ -314,3 +316,265 @@ def test_paired_submission_requires_compatible_preflight_contracts(tmp_path, mon
     with pytest.raises(ValueError, match="preflight contract"):
         producer._prepare_sweeps(args, tmp_path, "b" * 40)
     assert submitted == []
+
+
+def test_banked_arm_without_summary_rebuilds_reporting(tmp_path, monkeypatch):
+    """A kill after the last row must not strand the arm behind skip-complete."""
+    from robot_sf.benchmark.camera_ready import _resume_plan as plan
+
+    directory = tmp_path / "goal__differential_drive"
+    directory.mkdir()
+    (directory / "episodes.jsonl").write_text(
+        json.dumps({"scenario_id": "slot", "seed": 1001}) + "\n"
+    )
+    (directory / "receipt_execution.json").write_text("{}")
+    monkeypatch.setattr(plan, "_validate_resume_runtime_identities", lambda *args: None)
+    verdict = plan.build_resume_plan(
+        tmp_path,
+        planners=[{"key": "goal", "algo": "goal"}],
+        kinematics_matrix=["differential_drive"],
+        scenarios=[
+            {"name": "slot", "seeds": [1001], "simulation_config": {"max_episode_steps": 2}}
+        ],
+    )[0]
+    assert verdict.episodes_remaining == 0
+    assert verdict.verdict != "skip-complete", (
+        "atomic rows require summary reconstruction after a killed writer"
+    )
+
+
+def test_receipt_resume_summary_includes_banked_observations(tmp_path, monkeypatch):
+    """Resume must aggregate retained rows together with newly executed rows."""
+    from robot_sf.benchmark.map_runner import map_runner as runner
+    from robot_sf.benchmark.map_runner.map_runner_batch_runner import BatchExecutionResult
+
+    path = tmp_path / "episodes.jsonl"
+    rows = [
+        {
+            "episode_id": str(seed),
+            "scenario_id": "slot",
+            "seed": seed,
+            "metrics": {"success": False},
+        }
+        for seed in [1001, 1002]
+    ]
+    path.write_text("".join(json.dumps(row) + "\n" for row in rows))
+    (tmp_path / "receipt_execution.json").write_text("{}")
+    ctx = SimpleNamespace(
+        out_path=path,
+        schema={},
+        jobs=[],
+        filtered=[{"name": "slot", "seeds": [1001, 1002]}],
+        suite_seeds={},
+        suite_key="fixture",
+    )
+    monkeypatch.setattr(
+        runner,
+        "_dispatch_batch_execution",
+        lambda ctx: BatchExecutionResult(0, [], [], 0, 0, False, None, {}, 0.0, None),
+    )
+    monkeypatch.setattr(
+        runner,
+        "_build_final_summary",
+        lambda ctx, result: {
+            "ids": {row["episode_id"] for row in result.episode_records},
+            "written": result.wrote,
+            "expected": len(ctx.jobs),
+        },
+    )
+    result = runner._execute_and_summarize(ctx)
+    assert result == {"ids": {"1001", "1002"}, "written": 2, "expected": 2}
+
+
+def test_canary_passes_admitted_short_scenario_to_worker(tmp_path, monkeypatch):
+    """Canary shortening must use supported scenario fields before any reset or step."""
+    from robot_sf.benchmark.camera_ready_campaign import load_campaign_config
+    from robot_sf.benchmark.map_runner import map_runner as runner
+    from robot_sf.training.scenario_loader import build_robot_config_from_scenario
+    from scripts.validation.receipt_canary import run_canary
+
+    path, scenarios = sweep.build_derived_inputs(
+        "main",
+        seeds=[1001],
+        arms=["goal"],
+        scenarios_filter=["classic_bottleneck_low"],
+        workers=1,
+        out_dir=tmp_path / "inputs",
+        step_trace=True,
+    )
+
+    class ReachedConstructor(Exception):
+        pass
+
+    def worker(scenario, seed, **kwargs):
+        assert scenario["name"].startswith("canary/")
+        build_robot_config_from_scenario(scenario, scenario_path=kwargs["scenario_path"])
+        raise ReachedConstructor
+
+    monkeypatch.setattr(runner, "_run_map_episode", worker)
+    with pytest.raises(ReachedConstructor):
+        run_canary(
+            [("main", path, scenarios, load_campaign_config(path))],
+            tmp_path / "canary",
+            "a" * 40,
+            2,
+        )
+
+
+def test_fresh_receipt_does_not_masquerade_as_resumed_campaign(tmp_path):
+    """Execution descriptors must not create prior arms before a real campaign manifest."""
+    from robot_sf.benchmark.camera_ready_campaign import load_campaign_config
+    from robot_sf.benchmark.receipt_contract import prepare_completion_views
+
+    path, scenarios = sweep.build_derived_inputs(
+        "main",
+        seeds=[1001],
+        arms=["goal"],
+        scenarios_filter=["classic_bottleneck_low"],
+        workers=1,
+        out_dir=tmp_path,
+        step_trace=True,
+    )
+    prepare_completion_views(
+        [("main", path, scenarios, load_campaign_config(path))],
+        tmp_path,
+        {"source_sha": "a" * 40, "execution_key": "b" * 64},
+    )
+    assert not (tmp_path / "campaigns/empty_world_main/runs").exists(), (
+        "fresh preflight must not require a missing campaign_manifest.json"
+    )
+
+
+def test_contract_uses_production_batch_preflight_gates(tmp_path, monkeypatch):
+    """Construction checks cannot bypass readiness and per-scenario compatibility."""
+    from robot_sf.benchmark import receipt_contract
+    from robot_sf.benchmark.camera_ready_campaign import load_campaign_config
+    from robot_sf.benchmark.map_runner import map_runner as runner
+
+    path, scenarios = sweep.build_derived_inputs(
+        "main",
+        seeds=[1001],
+        arms=["goal"],
+        scenarios_filter=["classic_bottleneck_low"],
+        workers=1,
+        out_dir=tmp_path,
+        step_trace=True,
+    )
+    monkeypatch.setattr(receipt_contract, "inspect_construction", lambda *args, **kwargs: {})
+
+    def reject(ctx):
+        raise RuntimeError("production profile rejection")
+
+    monkeypatch.setattr(runner, "_run_preflight_pipeline", reject)
+    with pytest.raises(RuntimeError, match="production profile rejection"):
+        receipt_contract.compile_contract(
+            [("main", path, scenarios, load_campaign_config(path))],
+            source_sha="a" * 40,
+            root=REPO_ROOT,
+            output_dir=tmp_path,
+            minimum_free_bytes=0,
+            full_roster=False,
+        )
+
+
+def _comparison_fixture(tmp_path, monkeypatch, *, mismatched_definitions=False):
+    from robot_sf.benchmark.receipt_stages import stage_key
+    from scripts.validation import compare_behaviour_rows as comparator
+
+    head_dir, baseline_dir = tmp_path / "head", tmp_path / "baseline"
+    data = {}
+    for directory, source in ((head_dir, "a" * 40), (baseline_dir, "b" * 40)):
+        directory.mkdir()
+        definitions = ("2" if mismatched_definitions and directory == baseline_dir else "1") * 64
+        execution = {"source_sha": source, "metric_definitions_sha256": definitions}
+        (directory / "contract.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": "receipt-contract.v1",
+                    "source_sha": source,
+                    "execution_key": stage_key("execution", execution),
+                    "execution": execution,
+                    "metric_schema_version": "robot-sf-metrics.v2",
+                }
+            )
+        )
+        data[directory] = {
+            ("goal", "slot", seed): {
+                "git_hash": source,
+                "metrics": {
+                    "metric_schema_version": "robot-sf-metrics.v2",
+                    "success": True,
+                    "collisions": 0,
+                },
+            }
+            for seed in range(1001, 1031)
+        }
+    monkeypatch.setattr(comparator.producer, "_load_sweep_rows", lambda directory: data[directory])
+    return comparator, head_dir, baseline_dir
+
+
+def test_comparison_refuses_same_schema_different_metric_definitions(tmp_path, monkeypatch):
+    """An unchanged version label cannot conceal changed scoring meanings."""
+    comparator, head, baseline = _comparison_fixture(
+        tmp_path, monkeypatch, mismatched_definitions=True
+    )
+    with pytest.raises(ValueError, match="metric definitions"):
+        comparator.compare(
+            head, baseline, {"arms": ["goal"], "maps": ["slot"]}, tmp_path / "comparison.json"
+        )
+
+
+def test_comparison_preserves_original_scoring_source(tmp_path, monkeypatch):
+    """A newer comparison checkout must not relabel the original scoring source."""
+    comparator, head, baseline = _comparison_fixture(tmp_path, monkeypatch)
+    result = comparator.compare(
+        head, baseline, {"arms": ["goal"], "maps": ["slot"]}, tmp_path / "comparison.json"
+    )
+    assert result["scoring_keys"]["head"] != result["scoring_keys"]["baseline"], (
+        "different producing sources must retain separate execution-time scoring identities"
+    )
+    assert result.get("scoring_contracts", {}).get("head", {}).get("source_sha") == "a" * 40
+
+
+def test_nested_forecast_adapter_is_observable():
+    """A foresight encoder's nested real adapter cannot disappear from capability checks."""
+    from robot_sf.benchmark.receipt_contract import _loaded_predictors
+    from robot_sf.planner.socnav_prediction import PredictionPlannerAdapter
+
+    predictor = object.__new__(PredictionPlannerAdapter)
+    policy = SimpleNamespace(_predictive_foresight=SimpleNamespace(_adapter=predictor))
+    assert _loaded_predictors(policy) == [predictor]
+
+
+def test_effective_readback_observes_closure_planner_defaults():
+    """Closure-only learned planners expose constructed defaults rather than authored metadata."""
+    from dataclasses import dataclass
+
+    from robot_sf.benchmark.receipt_contract import _policy_readback
+
+    @dataclass
+    class Config:
+        max_speed: float = 7.0
+
+    planner = SimpleNamespace(config=Config())
+
+    def policy(obs):
+        return planner.config.max_speed
+
+    observed = _policy_readback(policy)
+    assert any(
+        item["parameters"].get("max_speed") == 7.0 for item in observed["owned_configurations"]
+    )
+
+
+def test_native_goal_readback_includes_instantiated_kinematics():
+    """The real native policy must expose constructed speed/command limits."""
+    from robot_sf.benchmark.map_runner.map_runner import _build_policy
+    from robot_sf.benchmark.receipt_contract import _policy_readback
+
+    policy, _ = _build_policy("goal", {}, robot_kinematics="differential_drive")
+    observed = _policy_readback(policy)
+    assert any(
+        item["parameters"].get("max_linear_speed") is not None
+        for item in observed["owned_configurations"]
+    )

@@ -13,7 +13,6 @@ import json
 from pathlib import Path
 
 from robot_sf.benchmark.metric_definitions import (
-    metric_definitions_sha256,
     require_uniform_metric_schema,
 )
 from robot_sf.benchmark.receipt_stages import atomic_json, file_digest, stage_key
@@ -23,9 +22,44 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def _inventory(directory: Path) -> dict[str, str]:
+    paths = [*directory.rglob("*.jsonl"), directory / "contract.json"]
     return {
         str(path.relative_to(directory)): file_digest(path)
-        for path in sorted(directory.rglob("*.jsonl"))
+        for path in sorted(paths)
+        if path.is_file()
+    }
+
+
+def _scoring_contract(directory: Path, rows: dict) -> dict:
+    """Recover the actual execution-time scorer identity, never the current checkout's scorer.
+
+    Returns:
+        Source-bound scoring provenance from the immutable producing contract.
+    """
+    path = directory / "contract.json"
+    if not path.is_file():
+        raise ValueError("immutable producing contract required for scoring provenance")
+    contract = json.loads(path.read_bytes())
+    execution = contract["execution"]
+    if contract["execution_key"] != stage_key("execution", execution):
+        raise ValueError("producing execution contract digest mismatch")
+    source = contract["source_sha"]
+    definitions = execution["metric_definitions_sha256"]
+    if execution["source_sha"] != source:
+        raise ValueError("producing scoring source differs from execution contract")
+    for row in rows.values():
+        if row.get("git_hash") != source:
+            raise ValueError("row scoring source differs from producing execution contract")
+        recorded = row.get("metrics", {}).get("metric_definitions_sha256")
+        if recorded is not None and recorded != definitions:
+            raise ValueError("row metric definitions differ from producing contract")
+    return {
+        "source_sha": source,
+        "execution_key": contract["execution_key"],
+        "metric_schema_version": contract["metric_schema_version"],
+        "metric_definitions_sha256": definitions,
+        "scorer_bundle": execution.get("scorer_bundle", {"complete_producing_source_sha": source}),
+        "mode": "execution-time-metrics",
     }
 
 
@@ -45,26 +79,23 @@ def compare(head_dir: Path, baseline_dir: Path, scope: dict, output: Path) -> di
         classification_class="measurement_inconsistency",
         evidence_base_uri="https://example.invalid/requires-independent-classification",
     )
-    scorer = {
-        name: file_digest(ROOT / name)
-        for name in (
-            "robot_sf/benchmark/metric_definitions.py",
-            "robot_sf/benchmark/metrics.py",
-            "robot_sf/benchmark/map_runner/map_runner_episode.py",
-        )
-    }
     scoring = {
-        "metric_schema_version": version,
-        "metric_definitions_sha256": metric_definitions_sha256(),
-        "scorer_bundle": scorer,
-        "mode": "execution-time-metrics",
+        "head": _scoring_contract(head_dir, head),
+        "baseline": _scoring_contract(baseline_dir, baseline),
     }
+    if (
+        scoring["head"]["metric_definitions_sha256"]
+        != scoring["baseline"]["metric_definitions_sha256"]
+    ):
+        raise ValueError("incompatible metric definitions in producing scoring contracts")
+    if any(contract["metric_schema_version"] != version for contract in scoring.values()):
+        raise ValueError("row metric schema differs from producing scoring contract")
     scoring_keys = {
         label: stage_key(
             "scoring",
             {
                 "sorted_row_digests": sorted(stage_key("row", row) for row in data.values()),
-                **scoring,
+                **scoring[label],
             },
         )
         for label, data in (("head", head), ("baseline", baseline))
@@ -76,7 +107,12 @@ def compare(head_dir: Path, baseline_dir: Path, scope: dict, output: Path) -> di
             "baseline_digest": stage_key(
                 "baseline", sorted(stage_key("row", row) for row in baseline.values())
             ),
-            "comparator_bundle": file_digest(Path(producer.__file__)),
+            "comparator_bundle": {
+                "producer": file_digest(Path(producer.__file__)),
+                "comparison": file_digest(Path(__file__)),
+                "identities": file_digest(ROOT / "robot_sf/benchmark/receipt_stages.py"),
+            },
+            "comparison_source_sha": producer._full_sha(ROOT, "HEAD"),
             "acceptance_policy": scope,
         },
     )
@@ -86,7 +122,8 @@ def compare(head_dir: Path, baseline_dir: Path, scope: dict, output: Path) -> di
         "schema_version": "receipt-comparison.v1",
         "comparison_key": comparison_key,
         "scoring_keys": scoring_keys,
-        "scoring_contract": scoring,
+        "scoring_contracts": scoring,
+        "comparison_source_sha": producer._full_sha(ROOT, "HEAD"),
         "input_file_digests": before,
         "totals": totals,
         "rows": rows,

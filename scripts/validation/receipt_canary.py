@@ -37,10 +37,21 @@ def run_canary(derived: list[tuple], output: Path, source_sha: str, steps: int) 
         scoped["seeds"] = [1001]
         scoped["metadata"] = {"diagnostic_variant": "receipt-canary.v1"}
         scoped.setdefault("simulation_config", {})["max_episode_steps"] = steps
-        scoped["simulation_config"]["episode_step_limit"] = steps
         kwargs["horizon"] = steps
         row = runner._run_map_episode(scoped, 1001, **kwargs, pair_reset_hook=reset_hook)
         path = output / "runs" / arm.key / "episodes.jsonl"
+        atomic_json(
+            path.parent / "receipt_execution.json",
+            {
+                "schema_version": "receipt-execution.v1",
+                "source_sha": source_sha,
+                "execution_key": stage_key(
+                    "canary-execution", {"source_sha": source_sha, "namespace": "canary"}
+                ),
+                "run_id": str(output.resolve()),
+            },
+            immutable=True,
+        )
         runner._write_validated(path, schema, row)
         # Consume persisted bytes through the same reader and outcome comparator.
         persisted = json.loads(path.read_text().splitlines()[-1])

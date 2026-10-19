@@ -310,3 +310,62 @@ def test_real_campaign_replacement_cannot_issue_execution_metadata(tmp_path, mon
     assert switched == [True]
     assert len(module.load_rows(out / "campaigns" / "empty_world_main")) == 1
     assert not (out / "execution_main.json").exists()
+
+
+def test_direct_cli_hashes_the_buffer_it_executes(tmp_path):
+    """An edit during initial imports cannot relabel the direct CLI's executed code."""
+    import hashlib
+    import os
+    import subprocess
+    import sys
+
+    script = tmp_path / "run_empty_world_sweep.py"
+    loaded = Path(sweep.__file__).read_bytes() + (
+        b"\nif __name__ == '__main__':\n    print('EXECUTED_MARKER=loaded')\n"
+    )
+    script.write_bytes(loaded)
+    replacement = (
+        loaded.replace(b"EXECUTED_MARKER=loaded", b"EXECUTED_MARKER=replacement")
+        + b"\n# Replacement before the direct CLI starts collection.\n"
+    )
+    replacement_file = tmp_path / "replacement.py"
+    replacement_file.write_bytes(replacement)
+    guard = tmp_path / "guard"
+    guard.mkdir()
+    (guard / "sitecustomize.py").write_text(
+        "import os, sys; from pathlib import Path\n"
+        "def replace(frame, event, arg):\n"
+        "    if event == 'call' and frame.f_code.co_filename == os.environ['PROBE_SOURCE']:\n"
+        "        sys.setprofile(None)\n"
+        "        Path(os.environ['PROBE_SOURCE']).write_bytes(Path(os.environ['PROBE_REPLACEMENT']).read_bytes())\n"
+        "sys.setprofile(replace)\n"
+    )
+    # Stop after loading, before main, to inspect the image whose functions exist.
+    # The production main entrypoint is replaced only in this private test image.
+    for target in (script, replacement_file):
+        target.write_bytes(
+            target.read_bytes().replace(
+                b"raise SystemExit(main())", b"print('LOADED_IMAGE=' + SWEEP_HARNESS_SHA256)"
+            )
+        )
+    loaded = script.read_bytes()
+    replacement = replacement_file.read_bytes()
+    env = dict(
+        os.environ,
+        PYTHONPATH=str(guard),
+        PROBE_SOURCE=str(script),
+        PROBE_REPLACEMENT=str(replacement_file),
+    )
+    result = subprocess.run(
+        [sys.executable, str(script)], env=env, capture_output=True, text=True, check=True
+    )
+    images = [
+        line.split("=", 1)[1]
+        for line in result.stdout.splitlines()
+        if line.startswith("LOADED_IMAGE=")
+    ]
+    assert images and set(images) == {hashlib.sha256(replacement).hexdigest()}
+    assert "EXECUTED_MARKER=replacement" in result.stdout
+    assert "EXECUTED_MARKER=loaded" not in result.stdout
+    # Compare an executed marker, not just a second read of a pathname.
+    assert loaded != replacement

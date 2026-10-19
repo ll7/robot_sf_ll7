@@ -998,4 +998,13 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    if "_SWEEP_SOURCE_BYTES" not in globals():
+        # Direct CLI calls also compile the exact buffer used for identity.
+        # The outer import defines no collection; only this captured image runs main.
+        source = Path(__file__).read_bytes()
+        exec(
+            compile(source, __file__, "exec"),
+            {"__name__": "__main__", "__file__": __file__, "_SWEEP_SOURCE_BYTES": source},
+        )
+        raise SystemExit(0)
     raise SystemExit(main())

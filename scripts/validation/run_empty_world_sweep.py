@@ -1002,7 +1002,7 @@ if __name__ == "__main__":
         # Direct CLI calls also compile the exact buffer used for identity.
         # The outer import defines no collection; only this captured image runs main.
         source = Path(__file__).read_bytes()
-        exec(
+        exec(  # noqa: S102 - Execute this captured local CLI source, never supplied code.
             compile(source, __file__, "exec"),
             {"__name__": "__main__", "__file__": __file__, "_SWEEP_SOURCE_BYTES": source},
         )

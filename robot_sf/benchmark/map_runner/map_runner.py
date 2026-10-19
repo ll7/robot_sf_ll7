@@ -3613,6 +3613,7 @@ def run_map_batch(  # noqa: PLR0913
         Summary payload with counts and failure details.
     """
     if batch_config is not None:
+        preflight_only = batch_config.preflight_only
         scenario_path = batch_config.scenario_path
         provenance_scenario_path = batch_config.provenance_scenario_path
         horizon = batch_config.horizon

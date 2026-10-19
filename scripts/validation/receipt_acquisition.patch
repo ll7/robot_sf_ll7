@@ -23,7 +23,7 @@ index 2a27d0b54..ac2cf793c 100644
              verdicts.append(
                  ArmResumeVerdict(
 diff --git a/robot_sf/benchmark/map_runner/map_runner.py b/robot_sf/benchmark/map_runner/map_runner.py
-index 269d7d1fa..33648b993 100644
+index 269d7d1fa..2e22e5eb0 100644
 --- a/robot_sf/benchmark/map_runner/map_runner.py
 +++ b/robot_sf/benchmark/map_runner/map_runner.py
 @@ -2,6 +2,7 @@
@@ -88,7 +88,15 @@ index 269d7d1fa..33648b993 100644
      scenario_path: str | Path | None = None,
      provenance_scenario_path: str | Path | None = None,
      horizon: int | None = None,
-@@ -3662,7 +3681,16 @@ def run_map_batch(  # noqa: PLR0913
+@@ -3594,6 +3613,7 @@ def run_map_batch(  # noqa: PLR0913
+         Summary payload with counts and failure details.
+     """
+     if batch_config is not None:
++        preflight_only = batch_config.preflight_only
+         scenario_path = batch_config.scenario_path
+         provenance_scenario_path = batch_config.provenance_scenario_path
+         horizon = batch_config.horizon
+@@ -3662,7 +3682,16 @@ def run_map_batch(  # noqa: PLR0913
      _run_preflight_pipeline(ctx)
      if ctx.preflight.get("status") == "skipped":
          return _build_skipped_summary(ctx)
@@ -121,3 +129,15 @@ index 28b2f14cc..1c638d061 100644
                  results_by_idx[idx] = rec
              except Exception as exc:  # pragma: no cover  # noqa: BLE001 - batch job isolation
                  logger.exception(
+diff --git a/robot_sf/benchmark/types.py b/robot_sf/benchmark/types.py
+index 957d30ecb..008d6cce8 100644
+--- a/robot_sf/benchmark/types.py
++++ b/robot_sf/benchmark/types.py
+@@ -518,6 +518,7 @@ class MapBatchConfig:
+     ``run_map_batch(..., batch_config=cfg)``.
+     """
+
++    preflight_only: bool = False
+     scenario_path: str | Path | None = None
+     provenance_scenario_path: str | Path | None = None
+     horizon: int | None = None

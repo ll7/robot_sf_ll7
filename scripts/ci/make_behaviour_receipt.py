@@ -1848,6 +1848,10 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
 def _prepare_sweeps(  # noqa: C901 - paired acquisition modes and preflight admission.
     args: argparse.Namespace, repo_root: Path, baseline_source: str
 ) -> tuple[SweepRun, SweepRun]:
+    if args.mode == "local" and (
+        getattr(args, "canary", False) or getattr(args, "first_seed_only", False)
+    ):
+        raise ValueError("bounded canary and first-seed modes require --mode sbatch")
     seeds = _check_seed_range(list(args.seeds))
     work_dir = (repo_root / args.work_dir).resolve()
     if args.mode == "existing":

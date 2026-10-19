@@ -123,6 +123,25 @@ def test_scheduler_pins_working_directory_and_checks_helpers(tmp_path, monkeypat
     script = (work / "behaviour_receipt_head.sbatch").read_text()
     assert "test -f" in script, "missing production helper must fail before a trajectory"
     assert 'export PYTHONPATH="$PWD:$PWD/fast-pysf' in script
+    # Simulate scheduler spooling with a missing production helper. The launcher must
+    # stop before invoking the runtime, even if an executable named uv is available.
+    import os
+    import subprocess
+
+    executable = tmp_path / "bin" / "uv"
+    executable.parent.mkdir()
+    sentinel = tmp_path / "runtime-started"
+    executable.write_text(f"#!/bin/sh\ntouch '{sentinel}'\n")
+    executable.chmod(0o755)
+    completed = subprocess.run(
+        ["bash", str(work / "behaviour_receipt_head.sbatch")],
+        cwd=tmp_path,
+        env={**os.environ, "PATH": f"{executable.parent}:{os.environ['PATH']}"},
+        capture_output=True,
+        check=False,
+    )
+    assert completed.returncode != 0
+    assert not sentinel.exists(), "missing helper must be rejected before runtime dispatch"
 
 
 def test_generated_campaign_enables_missing_only_resume(tmp_path):
@@ -645,6 +664,7 @@ def test_pinned_harness_installs_bounded_acquisition_bundle(tmp_path):
     git("config", "user.name", "Test")
     git("config", "user.email", "test@example.invalid")
     runtime_paths = [
+        "robot_sf/benchmark/types.py",
         "robot_sf/benchmark/map_runner/map_runner.py",
         "robot_sf/benchmark/map_runner/map_runner_batch_runner.py",
         "robot_sf/benchmark/camera_ready/_resume_plan.py",
@@ -788,3 +808,62 @@ def test_historical_runtime_without_definition_digest_still_gets_a_bound_contrac
     )
     assert contract["execution"]["metric_definitions_sha256"] is None
     assert len(contract["execution"]["metric_semantics_sha256"]) == 64
+
+
+@pytest.mark.parametrize("flag", ["canary", "first_seed_only"])
+def test_local_bounded_modes_are_rejected_before_dispatch(tmp_path, monkeypatch, flag):
+    """A bounded scheduler request cannot silently become unbounded local acquisition."""
+    from scripts.ci import make_behaviour_receipt as producer
+
+    def unexpected(*args, **kwargs):
+        pytest.fail("local execution reached despite scheduler-only bounded mode")
+
+    monkeypatch.setattr(producer, "_run_local_sweep", unexpected)
+    args = SimpleNamespace(
+        mode="local",
+        seeds=[1001],
+        work_dir=tmp_path,
+        check_only=True,
+        canary=False,
+        first_seed_only=False,
+        head_sha="a" * 40,
+        arms=None,
+        scenarios=None,
+        workers=1,
+        sweep_harness_source_sha=None,
+    )
+    setattr(args, flag, True)
+    with pytest.raises(ValueError, match="require.*sbatch"):
+        producer._prepare_sweeps(args, tmp_path, "b" * 40)
+
+
+def test_preflight_error_releases_output_lock_even_with_retained_traceback(tmp_path, monkeypatch):
+    """A retained error cannot block a repaired retry in the same Python process."""
+    from robot_sf.benchmark import receipt_contract
+
+    monkeypatch.setattr(sweep, "verify_head", lambda *a, **k: "a" * 40)
+    monkeypatch.setattr(sweep, "_preflight_receipt_inputs", lambda *a: None)
+
+    def broken(*a, **k):
+        raise RuntimeError("constructor failure")
+
+    monkeypatch.setattr(receipt_contract, "compile_contract", broken)
+    argv = [
+        "--head-sha",
+        "HEAD",
+        "--suite",
+        "main",
+        "--arms",
+        "goal",
+        "--scenarios",
+        "classic_bottleneck_low",
+        "--seeds",
+        "1001",
+        "--output-dir",
+        str(tmp_path),
+    ]
+    with pytest.raises(RuntimeError, match="constructor failure") as first:
+        sweep.main(argv)
+    with pytest.raises(RuntimeError, match="constructor failure"):
+        sweep.main(argv)
+    assert first.value.__traceback__ is not None

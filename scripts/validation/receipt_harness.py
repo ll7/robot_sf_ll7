@@ -17,6 +17,7 @@ from pathlib import Path
 SCRIPT = "scripts/validation/run_empty_world_sweep.py"
 PATCH = "scripts/validation/receipt_acquisition.patch"
 RUNTIME_PATHS = (
+    "robot_sf/benchmark/types.py",
     "robot_sf/benchmark/map_runner/map_runner.py",
     "robot_sf/benchmark/map_runner/map_runner_batch_runner.py",
     "robot_sf/benchmark/camera_ready/_resume_plan.py",

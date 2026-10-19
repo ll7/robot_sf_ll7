@@ -899,144 +899,153 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0915
     except BlockingIOError as error:
         lock.close()
         raise ValueError("receipt output already has an active writer") from error
-    started = time.time()
-    trace_notes: list[str] = []
-    incomplete_execution = False
-    derived = []
-    for suite in suites:
-        cfg_path, scenarios = build_derived_inputs(
-            suite,
-            seeds=seeds,
-            arms=args.arms,
-            scenarios_filter=args.scenarios,
-            workers=args.workers,
-            out_dir=out_dir,
-            step_trace=not args.no_step_trace,
-        )
-        derived.append((suite, cfg_path, scenarios, load_campaign_config(cfg_path)))
-    # Stage models before check-only. Derive every config first so model staging
-    # can inspect the generated receipt even when the initial preflight fails.
-    if not args.summarize_only:
-        _preflight_receipt_inputs(derived)
-        from robot_sf.benchmark.receipt_contract import compile_contract, prepare_completion_views
-        from robot_sf.benchmark.receipt_stages import atomic_json
-
-        contract = compile_contract(
-            derived,
-            source_sha=full_sha,
-            root=REPO_ROOT,
-            output_dir=out_dir,
-            minimum_free_bytes=args.minimum_free_bytes,
-            full_roster=args.suite == "both"
-            and not args.arms
-            and not args.scenarios
-            and sorted(seeds) == list(range(DEV_SEED_MIN, DEV_SEED_MAX + 1)),
-        )
-        contract_path = out_dir / "contract.json"
-        if contract_path.exists():
-            previous = json.loads(contract_path.read_bytes())
-            if previous["execution_key"] != contract["execution_key"]:
-                raise ValueError("receipt execution/source differs; same-source continuation only")
-        atomic_json(contract_path, contract)
-        if args.canary:
-            from scripts.validation.receipt_canary import run_canary
-
-            return run_canary(derived, out_dir / "canary", full_sha, args.canary_steps)
-        if not args.check_only:
-            prepare_completion_views(
-                derived, out_dir, contract, first_seed_only=args.first_seed_only
+    try:
+        started = time.time()
+        trace_notes: list[str] = []
+        incomplete_execution = False
+        derived = []
+        for suite in suites:
+            cfg_path, scenarios = build_derived_inputs(
+                suite,
+                seeds=seeds,
+                arms=args.arms,
+                scenarios_filter=args.scenarios,
+                workers=args.workers,
+                out_dir=out_dir,
+                step_trace=not args.no_step_trace,
             )
-    for suite, cfg_path, scenarios, cfg in derived:
-        if args.summarize_only:
-            root = out_dir / "campaigns" / f"empty_world_{suite}"
-            receipt = out_dir / f"execution_{suite}.json"
-            summary_path = root / "reports" / "campaign_summary.json"
-            result = (
-                json.loads(receipt.read_text())
-                if receipt.is_file()
-                else (json.loads(summary_path.read_text()) if summary_path.is_file() else {})
+            derived.append((suite, cfg_path, scenarios, load_campaign_config(cfg_path)))
+        # Stage models before check-only. Derive every config first so model staging
+        # can inspect the generated receipt even when the initial preflight fails.
+        if not args.summarize_only:
+            _preflight_receipt_inputs(derived)
+            from robot_sf.benchmark.receipt_contract import (
+                compile_contract,
+                prepare_completion_views,
+            )
+            from robot_sf.benchmark.receipt_stages import atomic_json
+
+            contract = compile_contract(
+                derived,
+                source_sha=full_sha,
+                root=REPO_ROOT,
+                output_dir=out_dir,
+                minimum_free_bytes=args.minimum_free_bytes,
+                full_roster=args.suite == "both"
+                and not args.arms
+                and not args.scenarios
+                and sorted(seeds) == list(range(DEV_SEED_MIN, DEV_SEED_MAX + 1)),
+            )
+            contract_path = out_dir / "contract.json"
+            if contract_path.exists():
+                previous = json.loads(contract_path.read_bytes())
+                if previous["execution_key"] != contract["execution_key"]:
+                    raise ValueError(
+                        "receipt execution/source differs; same-source continuation only"
+                    )
+            atomic_json(contract_path, contract)
+            if args.canary:
+                from scripts.validation.receipt_canary import run_canary
+
+                return run_canary(derived, out_dir / "canary", full_sha, args.canary_steps)
+            if not args.check_only:
+                prepare_completion_views(
+                    derived, out_dir, contract, first_seed_only=args.first_seed_only
+                )
+        for suite, cfg_path, scenarios, cfg in derived:
+            if args.summarize_only:
+                root = out_dir / "campaigns" / f"empty_world_{suite}"
+                receipt = out_dir / f"execution_{suite}.json"
+                summary_path = root / "reports" / "campaign_summary.json"
+                result = (
+                    json.loads(receipt.read_text())
+                    if receipt.is_file()
+                    else (json.loads(summary_path.read_text()) if summary_path.is_file() else {})
+                )
+                rows, axes = reconcile_execution(
+                    cfg, scenarios, load_rows(root), root, result, step_trace=not args.no_step_trace
+                )
+                incomplete_execution |= not axes["complete"]
+                meta = {
+                    "suite": suite,
+                    "head_sha": full_sha,
+                    "sweep_harness_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+                    **axes,
+                }
+                write_outputs(out_dir, rows, suite, meta)
+                receipt.write_text(json.dumps(meta, indent=2) + "\n")
+                continue
+            if args.check_only:
+                print(f"{suite}: derived inputs verified actor-free ({cfg_path})")
+                continue
+            t0 = time.time()
+            try:
+                result = run_campaign(
+                    cfg,
+                    output_root=out_dir / "campaigns",
+                    label=f"empty_world_{suite}",
+                    campaign_id=f"empty_world_{suite}",
+                    skip_publication_bundle=True,
+                    invoked_command=" ".join(sys.argv),
+                    arm_isolation=args.arm_isolation,
+                )
+            except (RuntimeError, OSError, ValueError) as error:
+                result = {
+                    "campaign_execution_status": "failed",
+                    "status": "failed",
+                    "exit_code": 1,
+                    "unexpected_failed_runs": 1,
+                    "total_episodes": None,
+                    "execution_error": f"{type(error).__name__} during campaign execution",
+                }
+            campaign_root = Path(
+                result.get("campaign_root") or out_dir / "campaigns" / f"empty_world_{suite}"
             )
             rows, axes = reconcile_execution(
-                cfg, scenarios, load_rows(root), root, result, step_trace=not args.no_step_trace
+                cfg,
+                scenarios,
+                load_rows(campaign_root),
+                campaign_root,
+                result,
+                step_trace=not args.no_step_trace,
             )
-            incomplete_execution |= not axes["complete"]
+            stage_complete = axes["complete"]
+            if args.first_seed_only:
+                first_seed_rows = [row for row in rows if row["seed"] == min(seeds)]
+                stage_complete = bool(first_seed_rows) and all(
+                    row.get("_sweep_execution_status") == "written" for row in first_seed_rows
+                )
+            incomplete_execution |= not stage_complete
             meta = {
                 "suite": suite,
                 "head_sha": full_sha,
+                "execution_key": contract["execution_key"],
+                "first_seed_only": args.first_seed_only,
                 "sweep_harness_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+                "seeds": seeds,
+                "workers": args.workers,
+                "runtime_s": round(time.time() - t0, 1),
+                "episodes": len(rows),
                 **axes,
             }
             write_outputs(out_dir, rows, suite, meta)
-            receipt.write_text(json.dumps(meta, indent=2) + "\n")
-            continue
-        if args.check_only:
-            print(f"{suite}: derived inputs verified actor-free ({cfg_path})")
-            continue
-        t0 = time.time()
-        try:
-            result = run_campaign(
-                cfg,
-                output_root=out_dir / "campaigns",
-                label=f"empty_world_{suite}",
-                campaign_id=f"empty_world_{suite}",
-                skip_publication_bundle=True,
-                invoked_command=" ".join(sys.argv),
-                arm_isolation=args.arm_isolation,
-            )
-        except (RuntimeError, OSError, ValueError) as error:
-            result = {
-                "campaign_execution_status": "failed",
-                "status": "failed",
-                "exit_code": 1,
-                "unexpected_failed_runs": 1,
-                "total_episodes": None,
-                "execution_error": f"{type(error).__name__} during campaign execution",
-            }
-        campaign_root = Path(
-            result.get("campaign_root") or out_dir / "campaigns" / f"empty_world_{suite}"
+            (out_dir / f"execution_{suite}.json").write_text(json.dumps(meta, indent=2) + "\n")
+            trace_notes.append(f"### {suite}\n\n{describe_trace(campaign_root)}\n")
+        if args.check_only or args.summarize_only:
+            return int(incomplete_execution)
+        readme = (
+            "# Empty-world sweep output (#9978)\n\n"
+            f"Head under test: `{full_sha}`. Seeds: {seeds}. Total runtime: "
+            f"{time.time() - started:.0f} s.\n\n"
+            "Files: `episodes_<suite>.jsonl` (one campaign episode row per line), "
+            "`summary_<suite>.csv/.md` (arm x scenario), `campaigns/` (raw campaign roots).\n\n"
+            "## Step-trace format\n\n" + "\n".join(trace_notes)
         )
-        rows, axes = reconcile_execution(
-            cfg,
-            scenarios,
-            load_rows(campaign_root),
-            campaign_root,
-            result,
-            step_trace=not args.no_step_trace,
-        )
-        stage_complete = axes["complete"]
-        if args.first_seed_only:
-            first_seed_rows = [row for row in rows if row["seed"] == min(seeds)]
-            stage_complete = bool(first_seed_rows) and all(
-                row.get("_sweep_execution_status") == "written" for row in first_seed_rows
-            )
-        incomplete_execution |= not stage_complete
-        meta = {
-            "suite": suite,
-            "head_sha": full_sha,
-            "execution_key": contract["execution_key"],
-            "first_seed_only": args.first_seed_only,
-            "sweep_harness_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
-            "seeds": seeds,
-            "workers": args.workers,
-            "runtime_s": round(time.time() - t0, 1),
-            "episodes": len(rows),
-            **axes,
-        }
-        write_outputs(out_dir, rows, suite, meta)
-        (out_dir / f"execution_{suite}.json").write_text(json.dumps(meta, indent=2) + "\n")
-        trace_notes.append(f"### {suite}\n\n{describe_trace(campaign_root)}\n")
-    if args.check_only or args.summarize_only:
+        (out_dir / "README.md").write_text(readme, encoding="utf-8")
         return int(incomplete_execution)
-    readme = (
-        "# Empty-world sweep output (#9978)\n\n"
-        f"Head under test: `{full_sha}`. Seeds: {seeds}. Total runtime: "
-        f"{time.time() - started:.0f} s.\n\n"
-        "Files: `episodes_<suite>.jsonl` (one campaign episode row per line), "
-        "`summary_<suite>.csv/.md` (arm x scenario), `campaigns/` (raw campaign roots).\n\n"
-        "## Step-trace format\n\n" + "\n".join(trace_notes)
-    )
-    (out_dir / "README.md").write_text(readme, encoding="utf-8")
-    return int(incomplete_execution)
+    finally:
+        fcntl.flock(lock, fcntl.LOCK_UN)
+        lock.close()
 
 
 if __name__ == "__main__":

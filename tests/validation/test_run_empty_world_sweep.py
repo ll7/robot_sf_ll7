@@ -141,3 +141,172 @@ def test_generated_width_predictive_arms_use_published_profiles(tmp_path, arm_ke
     if arm_key == "predictive_mppi":
         assert settings["horizon_steps"] == 8
         assert settings["rollout_dt"] == 0.1
+
+
+def _provenance_sweep(tmp_path, monkeypatch):
+    """Load a private source image and isolate campaign I/O from provenance checks."""
+    import importlib.util
+
+    from robot_sf.benchmark import camera_ready_campaign
+
+    script = tmp_path / "run_empty_world_sweep.py"
+    script.write_bytes(Path(sweep.__file__).read_bytes())
+    spec = importlib.util.spec_from_file_location("provenance_sweep", script)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    monkeypatch.setattr(module, "verify_head", lambda _: "a" * 40)
+    monkeypatch.setattr(module, "build_derived_inputs", lambda *_, **__: (tmp_path / "cfg", []))
+    monkeypatch.setattr(module, "_preflight_receipt_inputs", lambda _: None)
+    monkeypatch.setattr(camera_ready_campaign, "load_campaign_config", lambda _: object())
+    monkeypatch.setattr(module, "load_rows", lambda _: [])
+    monkeypatch.setattr(module, "reconcile_execution", lambda *_, **__: ([], {"complete": True}))
+    return module, script, camera_ready_campaign
+
+
+@pytest.mark.parametrize("replace_in_suite", ["main", "width"])
+def test_loaded_harness_replaced_during_run_is_not_certified(
+    tmp_path, monkeypatch, replace_in_suite
+):
+    """Loaded A cannot certify replacement B, even when B matches the manifest."""
+    import hashlib
+    import json
+
+    module, script, campaign = _provenance_sweep(tmp_path, monkeypatch)
+    loaded = script.read_bytes()
+    replacement = loaded + b"\n# Replacement execution image.\n"
+    out = tmp_path / "out"
+    out.mkdir()
+    (out / "harness.json").write_text(
+        json.dumps(
+            {"runtime_source_sha": "a" * 40, "harness_sha256": hashlib.sha256(loaded).hexdigest()}
+        )
+    )
+    called = []
+
+    def run(_cfg, **kwargs):
+        suite = kwargs["label"].removeprefix("empty_world_")
+        called.append(suite)
+        if suite == replace_in_suite:
+            script.write_bytes(replacement)
+            # Match the approved on-disk replacement, as in the review probe.
+            (out / "harness.json").write_text(
+                json.dumps(
+                    {
+                        "runtime_source_sha": "a" * 40,
+                        "harness_sha256": hashlib.sha256(replacement).hexdigest(),
+                    }
+                )
+            )
+        return {}
+
+    monkeypatch.setattr(campaign, "run_campaign", run)
+    with pytest.raises(RuntimeError, match="sweep harness.*changed"):
+        module.main(["--head-sha", "HEAD", "--output-dir", str(out)])
+    assert called == (["main"] if replace_in_suite == "main" else ["main", "width"])
+    assert not (out / f"execution_{replace_in_suite}.json").exists()
+    if replace_in_suite == "width":
+        assert (
+            json.loads((out / "execution_main.json").read_text())["sweep_harness_sha256"]
+            == hashlib.sha256(loaded).hexdigest()
+        )
+
+
+@pytest.mark.parametrize("fault", [None, "missing", "digest", "head", "suite", "seeds", "manifest"])
+def test_reanalysis_preserves_or_refuses_original_provenance(tmp_path, monkeypatch, fault):
+    """Reanalysis cannot manufacture or overwrite historical execution identity."""
+    import hashlib
+    import json
+
+    module, script, campaign = _provenance_sweep(tmp_path, monkeypatch)
+    out = tmp_path / "out"
+    out.mkdir()
+    meta = {
+        "suite": "main",
+        "head_sha": "a" * 40,
+        "sweep_harness_sha256": hashlib.sha256(script.read_bytes()).hexdigest(),
+        "seeds": list(module.DEFAULT_SEEDS),
+        "workers": 3,
+        "runtime_s": 12.5,
+        "episodes": 0,
+        "complete": True,
+    }
+    if fault in {"digest", "head", "suite", "seeds"}:
+        meta[
+            {
+                "digest": "sweep_harness_sha256",
+                "head": "head_sha",
+                "suite": "suite",
+                "seeds": "seeds",
+            }[fault]
+        ] = None
+    receipt = out / "execution_main.json"
+    if fault != "missing":
+        receipt.write_text(json.dumps(meta))
+    before = receipt.read_bytes() if receipt.exists() else None
+    if fault == "manifest":
+        (out / "harness.json").write_text(
+            json.dumps({"runtime_source_sha": "a" * 40, "harness_sha256": "b" * 64})
+        )
+    monkeypatch.setattr(
+        campaign, "run_campaign", lambda *_, **__: pytest.fail("reanalysis collected")
+    )
+    args = ["--head-sha", "HEAD", "--suite", "main", "--summarize-only", "--output-dir", str(out)]
+    if fault:
+        with pytest.raises(ValueError, match="original execution provenance"):
+            module.main(args)
+        assert (receipt.read_bytes() if receipt.exists() else None) == before
+    else:
+        assert module.main(args) == 0
+        assert json.loads(receipt.read_text()) == meta
+
+
+def test_real_campaign_replacement_cannot_issue_execution_metadata(tmp_path, monkeypatch):
+    """The real goal campaign runs, but replacement bytes cannot become its identity."""
+    import importlib.util
+    import sys
+
+    from robot_sf.benchmark import camera_ready_campaign
+
+    script = tmp_path / "run_empty_world_sweep.py"
+    loaded = Path(sweep.__file__).read_bytes()
+    script.write_bytes(loaded)
+    spec = importlib.util.spec_from_file_location("real_provenance_sweep", script)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    monkeypatch.setattr(module, "REPO_ROOT", REPO_ROOT)
+    out = tmp_path / "out"
+    previous_profile = sys.getprofile()
+    switched = []
+
+    def replace(frame, event, _arg):
+        if event == "call" and frame.f_code is camera_ready_campaign.run_campaign.__code__:
+            script.write_bytes(loaded + b"\n# Replaced while the campaign is executing.\n")
+            switched.append(True)
+            sys.setprofile(previous_profile)
+
+    sys.setprofile(replace)
+    try:
+        with pytest.raises(RuntimeError, match="sweep harness.*changed"):
+            module.main(
+                [
+                    "--head-sha",
+                    "HEAD",
+                    "--suite",
+                    "main",
+                    "--arms",
+                    "goal",
+                    "--scenarios",
+                    "classic_bottleneck_low",
+                    "--seeds",
+                    str(module.DEV_SEED_MIN),
+                    "--workers",
+                    "1",
+                    "--output-dir",
+                    str(out),
+                ]
+            )
+    finally:
+        sys.setprofile(previous_profile)
+    assert switched == [True]
+    assert len(module.load_rows(out / "campaigns" / "empty_world_main")) == 1
+    assert not (out / "execution_main.json").exists()

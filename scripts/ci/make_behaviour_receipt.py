@@ -815,12 +815,22 @@ def _sweep_command(
     scenarios: list[str] | None,
     workers: int,
     check_only: bool,
+    harness_sha256: str,
 ) -> list[str]:
     cmd = [
         "uv",
         "run",
         "python",
+        "-c",
+        "import hashlib, sys; from pathlib import Path; "
+        "path = Path(sys.argv.pop(1)).resolve(); expected = sys.argv.pop(1); "
+        "source = path.read_bytes(); digest = hashlib.sha256(source).hexdigest(); "
+        "digest == expected or sys.exit('sweep harness differs from selected committed source'); "
+        "sys.argv[0] = str(path); sys.path.insert(0, str(path.parents[2])); "
+        "exec(compile(source, str(path), 'exec'), "
+        "{'__name__': '__main__', '__file__': str(path), '_SWEEP_SOURCE_BYTES': source})",
         "scripts/validation/run_empty_world_sweep.py",
+        harness_sha256,
         "--head-sha",
         source_sha,
         "--suite",
@@ -926,6 +936,16 @@ def _run_local_sweep(  # noqa: PLR0913
         scenarios=scenarios,
         workers=workers,
         check_only=check_only,
+        harness_sha256=hashlib.sha256(
+            subprocess.check_output(
+                [
+                    "git",
+                    "show",
+                    f"{sweep_harness_source_sha or source_sha}:scripts/validation/run_empty_world_sweep.py",
+                ],
+                cwd=repo_root,
+            )
+        ).hexdigest(),
     )
     subprocess.run(cmd, cwd=checkout, check=True)
     manifest = output_dir / "README.md"
@@ -966,6 +986,16 @@ def _submit_sbatch_sweep(  # noqa: PLR0913
         scenarios=scenarios,
         workers=workers,
         check_only=False,
+        harness_sha256=hashlib.sha256(
+            subprocess.check_output(
+                [
+                    "git",
+                    "show",
+                    f"{sweep_harness_source_sha or source_sha}:scripts/validation/run_empty_world_sweep.py",
+                ],
+                cwd=repo_root,
+            )
+        ).hexdigest(),
     )
     script = work_dir / f"behaviour_receipt_{label}.sbatch"
     script.write_text(
@@ -976,7 +1006,7 @@ def _submit_sbatch_sweep(  # noqa: PLR0913
                 f"#SBATCH --output={output_dir / 'slurm-%j.out'}",
                 "#SBATCH --time=24:00:00",
                 "set -euo pipefail",
-                f"cd {checkout}",
+                f"cd {shlex.quote(str(checkout))}",
                 shlex.join(cmd),
                 "",
             ]

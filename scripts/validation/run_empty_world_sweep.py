@@ -45,6 +45,11 @@ DEFAULT_MAX_WORKERS = 24
 PED_DEPENDENT_BEHAVIORS = frozenset({"wait", "join", "leave", "follow", "lead", "accompany"})
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+# The receipt launcher supplies the exact buffer it verified and compiled. Direct
+# imports capture source before preflight/collection, never at completion time.
+SWEEP_HARNESS_SHA256 = hashlib.sha256(
+    globals().get("_SWEEP_SOURCE_BYTES", b"") or Path(__file__).read_bytes()
+).hexdigest()
 
 SUITES: dict[str, str] = {
     "main": "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml",
@@ -815,6 +820,38 @@ def _preflight_receipt_inputs(derived: list[tuple]) -> None:
         assert_forecast_support(cfg)
 
 
+def _verify_harness_identity(out_dir: Path, full_sha: str) -> None:
+    """Refuse source drift and disagreement with retained acquisition provenance."""
+    if hashlib.sha256(Path(__file__).read_bytes()).hexdigest() != SWEEP_HARNESS_SHA256:
+        raise RuntimeError("sweep harness source changed after loading")
+    manifest = out_dir / "harness.json"
+    if manifest.is_file():
+        pinned = json.loads(manifest.read_text())
+        if (
+            pinned.get("runtime_source_sha") != full_sha
+            or pinned.get("harness_sha256") != SWEEP_HARNESS_SHA256
+        ):
+            raise RuntimeError("sweep harness differs from pinned provenance")
+
+
+def _original_execution(out_dir: Path, suite: str, full_sha: str, seeds: list[int]) -> dict:
+    """Validate authoritative original identity before reanalysis writes any outputs."""
+    receipt = out_dir / f"execution_{suite}.json"
+    meta = json.loads(receipt.read_text()) if receipt.is_file() else {}
+    if (
+        meta.get("suite") != suite
+        or meta.get("head_sha") != full_sha
+        or meta.get("sweep_harness_sha256") != SWEEP_HARNESS_SHA256
+        or meta.get("seeds") != seeds
+    ):
+        raise ValueError(f"{suite} missing or conflicting original execution provenance")
+    try:
+        _verify_harness_identity(out_dir, full_sha)
+    except RuntimeError as error:
+        raise ValueError(f"{suite} conflicting original execution provenance") from error
+    return meta
+
+
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     """Parse the existing receipt sweep CLI."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -858,6 +895,12 @@ def main(argv: list[str] | None = None) -> int:
     suites = list(SUITES) if args.suite == "both" else [args.suite]
     out_dir = args.output_dir.resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
+    originals = (
+        {suite: _original_execution(out_dir, suite, full_sha, seeds) for suite in suites}
+        if args.summarize_only
+        else {}
+    )
+    _verify_harness_identity(out_dir, full_sha)
     started = time.time()
     trace_notes: list[str] = []
     incomplete_execution = False
@@ -878,25 +921,16 @@ def main(argv: list[str] | None = None) -> int:
     if not args.summarize_only:
         _preflight_receipt_inputs(derived)
     for suite, cfg_path, scenarios, cfg in derived:
+        _verify_harness_identity(out_dir, full_sha)
         if args.summarize_only:
             root = out_dir / "campaigns" / f"empty_world_{suite}"
             receipt = out_dir / f"execution_{suite}.json"
-            summary_path = root / "reports" / "campaign_summary.json"
-            result = (
-                json.loads(receipt.read_text())
-                if receipt.is_file()
-                else (json.loads(summary_path.read_text()) if summary_path.is_file() else {})
-            )
+            result = originals[suite]
             rows, axes = reconcile_execution(
                 cfg, scenarios, load_rows(root), root, result, step_trace=not args.no_step_trace
             )
             incomplete_execution |= not axes["complete"]
-            meta = {
-                "suite": suite,
-                "head_sha": full_sha,
-                "sweep_harness_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
-                **axes,
-            }
+            meta = {**result, **axes}
             write_outputs(out_dir, rows, suite, meta)
             receipt.write_text(json.dumps(meta, indent=2) + "\n")
             continue
@@ -923,6 +957,7 @@ def main(argv: list[str] | None = None) -> int:
                 "total_episodes": None,
                 "execution_error": f"{type(error).__name__} during campaign execution",
             }
+        _verify_harness_identity(out_dir, full_sha)
         campaign_root = Path(
             result.get("campaign_root") or out_dir / "campaigns" / f"empty_world_{suite}"
         )
@@ -938,7 +973,7 @@ def main(argv: list[str] | None = None) -> int:
         meta = {
             "suite": suite,
             "head_sha": full_sha,
-            "sweep_harness_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+            "sweep_harness_sha256": SWEEP_HARNESS_SHA256,
             "seeds": seeds,
             "workers": args.workers,
             "runtime_s": round(time.time() - t0, 1),

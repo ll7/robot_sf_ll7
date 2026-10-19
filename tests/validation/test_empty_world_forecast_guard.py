@@ -3,12 +3,18 @@
 from __future__ import annotations
 
 import copy
+import importlib.util
 from pathlib import Path
 
 import pytest
 import yaml
 
-from scripts.validation import run_empty_world_sweep as sweep
+# Compile the supplied image so main exercises the production capture contract.
+_SWEEP_PATH = Path(__file__).resolve().parents[2] / "scripts/validation/run_empty_world_sweep.py"
+_SWEEP_SPEC = importlib.util.spec_from_file_location("captured_empty_world_sweep", _SWEEP_PATH)
+sweep = importlib.util.module_from_spec(_SWEEP_SPEC)
+sweep._SWEEP_SOURCE_BYTES = _SWEEP_PATH.read_bytes()
+exec(compile(sweep._SWEEP_SOURCE_BYTES, str(_SWEEP_PATH), "exec"), sweep.__dict__)  # noqa: S102
 
 
 @pytest.fixture

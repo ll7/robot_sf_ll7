@@ -233,8 +233,12 @@ for each source/harness pair.
 Each sweep artifact retains `harness.json` with runtime source, harness source,
 and original/replacement script digests. The launcher verifies the selected
 committed digest, then compiles and executes that same captured byte buffer
-with the source path retained as `__file__`. Execution metadata uses its loaded
-digest for both suites; a later source-file replacement refuses completion
+with the source path retained as `__file__`. The direct CLI dispatches through
+the same captured-buffer contract. An imported `main()` refuses collection and
+reanalysis unless `_SWEEP_SOURCE_BYTES` was supplied by that dispatcher; a
+separate pathname read cannot establish imported execution identity.
+Execution metadata uses its loaded digest for both suites; a later source-file
+replacement refuses completion
 instead of certifying the replacement. Collection rejects disagreement and
 includes the reconstruction in the receipt's declared baseline differences.
 `--summarize-only` requires authoritative original execution metadata with

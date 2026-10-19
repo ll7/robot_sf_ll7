@@ -45,11 +45,13 @@ DEFAULT_MAX_WORKERS = 24
 PED_DEPENDENT_BEHAVIORS = frozenset({"wait", "join", "leave", "follow", "lead", "accompany"})
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-# The receipt launcher supplies the exact buffer it verified and compiled. Direct
-# imports capture source before preflight/collection, never at completion time.
-SWEEP_HARNESS_SHA256 = hashlib.sha256(
-    globals().get("_SWEEP_SOURCE_BYTES", b"") or Path(__file__).read_bytes()
-).hexdigest()
+# Only a dispatcher compiling this exact buffer can establish execution identity.
+# Ordinary imports expose helpers, but cannot collect or reanalyse campaigns.
+SWEEP_HARNESS_SHA256 = (
+    hashlib.sha256(globals()["_SWEEP_SOURCE_BYTES"]).hexdigest()
+    if "_SWEEP_SOURCE_BYTES" in globals()
+    else None
+)
 
 SUITES: dict[str, str] = {
     "main": "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml",
@@ -872,12 +874,17 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Run the sweep.
+    """Run the sweep from a dispatcher-supplied captured source image.
 
     Returns:
         Process exit code: 1 for failed/incomplete execution or requested traces;
         episode outcomes alone do not cause a nonzero exit. CLI flags are unchanged.
+
+    Raises:
+        RuntimeError: If an ordinary import calls main without captured source.
     """
+    if "_SWEEP_SOURCE_BYTES" not in globals():
+        raise RuntimeError("sweep execution requires a captured source image")
     args = _parse_args(argv)
 
     seeds = assert_dev_seeds(args.seeds)  # abort before anything else happens

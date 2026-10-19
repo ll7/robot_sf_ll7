@@ -2,11 +2,17 @@
 
 from __future__ import annotations
 
+import importlib.util
 from pathlib import Path
 
 import pytest
 
-from scripts.validation import run_empty_world_sweep as sweep
+# Compile the supplied image so main exercises the production capture contract.
+_SWEEP_PATH = Path(__file__).resolve().parents[2] / "scripts/validation/run_empty_world_sweep.py"
+_SWEEP_SPEC = importlib.util.spec_from_file_location("captured_empty_world_sweep", _SWEEP_PATH)
+sweep = importlib.util.module_from_spec(_SWEEP_SPEC)
+sweep._SWEEP_SOURCE_BYTES = _SWEEP_PATH.read_bytes()
+exec(compile(sweep._SWEEP_SOURCE_BYTES, str(_SWEEP_PATH), "exec"), sweep.__dict__)  # noqa: S102
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -150,10 +156,12 @@ def _provenance_sweep(tmp_path, monkeypatch):
     from robot_sf.benchmark import camera_ready_campaign
 
     script = tmp_path / "run_empty_world_sweep.py"
-    script.write_bytes(Path(sweep.__file__).read_bytes())
+    loaded = Path(sweep.__file__).read_bytes()
+    script.write_bytes(loaded)
     spec = importlib.util.spec_from_file_location("provenance_sweep", script)
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    module._SWEEP_SOURCE_BYTES = loaded
+    exec(compile(loaded, str(script), "exec"), module.__dict__)  # noqa: S102
     monkeypatch.setattr(module, "verify_head", lambda _: "a" * 40)
     monkeypatch.setattr(module, "build_derived_inputs", lambda *_, **__: (tmp_path / "cfg", []))
     monkeypatch.setattr(module, "_preflight_receipt_inputs", lambda _: None)
@@ -260,6 +268,87 @@ def test_reanalysis_preserves_or_refuses_original_provenance(tmp_path, monkeypat
         assert json.loads(receipt.read_text()) == meta
 
 
+@pytest.mark.parametrize("summarize_only", [False, True])
+@pytest.mark.parametrize("captured", [False, True])
+def test_import_entry_cannot_certify_unexecuted_source(
+    tmp_path, monkeypatch, summarize_only, captured
+):
+    """Importing A while restoring selected B must refuse collection and reanalysis."""
+    import hashlib
+    import importlib.util
+    import json
+    import sys
+
+    from robot_sf.benchmark import camera_ready_campaign
+
+    script = tmp_path / "run_empty_world_sweep.py"
+    selected = Path(sweep.__file__).read_bytes()
+    loaded = selected + b'\nIMPORT_IMAGE_MARKER = "loaded-image"\n'
+    script.write_bytes(loaded)
+    spec = importlib.util.spec_from_file_location("import_entry_sweep", script)
+    module = importlib.util.module_from_spec(spec)
+    previous_profile = sys.getprofile()
+    switched = []
+
+    def restore_selected(frame, event, _arg):
+        if event == "call" and frame.f_code.co_filename == str(script):
+            script.write_bytes(selected)
+            switched.append(True)
+            sys.setprofile(previous_profile)
+
+    sys.setprofile(restore_selected)
+    try:
+        if captured:
+            module._SWEEP_SOURCE_BYTES = loaded
+            exec(compile(loaded, str(script), "exec"), module.__dict__)  # noqa: S102
+        else:
+            spec.loader.exec_module(module)
+    finally:
+        sys.setprofile(previous_profile)
+    assert switched == [True]
+    assert module.IMPORT_IMAGE_MARKER == "loaded-image"
+    assert script.read_bytes() == selected
+    assert loaded != selected
+
+    # Retain selected-B provenance, as in the normal-path review witness.
+    out = tmp_path / "out"
+    out.mkdir()
+    selected_digest = hashlib.sha256(selected).hexdigest()
+    (out / "harness.json").write_text(
+        json.dumps({"runtime_source_sha": "a" * 40, "harness_sha256": selected_digest})
+    )
+    (out / "execution_main.json").write_text(
+        json.dumps(
+            {
+                "suite": "main",
+                "head_sha": "a" * 40,
+                "sweep_harness_sha256": selected_digest,
+                "seeds": list(module.DEFAULT_SEEDS),
+            }
+        )
+    )
+    before = {p.name: p.read_bytes() for p in out.iterdir()}
+    monkeypatch.setattr(module, "verify_head", lambda _: "a" * 40)
+    monkeypatch.setattr(module, "build_derived_inputs", lambda *_, **__: (tmp_path / "cfg", []))
+    monkeypatch.setattr(module, "_preflight_receipt_inputs", lambda _: None)
+    monkeypatch.setattr(camera_ready_campaign, "load_campaign_config", lambda _: object())
+    monkeypatch.setattr(camera_ready_campaign, "run_campaign", lambda *_, **__: {})
+    monkeypatch.setattr(module, "load_rows", lambda _: [])
+    monkeypatch.setattr(module, "reconcile_execution", lambda *_, **__: ([], {"complete": True}))
+    args = ["--head-sha", "HEAD", "--suite", "main", "--output-dir", str(out)]
+    if summarize_only:
+        args.append("--summarize-only")
+    # Captured A must reject B; an ordinary import must refuse before any I/O.
+    error = "sweep harness.*changed" if captured else "requires a captured source image"
+    # Reanalysis translates captured-image drift into a provenance conflict.
+    error_type = ValueError if captured and summarize_only else RuntimeError
+    if captured and summarize_only:
+        error = "original execution provenance"
+    with pytest.raises(error_type, match=error):
+        module.main(args)
+    assert {p.name: p.read_bytes() for p in out.iterdir()} == before
+
+
 def test_real_campaign_replacement_cannot_issue_execution_metadata(tmp_path, monkeypatch):
     """The real goal campaign runs, but replacement bytes cannot become its identity."""
     import importlib.util
@@ -272,7 +361,8 @@ def test_real_campaign_replacement_cannot_issue_execution_metadata(tmp_path, mon
     script.write_bytes(loaded)
     spec = importlib.util.spec_from_file_location("real_provenance_sweep", script)
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    module._SWEEP_SOURCE_BYTES = loaded
+    exec(compile(loaded, str(script), "exec"), module.__dict__)  # noqa: S102
     monkeypatch.setattr(module, "REPO_ROOT", REPO_ROOT)
     out = tmp_path / "out"
     previous_profile = sys.getprofile()

@@ -156,24 +156,77 @@ def test_startup_smoke_success_reports_metadata_and_clean_teardown(tmp_path, mon
         "Town01",
         7,
     )
+    assert section["server_exit_code"] == "not_applicable"
     assert section["terminated_cleanly"] is True and section["orphan_process_count"] == 0
 
 
 @pytest.mark.parametrize(
-    ("body", "timeout", "expected_reason"),
+    ("exit_code", "expected_reason"),
+    [(3, "server_exit_nonzero"), (0, "server_exit_without_ready")],
+)
+def test_startup_smoke_preserves_exit_status_after_stdout_eof(
+    tmp_path, monkeypatch, capsys, exit_code, expected_reason
+):
+    """Hold a real child alive until the first poll after stdout EOF observes None."""
+    release = tmp_path / "release"
+    body = (
+        "import os, sys, time\n"
+        "from pathlib import Path\n"
+        "os.close(sys.stdout.fileno())\n"
+        f"while not Path({str(release)!r}).exists():\n"
+        "    time.sleep(0.01)\n"
+        f"sys.exit({exit_code})\n"
+    )
+    popen = tool.subprocess.Popen
+    observations = []
+
+    def launch(*args, **kwargs):
+        process = popen(*args, **kwargs)
+        poll = process.poll
+
+        def poll_then_release():
+            if not observations:
+                observations.append(poll())
+                release.touch()
+                return observations[0]
+            return poll()
+
+        monkeypatch.setattr(process, "poll", poll_then_release)
+        return process
+
+    monkeypatch.setattr(tool.subprocess, "Popen", launch)
+    assert _smoke(monkeypatch, _server(tmp_path, body)) == 2
+    section = json.loads(capsys.readouterr().out)["startup_smoke"]
+    assert observations == [None]
+    assert section["unavailable_reasons"] == [expected_reason]
+    assert section["server_exit_code"] == exit_code
+    assert section["terminated_cleanly"] is True and section["orphan_process_count"] == 0
+
+
+@pytest.mark.parametrize(
+    ("body", "timeout", "expected_reason", "expected_exit_code"),
     [
-        ("import time\ntime.sleep(60)\n", 1.0, "startup_timeout"),
-        ("import sys\nsys.exit(3)\n", 2.0, "server_exit_nonzero"),
+        ("import time\ntime.sleep(60)\n", 1.0, "startup_timeout", "unavailable"),
+        (
+            "import os, time\nos.close(1)\ntime.sleep(60)\n",
+            1.0,
+            "startup_timeout",
+            "unavailable",
+        ),
+        ("import sys\nsys.exit(3)\n", 2.0, "server_exit_nonzero", 3),
+        ("import sys\nsys.exit(0)\n", 2.0, "server_exit_without_ready", 0),
     ],
 )
 def test_startup_smoke_failures_are_bounded_and_clean(
-    tmp_path, monkeypatch, capsys, body, timeout, expected_reason
+    tmp_path, monkeypatch, capsys, body, timeout, expected_reason, expected_exit_code
 ):
     start = time.monotonic()
     assert _smoke(monkeypatch, _server(tmp_path, body), timeout) == 2
     section = json.loads(capsys.readouterr().out)["startup_smoke"]
     assert section["unavailable_reasons"] == [expected_reason]
+    assert section["server_exit_code"] == expected_exit_code
     assert section["terminated_cleanly"] is True
+    assert section["orphan_process_count"] == 0
     assert time.monotonic() - start < 10
 
 

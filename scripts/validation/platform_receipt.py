@@ -480,7 +480,15 @@ def _await_ready(
         except queue.Empty:
             continue
         if line is None:
-            return None, "server_exit_without_ready", process.poll()
+            exit_code = process.poll()
+            if exit_code is None:
+                # Closing stdout need not mean the child has exited. Observe its status
+                # before teardown can replace it with an intentional termination signal.
+                try:
+                    exit_code = process.wait(timeout=max(0.0, deadline - time.monotonic()))
+                except subprocess.TimeoutExpired:
+                    return None, "startup_timeout", None
+            return None, "server_exit_without_ready", exit_code
         if line.startswith(READY_PREFIX.encode()):
             metadata, reason = _parse_ready(line.decode("utf-8", "replace"))
             return metadata, reason, process.returncode

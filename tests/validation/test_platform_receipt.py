@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import shlex
+import signal
 import sys
 import time
 from pathlib import Path
@@ -254,6 +256,44 @@ def test_startup_smoke_cleans_up_spawned_grandchild(tmp_path, monkeypatch):
             break
         time.sleep(0.05)
     assert not Path(f"/proc/{pid}").exists()
+
+
+def test_startup_smoke_cleans_up_detached_grandchild_after_stdout_eof(
+    tmp_path, monkeypatch, capsys
+):
+    """Track a descendant spawned after EOF and reparented before teardown (R1)."""
+    pid_file = tmp_path / "detached.pid"
+    body = (
+        "import os, subprocess, sys, time\n"
+        "os.close(sys.stdout.fileno())\n"
+        "time.sleep(0.3)\n"
+        "child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'], "
+        "start_new_session=True)\n"
+        f"with open({str(pid_file)!r}, 'w') as marker:\n"
+        "    marker.write(str(child.pid))\n"
+        "time.sleep(0.5)\n"
+    )
+    try:
+        assert _smoke(monkeypatch, _server(tmp_path, body), 2.0) == 2
+        section = json.loads(capsys.readouterr().out)["startup_smoke"]
+        assert pid_file.exists(), "detached descendant must be created before teardown"
+        pid = int(pid_file.read_text(encoding="utf-8"))
+        assert section["unavailable_reasons"] == ["server_exit_without_ready"]
+        assert section["server_exit_code"] == 0
+        assert section["terminated_cleanly"] is True
+        assert section["orphan_process_count"] == 0
+        assert not Path(f"/proc/{pid}").exists(), "receipt claimed cleanup but descendant survived"
+    finally:
+        if pid_file.exists():
+            pid = int(pid_file.read_text(encoding="utf-8"))
+            try:
+                os.kill(pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            try:
+                os.waitpid(pid, 0)
+            except ChildProcessError:
+                pass
 
 
 def test_receipt_projects_into_comparator_manifest(monkeypatch):

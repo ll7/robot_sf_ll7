@@ -481,13 +481,17 @@ def _await_ready(
             continue
         if line is None:
             exit_code = process.poll()
-            if exit_code is None:
+            while exit_code is None:
                 # Closing stdout need not mean the child has exited. Observe its status
-                # before teardown can replace it with an intentional termination signal.
-                try:
-                    exit_code = process.wait(timeout=max(0.0, deadline - time.monotonic()))
-                except subprocess.TimeoutExpired:
+                # before teardown, retaining descendants spawned during the EOF wait.
+                descendants.update(_SUPERVISOR._linux_process_descendants(process.pid))
+                remaining = max(0.0, deadline - time.monotonic())
+                if remaining == 0.0:
                     return None, "startup_timeout", None
+                try:
+                    exit_code = process.wait(timeout=min(SMOKE_POLL_S, remaining))
+                except subprocess.TimeoutExpired:
+                    continue
             return None, "server_exit_without_ready", exit_code
         if line.startswith(READY_PREFIX.encode()):
             metadata, reason = _parse_ready(line.decode("utf-8", "replace"))

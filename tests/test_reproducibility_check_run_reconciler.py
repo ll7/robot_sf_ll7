@@ -5,8 +5,11 @@ from __future__ import annotations
 import importlib.util
 import json
 import sys
+import time
 from pathlib import Path
 from typing import Any
+
+import pytest
 
 SCRIPT_PATH = (
     Path(__file__).resolve().parents[1]
@@ -172,3 +175,173 @@ def test_cli_skips_failed_upstream_job_without_api_calls(tmp_path: Path, monkeyp
     report = json.loads(output.read_text(encoding="utf-8"))
     assert report["status"] == "not_applicable"
     assert report["fail_closed"] is True
+
+
+class PropagatingGitHub(FakeGitHub):
+    """Return successive job snapshots while recording bounded polling."""
+
+    def __init__(self, snapshots: list[dict[str, Any]], checks: list[dict[str, Any]]) -> None:
+        """Keep the last job snapshot stable once propagation stops."""
+
+        super().__init__([], checks)
+        self.snapshots = snapshots
+        self.job_reads = 0
+
+    def list_jobs(self, _repository: str, _run_id: int) -> list[dict[str, Any]]:
+        self.job_reads += 1
+        if len(self.snapshots) > 1:
+            return [self.snapshots.pop(0)]
+        return self.snapshots
+
+
+@pytest.fixture
+def pending_api_job() -> dict[str, Any]:
+    """Model the stale queued/null Actions job observed in the incident."""
+
+    return _job(status="queued", conclusion=None)
+
+
+def test_queued_job_propagates_to_success_without_premature_patch(
+    monkeypatch: Any, pending_api_job: dict[str, Any]
+) -> None:
+
+    sleeps = []
+    client = PropagatingGitHub(
+        [pending_api_job, _job(status="in_progress", conclusion=None), _job()],
+        [_check_run(status="queued", conclusion=None), _check_run()],
+    )
+
+    def sleep(delay: float) -> None:
+        assert client.patch_payloads == []
+        sleeps.append(delay)
+
+    monkeypatch.setattr(time, "sleep", sleep)
+    result = _reconcile(client)
+
+    assert result["status"] == "reconciled"
+    assert client.job_reads == 3
+    assert len(sleeps) == 2
+    assert all(delay > 0 for delay in sleeps)
+    assert len(client.patch_payloads) == 1
+
+
+def test_persistently_pending_job_reports_pending_without_mutation(
+    monkeypatch: Any, pending_api_job: dict[str, Any]
+) -> None:
+
+    sleeps = []
+    monkeypatch.setattr(time, "sleep", sleeps.append)
+    client = PropagatingGitHub([pending_api_job], [])
+
+    result = _reconcile(client)
+
+    assert result["status"] == "pending"
+    assert result["action"] == "none"
+    assert result["job"] == {"status": "queued", "conclusion": None}
+    assert result["fail_closed"] is True
+    assert 1 < client.job_reads <= 10
+    assert len(sleeps) == client.job_reads - 1
+    assert sum(sleeps) <= 60
+    assert client.patch_payloads == []
+
+
+def test_pending_job_followed_by_terminal_failure_still_fails_closed(monkeypatch: Any) -> None:
+    monkeypatch.setattr(time, "sleep", lambda _delay: None)
+    client = PropagatingGitHub(
+        [_job(status="queued", conclusion=None), _job(conclusion="failure")], []
+    )
+    try:
+        _reconcile(client)
+    except MODULE.ReconciliationError as exc:
+        assert "not completed successfully" in str(exc)
+    else:
+        raise AssertionError("terminal failure after pending must not be repaired")
+    assert client.job_reads == 2
+    assert client.patch_payloads == []
+
+
+@pytest.mark.parametrize(
+    ("overrides", "error"),
+    [
+        ({"id": JOB_ID + 1}, "identity changed"),
+        (
+            {"check_run_url": f"https://api.github.com/repos/{REPOSITORY}/check-runs/321"},
+            "identity changed",
+        ),
+        ({"head_sha": "b" * 40}, "found 0"),
+        ({"run_attempt": RUN_ATTEMPT + 1}, "found 0"),
+        ({"run_id": RUN_ID + 1}, "found 0"),
+        ({"name": "other-job"}, "found 0"),
+    ],
+)
+def test_job_identity_change_during_polling_fails_closed(
+    monkeypatch: Any, overrides: dict[str, Any], error: str
+) -> None:
+    monkeypatch.setattr(time, "sleep", lambda _delay: None)
+    client = PropagatingGitHub([_job(status="queued", conclusion=None), _job(**overrides)], [])
+    try:
+        _reconcile(client)
+    except MODULE.ReconciliationError as exc:
+        assert error in str(exc)
+    else:
+        raise AssertionError("a replaced job must not be repaired")
+    assert client.patch_payloads == []
+
+
+@pytest.mark.parametrize(
+    ("status", "conclusion"),
+    [
+        ("completed", "failure"),
+        ("completed", "cancelled"),
+        ("queued", "failure"),
+        ("unknown", None),
+    ],
+)
+def test_non_success_job_is_never_retried_or_patched(
+    monkeypatch: Any, status: str, conclusion: str | None
+) -> None:
+    def fail_if_sleeping(_delay: float) -> None:
+        raise AssertionError("only pending jobs without a conclusion may be retried")
+
+    monkeypatch.setattr(time, "sleep", fail_if_sleeping)
+    client = PropagatingGitHub([_job(status=status, conclusion=conclusion)], [])
+    with pytest.raises(MODULE.ReconciliationError, match="not completed successfully"):
+        _reconcile(client)
+    assert client.job_reads == 1
+    assert client.patch_payloads == []
+
+
+def test_cli_reports_pending_as_successful_diagnostic(
+    tmp_path: Path, monkeypatch: Any, pending_api_job: dict[str, Any]
+) -> None:
+    monkeypatch.setattr(time, "sleep", lambda _delay: None)
+
+    def pending_jobs_only(args: list[str], _input: str | None) -> dict[str, Any]:
+        assert args == ["api", f"repos/{REPOSITORY}/actions/runs/{RUN_ID}/jobs?per_page=100"]
+        return {"jobs": [pending_api_job]}
+
+    client = MODULE.GitHubActionsClient(runner=pending_jobs_only)
+    monkeypatch.setattr(MODULE, "GitHubActionsClient", lambda: client)
+    output = tmp_path / "reconciliation.json"
+    assert (
+        MODULE.main(
+            [
+                "--repository",
+                REPOSITORY,
+                "--run-id",
+                str(RUN_ID),
+                "--run-attempt",
+                str(RUN_ATTEMPT),
+                "--head-sha",
+                HEAD_SHA,
+                "--job-result",
+                "success",
+                "--output",
+                str(output),
+            ]
+        )
+        == 0
+    )
+    report = json.loads(output.read_text(encoding="utf-8"))
+    assert report["status"] == "pending"
+    assert report["action"] == "none"

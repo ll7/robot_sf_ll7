@@ -6,7 +6,9 @@ Actions job identifier.  A hosted-state race can leave that check-run pending
 after the job completed successfully.  This helper is deliberately narrow:
 it can only reconcile the exact successful ``reproducibility-check`` job for
 the current workflow run, head SHA, and attempt.  Any mismatch or non-success
-condition fails closed and is reported without mutating hosted state.
+condition fails closed and is reported without mutating hosted state. Pending
+Actions job reads are retried for up to one minute of polling delays, then
+reported as pending without updating the check-run.
 """
 
 from __future__ import annotations
@@ -16,6 +18,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
@@ -24,6 +27,8 @@ from urllib.parse import urlparse
 SCHEMA = "reproducibility_check_run_reconciliation.v1"
 DEFAULT_JOB_NAME = "reproducibility-check"
 PENDING_CHECK_STATUSES = frozenset({"queued", "in_progress"})
+JOB_READ_ATTEMPTS = 7
+JOB_READ_DELAY_SECONDS = 10
 Runner = Callable[[Sequence[str], str | None], Any]
 
 
@@ -206,15 +211,39 @@ def reconcile_successful_job(
 ) -> dict[str, Any]:
     """Reconcile one successful job and return a machine-readable result."""
 
-    jobs = client.list_jobs(repository, run_id)
-    job = _select_job(
-        jobs,
-        repository=repository,
-        run_id=run_id,
-        run_attempt=run_attempt,
-        head_sha=head_sha,
-        job_name=job_name,
-    )
+    job_identity = None
+    for attempt in range(JOB_READ_ATTEMPTS):
+        job = _select_job(
+            client.list_jobs(repository, run_id),
+            repository=repository,
+            run_id=run_id,
+            run_attempt=run_attempt,
+            head_sha=head_sha,
+            job_name=job_name,
+        )
+        identity = (_as_int(job.get("id"), "job.id"), _check_run_id_for_job(job, repository))
+        if job_identity is not None and identity != job_identity:
+            raise ReconciliationError("the matching Actions job identity changed during polling")
+        job_identity = identity
+        if job.get("status") not in PENDING_CHECK_STATUSES or job.get("conclusion") is not None:
+            break
+        if attempt == JOB_READ_ATTEMPTS - 1:
+            return {
+                **_base_report(
+                    repository=repository,
+                    run_id=run_id,
+                    run_attempt=run_attempt,
+                    head_sha=head_sha,
+                    job_name=job_name,
+                ),
+                "status": "pending",
+                "action": "none",
+                "job_id": identity[0],
+                "check_run_id": identity[1],
+                "job": {"status": job.get("status"), "conclusion": job.get("conclusion")},
+                "reason": "exact Actions job still pending after bounded API polling",
+            }
+        time.sleep(JOB_READ_DELAY_SECONDS)
     if job.get("status") != "completed" or job.get("conclusion") != "success":
         raise ReconciliationError(
             "the matching Actions job is not completed successfully: "

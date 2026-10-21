@@ -27,7 +27,8 @@ This module closes that class of drift:
 - the live body or an unsuperseded comment carrying stale-narrative sentinels (including
   "not current-base merge evidence" and pending domain-review dispositions)
   invalidates the merge-ready disposition; a newer trusted accepted exact-head
-  review may supersede historical comments, using publication timestamps;
+  review with its own current metadata and selected base-policy evidence may
+  supersede historical comments, using original publication timestamps;
 - a body carrying ``gate-verdict``/``base-policy``/``Exact head`` SHA carriers
   must name the live head, so a stale body cannot back a current-head label
   write;
@@ -51,9 +52,15 @@ from scripts.dev.pr_loop_policy import (
     active_review_claim,
     extract_sha_carriers,
     has_current_accepted_gate_verdict,
+    has_current_ordinary_base_policy,
+    has_current_pr_metadata_verdict,
     invalid_sha_carriers,
 )
-from scripts.dev.pr_metadata import STALE_CARRIER_PATTERNS, find_not_ready_body_sentinels
+from scripts.dev.pr_metadata import (
+    STALE_CARRIER_PATTERNS,
+    find_not_ready_body_sentinels,
+    metadata_digest,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -252,9 +259,22 @@ def _read_reviews(
 
 
 def _latest_narrative_acceptance(
-    entries: Sequence[tuple[dict[str, Any], bool]], *, live_head: str, live_base: str
+    entries: Sequence[tuple[dict[str, Any], bool]],
+    *,
+    live_head: str,
+    live_base: str,
+    current_metadata_digest: str,
 ) -> datetime | None:
-    """Return the latest published trusted acceptance covering this live state."""
+    """Return the latest complete trusted acceptance covering this live state.
+
+    Replace each current carrier on the same entry. In particular, if any
+    trusted evidence selects ordinary CAS, preserve that policy without relying
+    on a warning-bearing source. This gate has no file selector: preserving any
+    selected ordinary policy also covers the case where that policy is required.
+    """
+    require_base_policy = has_current_ordinary_base_policy(
+        {"comments": [entry for entry, _ in entries]}, live_head
+    )
     accepted_times = []
     for entry, is_review in entries:
         if not isinstance(entry, dict):
@@ -269,7 +289,12 @@ def _latest_narrative_acceptance(
             is not None
         ):
             continue
-        if has_current_accepted_gate_verdict({"comments": [entry]}, live_head):
+        candidate = {"comments": [entry]}
+        if not has_current_pr_metadata_verdict(candidate, current_metadata_digest):
+            continue
+        if require_base_policy and not has_current_ordinary_base_policy(candidate, live_head):
+            continue
+        if has_current_accepted_gate_verdict(candidate, live_head):
             accepted_times.append(published_at)
     return max(accepted_times, default=None)
 
@@ -278,15 +303,16 @@ def _stale_narrative_error(
     comments: Sequence[dict[str, Any]],
     *,
     body: str,
+    current_metadata_digest: str,
     live_head: str,
     live_base: str,
     reviews: Sequence[dict[str, Any]] = (),
 ) -> str | None:
     """Reject live-body and unsuperseded comment/review stale narratives.
 
-    Only a trusted accepted review bound to the live state can supersede an
-    older narrative. Require strict publication chronology, including across
-    endpoints; missing or malformed timestamps never establish supersession.
+    Only a trusted accepted review bound to the live state and independently
+    carrying all current disposition evidence can supersede an older narrative.
+    Require strict publication chronology, including across endpoints; missing or malformed timestamps never establish supersession.
     The superseding carrier is itself scanned and cannot clear its own warning.
     """
     body_sentinels = find_not_ready_body_sentinels(body)
@@ -294,7 +320,10 @@ def _stale_narrative_error(
         return "PR body carries not-ready sentinels: " + "; ".join(body_sentinels)
     entries = [(entry, False) for entry in comments] + [(entry, True) for entry in reviews]
     latest_acceptance = _latest_narrative_acceptance(
-        entries, live_head=live_head, live_base=live_base
+        entries,
+        live_head=live_head,
+        live_base=live_base,
+        current_metadata_digest=current_metadata_digest,
     )
     for entry, _ in entries:
         if not isinstance(entry, dict):
@@ -326,6 +355,7 @@ def _comments_verdict(
     *,
     repo: str,
     body: str,
+    current_metadata_digest: str,
     live_head: str,
     live_base: str,
 ) -> dict[str, Any]:
@@ -352,7 +382,12 @@ def _comments_verdict(
     if claim_error:
         return {"status": "error", "error": claim_error}
     narrative_error = _stale_narrative_error(
-        comments, body=body, live_head=live_head, live_base=live_base, reviews=reviews
+        comments,
+        body=body,
+        current_metadata_digest=current_metadata_digest,
+        live_head=live_head,
+        live_base=live_base,
+        reviews=reviews,
     )
     if narrative_error:
         return {"status": "error", "error": narrative_error}
@@ -410,10 +445,13 @@ def check_merge_ready_carriers(
     if metadata_error:
         return {"status": "error", "error": metadata_error}
 
+    title = pr_payload.get("title")
+    current_digest = metadata_digest(title, body) if isinstance(title, str) else ""
     comments_verdict = _comments_verdict(
         number,
         repo=repo,
         body=body,
+        current_metadata_digest=current_digest,
         live_head=live_head,
         live_base=live_base,
     )

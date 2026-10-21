@@ -17,6 +17,7 @@ from scripts.dev.pr_carrier_gate import (
     review_comment_covers,
     stale_carrier_sentinels,
 )
+from scripts.dev.pr_metadata import metadata_digest
 
 HEAD_SHA = "a1b2c3d4e5f60718293a4b5c6d7e8f9001020304"
 BASE_SHA = "b1c2d3e4f5061728394a5b6c7d8e9f0011121314"
@@ -692,6 +693,7 @@ def test_gate_rejects_malformed_shas() -> None:
 def _narrative_history(
     old_source: str, new_source: str, *, body_warning: bool = False, carrier_warning: bool = False
 ) -> list[subprocess.CompletedProcess]:
+    body = "Bounded tooling repair." + (" Pending domain approval." if body_warning else "")
     old = json.loads(
         _comments_payload(
             "## Exact-head independent review\n"
@@ -707,7 +709,7 @@ def _narrative_history(
             + f"\ngate-verdict: accepted @ {HEAD_SHA}"
             + f"\nbase-policy: ordinary-cas @ {HEAD_SHA}"
             + "\npr-metadata: reconciled @ "
-            + "f" * 64
+            + metadata_digest("fix(benchmark): gate carriers", body)
             + ("\npending domain approval" if carrier_warning else "")
         )
     )[0]
@@ -718,7 +720,6 @@ def _narrative_history(
             entry["submitted_at"] = entry.pop("created_at")
             entry.update(commit_id=commit, state="COMMENTED")
         collections[source].append(entry)
-    body = "Bounded tooling repair." + (" Pending domain approval." if body_warning else "")
     return [
         _proc(stdout=_pr_payload(body=body)),
         _proc(stdout=json.dumps(collections["comments"])),
@@ -846,3 +847,88 @@ def test_gate_requires_live_commented_review_to_supersede(changes: dict[str, str
     assert result["status"] == "error"
     assert "review comment carries stale-carrier" in result["error"]
     assert "pending domain approval" in result["error"].lower()
+
+
+@pytest.mark.parametrize("old_source", ["comments", "reviews"])
+@pytest.mark.parametrize("new_source", ["comments", "reviews"])
+def test_warning_that_still_supplies_current_metadata_is_not_historical(
+    old_source: str, new_source: str
+) -> None:
+    """A later partial acceptance cannot hide its evidence source's warning."""
+    title, body = "fix: bounded tooling change", "Bounded tooling repair."
+    accepted = (
+        "## Exact-head independent review\n"
+        f"Exact head reviewed: `{HEAD_SHA}`\nExact base: `{BASE_SHA}`\n"
+        f"gate-verdict: accepted @ {HEAD_SHA}\n"
+    )
+    prior = {
+        "body": accepted
+        + f"base-policy: ordinary-cas @ {HEAD_SHA}\n"
+        + f"pr-metadata: reconciled @ {metadata_digest(title, body)}\n"
+        + "pending domain approval",
+        "user": {"login": "reviewer"},
+        "author_association": "OWNER",
+        "created_at": "2026-10-19T08:00:00Z",
+    }
+    newer = {
+        "body": accepted,
+        "user": {"login": "reviewer"},
+        "author_association": "OWNER",
+        "created_at": "2026-10-20T08:00:00Z",
+    }
+    collections = {"comments": [], "reviews": []}
+    for entry, source in ((prior, old_source), (newer, new_source)):
+        if source == "reviews":
+            entry["submitted_at"] = entry.pop("created_at")
+            entry.update(state="COMMENTED", commit_id=HEAD_SHA)
+        collections[source].append(entry)
+    with patch(
+        "scripts.dev.pr_carrier_gate._gh_api_get",
+        side_effect=[
+            _proc(stdout=_pr_payload(title=title, body=body)),
+            _proc(stdout=json.dumps(collections["comments"])),
+            _proc(stdout=json.dumps(collections["reviews"])),
+        ],
+    ):
+        result = check_merge_ready_carriers(10459, live_head=HEAD_SHA, live_base=BASE_SHA)
+    assert result["status"] == "error", (
+        "The only current metadata/base-policy evidence still says approval is pending",
+        result,
+    )
+    assert "review comment carries stale-carrier" in result["error"]
+
+
+@pytest.mark.parametrize("new_source", ["comments", "reviews"])
+@pytest.mark.parametrize(
+    "defect", ["missing_metadata", "stale_metadata", "missing_policy", "old_policy"]
+)
+def test_supersession_requires_complete_same_entry_evidence(new_source: str, defect: str) -> None:
+    """A complete replacement must independently replace each current carrier."""
+    responses = _narrative_history("comments", new_source)
+    comments = json.loads(responses[1].stdout)
+    reviews = json.loads(responses[2].stdout)
+    new = comments[-1] if new_source == "comments" else reviews[0]
+    # The warning-bearing history supplies both trailers. Keep that evidence
+    # available to consumers to ensure a partial replacement cannot borrow it.
+    comments[0]["body"] += (
+        f"\nbase-policy: ordinary-cas @ {HEAD_SHA}"
+        f"\npr-metadata: reconciled @ {metadata_digest('fix(benchmark): gate carriers', 'Bounded tooling repair.')}"
+    )
+    if defect == "missing_metadata":
+        new["body"] = new["body"].replace("pr-metadata:", "old-metadata:")
+    elif defect == "stale_metadata":
+        new["body"] = new["body"].replace(
+            metadata_digest("fix(benchmark): gate carriers", "Bounded tooling repair."), "f" * 64
+        )
+    elif defect == "missing_policy":
+        new["body"] = new["body"].replace("base-policy:", "old-policy:")
+    else:
+        new["body"] = new["body"].replace(
+            f"base-policy: ordinary-cas @ {HEAD_SHA}", f"base-policy: ordinary-cas @ {OTHER_SHA}"
+        )
+    responses[1] = _proc(stdout=json.dumps(comments))
+    responses[2] = _proc(stdout=json.dumps(reviews))
+    with patch("scripts.dev.pr_carrier_gate._gh_api_get", side_effect=responses):
+        result = check_merge_ready_carriers(10459, live_head=HEAD_SHA, live_base=BASE_SHA)
+    assert result["status"] == "error", result
+    assert "review comment carries stale-carrier" in result["error"]

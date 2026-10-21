@@ -46,7 +46,7 @@ jobs:
         run: |
           mkdir -p output/security
           {
-            uvx --from ruff==0.17.0 ruff check --config 'lint.ignore=[]' --select S .
+            uvx --from ruff==0.17.1 ruff check --config 'lint.ignore=[]' --select S .
           } 2>&1 | tee "$SECURITY_LOG"
 
       - name: Summarize Ruff security baseline

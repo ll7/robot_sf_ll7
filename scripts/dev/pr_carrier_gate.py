@@ -28,7 +28,9 @@ This module closes that class of drift:
   "not current-base merge evidence" and pending domain-review dispositions)
   invalidates the merge-ready disposition; a newer trusted accepted exact-head
   review with its own current metadata and selected base-policy evidence may
-  supersede historical comments, using original publication timestamps;
+  supersede historical comments, using original publication timestamps. Warnings
+  in current-head APPROVED reviews remain blocking because the receipt may still
+  select those reviews as required implementation-review evidence;
 - a body carrying ``gate-verdict``/``base-policy``/``Exact head`` SHA carriers
   must name the live head, so a stale body cannot back a current-head label
   write;
@@ -312,6 +314,8 @@ def _stale_narrative_error(
 
     Only a trusted accepted review bound to the live state and independently
     carrying all current disposition evidence can supersede an older narrative.
+    Conservatively retain current-head APPROVED review warnings: this owner
+    cannot prove that receipt selection no longer needs that review's evidence.
     Require strict publication chronology, including across endpoints; missing or malformed timestamps never establish supersession.
     The superseding carrier is itself scanned and cannot clear its own warning.
     """
@@ -325,7 +329,7 @@ def _stale_narrative_error(
         live_base=live_base,
         current_metadata_digest=current_metadata_digest,
     )
-    for entry, _ in entries:
+    for entry, is_review in entries:
         if not isinstance(entry, dict):
             continue
         text = entry.get("body")
@@ -334,8 +338,16 @@ def _stale_narrative_error(
         sentinels = stale_carrier_sentinels(text)
         if sentinels:
             published_at, _ = _marker_publication(entry)
+            review_commit = entry.get("commit_id")
+            current_approved_review = (
+                is_review
+                and str(entry.get("state", "")).upper() == "APPROVED"
+                and isinstance(review_commit, str)
+                and review_commit.lower() == live_head.lower()
+            )
             if (
-                latest_acceptance is not None
+                not current_approved_review
+                and latest_acceptance is not None
                 and published_at is not None
                 and published_at < latest_acceptance
             ):

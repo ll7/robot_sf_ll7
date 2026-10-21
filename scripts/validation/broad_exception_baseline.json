@@ -37,6 +37,7 @@
       "scripts/benchmark/run_scenario_criticality_optimization.py": 1,
       "scripts/benchmark_ped_policy_collisions.py": 1,
       "scripts/benchmark_repro_check.py": 2,
+      "scripts/ci/behaviour_receipt.py": 1,
       "scripts/classic_benchmark_full.py": 1,
       "scripts/coverage/open_coverage_report.py": 1,
       "scripts/demo/run_robot_sf_smoke.py": 1,
@@ -117,7 +118,7 @@
       "scripts/validation/verify_maps.py": 1,
       "scripts/validation/verify_sf_implementation.py": 4
     },
-    "total": 207
+    "total": 208
   },
   "description": "Broad exception handler baseline for benchmark/script surfaces. Run scripts/validation/check_broad_exceptions.py --write-baseline to refresh after intentionally removing or approving entries.",
   "entries": [
@@ -768,6 +769,16 @@
       "lineno": 190,
       "path": "scripts/benchmark_repro_check.py",
       "source": "except Exception as e:"
+    },
+    {
+      "col_offset": 4,
+      "context": "report_external",
+      "fingerprint": "9bae1407bba9554c",
+      "handler": "Exception",
+      "lineno": 564,
+      "path": "scripts/ci/behaviour_receipt.py",
+      "review_reason": "Report-only v3 preflight must contain every ordinary decoding, import, transport and validation exception so it cannot veto the mandatory v2 admission result. Deep JSON RecursionError and unexpected loader/validator exceptions become blocked shadow reports; KeyboardInterrupt and SystemExit propagate. Required by PR #10447 second review; real CLI and fresh-subprocess regressions cover valid-v2 and missing-v2 controls.",
+      "source": "except Exception as exc:  # noqa: BLE001 - No report-only failure may veto v2 admission."
     },
     {
       "col_offset": 4,

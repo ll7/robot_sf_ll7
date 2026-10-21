@@ -57,7 +57,10 @@ def _identity() -> dict:
 
 
 @pytest.mark.parametrize("new_source", ["comments", "reviews"])
-def test_required_approved_warning_review_is_not_superseded(new_source: str) -> None:
+@pytest.mark.parametrize("review_commit_present", [True, False])
+def test_required_approved_warning_review_is_not_superseded(
+    new_source: str, review_commit_present: bool
+) -> None:
     """A complete acceptance cannot erase the sole eligible receipt review's warning."""
     old = _record(_accepted() + "\npending domain approval", "2026-10-19T08:00:00Z", "reviews")
     old.update(
@@ -66,6 +69,10 @@ def test_required_approved_warning_review_is_not_superseded(new_source: str) -> 
         author_association="MEMBER",
         user={"login": "external-reviewer"},
     )
+    if not review_commit_present:
+        # Receipt projection can recover the head from the body when REST
+        # commit binding is absent. Uncertain binding must preserve the warning.
+        old.pop("commit_id")
     new = _record(_accepted(), "2026-10-20T08:00:00Z", new_source)
     new.update(id=102, user={"login": "ll7"})
     comments = [new] if new_source == "comments" else []

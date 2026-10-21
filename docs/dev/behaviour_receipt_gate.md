@@ -403,9 +403,20 @@ provenance refuse instead of being overwritten. Use a fresh work directory
 for each source/harness pair.
 
 Each sweep artifact retains `harness.json` with runtime source, harness source,
-and original/replacement script digests. Execution metadata records the script
-digest; collection rejects disagreement and includes the reconstruction in the
-receipt's declared baseline differences. Preserve these manifests with the raw
+and original/replacement script digests. The launcher verifies the selected
+committed digest, then compiles and executes that same captured byte buffer
+with the source path retained as `__file__`. The direct CLI dispatches through
+the same captured-buffer contract. An imported `main()` refuses collection and
+reanalysis unless `_SWEEP_SOURCE_BYTES` was supplied by that dispatcher; a
+separate pathname read cannot establish imported execution identity.
+Execution metadata uses its loaded digest for both suites; a later source-file
+replacement refuses completion
+instead of certifying the replacement. Collection rejects disagreement and
+includes the reconstruction in the receipt's declared baseline differences.
+`--summarize-only` requires authoritative original execution metadata with
+matching source, suite, development-seed selection and loaded harness identity;
+it preserves that provenance and refuses missing or conflicting identity before
+rewriting outputs. A campaign summary alone cannot reconstruct execution identity. Preserve these manifests with the raw
 rows and derived campaign configs. The repaired width binding differs from the
 historical width controller beyond its horizon: it uses the published profile
 as a whole. These are new development reconstructions, not unchanged historical

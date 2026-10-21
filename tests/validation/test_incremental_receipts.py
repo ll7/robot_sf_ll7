@@ -1,12 +1,19 @@
 """Production-path regression controls for incremental receipt acquisition (#10446)."""
 
+import importlib.util
 import json
 from dataclasses import replace
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
-from scripts.validation import run_empty_world_sweep as sweep
+# Compile the supplied image through the same captured-source contract as dispatch.
+_SWEEP_PATH = Path(__file__).resolve().parents[2] / "scripts/validation/run_empty_world_sweep.py"
+_SWEEP_SPEC = importlib.util.spec_from_file_location("incremental_empty_world_sweep", _SWEEP_PATH)
+sweep = importlib.util.module_from_spec(_SWEEP_SPEC)
+sweep._SWEEP_SOURCE_BYTES = _SWEEP_PATH.read_bytes()
+exec(compile(sweep._SWEEP_SOURCE_BYTES, str(_SWEEP_PATH), "exec"), sweep.__dict__)  # noqa: S102
 
 REPO_ROOT = sweep.REPO_ROOT
 
@@ -105,7 +112,9 @@ def test_scheduler_pins_working_directory_and_checks_helpers(tmp_path, monkeypat
     monkeypatch.setattr(
         producer.subprocess,
         "check_output",
-        lambda command, **kwargs: submitted.append(command) or "123\n",
+        lambda command, **kwargs: (
+            b"committed harness" if command[0] == "git" else submitted.append(command) or "123\n"
+        ),
     )
     producer._submit_sbatch_sweep(
         tmp_path,

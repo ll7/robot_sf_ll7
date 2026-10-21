@@ -45,6 +45,13 @@ DEFAULT_MAX_WORKERS = 24
 PED_DEPENDENT_BEHAVIORS = frozenset({"wait", "join", "leave", "follow", "lead", "accompany"})
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+# Only a dispatcher compiling this exact buffer can establish execution identity.
+# Ordinary imports expose helpers, but cannot collect or reanalyse campaigns.
+SWEEP_HARNESS_SHA256 = (
+    hashlib.sha256(globals()["_SWEEP_SOURCE_BYTES"]).hexdigest()
+    if "_SWEEP_SOURCE_BYTES" in globals()
+    else None
+)
 
 SUITES: dict[str, str] = {
     "main": "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml",
@@ -821,6 +828,38 @@ def _preflight_receipt_inputs(derived: list[tuple]) -> None:
     selected_episode_ids(derived)
 
 
+def _verify_harness_identity(out_dir: Path, full_sha: str) -> None:
+    """Refuse source drift and disagreement with retained acquisition provenance."""
+    if hashlib.sha256(Path(__file__).read_bytes()).hexdigest() != SWEEP_HARNESS_SHA256:
+        raise RuntimeError("sweep harness source changed after loading")
+    manifest = out_dir / "harness.json"
+    if manifest.is_file():
+        pinned = json.loads(manifest.read_text())
+        if (
+            pinned.get("runtime_source_sha") != full_sha
+            or pinned.get("harness_sha256") != SWEEP_HARNESS_SHA256
+        ):
+            raise RuntimeError("sweep harness differs from pinned provenance")
+
+
+def _original_execution(out_dir: Path, suite: str, full_sha: str, seeds: list[int]) -> dict:
+    """Validate authoritative original identity before reanalysis writes any outputs."""
+    receipt = out_dir / f"execution_{suite}.json"
+    meta = json.loads(receipt.read_text()) if receipt.is_file() else {}
+    if (
+        meta.get("suite") != suite
+        or meta.get("head_sha") != full_sha
+        or meta.get("sweep_harness_sha256") != SWEEP_HARNESS_SHA256
+        or meta.get("seeds") != seeds
+    ):
+        raise ValueError(f"{suite} missing or conflicting original execution provenance")
+    try:
+        _verify_harness_identity(out_dir, full_sha)
+    except RuntimeError as error:
+        raise ValueError(f"{suite} conflicting original execution provenance") from error
+    return meta
+
+
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     """Parse the existing receipt sweep CLI."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -853,12 +892,17 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
 
 
 def main(argv: list[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0915
-    """Run the sweep.
+    """Run the resumable sweep from a dispatcher-supplied captured source image.
 
     Returns:
         Process exit code: 1 for failed/incomplete execution or requested traces;
         episode outcomes alone do not cause a nonzero exit. CLI flags are unchanged.
+
+    Raises:
+        RuntimeError: If an ordinary import calls main without captured source.
     """
+    if "_SWEEP_SOURCE_BYTES" not in globals():
+        raise RuntimeError("sweep execution requires a captured source image")
     args = _parse_args(argv)
 
     seeds = assert_dev_seeds(args.seeds)  # abort before anything else happens
@@ -890,6 +934,11 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0915
 
     suites = list(SUITES) if args.suite == "both" else [args.suite]
     out_dir = args.output_dir.resolve()
+    # Reject invalid execution identity before creating even the writer lock.
+    if args.summarize_only:
+        for suite in suites:
+            _original_execution(out_dir, suite, full_sha, seeds)
+    _verify_harness_identity(out_dir, full_sha)
     out_dir.mkdir(parents=True, exist_ok=True)
     import fcntl
 
@@ -900,6 +949,12 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0915
         lock.close()
         raise ValueError("receipt output already has an active writer") from error
     try:
+        originals = (
+            {suite: _original_execution(out_dir, suite, full_sha, seeds) for suite in suites}
+            if args.summarize_only
+            else {}
+        )
+        _verify_harness_identity(out_dir, full_sha)
         started = time.time()
         trace_notes: list[str] = []
         incomplete_execution = False
@@ -953,25 +1008,16 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0915
                     derived, out_dir, contract, first_seed_only=args.first_seed_only
                 )
         for suite, cfg_path, scenarios, cfg in derived:
+            _verify_harness_identity(out_dir, full_sha)
             if args.summarize_only:
                 root = out_dir / "campaigns" / f"empty_world_{suite}"
                 receipt = out_dir / f"execution_{suite}.json"
-                summary_path = root / "reports" / "campaign_summary.json"
-                result = (
-                    json.loads(receipt.read_text())
-                    if receipt.is_file()
-                    else (json.loads(summary_path.read_text()) if summary_path.is_file() else {})
-                )
+                result = originals[suite]
                 rows, axes = reconcile_execution(
                     cfg, scenarios, load_rows(root), root, result, step_trace=not args.no_step_trace
                 )
                 incomplete_execution |= not axes["complete"]
-                meta = {
-                    "suite": suite,
-                    "head_sha": full_sha,
-                    "sweep_harness_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
-                    **axes,
-                }
+                meta = {**result, **axes}
                 write_outputs(out_dir, rows, suite, meta)
                 receipt.write_text(json.dumps(meta, indent=2) + "\n")
                 continue
@@ -998,6 +1044,7 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0915
                     "total_episodes": None,
                     "execution_error": f"{type(error).__name__} during campaign execution",
                 }
+            _verify_harness_identity(out_dir, full_sha)
             campaign_root = Path(
                 cast(
                     "str | Path",
@@ -1024,7 +1071,7 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0915
                 "head_sha": full_sha,
                 "execution_key": contract["execution_key"],
                 "first_seed_only": args.first_seed_only,
-                "sweep_harness_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+                "sweep_harness_sha256": SWEEP_HARNESS_SHA256,
                 "seeds": seeds,
                 "workers": args.workers,
                 "runtime_s": round(time.time() - t0, 1),
@@ -1052,4 +1099,13 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0915
 
 
 if __name__ == "__main__":
+    if "_SWEEP_SOURCE_BYTES" not in globals():
+        # Direct CLI calls also compile the exact buffer used for identity.
+        # The outer import defines no collection; only this captured image runs main.
+        source = Path(__file__).read_bytes()
+        exec(  # noqa: S102 - Execute this captured local CLI source, never supplied code.
+            compile(source, __file__, "exec"),
+            {"__name__": "__main__", "__file__": __file__, "_SWEEP_SOURCE_BYTES": source},
+        )
+        raise SystemExit(0)
     raise SystemExit(main())

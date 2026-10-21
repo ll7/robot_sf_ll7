@@ -1856,3 +1856,42 @@ def test_existing_mode_honors_explicit_paired_harness(tmp_path, bad_manifest):
         path.write_text(json.dumps(manifest))
     with pytest.raises(ValueError, match="requested committed harness"):
         producer._prepare_sweeps(args, repo, source)
+
+
+@pytest.mark.parametrize("replace_before_launch", [False, True])
+def test_sweep_launcher_executes_only_the_verified_buffer(tmp_path, replace_before_launch):
+    """A selected digest binds compiled bytes even if their pathname is replaced."""
+    script = tmp_path / "scripts/validation/run_empty_world_sweep.py"
+    script.parent.mkdir(parents=True)
+    source = (
+        b"import hashlib, json; from pathlib import Path\n"
+        b"path = Path(__file__)\n"
+        b"path.write_text('# replacement on disk\\n')\n"
+        b"print(json.dumps({'loaded': hashlib.sha256(_SWEEP_SOURCE_BYTES).hexdigest(), "
+        b"'file': __file__}))\n"
+    )
+    script.write_bytes(source)
+    digest = hashlib.sha256(source).hexdigest()
+    command = producer._sweep_command(
+        "a" * 40,
+        tmp_path / "out",
+        list(producer.DEFAULT_SEEDS),
+        arms=None,
+        scenarios=None,
+        workers=1,
+        check_only=False,
+        harness_sha256=digest,
+    )
+    if replace_before_launch:
+        script.write_text("print('UNAPPROVED EXECUTION')\n")
+    result = subprocess.run(
+        [sys.executable, *command[3:]], cwd=tmp_path, capture_output=True, text=True, check=False
+    )
+    if replace_before_launch:
+        assert result.returncode != 0
+        assert "differs from selected committed source" in result.stderr
+        assert not result.stdout
+    else:
+        assert result.returncode == 0, result.stderr
+        assert json.loads(result.stdout) == {"loaded": digest, "file": str(script)}
+        assert hashlib.sha256(script.read_bytes()).hexdigest() != digest

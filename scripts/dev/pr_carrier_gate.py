@@ -24,9 +24,13 @@ This module closes that class of drift:
   form, where the ellipsis represents up to 40 non-newline characters);
   anything else fails with the vocabulary named in the error, never a bare
   "no carrier" verdict;
-- a body or comment carrying stale-narrative sentinels (including
+- the live body or an unsuperseded comment carrying stale-narrative sentinels (including
   "not current-base merge evidence" and pending domain-review dispositions)
-  invalidates the merge-ready disposition;
+  invalidates the merge-ready disposition; a newer trusted accepted exact-head
+  review with its own current metadata and selected base-policy evidence may
+  supersede historical comments, using original publication timestamps. Warnings
+  in entries the receipt can still accept as implementation-review evidence
+  remain blocking;
 - a body carrying ``gate-verdict``/``base-policy``/``Exact head`` SHA carriers
   must name the live head, so a stale body cannot back a current-head label
   write;
@@ -46,14 +50,27 @@ from typing import TYPE_CHECKING, Any
 from scripts.dev._gh_rest import gh_api_get as _gh_api_get
 from scripts.dev._gh_rest import parse_json as _parse_json
 from scripts.dev.pr_loop_policy import (
+    _marker_publication,
     active_review_claim,
     extract_sha_carriers,
+    has_current_accepted_gate_verdict,
+    has_current_ordinary_base_policy,
+    has_current_pr_metadata_verdict,
     invalid_sha_carriers,
 )
-from scripts.dev.pr_metadata import find_not_ready_body_sentinels
+from scripts.dev.pr_metadata import (
+    STALE_CARRIER_PATTERNS,
+    find_not_ready_body_sentinels,
+    metadata_digest,
+)
+from scripts.dev.single_account_merge_receipt import (
+    classify_implementation_review,
+    project_review_evidence,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+    from datetime import datetime
 
 DEFAULT_REPO = "ll7/robot_sf_ll7"
 FULL_SHA_RE = re.compile(r"^[0-9a-fA-F]{40}$")
@@ -76,13 +93,6 @@ REVIEW_HEADING_VOCABULARY: tuple[str, ...] = (
     "Exact-head implementation review",
     "Exact-head independent review",
     "Self-review … exact head",
-)
-
-STALE_CARRIER_PATTERNS: tuple[re.Pattern[str], ...] = (
-    re.compile(r"not\s+current[- ]base\s+merge\s+evidence", re.IGNORECASE),
-    re.compile(r"pending[- ]domain[- ]review", re.IGNORECASE),
-    re.compile(r"pending\s+domain(?:\s+aware)?\s+(?:approval|review)", re.IGNORECASE),
-    re.compile(r"domain[- ]?aware\s+approval\s+remain\w*\s+pending", re.IGNORECASE),
 )
 
 _BOT_AUTHORS = frozenset(
@@ -254,51 +264,78 @@ def _read_reviews(
     return reviews, None
 
 
-def _reviews_verdict(
-    number: int,
+def _latest_narrative_acceptance(
+    entries: Sequence[tuple[dict[str, Any], bool]],
     *,
-    repo: str,
     live_head: str,
     live_base: str,
-    reviews: Sequence[dict[str, Any]] | None = None,
-) -> dict[str, Any]:
-    """Read PR reviews and validate a canonical review-endpoint carrier.
+    current_metadata_digest: str,
+) -> datetime | None:
+    """Return the latest complete trusted acceptance covering this live state.
 
-    A review must be a live-head ``COMMENTED`` review with its commit id bound to
-    the live head. The caller may use a top-level issue-comment carrier when
-    this endpoint has no carrier, but it still reads the endpoint to check for
-    review-only active claims.
+    Replace each current carrier on the same entry. In particular, if any
+    trusted evidence selects ordinary CAS, preserve that policy without relying
+    on a warning-bearing source. This gate has no file selector: preserving any
+    selected ordinary policy also covers the case where that policy is required.
     """
-    if reviews is None:
-        reviews, reviews_error = _read_reviews(number, repo=repo)
-        if reviews_error:
-            return {"status": "error", "error": reviews_error}
-
-    claim_error = _active_review_claim_error(reviews, live_head=live_head)
-    if claim_error:
-        return {"status": "error", "error": claim_error}
-
-    narrative_error = _stale_narrative_error(reviews, body="")
-    if narrative_error:
-        return {"status": "error", "error": narrative_error}
-
-    review_error = _review_carrier_error(
-        reviews,
-        live_head=live_head,
-        live_base=live_base,
-        require_review_commit=True,
+    require_base_policy = has_current_ordinary_base_policy(
+        {"comments": [entry for entry, _ in entries]}, live_head
     )
-    if review_error:
-        return {"status": "error", "error": review_error}
-    return {"status": "ok", "carrier_source": "pull_request_review"}
+    accepted_times = []
+    for entry, is_review in entries:
+        if not isinstance(entry, dict):
+            continue
+        published_at, _ = _marker_publication(entry)
+        if published_at is None:
+            continue
+        if (
+            _review_carrier_error(
+                [entry], live_head=live_head, live_base=live_base, require_review_commit=is_review
+            )
+            is not None
+        ):
+            continue
+        candidate = {"comments": [entry]}
+        if not has_current_pr_metadata_verdict(candidate, current_metadata_digest):
+            continue
+        if require_base_policy and not has_current_ordinary_base_policy(candidate, live_head):
+            continue
+        if has_current_accepted_gate_verdict(candidate, live_head):
+            accepted_times.append(published_at)
+    return max(accepted_times, default=None)
 
 
-def _stale_narrative_error(comments: Sequence[dict[str, Any]], *, body: str) -> str | None:
-    """Return an error when the body or any comment carries stale narratives."""
+def _stale_narrative_error(
+    comments: Sequence[dict[str, Any]],
+    *,
+    body: str,
+    current_metadata_digest: str,
+    live_head: str,
+    live_base: str,
+    reviews: Sequence[dict[str, Any]] = (),
+) -> str | None:
+    """Reject live-body and unsuperseded comment/review stale narratives.
+
+    Only a trusted accepted review bound to the live state and independently
+    carrying all current disposition evidence can supersede an older narrative.
+    Retain warnings in every entry the receipt can still accept as independent
+    implementation-review evidence. Use its actual projection and classifier,
+    including body-derived bindings and approved machine-comment sources; this
+    owner cannot prove that selection no longer needs that entry's evidence.
+    Require strict publication chronology, including across endpoints; missing or malformed timestamps never establish supersession.
+    The superseding carrier is itself scanned and cannot clear its own warning.
+    """
     body_sentinels = find_not_ready_body_sentinels(body)
     if body_sentinels:
         return "PR body carries not-ready sentinels: " + "; ".join(body_sentinels)
-    for entry in comments:
+    entries = [(entry, False) for entry in comments] + [(entry, True) for entry in reviews]
+    latest_acceptance = _latest_narrative_acceptance(
+        entries,
+        live_head=live_head,
+        live_base=live_base,
+        current_metadata_digest=current_metadata_digest,
+    )
+    for entry, is_review in entries:
         if not isinstance(entry, dict):
             continue
         text = entry.get("body")
@@ -306,6 +343,24 @@ def _stale_narrative_error(comments: Sequence[dict[str, Any]], *, body: str) -> 
             continue
         sentinels = stale_carrier_sentinels(text)
         if sentinels:
+            published_at, _ = _marker_publication(entry)
+            receipt_evidence = project_review_evidence(
+                [entry], head_sha=live_head, expected_metadata_digest=current_metadata_digest
+            )
+            receipt_review = classify_implementation_review(
+                {
+                    "head_sha": live_head,
+                    "metadata_digest": current_metadata_digest,
+                    "reviews" if is_review else "comments": receipt_evidence,
+                }
+            )
+            if (
+                receipt_review["status"] != "accepted"
+                and latest_acceptance is not None
+                and published_at is not None
+                and published_at < latest_acceptance
+            ):
+                continue
             author = entry.get("user")
             who = author.get("login") if isinstance(author, dict) else "unknown"
             return (
@@ -321,6 +376,7 @@ def _comments_verdict(
     *,
     repo: str,
     body: str,
+    current_metadata_digest: str,
     live_head: str,
     live_base: str,
 ) -> dict[str, Any]:
@@ -338,35 +394,34 @@ def _comments_verdict(
     if claim_error:
         return {"status": "error", "error": claim_error}
 
-    narrative_error = _stale_narrative_error(comments, body=body)
+    # Read both sources once before applying supersession so a newer review
+    # can close a historical issue-comment finding (and vice versa).
+    reviews, reviews_error = _read_reviews(number, repo=repo)
+    if reviews_error:
+        return {"status": "error", "error": reviews_error}
+    claim_error = _active_review_claim_error(reviews, live_head=live_head)
+    if claim_error:
+        return {"status": "error", "error": claim_error}
+    narrative_error = _stale_narrative_error(
+        comments,
+        body=body,
+        current_metadata_digest=current_metadata_digest,
+        live_head=live_head,
+        live_base=live_base,
+        reviews=reviews,
+    )
     if narrative_error:
         return {"status": "error", "error": narrative_error}
 
     review_error = _review_carrier_error(comments, live_head=live_head, live_base=live_base)
     if review_error is None:
-        # Inspect both carrier sources before accepting the compatibility
-        # comment; otherwise a review-only active claim can be hidden by a
-        # valid issue comment.
-        reviews, reviews_error = _read_reviews(number, repo=repo)
-        if reviews_error:
-            return {"status": "error", "error": reviews_error}
-        claim_error = _active_review_claim_error(reviews, live_head=live_head)
-        if claim_error:
-            return {"status": "error", "error": claim_error}
-        narrative_error = _stale_narrative_error(reviews, body="")
-        if narrative_error:
-            return {"status": "error", "error": narrative_error}
         return {"status": "ok", "carrier_source": "issue_comment"}
-    reviews_verdict = _reviews_verdict(
-        number,
-        repo=repo,
-        live_head=live_head,
-        live_base=live_base,
+    review_error = _review_carrier_error(
+        reviews, live_head=live_head, live_base=live_base, require_review_commit=True
     )
-    if reviews_verdict["status"] != "ok":
-        return reviews_verdict
-
-    return reviews_verdict
+    if review_error:
+        return {"status": "error", "error": review_error}
+    return {"status": "ok", "carrier_source": "pull_request_review"}
 
 
 def check_merge_ready_carriers(
@@ -411,10 +466,13 @@ def check_merge_ready_carriers(
     if metadata_error:
         return {"status": "error", "error": metadata_error}
 
+    title = pr_payload.get("title")
+    current_digest = metadata_digest(title, body) if isinstance(title, str) else ""
     comments_verdict = _comments_verdict(
         number,
         repo=repo,
         body=body,
+        current_metadata_digest=current_digest,
         live_head=live_head,
         live_base=live_base,
     )

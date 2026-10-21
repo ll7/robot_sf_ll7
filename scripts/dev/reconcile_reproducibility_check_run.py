@@ -26,6 +26,7 @@ from urllib.parse import urlparse
 
 SCHEMA = "reproducibility_check_run_reconciliation.v1"
 DEFAULT_JOB_NAME = "reproducibility-check"
+PENDING_JOB_STATUSES = frozenset({"queued", "in_progress", "requested", "waiting", "pending"})
 PENDING_CHECK_STATUSES = frozenset({"queued", "in_progress"})
 JOB_READ_ATTEMPTS = 7
 JOB_READ_DELAY_SECONDS = 10
@@ -225,7 +226,7 @@ def reconcile_successful_job(
         if job_identity is not None and identity != job_identity:
             raise ReconciliationError("the matching Actions job identity changed during polling")
         job_identity = identity
-        if job.get("status") not in PENDING_CHECK_STATUSES or job.get("conclusion") is not None:
+        if job.get("status") not in PENDING_JOB_STATUSES or job.get("conclusion") is not None:
             break
         if attempt == JOB_READ_ATTEMPTS - 1:
             return {

@@ -201,13 +201,14 @@ def pending_api_job() -> dict[str, Any]:
     return _job(status="queued", conclusion=None)
 
 
-def test_queued_job_propagates_to_success_without_premature_patch(
-    monkeypatch: Any, pending_api_job: dict[str, Any]
+@pytest.mark.parametrize("status", ["queued", "in_progress", "requested", "waiting", "pending"])
+def test_pending_job_propagates_to_success_without_premature_patch(
+    monkeypatch: Any, status: str
 ) -> None:
 
     sleeps = []
     client = PropagatingGitHub(
-        [pending_api_job, _job(status="in_progress", conclusion=None), _job()],
+        [_job(status=status, conclusion=None), _job(status="in_progress", conclusion=None), _job()],
         [_check_run(status="queued", conclusion=None), _check_run()],
     )
 
@@ -225,30 +226,34 @@ def test_queued_job_propagates_to_success_without_premature_patch(
     assert len(client.patch_payloads) == 1
 
 
+@pytest.mark.parametrize("status", ["queued", "in_progress", "requested", "waiting", "pending"])
 def test_persistently_pending_job_reports_pending_without_mutation(
-    monkeypatch: Any, pending_api_job: dict[str, Any]
+    monkeypatch: Any, status: str
 ) -> None:
 
     sleeps = []
     monkeypatch.setattr(time, "sleep", sleeps.append)
-    client = PropagatingGitHub([pending_api_job], [])
+    client = PropagatingGitHub([_job(status=status, conclusion=None)], [])
 
     result = _reconcile(client)
 
     assert result["status"] == "pending"
     assert result["action"] == "none"
-    assert result["job"] == {"status": "queued", "conclusion": None}
+    assert result["job"] == {"status": status, "conclusion": None}
     assert result["fail_closed"] is True
-    assert 1 < client.job_reads <= 10
+    assert client.job_reads == 7
     assert len(sleeps) == client.job_reads - 1
-    assert sum(sleeps) <= 60
+    assert sum(sleeps) == 60
     assert client.patch_payloads == []
 
 
-def test_pending_job_followed_by_terminal_failure_still_fails_closed(monkeypatch: Any) -> None:
+@pytest.mark.parametrize("status", ["queued", "in_progress", "requested", "waiting", "pending"])
+def test_pending_job_followed_by_terminal_failure_still_fails_closed(
+    monkeypatch: Any, status: str
+) -> None:
     monkeypatch.setattr(time, "sleep", lambda _delay: None)
     client = PropagatingGitHub(
-        [_job(status="queued", conclusion=None), _job(conclusion="failure")], []
+        [_job(status=status, conclusion=None), _job(conclusion="failure")], []
     )
     try:
         _reconcile(client)
@@ -260,6 +265,7 @@ def test_pending_job_followed_by_terminal_failure_still_fails_closed(monkeypatch
     assert client.patch_payloads == []
 
 
+@pytest.mark.parametrize("status", ["queued", "in_progress", "requested", "waiting", "pending"])
 @pytest.mark.parametrize(
     ("overrides", "error"),
     [
@@ -275,10 +281,10 @@ def test_pending_job_followed_by_terminal_failure_still_fails_closed(monkeypatch
     ],
 )
 def test_job_identity_change_during_polling_fails_closed(
-    monkeypatch: Any, overrides: dict[str, Any], error: str
+    monkeypatch: Any, status: str, overrides: dict[str, Any], error: str
 ) -> None:
     monkeypatch.setattr(time, "sleep", lambda _delay: None)
-    client = PropagatingGitHub([_job(status="queued", conclusion=None), _job(**overrides)], [])
+    client = PropagatingGitHub([_job(status=status, conclusion=None), _job(**overrides)], [])
     try:
         _reconcile(client)
     except MODULE.ReconciliationError as exc:
@@ -294,6 +300,9 @@ def test_job_identity_change_during_polling_fails_closed(
         ("completed", "failure"),
         ("completed", "cancelled"),
         ("queued", "failure"),
+        ("requested", "failure"),
+        ("waiting", "failure"),
+        ("pending", "failure"),
         ("unknown", None),
     ],
 )

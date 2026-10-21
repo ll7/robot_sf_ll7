@@ -1,5 +1,10 @@
 # Context Retrieval Index
 
+## Top-hybrid guard/escape follow-up
+
+Prospective 18-cell factorial on hybrid v4, development seeds 1061–1090:
+[guard_escape_top_hybrid/README.md](guard_escape_top_hybrid/README.md).
+
 Guard/escape factorial ablation: 2,160 paired development episodes, independently
 confirmed numerical results, portable compact inputs and SHA-256 custody:
 [guard_escape_ablation/README.md](guard_escape_ablation/README.md).

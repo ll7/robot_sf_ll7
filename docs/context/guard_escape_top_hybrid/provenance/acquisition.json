@@ -1,0 +1,36 @@
+{
+  "registration_commit": "55a98a1e6143a71e18278478ba4d3dff9bbf8bd4",
+  "execution_commit": "6a3ac329d25a97202b050edd69190142fd7553e7",
+  "execution_source_clean": true,
+  "acquisition_start_utc": "2026-10-18T07:53:55.924744+00:00",
+  "workers": 4,
+  "free_disk_bytes_at_launch": 144591585280,
+  "load_average": [
+    4.46484375,
+    2.947265625,
+    2.2890625
+  ],
+  "launch_config_sha256": "3e30c73fef9c23e46dacf156749dfca4c3b3462241f4427f0fc2ed882598aa73",
+  "registered_config_sha256": "a42fd09eea7dec8d9630d45e3c485e3d188ceaf63c1cb0147e896278fa47f44e",
+  "path_resolution_only": true,
+  "exit_code": 0,
+  "acquisition_end_utc": "2026-10-18T09:46:38.016110+00:00",
+  "command": "python scripts/tools/run_camera_ready_benchmark.py --config <resolved-registered-config> --output-root <outside-git> --label exp_guardesc_top_hybrid_1061_1090 --log-level INFO",
+  "environment": {
+    "python": "3.13.14 (main, Jun 11 2026, 04:03:13) [Clang 22.1.3 ]",
+    "packages": {
+      "numpy": "2.4.6",
+      "PyYAML": "6.0.3",
+      "gymnasium": "1.1.1",
+      "numba": "0.67.0",
+      "pygame": "2.6.1",
+      "shapely": "2.1.2",
+      "stable-baselines3": "2.9.0",
+      "torch": "2.13.0",
+      "wandb": "0.30.0"
+    },
+    "uv_lock_sha256": "def82098b23281e7c49f1f05e052e412c2de54ae2da53f1708bc0ddc2a30d023",
+    "cpu_only": true,
+    "numerical_threads": 1
+  }
+}

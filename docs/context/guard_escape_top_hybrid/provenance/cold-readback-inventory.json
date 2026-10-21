@@ -1,0 +1,7 @@
+{
+  "passed": true,
+  "cold_download_payloads_verified": 128,
+  "all_inner_sha256_match": true,
+  "raw_episode_files": 4,
+  "source_snapshot_and_git_bundle_present": true
+}

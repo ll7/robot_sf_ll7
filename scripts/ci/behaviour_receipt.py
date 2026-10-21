@@ -14,10 +14,16 @@ import json
 import os
 import re
 import subprocess
+import sys
+import zipfile
 from pathlib import Path, PurePosixPath
 from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+if __name__ == "__main__":
+    sys.modules["scripts.ci.behaviour_receipt"] = sys.modules[__name__]
 SCOPE_FILE = "configs/benchmarks/releases/behaviour_gate_0_1_0.json"
 SCOPE_PATH = ROOT / SCOPE_FILE
 SOFTWARE_VERSION_RE = re.compile(r"(?<![\w.])v?(\d+\.\d+\.\d+(?:\.post\d+)?)(?![\w.])")
@@ -474,6 +480,10 @@ def load_receipt(header: dict, head: str) -> dict:
     return receipt
 
 
+class TrainEvidenceError(ValueError):
+    """A bounded, public-safe refusal from frozen candidate validation."""
+
+
 def check_receipt(
     body: str, changed_files: list[str], repo: str, base_ref: str = "origin/main"
 ) -> list[str]:
@@ -490,12 +500,20 @@ def check_receipt(
         )
         if not path_trigger and not dependency_change_requires_receipt(changed_files, base_ref):
             return []
-        matches = re.findall(r"<!--\s*behaviour-change-receipt:v2\s*\n(.*?)-->", body, re.DOTALL)
-        if len(matches) != 1:
-            return ["BLOCKER: behaviour receipt missing or duplicated for a behaviour-changing PR"]
         if not SCOPE_PATH.is_file():
             return [
                 "BLOCKER: reviewed scope inventory is not installed; merge the release integration owner's inventory before enabling this gate"
+            ]
+        # External v3 reports never replace or veto the existing v2 merge
+        # receipt during shadow rollout. The report is evaluated separately.
+        matches = re.findall(r"<!--\s*behaviour-change-receipt:v2\s*\n(.*?)-->", body, re.DOTALL)
+        if len(matches) > 1:
+            return [
+                "BLOCKER: blocked: behaviour receipt missing or duplicated for a behaviour-changing PR"
+            ]
+        if not matches:
+            return [
+                "BLOCKER: behaviour receipt missing or duplicated for a behaviour-changing PR; WAITING_FOR_TRAIN: awaiting exact-head evidence"
             ]
         _require(len(body) <= 65536, "PR body exceeds GitHub's 65,536 character limit")
         header = json.loads(matches[0])
@@ -504,6 +522,8 @@ def check_receipt(
         scope = json.loads(SCOPE_PATH.read_text())
         release = latest_release(repo)
         validate_receipt(receipt, scope, head, release, release_source(release))
+    except TrainEvidenceError as exc:
+        return [f"BLOCKER: blocked: external behaviour receipt rejected: {exc}"]
     except (
         OSError,
         ValueError,
@@ -511,6 +531,7 @@ def check_receipt(
         TypeError,
         subprocess.SubprocessError,
         jsonschema.ValidationError,
+        zipfile.BadZipFile,
     ) as exc:
         return [
             f"BLOCKER: behaviour receipt rejected ({type(exc).__name__}); verify scope, exact head, baseline, job, payload digest and classification inventory"
@@ -518,12 +539,58 @@ def check_receipt(
     return []
 
 
+def report_external(body: str, repo: str, base_ref: str) -> dict:
+    """Evaluate v3 evidence in shadow mode without changing merge admission."""
+    result = {"mode": "shadow", "state": "blocked", "merge_authorized": False}
+    try:
+        from scripts.ci import frozen_candidate
+
+        external = re.findall(r"<!--\s*behaviour-change-receipt:v3\s*\n(.*?)-->", body, re.DOTALL)
+        frozen_candidate.require(len(external) == 1, "external reference missing or duplicated")
+        frozen_candidate.require(len(body) <= 65536, "PR body exceeds GitHub limit")
+        head = current_head()
+        reference = json.loads(external[0])
+        envelope = frozen_candidate.load_external(reference, repo, head)
+        release = latest_release(repo)
+        frozen_candidate.validate_evidence(
+            envelope,
+            reference,
+            head,
+            subprocess.check_output(["git", "rev-parse", base_ref], cwd=ROOT, text=True).strip(),
+            json.loads(SCOPE_PATH.read_text()),
+            release,
+            release_source(release),
+        )
+    except Exception as exc:  # noqa: BLE001 - No report-only failure may veto v2 admission.
+        # Includes RecursionError from deeply nested JSON or validation; process
+        # control signals (KeyboardInterrupt/SystemExit) remain uncaught.
+        result["reason"] = str(exc)
+        return result
+    result["state"] = "ready"
+    return result
+
+
 def main(argv: list[str] | None = None) -> int:
     """Run the base-owned validator against event metadata and source Git objects."""
+    arguments = list(sys.argv[1:] if argv is None else argv)
+    if arguments and arguments[0] in {"promotion", "freeze", "assemble"}:
+        from scripts.ci import frozen_candidate
+
+        commands = {
+            "promotion": frozen_candidate.main,
+            "freeze": frozen_candidate.freeze_main,
+            "assemble": frozen_candidate.assemble_main,
+        }
+        return commands[arguments[0]](arguments[1:])
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--github-event-path", type=Path, required=True)
     parser.add_argument("--repo-root", type=Path, required=True)
     parser.add_argument("--base-ref", required=True)
+    parser.add_argument(
+        "--train-state",
+        default="admitted",
+        choices=("admitted", "WAITING_FOR_TRAIN", "candidate", "executing", "blocked", "ready"),
+    )
     args = parser.parse_args(argv)
     global ROOT
     ROOT = args.repo_root.resolve()
@@ -548,6 +615,38 @@ def main(argv: list[str] | None = None) -> int:
         event["repository"]["full_name"],
         args.base_ref,
     )
+    waiting = blockers and all("WAITING_FOR_TRAIN:" in item for item in blockers)
+    state = args.train_state
+    if blockers:
+        state = (
+            (state if state in {"candidate", "executing", "blocked"} else "WAITING_FOR_TRAIN")
+            if waiting
+            else "blocked"
+        )
+    elif state == "WAITING_FOR_TRAIN":
+        state = "admitted"
+    print(
+        json.dumps(
+            {
+                "mode": "shadow",
+                "train_state": state,
+                "merge_blocked": bool(blockers),
+                "merge_authorized": False,
+            },
+            sort_keys=True,
+        )
+    )
+    if "behaviour-change-receipt:v3" in (pr.get("body") or ""):
+        print(
+            json.dumps(
+                {
+                    "preflight": report_external(
+                        pr["body"], event["repository"]["full_name"], args.base_ref
+                    )
+                },
+                sort_keys=True,
+            )
+        )
     for blocker in blockers:
         print(blocker)
     if not blockers:

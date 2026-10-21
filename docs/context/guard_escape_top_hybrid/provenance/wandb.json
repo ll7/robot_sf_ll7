@@ -1,0 +1,17 @@
+{
+  "status": "uploaded_and_cold_readback_verified",
+  "upload_attempts": 1,
+  "run_path": "ll7/robot_sf/8820f7ba",
+  "run_url": "https://wandb.ai/ll7/robot_sf/runs/8820f7ba",
+  "artifact": "ll7/robot_sf/guard-escape-top-hybrid-development-1061-1090:v0",
+  "artifact_digest": "cc32fd83ed0826c8c7eee716a600c733",
+  "archive_sha256": "59d7676ded5cfd0ccf95bd2410e20f6ba4bde8922f162acd9f8d2b6244aa77ad",
+  "manifest_sha256": "f0b809806ff5903cec7268fe18af17914c725af27dfd641dd58a4b20ed88f08e",
+  "archive_bytes": 135424383,
+  "payload_files": 128,
+  "source_snapshot_sha256": "7a8eabdd407f50d5c9c875b307054c0886d9952b200f8531fe547e7d085051e8",
+  "source_git_bundle_sha256": "9a9c9a7d205acba63ce6d6686e4a364e9319e158c4ffc278cc36c780aef2f844",
+  "cold_readback_verified": true,
+  "credential_handling": "in-process only; no login or credential writes",
+  "finished_utc": "2026-10-18T09:48:47.185716+00:00"
+}

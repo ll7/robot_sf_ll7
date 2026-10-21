@@ -1,0 +1,12 @@
+{
+  "stored_episode_schema_valid": 2700,
+  "native_schema_validation_projection_valid": 2700,
+  "native_schema_optional_null_exceptions": {
+    "min_separation_corrupted_m": 2700
+  },
+  "success_and_event_ledger_integrity_valid": 2700,
+  "map_face_coordinate_checks_valid": 2700,
+  "full_reset_obstacle_geometry_matches_pinned_svg": 2700,
+  "producer_selected_map_identity_unavailable": 2700,
+  "raw_trace_records_unchanged": true
+}

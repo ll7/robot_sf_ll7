@@ -480,7 +480,19 @@ def _await_ready(
         except queue.Empty:
             continue
         if line is None:
-            return None, "server_exit_without_ready", process.poll()
+            exit_code = process.poll()
+            while exit_code is None:
+                # Closing stdout need not mean the child has exited. Observe its status
+                # before teardown, retaining descendants spawned during the EOF wait.
+                descendants.update(_SUPERVISOR._linux_process_descendants(process.pid))
+                remaining = max(0.0, deadline - time.monotonic())
+                if remaining == 0.0:
+                    return None, "startup_timeout", None
+                try:
+                    exit_code = process.wait(timeout=min(SMOKE_POLL_S, remaining))
+                except subprocess.TimeoutExpired:
+                    continue
+            return None, "server_exit_without_ready", exit_code
         if line.startswith(READY_PREFIX.encode()):
             metadata, reason = _parse_ready(line.decode("utf-8", "replace"))
             return metadata, reason, process.returncode

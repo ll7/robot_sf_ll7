@@ -1,0 +1,7 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/confinement_dev_trace_20261018/hybrid_orca_contrasts.csv",
+  "artifact_sha256": "1ab87729f0338be5f3df1812e6febb01f91e5bfd52141d56f0e50d7173382383",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW"
+}

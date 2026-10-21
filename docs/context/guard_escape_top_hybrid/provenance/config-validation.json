@@ -1,0 +1,14 @@
+{
+  "native_G1E1_matches_frozen_controller_in_all_18_cells": true,
+  "simulation_reset_or_step": false,
+  "active_escape_switches": [
+    "static_clearance_escape_enabled",
+    "static_recenter_enabled",
+    "static_corridor_transit_enabled"
+  ],
+  "inactive_original_switches": {
+    "corridor_subgoal_enabled": false
+  },
+  "controller_sha256": "1329d3934decb0bf50a803071af69b99e3f12e534083fc3d82e20d4706c76811",
+  "execution_commit": "6a3ac329d25a97202b050edd69190142fd7553e7"
+}

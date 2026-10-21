@@ -99,7 +99,6 @@ from scripts.dev.github_graphql_retry import GraphQLRetryOutcome, run_with_retry
 from scripts.dev.github_quota import quota_reset_handoff  # noqa: E402
 from scripts.dev.lane_markers import (  # noqa: E402
     GATE_VERDICT_PROJECTION_SOURCE,
-    extract_metadata_digests,
     metadata_trailer,
 )
 from scripts.dev.pr_loop_policy import (  # noqa: E402
@@ -111,6 +110,9 @@ from scripts.dev.pr_loop_policy import (  # noqa: E402
 from scripts.dev.pr_metadata import (  # noqa: E402
     find_not_ready_body_sentinels,
     metadata_digest,
+)
+from scripts.dev.single_account_merge_receipt import (  # noqa: E402
+    project_review_evidence as _to_receipt_review_evidence,
 )
 from scripts.dev.snapshot_pr_queue import (  # noqa: E402
     _extract_base_policies,
@@ -1216,70 +1218,6 @@ def _to_receipt_check_runs(
             }
         )
     return checks
-
-
-def _to_receipt_review_evidence(
-    items: Any, *, head_sha: str, expected_metadata_digest: str
-) -> list[dict[str, Any]]:
-    """Keep the raw fields needed to classify independent carriers.
-
-    Review comments can carry the canonical metadata trailer and an exact-head
-    marker even though GitHub does not expose either as a typed field.  Preserve
-    those declarations so the receipt classifier can reject stale or missing
-    bindings rather than stamping the current snapshot onto old prose.
-    """
-    if not isinstance(items, list):
-        return []
-    evidence: list[dict[str, Any]] = []
-    for item in items:
-        if not isinstance(item, dict):
-            continue
-        author_value = item.get("author")
-        author: dict[str, Any] = author_value if isinstance(author_value, dict) else {}
-        user_value = item.get("user")
-        user: dict[str, Any] = user_value if isinstance(user_value, dict) else {}
-        body = str(item.get("body") or "")
-        declared_shas = re.findall(r"(?<![0-9a-fA-F])([0-9a-fA-F]{40})(?![0-9a-fA-F])", body)
-        observed_head = item.get("head_sha") or item.get("commit_id") or item.get("commitId")
-        if not observed_head:
-            observed_head = next(
-                (value for value in declared_shas if value.lower() == head_sha.lower()),
-                declared_shas[-1] if declared_shas else None,
-            )
-        observed_metadata = item.get("metadata_digest")
-        metadata_values = extract_metadata_digests(body)
-        if not observed_metadata:
-            observed_metadata = next(
-                (
-                    value
-                    for value in metadata_values
-                    if value.lower() == expected_metadata_digest.lower()
-                ),
-                metadata_values[-1] if metadata_values else None,
-            )
-        evidence.append(
-            {
-                "id": item.get("id"),
-                "identity": str(
-                    item.get("identity") or author.get("login") or user.get("login") or ""
-                ),
-                "authorAssociation": str(
-                    item.get("authorAssociation") or item.get("author_association") or ""
-                ).upper(),
-                "state": str(item.get("state") or ""),
-                "commit_id": item.get("commit_id") or item.get("commitId"),
-                "head_sha": observed_head,
-                "metadata_digest": observed_metadata,
-                "evidence_digest": item.get("evidence_digest") or item.get("digest"),
-                "approved_reviewer": item.get("approved_reviewer") is True,
-                "approved_source": item.get("approved_source") is True,
-                "dismissed": item.get("dismissed") is True,
-                "withdrawn": item.get("withdrawn") is True,
-                "superseded": item.get("superseded") is True,
-                "body": body,
-            }
-        )
-    return evidence
 
 
 def _requested_review_identities(items: Any) -> tuple[list[str], list[str]]:

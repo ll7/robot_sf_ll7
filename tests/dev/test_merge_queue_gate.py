@@ -2388,6 +2388,10 @@ def test_merge_group_cannot_opt_into_advisory_mode(capsys) -> None:
     "stale_body, expected_sentinel",
     [
         (
+            "Required/pending domain approval.",
+            "pending domain approval",
+        ),
+        (
             "The PR remains unapproved and not merge-ready pending independent exact-head review and current hosted checks.",
             "not merge-ready",
         ),

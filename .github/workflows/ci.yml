@@ -196,8 +196,8 @@ jobs:
         if: github.event_name == 'pull_request' && github.event.pull_request.draft && steps.docs.outputs.docs_only != 'true'
         run: |
           set -euo pipefail
-          uvx --from ruff==0.17.0 ruff check .
-          uvx --from ruff==0.17.0 ruff format --check .
+          uvx --from ruff==0.17.1 ruff check .
+          uvx --from ruff==0.17.1 ruff format --check .
           PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run --no-project --with pytest==9.1.1 \
             python -m pytest tests/dev/test_ci_heavy_paths.py tests/ci/test_collect_pr_files.py \
             --noconftest -q -o addopts=''
@@ -329,7 +329,7 @@ jobs:
           github.event.pull_request.head.repo.fork == false &&
           github.event.pull_request.user.login == 'll7'))
         continue-on-error: true
-        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2.2.2
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
           app-id: ${{ secrets.ROBOT_SF_ROUTER_APP_ID }}
           private-key: ${{ secrets.ROBOT_SF_ROUTER_APP_KEY }}

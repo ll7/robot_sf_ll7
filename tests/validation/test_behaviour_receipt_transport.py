@@ -70,7 +70,7 @@ def test_sensitive_dependency_real_git_diff(monkeypatch, tmp_path, package, file
         assert blockers == []
     else:
         assert blockers == [
-            "BLOCKER: behaviour receipt missing or duplicated for a behaviour-changing PR"
+            "BLOCKER: behaviour receipt missing or duplicated for a behaviour-changing PR; WAITING_FOR_TRAIN: awaiting exact-head evidence"
         ]
 
 

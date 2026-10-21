@@ -69,6 +69,21 @@ token-efficient thread profile, phase audits, meta-workflow gate, SLURM lanes,
 cross-agent compatibility, and context-note policy, use the topic index at
 `docs/dev/agents/relocated-agents-guidance.md`.
 
+Edit `docs/dev/agents/shared-hazards.md`; regenerate with `scripts/tools/sync_ai_config.py --fix` (drift is report-only).
+
+<!-- shared-hazards:start -->
+## Shared Hazards
+
+- SH-01 — Work only in the assigned checkout, branch, and scope; preserve other lanes' changes.
+- SH-02 — Bind multi-repository Git commands to the intended checkout with `git -C <repo-root>`.
+- SH-03 — Stage explicit task-owned paths and inspect the staged diff; never use `git add -A`.
+- SH-04 — Never use `git stash` during parallel work; stashes are shared across linked worktrees.
+- SH-05 — Stop processes only by a freshly verified PID you own; never kill by name pattern.
+- SH-06 — Rewrite only your authorized feature branch with `--force-with-lease=<branch>:<expected-sha>`; verify the result.
+- SH-07 — Preserve Git mutation exit status; never pipe mutating Git commands into output filters.
+- SH-08 — Keep secret values out of prompts, logs, and commits, and private material out of public artifacts.
+<!-- shared-hazards:end -->
+
 ## Local Machine Context
 
 If `local.machine.md` or `local.machine.<name>.md` exists at the repository root, read it before
@@ -104,13 +119,12 @@ matrix is owned by `docs/code_review.md`; benchmark governance by `docs/benchmar
 
 ## Delivery And Communication
 
-After an exact-head pull request (PR) review is accepted, apply `merge-if-ci-green`
-when hosted continuous integration (CI) is the only remaining gate. The label
-records completed review while checks are pending; it does not authorize a
-merge. The guarded merger promotes that same head to `merge-ready` after green
-required checks, then runs the existing merge preflight. CI completion alone
-does not start another review cycle. A moved head, substantive finding, or
-removed readiness label requires normal triage.
+After accepted exact-head pull request (PR) review, apply `merge-if-ci-green` when hosted CI is the only gate.
+The label records review; the guarded merger validates the current head's review, CI, and evidence contracts.
+After green required checks, it promotes that head to `merge-ready` and runs merge preflight.
+Validation must still apply to the landing base; see `docs/code_review.md` for review and base freshness.
+CI completion alone needs no new review; a moved head, substantive finding, or removed readiness label needs triage.
+Ordinary PRs squash; integration trains use merge commits (D-071 in `docs/release/0.0.8/decisions.md`).
 
 For issue-linked PRs opened from a worktree, read the linked issue's fresh native
 Parent/Blocked by/Blocking state. Keep `Closes`/`Refs` in `Linked Issues` for coverage semantics;
@@ -118,7 +132,7 @@ they do not establish dependency edges. Do not duplicate native links in the PR 
 `docs/context/issue_relationships.md` for the readback and review-only-worktree boundary.
 
 Use conventional commits. A PR states intent, linked issues, validation commands, artifact
-disposition, and downstream propagation; because merges squash, reconcile the final title and body
+disposition, and downstream propagation; for ordinary squash merges, reconcile the final title and body
 with `uv run python scripts/dev/gh_pr_body_rest.py` and pass Markdown-heavy comments through
 `scripts/dev/gh_comment.sh` or a body file. Prefer concise-but-explanatory reporting: what changed,
 why it matters, remaining risk, and uncertainty separated from observed evidence. When a persistent

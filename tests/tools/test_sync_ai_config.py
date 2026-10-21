@@ -364,3 +364,46 @@ def test_live_adapters_contain_no_volatile_model_ids() -> None:
     lowered = claude.lower()
     for token in ("opus 4", "sonnet 4", "gpt-4", "gpt-5", "gemini 2"):
         assert token not in lowered, token
+
+
+@pytest.mark.parametrize("markers", ["valid", "missing", "duplicate", "reversed"])
+def test_hazard_sync_reports_drift_and_repairs_only_bounded_block(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    markers: str,
+) -> None:
+    """Check is advisory; fix preserves surrounding text and refuses ambiguous markers."""
+    monkeypatch.setattr(sync_ai_config, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(
+        sync_ai_config, "load_manifest", lambda: sync_ai_config.MirrorManifest((), ())
+    )
+    source = tmp_path / "docs/dev/agents/shared-hazards.md"
+    source.parent.mkdir(parents=True)
+    source.write_text("## Shared Hazards\n\n- Preserve owned work.\n", encoding="utf-8")
+    start, end = "<!-- shared-hazards:start -->", "<!-- shared-hazards:end -->"
+    blocks = {
+        "valid": f"{start}\nstale rule\n{end}\n",
+        "missing": "stale rule\n",
+        "duplicate": f"{start}\n{start}\nstale rule\n{end}\n",
+        "reversed": f"{end}\nstale rule\n{start}\n",
+    }
+    agents = tmp_path / "AGENTS.md"
+    original = "before\n" + blocks[markers] + "after\n"
+    agents.write_text(original, encoding="utf-8")
+    monkeypatch.setattr("sys.argv", ["sync_ai_config.py", "--check"])
+    assert sync_ai_config.main() == 0
+    assert "report-only" in capsys.readouterr().out
+    assert agents.read_text(encoding="utf-8") == original
+    monkeypatch.setattr("sys.argv", ["sync_ai_config.py", "--fix"])
+    assert sync_ai_config.main() == 0
+    if markers == "valid":
+        assert agents.read_text(encoding="utf-8") == (
+            f"before\n{start}\n## Shared Hazards\n\n- Preserve owned work.\n{end}\nafter\n"
+        )
+        monkeypatch.setattr("sys.argv", ["sync_ai_config.py", "--check"])
+        assert sync_ai_config.main() == 0
+        assert "shared hazards match" in capsys.readouterr().out
+    else:
+        assert agents.read_text(encoding="utf-8") == original
+        assert "report-only" in capsys.readouterr().out

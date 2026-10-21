@@ -2,7 +2,7 @@
 base_config: expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity.yaml
 policy_id: ppo_release_contract_issue791_delta_seed1001_20260930
 seeds:
-- 1001
+- 101001
 randomize_seeds: false
 env_overrides:
   ppo_action_semantics: velocity_delta

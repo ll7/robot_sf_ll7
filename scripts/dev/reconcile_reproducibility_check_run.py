@@ -16,10 +16,17 @@ import json
 import os
 import subprocess
 import sys
+import time
 from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
+
+if __package__ in {None, ""}:
+    # CI invokes this file with plain Python, without project installation.
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+from scripts.dev.github_graphql_retry import is_transient_failure
 
 SCHEMA = "reproducibility_check_run_reconciliation.v1"
 DEFAULT_JOB_NAME = "reproducibility-check"
@@ -34,14 +41,30 @@ class ReconciliationError(RuntimeError):
 def _run_gh(args: Sequence[str], input_text: str | None = None) -> Any:
     """Run ``gh api`` and decode its JSON response."""
 
-    result = subprocess.run(
-        ["gh", *args],
-        input=input_text,
-        capture_output=True,
-        check=False,
-        text=True,
-    )
-    if result.returncode != 0:
+    # The client uses implicit GET only for reads. Never repeat a PATCH after
+    # an ambiguous transport error; the existing identity/read-back rules remain.
+    read_request = input_text is None and len(args) == 2 and args[0] == "api"
+    attempts = 3 if read_request else 1
+    for attempt in range(attempts):
+        try:
+            result = subprocess.run(
+                ["gh", *args],
+                input=input_text,
+                capture_output=True,
+                check=False,
+                text=True,
+                timeout=30,
+            )
+        except subprocess.TimeoutExpired as exc:
+            if attempt + 1 < attempts:
+                time.sleep(2**attempt)
+                continue
+            raise ReconciliationError("GitHub API request timed out") from exc
+        if result.returncode == 0:
+            break
+        if attempt + 1 < attempts and is_transient_failure(result):
+            time.sleep(2**attempt)
+            continue
         detail = result.stderr.strip() or result.stdout.strip() or "no response"
         raise ReconciliationError(f"GitHub API request failed: {detail}")
     try:

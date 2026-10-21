@@ -42,7 +42,7 @@ comparison_references:
     candidate_id: ppo_issue791_best_v1
     config: configs/policy_search/candidates/ppo_issue791_best_v1.yaml
     scenario_slice: nominal_sanity
-    seeds: [111, 112, 113]
+    seeds: [101031, 101032, 101033]
     source_report: docs/context/policy_search/reports/2026-05-05_ppo_issue791_best_v1_nominal_sanity.md
     summary_artifacts:
       - docs/context/evidence/issue_1396_shielded_ppo_launch_packet_2026-05-24/comparison_freeze_stub.json
@@ -53,7 +53,7 @@ comparison_references:
     candidate_id: risk_guarded_ppo_v1
     config: configs/policy_search/candidates/risk_guarded_ppo_v1.yaml
     scenario_slice: nominal_sanity
-    seeds: [111, 112, 113]
+    seeds: [101031, 101032, 101033]
     source_report: docs/context/policy_search/reports/2026-04-29_risk_guarded_ppo_v1_nominal_sanity.md
     summary_artifacts:
       - docs/context/evidence/issue_1396_shielded_ppo_launch_packet_2026-05-24/comparison_freeze_stub.json

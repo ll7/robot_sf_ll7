@@ -16,7 +16,7 @@ baselines:
         inflate_radius_meters: 0.0
 
 seed_plan:
-  base_seed: 123
+  base_seed: 1113
   repeats: 2
 
 metrics:
@@ -30,7 +30,7 @@ metrics:
 bootstrap:
   samples: 1000
   confidence: 0.95
-  seed: 123
+  seed: 1113
 
 software:
   identifiers:

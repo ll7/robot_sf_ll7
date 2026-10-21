@@ -17,7 +17,7 @@
     "not_in_approved_execution_scope": 1,
     "unsafe_command": 4
   },
-  "generated_at": "2026-09-27T04:55:56+00:00",
+  "generated_at": "2026-10-12T10:24:17+00:00",
   "ineligible_count": 25,
   "issue": 6769,
   "review_marker": "AI-GENERATED NEEDS-REVIEW",
@@ -28,6 +28,6 @@
     "manifest_field": 1,
     "readme_reproduction": 31
   },
-  "source_commit": "4bb3a5f9a429a63a64411f8374062be5128bf5a8",
+  "source_commit": "f7912ef1bcd8a2bb72cbad9aeb0bd9908f64c2bd",
   "total_entries": 34
 }

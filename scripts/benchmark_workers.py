@@ -56,7 +56,7 @@ def bench(workers: int, repeats: int, out_dir: Path) -> dict:
         scenarios,
         out_path=out_file,
         schema_path=SCHEMA_PATH,
-        base_seed=123,
+        base_seed=1113,
         horizon=8,
         dt=0.1,
         record_forces=False,

@@ -191,7 +191,7 @@ def load_constrained_rl_config(config_path: str | Path) -> ConstrainedRLConfig:
         algorithm=str(raw.get("algorithm", "ppo")),
         scenario_config=scenario_config,
         total_timesteps=_positive_int(raw.get("total_timesteps"), "total_timesteps"),
-        seed=int(raw.get("seed", 4017)),
+        seed=int(raw.get("seed", 104017)),
         num_envs=_positive_int(raw.get("num_envs", 1), "num_envs"),
         device=str(raw.get("device", "cpu")),
         policy=str(raw.get("policy", "MultiInputPolicy")),

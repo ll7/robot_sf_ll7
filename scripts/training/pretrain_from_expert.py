@@ -569,7 +569,7 @@ def load_bc_config(config_path: Path) -> BCPretrainingConfig:
         bc_epochs=raw.get("bc_epochs", 10),
         batch_size=raw.get("batch_size", 32),
         learning_rate=raw.get("learning_rate", 0.0003),
-        random_seeds=tuple(raw.get("random_seeds", [42])),
+        random_seeds=tuple(raw.get("random_seeds", [100042])),
         training_config_path=resolve_config_path(raw.get("training_config"), base_dir=base_dir),
         scenario_config_path=resolve_config_path(raw.get("scenario_config"), base_dir=base_dir),
         scenario_id=raw.get("scenario_id"),

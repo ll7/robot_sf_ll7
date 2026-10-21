@@ -586,6 +586,21 @@ def _paths_from_config(
     )
 
 
+def _development_config_path(raw: str) -> Path:
+    """Route archived paired training recipes to their separate development successors."""
+    path = Path(raw).resolve()
+    directory = Path(__file__).resolve().parents[2] / "configs/training/predictive"
+    archived = {
+        "predictive_br07_same_seed_issue_1427.yaml",
+        "predictive_obstacle_features_same_seed_issue_1427.yaml",
+        "predictive_ego_features_same_seed_issue_1504.yaml",
+        "predictive_ego_obstacle_features_same_seed_issue_1504.yaml",
+    }
+    if path.parent == directory and path.name in archived:
+        return path.with_name("dev_" + path.name)
+    return path
+
+
 def _parse_args() -> argparse.Namespace:
     """Parse predictive training pipeline CLI arguments.
 
@@ -595,9 +610,9 @@ def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--config",
-        type=Path,
+        type=_development_config_path,
         required=True,
-        help="Predictive pipeline YAML config path.",
+        help="Predictive pipeline YAML config path; archived paired recipes use dev_ successors.",
     )
     parser.add_argument(
         "--run-id",
@@ -647,7 +662,10 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         base=base_dir,
     )
     hard_seed_manifest = _resolve(
-        scenario_cfg.get("hard_seed_manifest", "configs/benchmarks/predictive_hard_seeds_v1.yaml"),
+        scenario_cfg.get(
+            "hard_seed_manifest",
+            "configs/training/predictive/training_predictive_hard_seeds_v1.yaml",
+        ),
         base=base_dir,
     )
     planner_grid = _resolve(
@@ -709,7 +727,7 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         _build_random_seed_manifest(
             scenario_matrix=scenario_matrix,
             seeds_per_scenario=int(base_collection.get("seeds_per_scenario", 4)),
-            random_seed_base=int(base_collection.get("random_seed_base", 11_000)),
+            random_seed_base=int(base_collection.get("random_seed_base", 111000)),
             output_path=base_manifest,
         )
         base_manifest_generated = True
@@ -932,7 +950,7 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         "--val-split",
         str(float(train_cfg.get("val_split", 0.2))),
         "--seed",
-        str(int(train_cfg.get("seed", 42))),
+        str(int(train_cfg.get("seed", 100042))),
         "--num-workers",
         str(num_workers),
         "--prefetch-factor",

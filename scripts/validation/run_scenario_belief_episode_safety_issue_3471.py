@@ -583,7 +583,7 @@ def load_config(path: Path) -> tuple[list[int], EpisodeParams]:
     import yaml
 
     data = yaml.safe_load(path.read_text()) or {}
-    seeds = [int(s) for s in data.get("seeds", range(101, 113))]
+    seeds = [int(s) for s in data.get("seeds", range(1101, 1113))]
     param_fields = {f.name for f in EpisodeParams.__dataclass_fields__.values()}
     overrides = {k: v for k, v in (data.get("params") or {}).items() if k in param_fields}
     return seeds, EpisodeParams(**overrides)
@@ -625,7 +625,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.config is not None:
         seeds, params = load_config(args.config)
     else:
-        seeds, params = list(range(101, 113)), EpisodeParams()
+        seeds, params = list(range(1101, 1113)), EpisodeParams()
     if args.seeds is not None:
         seeds = args.seeds
     if args.max_steps is not None:

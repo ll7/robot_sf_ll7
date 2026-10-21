@@ -36,8 +36,8 @@ if TYPE_CHECKING:
 DEFAULT_COMMIT = "fcc495b955c9eab00bc60842b5cae63f74cf2e2c"
 DEFAULT_MODEL_ID = "ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417"
 DEFAULT_MODEL_SHA256 = "2b30df812bfcc737924b126b0763d69c567fe20716dc1c1eba8f56f926b49c1d"
-DEFAULT_SEEDS = tuple(range(111, 121))
-DEFAULT_S3_SEEDS = (111, 112, 113)
+DEFAULT_SEEDS = tuple(range(1101, 1111))
+DEFAULT_S3_SEEDS = (1101, 1102, 1103)
 EXPECTED_PLANNERS = ("orca", "ppo")
 EXPECTED_EXECUTION_MODES = {"orca": "adapter", "ppo": "native"}
 EXPECTED_OBSERVATION_LEVEL = "tracked_agents_no_noise"

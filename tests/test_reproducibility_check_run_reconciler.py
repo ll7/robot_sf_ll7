@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
+
+import pytest
 
 SCRIPT_PATH = (
     Path(__file__).resolve().parents[1]
@@ -172,3 +175,125 @@ def test_cli_skips_failed_upstream_job_without_api_calls(tmp_path: Path, monkeyp
     report = json.loads(output.read_text(encoding="utf-8"))
     assert report["status"] == "not_applicable"
     assert report["fail_closed"] is True
+
+
+def _mock_transport(monkeypatch, responses):
+    calls, sleeps = [], []
+    remaining = iter(responses)
+
+    def run(args, **kwargs):
+        calls.append((args, kwargs))
+        response = next(remaining)
+        if isinstance(response, subprocess.TimeoutExpired):
+            raise response
+        return response
+
+    monkeypatch.setattr(MODULE.subprocess, "run", run)
+    monkeypatch.setattr(MODULE.time, "sleep", sleeps.append)
+    return calls, sleeps
+
+
+@pytest.mark.parametrize("status", [502, 503, 504])
+def test_transient_read_failure_retries_before_decoding(monkeypatch, status):
+    """A single GitHub gateway failure cannot red an otherwise healthy read."""
+    calls, sleeps = _mock_transport(
+        monkeypatch,
+        [
+            subprocess.CompletedProcess([], 1, "", f"gh: Server Error (HTTP {status})"),
+            subprocess.CompletedProcess([], 0, '{"jobs": []}', ""),
+        ],
+    )
+    assert MODULE._run_gh(["api", "repos/example/repo/actions/runs/1/jobs"]) == {"jobs": []}
+    assert len(calls) == 2 and sleeps == [1]
+    assert all(kwargs["timeout"] == 30 for _, kwargs in calls)
+
+
+@pytest.mark.parametrize("status", [401, 403, 404])
+def test_permanent_read_failure_fails_immediately(monkeypatch, status):
+    """Authentication, authorization and identity failures do not consume retries."""
+    calls, sleeps = _mock_transport(
+        monkeypatch,
+        [
+            subprocess.CompletedProcess([], 1, "", f"gh: API error (HTTP {status})"),
+        ],
+    )
+    with pytest.raises(MODULE.ReconciliationError):
+        MODULE._run_gh(["api", "repos/example/repo/actions/runs/1/jobs"])
+    assert len(calls) == 1 and sleeps == []
+
+
+def test_persistent_gateway_failure_exhausts_and_fails_closed(monkeypatch):
+    """Read retries have a fixed budget and cannot report success on exhaustion."""
+    failure = subprocess.CompletedProcess([], 1, "", "gh: Server Error (HTTP 502)")
+    calls, sleeps = _mock_transport(monkeypatch, [failure] * 3)
+    with pytest.raises(MODULE.ReconciliationError):
+        MODULE._run_gh(["api", "repos/example/repo/actions/runs/1/jobs"])
+    assert len(calls) == 3 and sleeps == [1, 2]
+
+
+def test_patch_gateway_failure_is_not_blindly_repeated(monkeypatch):
+    """An ambiguous mutation response cannot trigger another success-stamping PATCH."""
+    calls, sleeps = _mock_transport(
+        monkeypatch,
+        [
+            subprocess.CompletedProcess([], 1, "", "gh: Server Error (HTTP 502)"),
+        ],
+    )
+    with pytest.raises(MODULE.ReconciliationError):
+        MODULE._run_gh(["api", "--method", "PATCH", "repos/example/repo/check-runs/1"], "{}")
+    assert len(calls) == 1 and sleeps == []
+
+
+def test_successful_invalid_json_fails_closed_without_retry(monkeypatch):
+    """A successful but malformed API body is not accepted as hosted-state evidence."""
+    calls, sleeps = _mock_transport(
+        monkeypatch,
+        [
+            subprocess.CompletedProcess([], 0, "not json", ""),
+        ],
+    )
+    with pytest.raises(MODULE.ReconciliationError, match="invalid JSON"):
+        MODULE._run_gh(["api", "repos/example/repo/check-runs/1"])
+    assert len(calls) == 1 and sleeps == []
+
+
+def test_read_timeout_is_bounded_and_retried(monkeypatch):
+    """A timed-out read can recover within the same finite transport budget."""
+    calls, sleeps = _mock_transport(
+        monkeypatch,
+        [
+            subprocess.TimeoutExpired(["gh"], 30),
+            subprocess.CompletedProcess([], 0, '{"id": 1}', ""),
+        ],
+    )
+    assert MODULE._run_gh(["api", "repos/example/repo/check-runs/1"]) == {"id": 1}
+    assert len(calls) == 2 and sleeps == [1]
+
+
+def test_patch_timeout_is_not_repeated(monkeypatch):
+    """A timed-out update remains ambiguous and fails closed after one request."""
+    calls, sleeps = _mock_transport(monkeypatch, [subprocess.TimeoutExpired(["gh"], 30)])
+    with pytest.raises(MODULE.ReconciliationError, match="timed out"):
+        MODULE._run_gh(["api", "--method", "PATCH", "repos/example/repo/check-runs/1"], "{}")
+    assert len(calls) == 1 and sleeps == []
+
+
+def test_direct_ci_entrypoint_works_without_project_import_path(tmp_path):
+    """Plain isolated Python can run CI's standalone reconciliation entrypoint."""
+    output = tmp_path / "report.json"
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-I",
+            str(SCRIPT_PATH),
+            "--job-result",
+            "failure",
+            "--output",
+            str(output),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert json.loads(output.read_text())["status"] == "not_applicable"

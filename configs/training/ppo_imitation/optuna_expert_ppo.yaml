@@ -1,5 +1,5 @@
 schema_version: robot_sf.optuna_expert_ppo_launcher.v1
-base_config: expert_ppo.yaml
+base_config: dev_expert_ppo.yaml
 
 # Study settings
 trials: 8
@@ -8,7 +8,7 @@ objective_mode: last_n_mean # best_checkpoint | final_eval | last_n_mean | auc |
 objective_window: 3
 study_name: weekend_optuna_expert_ppo_last_n_mean
 storage: sqlite:///output/optuna/weekend_optuna_expert_ppo.db
-seed: 123
+seed: 101043
 log_level: WARNING
 
 # Trial runtime controls

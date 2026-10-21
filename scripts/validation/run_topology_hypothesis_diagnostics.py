@@ -95,7 +95,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default="classic_realworld_double_bottleneck_high",
     )
     parser.add_argument("--scenario-index", type=int, default=0)
-    parser.add_argument("--seed", type=int, default=111)
+    parser.add_argument("--seed", type=int, default=1101)
     parser.add_argument("--seed-index", type=int, default=0)
     parser.add_argument("--horizon", type=int, default=160)
     parser.add_argument("--output-dir", type=Path, default=None)

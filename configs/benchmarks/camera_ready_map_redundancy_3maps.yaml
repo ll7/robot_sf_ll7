@@ -16,7 +16,7 @@ resume: true
 stop_on_failure: true
 bootstrap_samples: 100
 bootstrap_confidence: 0.95
-bootstrap_seed: 123
+bootstrap_seed: 1113
 
 export_publication_bundle: true
 include_videos_in_publication: false

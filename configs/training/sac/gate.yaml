@@ -16,7 +16,7 @@
 policy_id: sac_gate_v1
 scenario_config: ../../scenarios/classic_interactions.yaml
 total_timesteps: 50000
-seed: 42
+seed: 100042
 
 output_dir: output/models/sac
 

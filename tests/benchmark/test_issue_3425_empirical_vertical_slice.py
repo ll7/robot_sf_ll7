@@ -59,7 +59,7 @@ def test_issue_3425_campaign_resolves_3x3x3_matrix() -> None:
 
     scenario_names = [scenario["name"] for scenario in scenarios]
     assert set(scenario_names) == set(cfg.scenario_candidates.names)
-    assert {tuple(scenario["seeds"]) for scenario in scenarios} == {(111, 112, 113)}
+    assert {tuple(scenario["seeds"]) for scenario in scenarios} == {(1101, 1102, 1103)}
     assert len(scenarios) * len(cfg.planners) * 3 == 27
 
 

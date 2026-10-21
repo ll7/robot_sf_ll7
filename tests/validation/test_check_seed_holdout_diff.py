@@ -4,6 +4,7 @@
 
 import ast
 import difflib
+import json
 import subprocess
 from pathlib import Path
 
@@ -984,6 +985,80 @@ def test_imported_runner_alias_binding(tmp_path, import_line, consumer):
 
 
 # seed-holdout: synthetic-fixture begin
+
+
+def _preservation_inventory(tmp_path, entry):
+    path = "tests/fixtures/active_config_seed_exclusions.json"
+    payload = {"configs/benchmarks/seed_sets_0_0_8.yaml": entry}
+    text = json.dumps(payload, indent=2)
+    target = tmp_path / path
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(text)
+    return path, text
+
+
+def test_preservation_hash_inventory_path_is_metadata(tmp_path):
+    """A fingerprint key names a recorded file, not an executable seed transport."""
+    path, text = _preservation_inventory(
+        tmp_path, {"sha256": "a" * 64, "reason": "immutable historical source"}
+    )
+    assert not check_diff(_diff(path, text), tmp_path)
+
+
+@pytest.mark.parametrize("extra", [{"seed": 123}, {"command": "run --seed 123"}])
+def test_preservation_inventory_rejects_executable_fields(tmp_path, extra):
+    """A path-key exception cannot hide seed/command payloads in the registry."""
+    path, text = _preservation_inventory(
+        tmp_path, {"sha256": "a" * 64, "reason": "immutable source", **extra}
+    )
+    assert check_diff(_diff(path, text), tmp_path)
+
+
+def test_preservation_inventory_reason_rejects_executable_seed(tmp_path):
+    """Only path keys are metadata; embedded seed commands remain guarded."""
+    path, text = _preservation_inventory(tmp_path, {"sha256": "a" * 64, "reason": "run --seed 123"})
+    assert check_diff(_diff(path, text), tmp_path)
+
+
+def test_preservation_inventory_invalid_fingerprint_is_not_exempt(tmp_path):
+    """Malformed fingerprints cannot provide a release-reference exception."""
+    path, text = _preservation_inventory(
+        tmp_path, {"sha256": "not-a-hash", "reason": "immutable source"}
+    )
+    assert check_diff(_diff(path, text), tmp_path)
+
+
+def test_other_inventory_path_does_not_gain_exception(tmp_path):
+    """The exception is specific to the source-preservation inventory's schema."""
+    _, text = _preservation_inventory(tmp_path, {"sha256": "a" * 64, "reason": "immutable source"})
+    assert check_diff(_diff("tests/fixtures/other_registry.json", text), tmp_path)
+
+
+# seed-holdout: synthetic-fixture end
+
+
+def test_real_preservation_inventory_path_is_metadata():
+    """CI's real inventory, including its legacy annotation, remains inert metadata."""
+    root = Path(__file__).resolve().parents[2]
+    path = "tests/fixtures/active_config_seed_exclusions.json"
+    lines = (root / path).read_text().splitlines()
+    number = next(
+        i for i, line in enumerate(lines, 1) if '"configs/benchmarks/seed_sets_0_0_8.yaml"' in line
+    )
+    diff = (
+        f"diff --git a/{path} b/{path}\n+++ b/{path}\n"
+        f"@@ -0,0 +{number},1 @@\n+{lines[number - 1]}\n"
+    )
+    assert not check_diff(diff, root)
+
+
+def test_preservation_inventory_structured_annotation_is_not_exempt(tmp_path):
+    """An optional text annotation cannot become an executable nested payload."""
+    path, text = _preservation_inventory(
+        tmp_path,
+        {"sha256": "a" * 64, "reason": "immutable source", "annotation": {"command": "run"}},
+    )
+    assert check_diff(_diff(path, text), tmp_path)
 
 
 def versions(mode, lo, hi):

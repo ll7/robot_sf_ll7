@@ -4,7 +4,7 @@
 This runner captures a per-step Dynamic Window Approach (DWA) decision trace for the two
 fixed-seed episodes named by the #5262 configuration-sensitivity diagnostic:
 
-- ``classic_bottleneck_medium`` seed ``131`` (canonical config, ``max_steps`` timeout).
+- ``classic_bottleneck_medium`` development seed ``1121`` (replacement; historical outcome does not transfer).
 - ``classic_t_intersection_low`` seed ``161`` (canonical config, ``collision``).
 
 For each episode it records the selected command, the selected candidate score, the
@@ -14,8 +14,8 @@ point at which the episode becomes unrecoverable. The result is analysis-only: i
 benchmark, roster, metric, frozen-suite, paper, or dissertation claim.
 
 The trace is captured through the shared ``run_map_batch`` harness with
-``record_planner_decision_trace=True`` so the episodes reproduce the exact outcomes
-recorded in the #5262 manifest episode rows.
+``record_planner_decision_trace=True``. The changed development seed supersedes
+the prior outcome descriptions; recording decisions does not reproduce the historical identity.
 
 Outputs:
 
@@ -62,12 +62,19 @@ DEFAULT_OUT_DIR = REPO_ROOT / "output/benchmarks/issue_5298"
 HORIZON = 100
 DT = 0.1
 
-# The two episodes named by the #5262 manifest's canonical config point. The seeds come
-# from the standard classic archetype matrix declaration used by both the #5020 and #5262
-# diagnostics; the canonical DWA config point applies no overrides, so tracing these rows
-# reproduces the #5262 canonical episode outcomes (timeout at 100 steps, collision).
+# Development replacements for the two episodes named by the #5262 manifest's canonical config point. The seeds come
+# from a replacement development identity. Prior recorded outcomes do not transfer.
+# The bottleneck development probe changes the historical episode identity.
+# Episode IDs below remain compatibility labels, not claims about future outcomes.
+SEED_MIGRATION = {
+    "historical_seed": 131,  # seed-holdout: setup-only (archived identity; never dispatched)
+    "development_seed": 1121,
+    "prior_outcome_descriptions": "superseded",
+    "replacement_trace_recorded_by_seed_migration": False,
+}
+
 TARGET_EPISODES: tuple[tuple[str, int, str], ...] = (
-    ("classic_bottleneck_medium", 131, "bottleneck_timeout"),
+    ("classic_bottleneck_medium", 1121, "bottleneck_timeout"),
     ("classic_t_intersection_low", 161, "t_intersection_collision"),
 )
 FOLLOW_UP_ISSUE = 5319
@@ -166,6 +173,9 @@ def _write_evidence_readme(  # noqa: PLR0915
     lines: list[str] = []
     lines.append("<!-- AI-GENERATED (robot_sf#5298, 2026-07-11) - NEEDS-REVIEW -->")
     lines.append(
+        "Prior outcome descriptions are superseded for the changed seed (historical identity to development seed 1121). No replacement trace is recorded by this migration; legacy episode IDs are compatibility labels."
+    )
+    lines.append(
         "# Issue #5298 — DWA Decision Trace for the #5262 Timeout and T-Intersection Collision"
     )
     lines.append("")
@@ -187,17 +197,16 @@ def _write_evidence_readme(  # noqa: PLR0915
     lines.append(
         "- **Claim boundary:** two CPU-only fixed-seed episodes traced with the canonical DWA config. "
         "This does not change DWA roster status, benchmark metric semantics, the frozen v0.1 suite, or any "
-        "paper/dissertation claim. It diagnoses the observed failure mechanism; it is not a comparator run."
+        "paper/dissertation claim. Any failure-mechanism conclusion must come from newly recorded observations."
     )
     lines.append(
-        "- **Major caveats:** the trace reproduces the two canonical-config episodes selected by the #5262 "
+        "- **Major caveats:** the changed seed supersedes the original bottleneck episode selected by the #5262 "
         "manifest. The non-canonical config points from #5262 are out of scope here. Two episodes cannot bound the "
         "full failure surface; they isolate the mechanism on the named rows."
     )
     lines.append(
-        "- **Uncertainty:** about 85% confidence that the mechanism identified below is the dominant cause on "
-        "these two rows. That conclusion would change if a deeper rollout-horizon or global-route probe isolates a "
-        "distinct driver."
+        "- **Uncertainty:** historical confidence and outcome descriptions are superseded; "
+        "the replacement identity requires new observations before interpreting mechanisms."
     )
     lines.append("")
     lines.append("## Traced episodes")
@@ -215,12 +224,12 @@ def _write_evidence_readme(  # noqa: PLR0915
             f"`configs/algos/dwa_classic.yaml` | {t_inter['termination_reason']} | {t_inter['steps']} |"
         )
     lines.append("")
-    lines.append("The seeds come from the standard classic archetype matrix declaration ")
+    lines.append("The bottleneck seed is a development replacement; the other seed is unchanged. ")
     lines.append(
         "(`configs/scenarios/classic_interactions.yaml`); the #5262 manifest's canonical config point applies "
     )
     lines.append(
-        "no overrides, so these rows reproduce the #5262 canonical episode outcomes exactly."
+        "no overrides, so these development probes do not reproduce the original recorded outcomes by construction."
     )
     lines.append("")
     lines.append("## Per-step trace artifacts")
@@ -462,6 +471,7 @@ def trace_episodes(
             "schema_version": "dwa-decision-trace.v1",
             "issue": 5298,
             "claim_boundary": "analysis-only: two CPU fixed-seed DWA episodes; no benchmark/roster/metric/paper claim.",
+            "seed_migration": SEED_MIGRATION,
             "episodes": episodes_payload,
         },
         review_marker=False,
@@ -470,6 +480,7 @@ def trace_episodes(
     summary_payload = {
         "schema_version": "dwa-decision-trace.v1",
         "issue": 5298,
+        "seed_migration": SEED_MIGRATION,
         "episodes": summaries,
     }
     write_json_atomic(
@@ -492,6 +503,7 @@ def trace_episodes(
 
     return {
         "issue": 5298,
+        "seed_migration": SEED_MIGRATION,
         "episodes": summaries,
         "out_dir": str(out_dir),
         "evidence_dir": str(evidence_dir) if evidence_dir else None,

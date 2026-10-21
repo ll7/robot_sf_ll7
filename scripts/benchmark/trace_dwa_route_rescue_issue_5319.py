@@ -5,7 +5,7 @@ This runner captures a per-step DWA decision trace with the route-rescue and
 feasibility-slowdown interventions enabled, using the same two fixed-seed
 episodes from the #5298 baseline trace:
 
-- ``classic_bottleneck_medium`` seed ``131`` (canonical config, ``max_steps`` timeout).
+- ``classic_bottleneck_medium`` development seed ``1121`` (replacement; historical outcome does not transfer).
 - ``classic_t_intersection_low`` seed ``161`` (canonical config, ``collision``).
 
 It runs each episode with the ``dwa_route_rescue.yaml`` config and records
@@ -66,8 +66,17 @@ BASELINE_SUMMARY = (
 HORIZON = 100
 DT = 0.1
 
+# The bottleneck development probe changes the historical episode identity.
+# Episode IDs below remain compatibility labels, not claims about future outcomes.
+SEED_MIGRATION = {
+    "historical_seed": 131,  # seed-holdout: setup-only (archived identity; never dispatched)
+    "development_seed": 1121,
+    "prior_outcome_descriptions": "superseded",
+    "replacement_trace_recorded_by_seed_migration": False,
+}
+
 TARGET_EPISODES: tuple[tuple[str, int, str], ...] = (
-    ("classic_bottleneck_medium", 131, "bottleneck_timeout"),
+    ("classic_bottleneck_medium", 1121, "bottleneck_timeout"),
     ("classic_t_intersection_low", 161, "t_intersection_collision"),
 )
 BASELINE_ISSUE = 5298
@@ -189,6 +198,20 @@ def _write_steps_csv(path: Path, rows: list[dict[str, Any]]) -> None:
     write_steps_csv(path, rows, STEP_TRACE_FIELDS)
 
 
+def paired_comparisons(cases, lines):
+    """Withhold comparisons whose archived scenario/seed identity differs."""
+    for label, rescue, base in cases:
+        if rescue is None or base is None:
+            continue
+        if (rescue.get("scenario_id"), rescue.get("seed")) != (
+            base.get("scenario_id"),
+            base.get("seed"),
+        ):
+            lines.append(f"- {label}: baseline identity differs; paired delta withheld.")
+            continue
+        yield label, rescue, base
+
+
 def _write_evidence_readme(  # noqa: PLR0915
     path: Path,
     *,
@@ -212,6 +235,9 @@ def _write_evidence_readme(  # noqa: PLR0915
     )
     lines: list[str] = []
     lines.append("<!-- AI-GENERATED (robot_sf#5319, 2026-07-11) - NEEDS-REVIEW -->")
+    lines.append(
+        "Prior outcome descriptions are superseded for the changed seed (historical identity to development seed 1121). No replacement trace is recorded by this migration; legacy episode IDs are compatibility labels."
+    )
     lines.append("# Issue #5319 — DWA Route-Rescue Diagnostic Probe")
     lines.append("")
     lines.append("Date: 2026-07-11")
@@ -266,12 +292,13 @@ def _write_evidence_readme(  # noqa: PLR0915
     lines.append("")
     lines.append("| Episode | Metric | Baseline (#5298) | Route-rescue | Delta |")
     lines.append("| --- | --- | --- | --- | --- |")
-    for label, rescue, base in [
-        ("bottleneck", rescue_bottleneck, base_bottleneck),
-        ("t_intersection", rescue_t_inter, base_t_inter),
-    ]:
-        if rescue is None or base is None:
-            continue
+    for label, rescue, base in paired_comparisons(
+        [
+            ("bottleneck", rescue_bottleneck, base_bottleneck),
+            ("t_intersection", rescue_t_inter, base_t_inter),
+        ],
+        lines,
+    ):
         rp_r = rescue.get("route_progress", {})
         rp_b = base.get("route_progress", {})
         base_steps = base.get("steps")
@@ -463,6 +490,7 @@ def trace_episodes(
             "issue": 5319,
             "claim_boundary": "diagnostic-only: two CPU fixed-seed DWA episodes with route-rescue; no benchmark/roster/metric/paper claim.",
             "config": _repo_relative_path(algo_config_path),
+            "seed_migration": SEED_MIGRATION,
             "episodes": episodes_payload,
         },
         review_marker=True,
@@ -472,6 +500,7 @@ def trace_episodes(
         "schema_version": "dwa-route-rescue-trace.v1",
         "issue": 5319,
         "config": _repo_relative_path(algo_config_path),
+        "seed_migration": SEED_MIGRATION,
         "episodes": summaries,
     }
     write_json_atomic(
@@ -505,6 +534,7 @@ def trace_episodes(
 
     return {
         "issue": 5319,
+        "seed_migration": SEED_MIGRATION,
         "episodes": summaries,
         "out_dir": str(out_dir),
         "evidence_dir": str(evidence_dir) if evidence_dir else None,

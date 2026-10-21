@@ -59,7 +59,7 @@ CONFIG_PATH = ROOT / "configs/benchmarks/issue_6481_social_compliance_preflight_
 SCENARIO_MATRIX_PATH = ROOT / "configs/scenarios/issue_6481_social_compliance_preflight.yaml"
 METRIC_CONTRACT_PATH = ROOT / "configs/benchmarks/social_compliance_metric_contract_v1.yaml"
 EXPECTED_PLANNERS = ("goal", "social_force", "orca")
-EXPECTED_SEEDS = (111, 112, 113)
+EXPECTED_SEEDS = (1101, 1102, 1103)
 EXPECTED_SCENARIO = "single_ped_crossing_orthogonal"
 EXPECTED_ROW_COUNT = len(EXPECTED_PLANNERS) * len(EXPECTED_SEEDS)  # 9
 

@@ -17,7 +17,7 @@ weighting:
   rule: repeat_hardcase_rows
   hardcase_family: crossing_conflict
   hardcase_repeat: 8
-  shuffle_seed: 3214
+  shuffle_seed: 103214
 
 compatibility_contract:
   require_feature_schema_json_for_ego_conditioned: true

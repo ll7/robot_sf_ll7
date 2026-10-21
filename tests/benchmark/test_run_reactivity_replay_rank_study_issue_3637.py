@@ -68,7 +68,7 @@ def test_runner_uses_packet_plan_and_writes_report(monkeypatch: pytest.MonkeyPat
     assert len(calls) == 1
     call = calls[0]
     assert call["set_path"] == Path("configs/scenarios/sets/classic_crossing_subset.yaml")
-    assert call["seeds"] == list(range(101, 121))
+    assert call["seeds"] == list(range(101, 111)) + list(range(1101, 1111))
     assert call["planners"] == ("goal", "orca", "social_force")
     assert call["out_dir"] == out_dir
     assert call["horizon"] == 300

@@ -328,7 +328,7 @@ def parse_args() -> argparse.Namespace:
         default="predictive_legacy_v1",
         help="Predictive input schema/model family to collect.",
     )
-    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--seed", type=int, default=100042)
     parser.add_argument("--max-speed", type=float, default=1.0)
     parser.add_argument("--min-goal-distance", type=float, default=2.0)
     parser.add_argument("--max-reset-attempts", type=int, default=12)
@@ -370,7 +370,7 @@ def _reset_with_min_goal(
     skipped = 0
     obs = None
     for _attempt in range(max(1, int(max_reset_attempts))):
-        seed = int(rng.integers(0, 2**31 - 1))
+        seed = int(rng.integers(100000, 2**31 - 1))
         try:
             obs, _info = env.reset(seed=seed)
         except Exception:

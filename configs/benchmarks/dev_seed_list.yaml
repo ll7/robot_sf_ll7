@@ -1,0 +1,25 @@
+# Development-only scenario seed transport; immutable release seed_list_v1 is preserved.
+classic_interactions:
+- 1101
+- 1102
+- 1103
+- 1104
+- 1105
+- 1106
+- 1107
+- 1108
+- 1109
+- 1110
+francis2023:
+- 1101
+- 1102
+- 1103
+- 1104
+- 1105
+- 1106
+- 1107
+- 1108
+- 1109
+- 1110
+default:
+- 1101

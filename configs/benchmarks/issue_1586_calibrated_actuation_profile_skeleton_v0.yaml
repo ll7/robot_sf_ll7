@@ -30,7 +30,7 @@ scenario_candidates:
 seed_policy:
   mode: seed-set
   seed_set: eval
-  seed_sets_path: configs/benchmarks/seed_sets_v1.yaml
+  seed_sets_path: configs/benchmarks/dev_seed_sets.yaml
 
 synthetic_actuation_profile:
   name: amv-actuation-calibrated-placeholder-v0
@@ -71,7 +71,7 @@ resume: true
 stop_on_failure: false
 bootstrap_samples: 300
 bootstrap_confidence: 0.95
-bootstrap_seed: 123
+bootstrap_seed: 1113
 
 kinematics_matrix:
   - differential_drive

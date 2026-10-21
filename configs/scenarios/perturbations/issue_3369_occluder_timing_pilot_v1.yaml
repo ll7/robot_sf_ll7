@@ -8,7 +8,7 @@ description: >
 scenario_config: configs/scenarios/single/issue_2756_occluded_emergence_live.yaml
 seed_controls:
   baseline_seeds:
-  - 111
+  - 1101
   replay_seed_policy: explicit
   source: issue_2756_occluded_emergence_fixture
 validity:
@@ -24,12 +24,12 @@ variants:
   scenario_id: issue_2756_occluded_emergence
   family: noop
   seeds:
-  - 111
+  - 1101
 - variant_id: issue_2756_occluded_emergence_occluder_timing_h1_p050
   scenario_id: issue_2756_occluded_emergence
   family: occluder_timing_offset
   seeds:
-  - 111
+  - 1101
   rationale: >
     Delay the emerging pedestrian by 0.5 s to generate a diagnostic counterfactual input for
     occlusion-exposure sensitivity. This does not assert any benchmark outcome.

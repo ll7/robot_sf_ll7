@@ -251,7 +251,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         scenario_seeds.extend(int(s) for s in scenario.get("seeds", []))
     seeds = args.seeds if args.seeds else sorted(set(scenario_seeds))
     if not seeds:
-        seeds = [111, 112, 113]
+        seeds = [1101, 1102, 1103]
 
     rows = run_sweep(
         config=config,

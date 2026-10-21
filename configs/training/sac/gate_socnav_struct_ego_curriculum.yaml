@@ -8,7 +8,7 @@
 policy_id: sac_gate_socnav_struct_ego_curriculum_v1
 scenario_config: ../../scenarios/sets/verified_simple_subset_v1.yaml
 total_timesteps: 100000
-seed: 42
+seed: 100042
 action_semantics: delta
 relative_obs: true
 obs_transform: ego

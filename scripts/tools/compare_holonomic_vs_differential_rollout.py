@@ -53,7 +53,7 @@ DEFAULT_HOLO_CONFIGS: dict[str, Path | None] = {
     "ppo": Path("configs/baselines/ppo_15m_grid_socnav_holonomic.yaml"),
     "orca": None,
 }
-DEFAULT_SEED = 111
+DEFAULT_SEED = 1101
 DEFAULT_MAX_STEPS = 100
 DEFAULT_TOLERANCE = 1e-9
 

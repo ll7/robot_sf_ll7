@@ -52,11 +52,11 @@ planners:
 seed_policy:
   mode: seed-set
   seed_set: eval
-  seed_sets_path: configs/benchmarks/seed_sets_v1.yaml
+  seed_sets_path: configs/benchmarks/dev_seed_sets.yaml
   seeds:
-    - 111
-    - 112
-    - 113
+    - 1101
+    - 1102
+    - 1103
   repeat_policy: one episode per scenario/planner/seed row
 
 metrics:

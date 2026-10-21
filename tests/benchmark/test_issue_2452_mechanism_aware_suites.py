@@ -175,7 +175,7 @@ def test_issue_2653_static_deadlock_activation_capable_contract() -> None:
         "narrow_passage",
     ]
     for scenario in scenarios:
-        assert scenario["seeds"] == [111, 112, 113]
+        assert scenario["seeds"] == [1101, 1102, 1103]
         metadata = scenario["metadata"]
         assert metadata["mechanism_aware_suite_id"] == "static_deadlock_recovery"
         assert metadata["issue"] == 2653

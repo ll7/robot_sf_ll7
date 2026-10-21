@@ -3,10 +3,10 @@
 collection_entrypoint: scripts/training/collect_predictive_hardcase_data.py
 base_matrix: configs/scenarios/classic_interactions.yaml
 hardcase_matrix: configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml
-collection_seed_start: 1001
-collection_seed_end: 1015
-evaluation_seed_start: 1016
-evaluation_seed_end: 1030
+collection_seed_start: 101001
+collection_seed_end: 101015
+evaluation_seed_start: 1101
+evaluation_seed_end: 1115
 hardcase_names_contain: [cross_trap, doorway, bottleneck]
 base_max_steps: 240
 hardcase_max_steps: 260
@@ -22,7 +22,7 @@ training:
   lr: 0.0002
   weight_decay: 0.00001
   val_split: 0.2
-  seed: 1008
+  seed: 101008
   hidden_dim: 192
   message_passing_steps: 3
   num_workers: 2

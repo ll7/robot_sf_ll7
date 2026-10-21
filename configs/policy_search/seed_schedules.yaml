@@ -1,19 +1,19 @@
 seed_schedules:
   smoke:
-    seeds: [ 111 ]
+    seeds: [ 1031 ]
     policy: explicit_single_seed
   nominal_sanity:
-    seeds: [ 111, 112, 113 ]
+    seeds: [ 1031, 1032, 1033 ]
     manifest: nominal_sanity_seeds.yaml
   stress_slice:
-    seeds: [ 111, 112, 113 ]
+    seeds: [ 1031, 1032, 1033 ]
     manifest: stress_slice_seeds.yaml
   full_matrix:
-    seeds: [ 111, 112, 113 ]
-    manifest: configs/benchmarks/seed_list_v1.yaml
+    seeds: [ 1031, 1032, 1033 ]
+    manifest: configs/benchmarks/dev_seed_list.yaml
   leader_collision_slice_h500:
-    seeds: [ 111, 112, 113 ]
+    seeds: [ 1031, 1032, 1033 ]
     manifest: leader_collision_slice_h500_seeds.yaml
   robustness_extension:
-    seeds: [ 114, 115 ]
+    seeds: [ 1034, 1035 ]
     manifest: robustness_extension_seeds.yaml

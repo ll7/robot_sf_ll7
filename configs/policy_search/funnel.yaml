@@ -19,7 +19,7 @@ _h500_common: &h500_common
 stages:
   smoke:
     scenario_matrix: configs/scenarios/single/planner_sanity_simple.yaml
-    seed_list: [ 111 ]
+    seed_list: [ 1031 ]
     benchmark_profile: experimental
     horizon: 80
     dt: 0.1
@@ -68,7 +68,7 @@ stages:
     requires_slurm: false
   full_matrix:
     scenario_matrix: configs/scenarios/classic_interactions_francis2023.yaml
-    seed_list: [ 111, 112, 113 ]
+    seed_list: [ 1031, 1032, 1033 ]
     benchmark_profile: experimental
     horizon: 120
     dt: 0.1
@@ -79,7 +79,7 @@ stages:
     seed_manifest: configs/policy_search/leader_collision_slice_h500_seeds.yaml
   full_matrix_h500:
     <<: *h500_common
-    seed_list: [ 111, 112, 113 ]
+    seed_list: [ 1031, 1032, 1033 ]
   robustness_extension:
     scenario_matrix: configs/policy_search/stress_slice_matrix.yaml
     seed_manifest: configs/policy_search/robustness_extension_seeds.yaml

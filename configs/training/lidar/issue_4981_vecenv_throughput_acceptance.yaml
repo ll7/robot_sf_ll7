@@ -13,7 +13,7 @@ standard_workload:
     - threaded
     - threaded_lidar_batch
   repetitions: 5
-  base_seed: 4981
+  base_seed: 104981
   warmup_steps: 1000
   measure_steps: 10000
 

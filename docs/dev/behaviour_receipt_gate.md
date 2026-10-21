@@ -54,9 +54,56 @@ versions, an unversioned newest publication, duplicate highest-version records,
 or tied latest publications fail closed. Older unversioned dataset publications
 do not displace a uniquely identified newest release. For real evidence, run
 from the SLURM host and use
-`--mode sbatch --submit-only` to submit the head and baseline empty-world sweeps;
+`--mode sbatch --submit-only --sbatch-node <node>` to submit the head and baseline
+empty-world sweeps on the same single node;
 after both jobs finish, rerun with `--mode existing` and the two completed sweep
 directories to write `receipts/behaviour/<id>.json` and print the header.
+
+The node argument must be one literal hostname from the checked-in
+[`behaviour_receipt_nodes.json`](../../scripts/ci/behaviour_receipt_nodes.json)
+inventory; node lists and range expressions are refused before submission.
+The inventory is owned by the trusted base policy and maps scheduler node names
+to CPU model, architecture and node class (partition). Unknown nodes are refused.
+Updating this mapping requires review; job-written CPU claims cannot update it.
+
+Each job creates `sweeps/<side>/<SLURM_JOB_ID>` with an exclusive `mkdir` before
+writing any evidence. An existing directory causes failure. Resubmission receives
+a new job ID and a new directory; it never overwrites previous execution evidence.
+Submission manifests are separately keyed by job ID. After the sweep command
+succeeds, its summary and raw rows receive `scheduler_job_id` and `scheduler_node`
+from the Slurm allocation environment. Existing or inconsistent row bindings fail.
+Local execution cannot produce an admissible scheduler-backed receipt.
+
+Collection queries `sacct` through the authenticated, read-only scheduler endpoint
+on `imech192`, using allocation records rather than job-written state. Every
+selected shard must have exactly one `COMPLETED` record with exit code `0:0` and
+a single known node. It refuses mixed nodes within either side. Both sides must
+match node, CPU model, architecture and node class. Every summary and raw row's
+job ID must match its job-keyed directory; node claims and source execution
+contexts must agree with the authoritative allocation and inventory.
+
+The four job-written identity files are claims only. Collection checks them
+against scheduler records and the trusted inventory, and embeds an additional
+`execution_scheduler.json` verification snapshot with inventory artifact path and
+digest. SHA-256 digests preserve bytes; they do not grant job-written evidence
+authority. Admission independently queries the same scheduler endpoint and
+compares the snapshot to fresh authoritative records, then checks both job/node
+bindings on every joined row. Rehashed invented CPU claims remain invalid.
+
+Missing, unavailable, failed or inconsistent scheduler evidence explicitly
+invalidates collection and admission with `hardware comparison invalid`, even
+when outcomes are unchanged. Collection exits without writing a receipt, header,
+audit or outcome report. There is no unsigned offline fallback. Hosted admission
+requires authenticated scheduler read access; absence blocks admission rather
+than silently trusting the stored snapshot. Read-access integration is tracked
+under the gate owner issue #10000 and must be available before promoting this
+policy for behaviour-changing PRs.
+
+Legacy receipts without scheduler verification or row allocation bindings cannot
+be admitted. Acquire fresh job-keyed evidence; do not backfill observations or
+bindings into frozen artifacts. CPU-dependent inference can still differ across
+hosts. Same-node selection does not promise numerical equality or admit a
+tolerance, and it waives no classification or real-row audit requirement.
 
 One-command collection flow after both sweeps complete (no `PYTHONPATH` needed):
 
@@ -75,6 +122,49 @@ uv run python scripts/ci/make_behaviour_receipt.py \
   --audit-uri https://example.org/replace-with-real-row-audit \
   --classification-evidence-base-uri https://example.org/replace-with-classifications
 ```
+
+For a sharded side, pass its parent directory and a comma-separated allocation
+list, for example `--head-sweep-dir "$HEAD_SIDE_DIR" --job-id "$HEAD_JOB_IDS"`.
+Only the selected job-keyed directories enter the receipt artifact digest and
+row comparison. Their combined coverage must still exactly satisfy the gate;
+duplicate rows across shards are refused.
+
+Allocation stamping writes a separate, exclusively created
+`execution_binding.json`; it never edits raw episodes, summaries or their
+producer sidecars. The binding hashes every comparison input and identifies
+its job and node. Both normal raw sidecars (`.provenance.json` and
+`.manifest.json`) are required. Collection invokes the repository publication
+digest verifier against their sealed raw hashes and the allocation binding;
+any mismatch invalidates the comparison before a receipt or outcomes are emitted.
+
+Collection also preserves exact source bytes in job-keyed `.tar.gz` bundles
+under `receipts/behaviour/<receipt-id>-sources/`, referenced and hashed by the
+receipt payload's `source_artifacts`. Commit these bundles with the payload
+(use Git LFS for large evidence). Admission reads their exact committed bytes,
+verifies the artifact/LFS digest, rejects unsafe archive entries, and reruns
+the same producer-seal and binding verifier. It compares the joined outcomes
+and allocation identities against those verified raw rows. Dirty checkout
+files and a collector's verification flag cannot substitute for source evidence.
+The compact payload retains its 32 MiB limit; each source bundle is limited to
+512 MiB compressed and 2 GiB expanded. Existing identical bundles are preserved;
+conflicting bytes at an existing evidence path are refused.
+
+Allocation binding v2 also records `source_sha` and `arm_role` (`head` or
+`baseline`). The producer's run and per-row source commits, raw `git_hash`,
+explicit arm-role claims and recorded execution context must agree with that
+binding and with the receipt's independently selected source/node. The producer
+hostname and CPU model must match the scheduler and trusted inventory; its
+canonical context digest must verify. Head and baseline must use different
+producer commits. Consistent hashes alone cannot relabel baseline bytes as head
+evidence. Older bindings cannot be backfilled into frozen artifacts.
+
+Collection and admission share `verified_raw_rows`, `derive_valid_comparison`
+and `require_valid_execution`. They verify metadata and summary/raw coverage,
+reconstruct allocation context in memory, and apply the same registry algorithm,
+command mode, controller, trace and fallback/degradation checks to both sides.
+Admission re-derives the full joined-row projection and totals from verified
+raw evidence, then compares every projected field with the receipt. A healthy
+payload cannot override invalid execution in a validly re-sealed source.
 
 Production receipt generation uses the full gate seed set (`1001..1030`) because
 that is what the validator admits today; the producer rejects seeds outside the
@@ -211,3 +301,15 @@ be internally consistent: independent review must verify its linked job,
 execution artifacts, body/config/source provenance and classifications. Review
 plus the digest/binding checks remain the safeguards against receipt forgery.
 Synthetic test rows prove validator behaviour only.
+
+### Required source outcomes
+
+Collection and admission use `source_outcomes` in
+`scripts/ci/behaviour_receipt.schema.json` for every raw episode and sweep summary.
+Success must be an explicit boolean, collisions a nonnegative integer, and steps a
+positive integer. The schema records the accepted producer field paths. If several
+paths are present, every value must be valid and they must agree. Raw and summary
+observations must agree on all three fields. Missing fields, nulls, coercible
+strings, invalid counters and conflicting aliases invalidate the comparison before
+outcomes are reported; explicit `false` success and zero collisions remain valid.
+Partial historical evidence must be reacquired, never backfilled into sealed files.

@@ -165,46 +165,67 @@ def test_helper_fixture_is_bounded_and_removed(tmp_path: Path) -> None:
     assert not workspace.exists()
 
 
-def test_helper_timeout_reaps_children_and_removes_workspace(tmp_path: Path) -> None:
+def test_helper_timeout_reaps_children_and_removes_workspace(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """A wedged bootstrap cannot keep descendants or temporary checkout data alive."""
     child_pid = None
+
+    def is_alive(pid: int) -> bool:
+        try:
+            state = Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()[0]
+        except (FileNotFoundError, ProcessLookupError):
+            return False
+        return state not in {"Z", "X", "x"}
+
+    class ReadyProcess(subprocess.Popen):
+        def communicate(self, *args: Any, **kwargs: Any) -> tuple[str, str]:
+            # Start the command timeout only after both processes exist.
+            nonlocal child_pid
+            deadline = time.monotonic() + 5
+            while child_pid is None and time.monotonic() < deadline:
+                try:
+                    child_pid = int(pid_file.read_text())
+                except (FileNotFoundError, ValueError):
+                    time.sleep(0.01)
+            assert child_pid is not None, "the command must spawn a descendant before timing out"
+            assert is_alive(self.pid), "the parent must be alive before timing out"
+            assert is_alive(child_pid), "the descendant must be alive before timing out"
+            return super().communicate(*args, **kwargs)
+
+    monkeypatch.setattr(subprocess, "Popen", ReadyProcess)
     with pytest.raises(subprocess.TimeoutExpired), _runner_workspace(tmp_path) as workspace:
         pid_file = workspace / "child.pid"
-        try:
-            _run_helper_command(
-                [
-                    sys.executable,
-                    "-c",
-                    "import pathlib, subprocess, sys; "
-                    "child = subprocess.Popen([sys.executable, '-c', "
-                    "'import time; time.sleep(60)']); "
-                    "pathlib.Path(sys.argv[1]).write_text(str(child.pid)); child.wait()",
-                    str(pid_file),
-                ],
-                cwd=workspace,
-                env=os.environ.copy(),
-                timeout=2,
-            )
-        finally:
-            if pid_file.exists():
-                child_pid = int(pid_file.read_text())
+        _run_helper_command(
+            [
+                sys.executable,
+                "-c",
+                "import subprocess, sys; "
+                "child = subprocess.Popen([sys.executable, '-c', "
+                "'import os, pathlib, sys, time; "
+                "pathlib.Path(sys.argv[1]).write_text(str(os.getpid())); time.sleep(60)', "
+                "sys.argv[1]]); child.wait()",
+                str(pid_file),
+            ],
+            cwd=workspace,
+            env=os.environ.copy(),
+            timeout=2,
+        )
     assert child_pid is not None, "the command must spawn a descendant before timing out"
     # A killed orphan may briefly remain as a zombie until the OS reaps it.
-    child_stat = Path(f"/proc/{child_pid}/stat")
-    deadline = time.monotonic() + 1
-    while (
-        child_stat.exists()
-        and child_stat.read_text().rsplit(")", 1)[1].split()[0] != "Z"
-        and time.monotonic() < deadline
-    ):
-        time.sleep(0.01)
+    deadline = time.monotonic() + 5
     try:
-        assert not child_stat.exists() or child_stat.read_text().rsplit(")", 1)[1].split()[0] == "Z"
+        while is_alive(child_pid) and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert not is_alive(child_pid), "the descendant must terminate after timeout cleanup"
         assert not workspace.exists()
     finally:
         # Keep the negative control safe if process-group cleanup regresses.
-        if child_stat.exists() and child_stat.read_text().rsplit(")", 1)[1].split()[0] != "Z":
-            os.kill(child_pid, signal.SIGKILL)
+        if is_alive(child_pid):
+            try:
+                os.kill(child_pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
 
 
 def _prepare_helper_cache(

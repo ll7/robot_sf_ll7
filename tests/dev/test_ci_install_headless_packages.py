@@ -309,6 +309,13 @@ def test_ci_install_headless_packages_reports_fallback_preparation_failure(
     )
 
     env = _timer_test_environment(fake_bin)
+    # Catch accidental Python-backend selection without relying on the USR1 race.
+    python_backend = fake_bin / "python3"
+    python_backend.unlink()
+    _write_executable(
+        python_backend,
+        "#!/usr/bin/env bash\necho 'unexpected Python timer backend' >&2\nexit 125\n",
+    )
     env["CI_HEADLESS_APT_OS_RELEASE_FILE"] = str(os_release)
     env["CI_HEADLESS_APT_PHASE_TIMEOUT_SECONDS"] = "2"
     env["CI_HEADLESS_APT_MIRROR_FALLBACK_TIMEOUT_SECONDS"] = "1"

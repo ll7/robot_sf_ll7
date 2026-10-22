@@ -333,7 +333,10 @@ def test_native_watchdog_sigkills_descendant_that_ignores_sigterm(tmp_path: Path
 
 
 @pytest.mark.skipif(os.name != "posix", reason="process-group cleanup is POSIX-specific")
-def test_native_watchdog_cleans_descendant_after_parent_exits(tmp_path: Path) -> None:
+@pytest.mark.parametrize("startup_delay", [0.0, 1.25], ids=["normal", "delayed-startup"])
+def test_native_watchdog_cleans_descendant_after_parent_exits(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, startup_delay: float
+) -> None:
     """A successful parent cannot leave its native descendant behind after returning."""
     pid_path = tmp_path / "descendant.pid"
     descendant = (
@@ -343,13 +346,44 @@ def test_native_watchdog_cleans_descendant_after_parent_exits(tmp_path: Path) ->
     )
     parent = (
         "from pathlib import Path; import subprocess, sys, time\n"
+        f"time.sleep({startup_delay!r})\n"
         "child = subprocess.Popen([sys.executable, '-c', sys.argv[2], sys.argv[1]])\n"
-        "deadline = time.monotonic() + 0.5\n"
         "while not Path(sys.argv[1]).is_file():\n"
         " if child.poll() is not None: raise RuntimeError('descendant exited before ready')\n"
-        " if time.monotonic() >= deadline: raise TimeoutError('descendant never became ready')\n"
         " time.sleep(0.005)\n"
     )
+    # Interpreter startup and the ready-marker handshake are fixture preparation,
+    # not episode production. Return the real sentinel to the watchdog only once
+    # its parent has exited successfully, leaving a live descendant to clean up.
+    sentinel_command = smoke_validator._watchdog_sentinel_command
+    real_popen = subprocess.Popen
+    fixture_status_path: Path | None = None
+
+    def capture_status_path(*, command: list[str], status_path: Path) -> list[str]:
+        nonlocal fixture_status_path
+        fixture_status_path = status_path
+        return sentinel_command(command=command, status_path=status_path)
+
+    def start_prepared_fixture(*args: object, **kwargs: object) -> subprocess.Popen[bytes]:
+        process = real_popen(*args, **kwargs)
+        try:
+            assert fixture_status_path is not None
+            deadline = time.monotonic() + 5.0
+            while smoke_validator._read_native_returncode(fixture_status_path) is None:
+                assert process.poll() is None, "fixture sentinel exited before parent receipt"
+                if time.monotonic() >= deadline:
+                    pytest.fail("fixture parent never completed startup")
+                time.sleep(0.005)
+            assert smoke_validator._read_native_returncode(fixture_status_path) == 0
+            descendant_pid = int(pid_path.read_text(encoding="utf-8"))
+            os.kill(descendant_pid, 0)
+        except BaseException:
+            smoke_validator._terminate_process_group(process, process_group_id=process.pid)
+            raise
+        return process
+
+    monkeypatch.setattr(smoke_validator, "_watchdog_sentinel_command", capture_status_path)
+    monkeypatch.setattr(smoke_validator.subprocess, "Popen", start_prepared_fixture)
     smoke_validator._run_native_row_with_watchdog(
         command=[sys.executable, "-c", parent, str(pid_path), descendant],
         episodes_path=tmp_path / "episodes.jsonl",

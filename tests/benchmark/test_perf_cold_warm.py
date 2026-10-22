@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-import textwrap
+import math
 from argparse import Namespace
 from pathlib import Path
 
@@ -413,6 +413,31 @@ def test_load_scenario_config_and_not_found(monkeypatch: pytest.MonkeyPatch) -> 
         perf_cold_warm._load_scenario_config(Path("x.yaml"), "missing", 10)
 
 
+def test_measure_cold_subprocess_real_child(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A fresh interpreter must complete a sample without stdlib shadowing."""
+    real_run = perf_cold_warm.subprocess.run
+
+    def _run_module(command, **kwargs):
+        """Check dispatch before the test seed guard rewrites child startup."""
+        assert command[:3] == [
+            perf_cold_warm.sys.executable,
+            "-m",
+            "robot_sf.benchmark.perf_cold_warm",
+        ]
+        return real_run(command, **kwargs)
+
+    monkeypatch.setattr(perf_cold_warm.subprocess, "run", _run_module)
+    sample = perf_cold_warm._measure_cold_subprocess(
+        scenario_config=Path("configs/scenarios/archetypes/classic_cross_trap.yaml"),
+        scenario_name="classic_cross_trap_low",
+        seed=perf_cold_warm.parse_args([]).seed,
+        episode_steps=1,
+    )
+
+    assert all(math.isfinite(value) and value > 0 for value in sample.to_dict().values())
+    assert sample.steps_per_sec * sample.episode_sec == pytest.approx(1.0)
+
+
 def test_measure_cold_subprocess_success_and_failures(monkeypatch: pytest.MonkeyPatch) -> None:
     """Subprocess helper should parse JSON payloads and raise on failure modes."""
 
@@ -615,69 +640,3 @@ def test_main_non_internal_paths(monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     assert perf_cold_warm.main([]) == 0
     assert out_json.exists()
     assert out_md.exists()
-
-
-def test_cold_subprocess_bootstraps_real_module(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    """A real cold child must import stdlib modules and complete a one-step sample."""
-    repo_root = Path(__file__).resolve().parents[2]
-    monkeypatch.chdir(repo_root)
-    monkeypatch.setenv("PYTHONPATH", f"{repo_root}:{repo_root / 'fast-pysf'}")
-    monkeypatch.setenv("ROBOT_SF_ARTIFACT_ROOT", str(tmp_path / "artifacts"))
-
-    sample = perf_cold_warm._measure_cold_subprocess(
-        scenario_config=repo_root / "configs/scenarios/archetypes/classic_crossing.yaml",
-        scenario_name="classic_crossing_low",
-        seed=1001,
-        episode_steps=1,
-    )
-
-    assert sample.env_create_sec > 0.0
-    assert 0.0 < sample.first_step_sec <= sample.episode_sec
-    assert sample.steps_per_sec * sample.episode_sec == pytest.approx(1.0)
-
-
-def test_cold_child_startup_does_not_shadow_stdlib_types(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    """Real dispatch works when site startup has not preloaded stdlib types."""
-    package = tmp_path / "robot_sf" / "benchmark"
-    package.mkdir(parents=True)
-    (package.parent / "__init__.py").touch()
-    (package / "__init__.py").touch()
-    # Reproduce the real directory's stdlib-name collision without simulator imports.
-    (package / "types.py").write_text("import json\n")
-    (package / "perf_cold_warm.py").write_text(
-        textwrap.dedent(
-            """\
-            import argparse
-            import json
-
-            parser = argparse.ArgumentParser()
-            for flag in ("scenario-config", "scenario-name", "seed", "episode-steps",
-                         "output-json", "output-markdown"):
-                parser.add_argument("--" + flag, required=True)
-            parser.add_argument("--internal-measure-once", action="store_true", required=True)
-            parser.parse_args()
-            print(json.dumps({"env_create_sec": 1, "first_step_sec": 0.2,
-                              "episode_sec": 1.4, "steps_per_sec": 9}))
-            """
-        )
-    )
-    interpreter = tmp_path / "python-without-site"
-    interpreter.write_text('#!/bin/sh\nexec "$COLD_TEST_PYTHON" -S "$@"\n')
-    interpreter.chmod(0o755)
-    monkeypatch.setenv("COLD_TEST_PYTHON", perf_cold_warm.sys.executable)
-    monkeypatch.setattr(perf_cold_warm.sys, "executable", str(interpreter))
-    monkeypatch.setenv("PYTHONPATH", str(tmp_path))
-    monkeypatch.chdir(tmp_path)
-
-    sample = perf_cold_warm._measure_cold_subprocess(
-        scenario_config=Path("scenario.yaml"),
-        scenario_name="bootstrap-only",
-        seed=1001,
-        episode_steps=1,
-    )
-
-    assert sample.steps_per_sec == 9

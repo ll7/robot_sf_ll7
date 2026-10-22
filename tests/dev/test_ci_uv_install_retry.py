@@ -42,10 +42,13 @@ def _write_stub_python(
             f"""\
             #!/usr/bin/env bash
             if [[ "$1" == "-m" && "${{2:-}}" == "pip" ]]; then
+              printf '%s\\n' "$*" >> '{log}'
+              if [[ "$*" == *"pip @ https://files.pythonhosted.org/"* ]]; then
+                exit "${{STUB_PIP_BOOTSTRAP_FAIL:-0}}"
+              fi
               n="$(cat '{counter}' 2>/dev/null || echo 0)"
               n=$((n + 1))
               printf '%s\\n' "$n" > '{counter}'
-              printf '%s\\n' "$*" >> '{log}'
               if [[ "$n" -lt {succeed_on} ]]; then
                 echo "stub pip: simulated transient index failure (call $n)" >&2
                 exit 1
@@ -239,3 +242,31 @@ def test_direct_uv_workflows_use_the_retry_helper() -> None:
         assert "scripts/dev/ci_install_uv_retry.sh" in workflow_text, relative_path
         assert "astral-sh/setup-uv@" not in workflow_text, relative_path
         assert 'UV_INSTALL_MAX_ATTEMPTS: "3"' in workflow_text, relative_path
+
+
+def test_ci_install_uv_bootstraps_hash_pinned_pip_before_index_use(tmp_path: Path) -> None:
+    """The uv fallback cannot contact the index with the runner's bundled old pip."""
+    env, _, pip_log = _retry_env(tmp_path, succeed_on=1)
+
+    result = _run_helper(tmp_path, env=env)
+
+    assert result.returncode == 0, result.stderr
+    commands = pip_log.read_text().splitlines()
+    assert "pip @ https://files.pythonhosted.org/" in commands[0]
+    assert (
+        "pip-26.2.2-py3-none-any.whl#sha256="
+        "fd7f4dfa8190e014013b9f08f3e973f4e4c26ffd179a204895533a7254813a70"
+    ) in commands[0]
+    assert "uv==0.11.21" in commands[1]
+
+
+def test_ci_install_uv_rejects_failed_secure_pip_bootstrap(tmp_path: Path) -> None:
+    """A failed secure bootstrap must stop before an insecure index request."""
+    env, counter, pip_log = _retry_env(tmp_path, succeed_on=1)
+    env["STUB_PIP_BOOTSTRAP_FAIL"] = "1"
+
+    result = _run_helper(tmp_path, env=env)
+
+    assert result.returncode != 0
+    assert not counter.exists(), "uv index install ran after the pip bootstrap failed"
+    assert "uv==" not in pip_log.read_text()

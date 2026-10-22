@@ -759,6 +759,7 @@ srev29-example-renderer = "examples.scenario_review.components.telemetry_rendere
 # Note: uv-specific config removed to avoid duplicate-config warnings with uv.toml
 
 [tool.uv]
+constraint-dependencies = ["certifi>=2026.10.19"]
 conflicts = [
     [
         { extra = "rllib" },

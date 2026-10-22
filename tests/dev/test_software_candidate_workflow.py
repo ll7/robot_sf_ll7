@@ -5,12 +5,20 @@ from __future__ import annotations
 import os
 import re
 import shutil
+import signal
 import subprocess
+import sys
+import tempfile
+import time
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pytest
 import yaml
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 HELPER = REPO_ROOT / "scripts" / "dev" / "software_candidate_manifest.py"
@@ -52,6 +60,153 @@ def _steps(payload: dict[str, Any]) -> list[dict[str, Any]]:
     return jobs["build-candidate"]["steps"]
 
 
+@contextmanager
+def _runner_workspace(parent: Path) -> Iterator[Path]:
+    """Remove checkout, helper environment and cache even when a command times out."""
+    with tempfile.TemporaryDirectory(prefix="helper-runner-", dir=parent) as directory:
+        yield Path(directory)
+
+
+def _run_helper_command(
+    command: list[str], *, cwd: Path, env: dict[str, str], timeout: float = 30
+) -> subprocess.CompletedProcess[str]:
+    """Bound commands and kill their whole session before workspace cleanup."""
+    process = subprocess.Popen(
+        command,
+        cwd=cwd,
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        start_new_session=True,
+    )
+    try:
+        stdout, stderr = process.communicate(timeout=timeout)
+        return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
+    finally:
+        # Also runs for pytest-timeout's interruption, and when the leader exits
+        # before a descendant that still holds a pipe or writes into the checkout.
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        process.wait()
+        assert process.stdout is not None
+        assert process.stderr is not None
+        process.stdout.close()
+        process.stderr.close()
+
+
+def _clone_helper_fixture(workspace: Path) -> Path:
+    """Clone one commit containing the real workflow and helper import closure."""
+    source = workspace / "fixture-source"
+    source.mkdir()
+    for relative in (
+        ".github/workflows/software-candidate.yml",
+        "scripts/dev/software_candidate_manifest.py",
+        "scripts/tools/check_dependency_license_inventory.py",
+        "scripts/tools/check_distribution_licenses.py",
+        "scripts/tools/check_asset_rights_inventory.py",
+    ):
+        destination = source / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(REPO_ROOT / relative, destination)
+    env = os.environ.copy()
+    for command in (
+        ["git", "init", "--quiet", str(source)],
+        ["git", "add", "."],
+        [
+            "git",
+            "-c",
+            "user.name=Fixture",
+            "-c",
+            "user.email=fixture@example.invalid",
+            "-c",
+            "commit.gpgsign=false",
+            "commit",
+            "--quiet",
+            "-m",
+            "Helper fixture",
+        ],
+    ):
+        result = _run_helper_command(command, cwd=source, env=env)
+        assert result.returncode == 0, result.stderr
+    clean_repo = workspace / "clean-source"
+    result = _run_helper_command(
+        ["git", "clone", "--quiet", "--no-hardlinks", str(source), str(clean_repo)],
+        cwd=workspace,
+        env=env,
+    )
+    assert result.returncode == 0, result.stderr
+    return clean_repo
+
+
+@pytest.fixture
+def clean_runner_workspace(tmp_path: Path) -> Iterator[Path]:
+    """Own all clean-runner temporary data through test failure and teardown."""
+    with _runner_workspace(tmp_path) as workspace:
+        yield workspace
+
+
+def test_helper_fixture_is_bounded_and_removed(tmp_path: Path) -> None:
+    """The bootstrap checkout has one commit, five real files and no retained data."""
+    with _runner_workspace(tmp_path) as workspace:
+        clean_repo = _clone_helper_fixture(workspace)
+        history = _run_helper_command(
+            ["git", "rev-list", "--count", "HEAD"], cwd=clean_repo, env=os.environ.copy()
+        )
+        assert history.returncode == 0, history.stderr
+        assert history.stdout.strip() == "1"
+        tracked = _run_helper_command(["git", "ls-files"], cwd=clean_repo, env=os.environ.copy())
+        assert tracked.returncode == 0, tracked.stderr
+        assert len(tracked.stdout.splitlines()) == 5
+        for relative in tracked.stdout.splitlines():
+            assert (clean_repo / relative).read_bytes() == (REPO_ROOT / relative).read_bytes()
+    assert not workspace.exists()
+
+
+def test_helper_timeout_reaps_children_and_removes_workspace(tmp_path: Path) -> None:
+    """A wedged bootstrap cannot keep descendants or temporary checkout data alive."""
+    child_pid = None
+    with pytest.raises(subprocess.TimeoutExpired), _runner_workspace(tmp_path) as workspace:
+        pid_file = workspace / "child.pid"
+        try:
+            _run_helper_command(
+                [
+                    sys.executable,
+                    "-c",
+                    "import pathlib, subprocess, sys; "
+                    "child = subprocess.Popen([sys.executable, '-c', "
+                    "'import time; time.sleep(60)']); "
+                    "pathlib.Path(sys.argv[1]).write_text(str(child.pid)); child.wait()",
+                    str(pid_file),
+                ],
+                cwd=workspace,
+                env=os.environ.copy(),
+                timeout=2,
+            )
+        finally:
+            if pid_file.exists():
+                child_pid = int(pid_file.read_text())
+    assert child_pid is not None, "the command must spawn a descendant before timing out"
+    # A killed orphan may briefly remain as a zombie until the OS reaps it.
+    child_stat = Path(f"/proc/{child_pid}/stat")
+    deadline = time.monotonic() + 1
+    while (
+        child_stat.exists()
+        and child_stat.read_text().rsplit(")", 1)[1].split()[0] != "Z"
+        and time.monotonic() < deadline
+    ):
+        time.sleep(0.01)
+    try:
+        assert not child_stat.exists() or child_stat.read_text().rsplit(")", 1)[1].split()[0] == "Z"
+        assert not workspace.exists()
+    finally:
+        # Keep the negative control safe if process-group cleanup regresses.
+        if child_stat.exists() and child_stat.read_text().rsplit(")", 1)[1].split()[0] != "Z":
+            os.kill(child_pid, signal.SIGKILL)
+
+
 def _prepare_helper_cache(
     tmp_path: Path, python312: str, env: dict[str, str], *, provision_artifacts: bool
 ) -> None:
@@ -60,7 +215,7 @@ def _prepare_helper_cache(
     if provision_artifacts:
         # Only preparation may use the network; the workflow keeps UV_OFFLINE=1.
         preparation_env.pop("UV_OFFLINE")
-    preparation = subprocess.run(
+    preparation = _run_helper_command(
         [
             "bash",
             "--noprofile",
@@ -76,9 +231,6 @@ def _prepare_helper_cache(
         ],
         cwd=REPO_ROOT,
         env=preparation_env,
-        check=False,
-        capture_output=True,
-        text=True,
         timeout=120,
     )
     if provision_artifacts:
@@ -216,36 +368,19 @@ def test_workflow_bootstraps_one_isolated_pinned_helper_environment() -> None:
     "provision_artifacts", [False, True], ids=["missing-artifacts", "clean-cache"]
 )
 def test_clean_runner_bootstraps_and_checks_the_cloned_helper_offline(
-    tmp_path: Path, provision_artifacts: bool
+    clean_runner_workspace: Path, provision_artifacts: bool
 ) -> None:
     """Provision a fresh cache before the real offline bootstrap and source check."""
     uv = shutil.which("uv")
     if uv is None:
         pytest.fail("uv is required to exercise the clean-runner bootstrap contract")
-    clean_repo = tmp_path / "clean-source"
-    clone_env = os.environ.copy()
-    # This fixture validates the clean helper checkout, not availability of unrelated LFS blobs.
-    clone_env["GIT_LFS_SKIP_SMUDGE"] = "1"
-    clone_result = subprocess.run(
-        ["git", "clone", "--quiet", "--no-hardlinks", str(REPO_ROOT), str(clean_repo)],
-        check=False,
-        capture_output=True,
-        text=True,
-        env=clone_env,
+    tmp_path = clean_runner_workspace
+    clean_repo = _clone_helper_fixture(tmp_path)
+    source_result = _run_helper_command(
+        ["git", "rev-parse", "HEAD"], cwd=clean_repo, env=os.environ.copy()
     )
-    assert clone_result.returncode == 0, (
-        "git clone failed with exit code "
-        f"{clone_result.returncode}: {clone_result.args!r}\n"
-        f"stdout:\n{clone_result.stdout}\n"
-        f"stderr:\n{clone_result.stderr}"
-    )
-    source_sha = subprocess.run(
-        ["git", "rev-parse", "HEAD"],
-        cwd=clean_repo,
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout.strip()
+    assert source_result.returncode == 0, source_result.stderr
+    source_sha = source_result.stdout.strip()
     workflow_text, workflow = _workflow_at(clean_repo)
     bootstrap = next(
         step
@@ -302,13 +437,10 @@ def test_clean_runner_bootstraps_and_checks_the_cloned_helper_offline(
     )
     _prepare_helper_cache(tmp_path, python312, env, provision_artifacts=provision_artifacts)
     assert not Path(env["HELPER_ENV"]).exists()
-    bootstrap_result = subprocess.run(
+    bootstrap_result = _run_helper_command(
         ["bash", "--noprofile", "--norc", "-euo", "pipefail", "-c", bootstrap_run],
         cwd=tmp_path,
         env=env,
-        check=False,
-        capture_output=True,
-        text=True,
         timeout=60,
     )
     if not provision_artifacts:
@@ -331,13 +463,10 @@ def test_clean_runner_bootstraps_and_checks_the_cloned_helper_offline(
     helper_python = Path(github_env["SOFTWARE_CANDIDATE_PYTHON"])
     assert helper_python == Path(env["HELPER_ENV"]) / "bin" / "python"
     assert helper_python.is_file()
-    runtime = subprocess.run(
+    runtime = _run_helper_command(
         [str(helper_python), "-I", "-c", "import sys; assert sys.version_info[:2] == (3, 12)"],
         cwd=tmp_path,
         env=env,
-        check=False,
-        capture_output=True,
-        text=True,
         timeout=30,
     )
     assert runtime.returncode == 0, runtime.stderr
@@ -353,13 +482,10 @@ def test_clean_runner_bootstraps_and_checks_the_cloned_helper_offline(
     ]
     assert helper_command[1] == str(clone_helper)
     assert helper_command[1] != str(HELPER)
-    result = subprocess.run(
+    result = _run_helper_command(
         helper_command,
         cwd=tmp_path,
         env=env,
-        check=False,
-        capture_output=True,
-        text=True,
     )
     assert result.returncode == 0, result.stderr
     assert f"PASS: source identity is clean and exact at {source_sha}" in result.stdout

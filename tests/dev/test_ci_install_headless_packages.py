@@ -28,8 +28,22 @@ def _shell_quote(path: Path) -> str:
 
 
 def _timer_test_environment(fake_bin: Path) -> dict[str, str]:
-    """Provide only the runtime tools needed by the shell helper and its timer."""
-    for command_name in ("bash", "cat", "date", "dirname", "grep", "mktemp", "rm", "sleep"):
+    """Use the apt runner's GNU timer; Python fallback contracts have dedicated tests."""
+    # Hiding timeout accidentally selects the Python backend. Its readiness USR1
+    # can interrupt Bash wait as the immediate fake apt-get exits, losing status
+    # 124 to the backend's bounded reap error (125) under concurrent load.
+    # Keep a real timeout backend and the same budgets for installer assertions.
+    for command_name in (
+        "bash",
+        "cat",
+        "date",
+        "dirname",
+        "grep",
+        "mktemp",
+        "rm",
+        "sleep",
+        "timeout",
+    ):
         command_path = shutil.which(command_name)
         assert command_path, f"{command_name} is required for this test"
         os.symlink(command_path, fake_bin / command_name)
@@ -307,7 +321,8 @@ def test_ci_install_headless_packages_reports_fallback_preparation_failure(
         timeout=10,
     )
 
-    assert result.returncode == 1
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert 'step_end label="Headless package apt update" status=124' in result.stdout
     assert "warning=apt_update_official_mirror_fallback_unavailable" in result.stderr
     diagnostic = next(
         line

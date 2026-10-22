@@ -213,7 +213,7 @@ def test_helper_timeout_reaps_children_and_removes_workspace(
         )
     assert child_pid is not None, "the command must spawn a descendant before timing out"
     # A killed orphan may briefly remain as a zombie until the OS reaps it.
-    deadline = time.monotonic() + 5
+    deadline = time.monotonic() + 1
     try:
         while is_alive(child_pid) and time.monotonic() < deadline:
             time.sleep(0.01)

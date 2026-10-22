@@ -200,4 +200,6 @@ def test_node_refused_connection_is_inconclusive(node_client):
     with socket.socket() as reserved:
         reserved.bind(("127.0.0.1", 0))
         host = f"127.0.0.1:{reserved.getsockname()[1]}"
-        assert trust.command_probe(node_client, host).startswith("inconclusive")
+    result = trust.command_probe(node_client, host)
+    assert result.startswith("inconclusive")
+    assert "ECONNREFUSED" in result

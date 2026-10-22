@@ -38,9 +38,6 @@ conflicts = [[
     { package = "robot-sf", group = "imitation" },
 ]]
 
-[manifest]
-constraints = [{ name = "certifi", specifier = ">=2026.10.19" }]
-
 [[package]]
 name = "absl-py"
 version = "2.4.0"

@@ -46,9 +46,25 @@ runs:
       run: |
         ca_bundle="$(python -c 'from pip._vendor import certifi; print(certifi.where())')"
         empty_ca_dir="$(mktemp -d "${RUNNER_TEMP}/robot-sf-empty-ca.XXXXXX")"
+        curl_home="$(mktemp -d "${RUNNER_TEMP}/robot-sf-curl-home.XXXXXX")"
+        # curl can retain its compiled CA directory despite SSL_CERT_DIR. An
+        # explicit capath in a job-owned config replaces that default.
+        python - "$ca_bundle" "$empty_ca_dir" "$curl_home/.curlrc" <<'PY'
+        import pathlib
+        import sys
+
+        def curl_quote(value):
+            return '"' + value.replace('\\', '\\\\').replace('"', '\\"') + '"'
+
+        pathlib.Path(sys.argv[3]).write_text(
+            'cacert = ' + curl_quote(sys.argv[1]) + '\n'
+            + 'capath = ' + curl_quote(sys.argv[2]) + '\n'
+        )
+        PY
         echo "SSL_CERT_FILE=$ca_bundle" >> "$GITHUB_ENV"
         echo "CURL_CA_BUNDLE=$ca_bundle" >> "$GITHUB_ENV"
         echo "SSL_CERT_DIR=$empty_ca_dir" >> "$GITHUB_ENV"
+        echo "CURL_HOME=$curl_home" >> "$GITHUB_ENV"
 
     - name: Set up browser test runtime
       if: ${{ inputs.node == 'true' }}

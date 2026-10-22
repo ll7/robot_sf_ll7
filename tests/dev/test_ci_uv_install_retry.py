@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import sys
 import textwrap
 from pathlib import Path
 
@@ -270,3 +271,63 @@ def test_ci_install_uv_rejects_failed_secure_pip_bootstrap(tmp_path: Path) -> No
     assert result.returncode != 0
     assert not counter.exists(), "uv index install ran after the pip bootstrap failed"
     assert "uv==" not in pip_log.read_text()
+
+
+def test_shared_setup_exposes_isolated_quoted_curl_trust_config(tmp_path: Path) -> None:
+    """Ordinary downstream curl must use only the fixed bundle and empty CA directory."""
+    steps = yaml.safe_load(_action_path().read_text())["runs"]["steps"]
+    expose = next(
+        step for step in steps if step.get("name") == "Expose the fixed CA bundle to job tools"
+    )
+    runner_temp = tmp_path / 'runner temp "quoted"'
+    runner_temp.mkdir()
+    original_curl_home = tmp_path / "existing-curl-home"
+    original_curl_home.mkdir()
+    original_config = original_curl_home / ".curlrc"
+    original_config.write_text("user-agent = user-config-preserved\n")
+    ca_bundle = tmp_path / 'bundle "quoted" with\\backslash.pem'
+    ca_bundle.touch()
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    python = fake_bin / "python"
+    python.write_text(
+        "#!/usr/bin/env bash\n"
+        'if [[ "$1" == -c ]]; then\n'
+        "  printf '%s\\n' \"$FAKE_CA_BUNDLE\"\n"
+        "else\n"
+        '  exec "$TEST_REAL_PYTHON" "$@"\n'
+        "fi\n"
+    )
+    python.chmod(0o755)
+    github_env = tmp_path / "github-env"
+    env = os.environ.copy()
+    env.update(
+        {
+            "PATH": f"{fake_bin}{os.pathsep}{env['PATH']}",
+            "FAKE_CA_BUNDLE": str(ca_bundle),
+            "TEST_REAL_PYTHON": sys.executable,
+            "RUNNER_TEMP": str(runner_temp),
+            "GITHUB_ENV": str(github_env),
+            "CURL_HOME": str(original_curl_home),
+        }
+    )
+
+    result = subprocess.run(
+        ["bash", "-e", "-c", expose["run"]], env=env, text=True, capture_output=True, check=False
+    )
+
+    assert result.returncode == 0, result.stderr
+    exported = dict(line.split("=", 1) for line in github_env.read_text().splitlines())
+    assert "CURL_HOME" in exported, "ordinary curl still falls back to its compiled CA directory"
+    curl_home = Path(exported["CURL_HOME"])
+    assert curl_home.parent == runner_temp
+    assert curl_home != original_curl_home
+    empty_ca_dir = Path(exported["SSL_CERT_DIR"])
+    assert empty_ca_dir.is_dir() and not list(empty_ca_dir.iterdir())
+    assert exported["SSL_CERT_FILE"] == exported["CURL_CA_BUNDLE"] == str(ca_bundle)
+    # Independently spell the fixture's curl escapes rather than invoking the writer's logic.
+    assert (curl_home / ".curlrc").read_text() == (
+        f'cacert = "{tmp_path}/bundle \\"quoted\\" with\\\\backslash.pem"\n'
+        f'capath = "{tmp_path}/runner temp \\"quoted\\"/{empty_ca_dir.name}"\n'
+    )
+    assert original_config.read_text() == "user-agent = user-config-preserved\n"

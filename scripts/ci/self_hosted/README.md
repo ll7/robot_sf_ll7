@@ -226,3 +226,6 @@ before promoting the candidate. Rebuilding does not start stopped supervisors.
 
 The shared CI action repeats the TLS check in the synchronized Python environment
 so restored caches cannot silently reintroduce an older certificate bundle.
+It also gives ordinary job curl commands a separate `CURL_HOME` configuration
+with the fixed bundle and an explicit empty `capath`. Setting `SSL_CERT_DIR`
+alongside `CURL_CA_BUNDLE` alone can leave curl's compiled CA directory active.

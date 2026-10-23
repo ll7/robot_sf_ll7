@@ -30,8 +30,15 @@ def _run_episode(scenario_name: str, seed: int, config: Path, tmp_path: Path) ->
     scenarios = [s for s in load_scenarios(SCENARIO_MATRIX) if s.get("name") == scenario_name]
     assert scenarios, scenario_name
     out_path = tmp_path / f"{config.stem}_{scenario_name}_{seed}.jsonl"
+    # This historical v3/v4 comparison must retain the release wall physics.
+    # The 0.1.0 default intentionally changes pedestrian trajectories.
+    scenario = dict(scenarios[0], seeds=[seed])
+    scenario["simulation_config"] = {
+        **scenario.get("simulation_config", {}),
+        "obstacle_force_law": "legacy_shifted_gradient_v1",
+    }
     run_map_batch(
-        [dict(scenarios[0], seeds=[seed])],
+        [scenario],
         out_path,
         EPISODE_SCHEMA,
         scenario_path=SCENARIO_MATRIX,

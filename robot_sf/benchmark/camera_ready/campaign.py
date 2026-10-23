@@ -44,9 +44,7 @@ from robot_sf.benchmark.camera_ready._artifacts import (
     _write_table_artifacts,
 )
 from robot_sf.benchmark.camera_ready._config import (
-    _apply_fixed_campaign_horizon,
     _sanitize_name,
-    _scenario_with_kinematics,
 )
 from robot_sf.benchmark.camera_ready._crosswalk_producer import (
     write_crosswalk_sidecar,
@@ -72,6 +70,7 @@ from robot_sf.benchmark.camera_ready._run_state import (
     _campaign_success_counters,
     validate_campaign_integrity,
 )
+from robot_sf.benchmark.camera_ready._runtime_identity import expected_arm_scenarios
 from robot_sf.benchmark.camera_ready._summaries import (
     _SEED_VARIABILITY_METRICS,
     _build_actuation_envelope_summary,
@@ -759,16 +758,6 @@ def _prepare_campaign_planner_variant_run(
             planner.benchmark_profile,
             effective_workers,
         )
-    scoped_scenarios = []
-    for scenario in context.scenarios:
-        scoped = _scenario_with_kinematics(
-            scenario,
-            kinematics=kinematics,
-            holonomic_command_mode=cfg.holonomic_command_mode,
-        )
-        if cfg.telemetry is not None:
-            scoped["telemetry"] = dict(cfg.telemetry)
-        scoped_scenarios.append(scoped)
     return _CampaignPlannerVariantRun(
         kinematics=kinematics,
         active_observation_mode=active_observation_mode,
@@ -777,11 +766,11 @@ def _prepare_campaign_planner_variant_run(
         effective_workers=effective_workers,
         effective_horizon=effective_horizon,
         effective_dt=effective_dt,
-        scoped_scenarios=_apply_fixed_campaign_horizon(
-            scoped_scenarios,
-            horizon=effective_horizon,
-            horizon_policy=cfg.horizon_policy,
-            protocol_version=cfg.protocol_version,
+        scoped_scenarios=expected_arm_scenarios(
+            context.scenarios,
+            cfg=cfg,
+            planner=planner,
+            kinematics=kinematics,
         ),
     )
 
@@ -871,8 +860,10 @@ def _resolve_campaign_planner_batch_result(
                 "key": planner.key,
                 "algo": planner.algo,
                 "algo_config_path": planner.algo_config_path,
+                "kinematics": run.kinematics,
             },
             run.scoped_scenarios,
+            cfg=context.cfg if context is not None else None,
         )
         logger.info(
             "Skipping completed campaign arm: planner={} kinematics={} episodes={}/{}",
@@ -1795,6 +1786,7 @@ def _emit_resume_plan_preflight(
         kinematics_matrix=list(kinematics),
         scenarios=scenarios,
         scenario_path=getattr(cfg, "scenario_matrix_path", None),
+        cfg=cfg,
     )
 
     emit_resume_plan_log(verdicts)
@@ -1983,6 +1975,7 @@ def _post_run_integrity_and_fairness(
         resolved_seeds=resolved_seeds,
         campaign_root=campaign_root,
         campaign_manifest=manifest_payload,
+        cfg=cfg,
     )
     for blocker in campaign_integrity["blockers"]:
         warnings.append(

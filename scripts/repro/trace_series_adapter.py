@@ -55,6 +55,12 @@ from typing import Any
 
 # Schema contract this adapter understands. It is intentionally narrow: the
 # issue asks for a fail-closed adapter, not a permissive one.
+from robot_sf.benchmark.footprint_metrics import (
+    FOOTPRINT_MARKER,
+    FOOTPRINT_SCHEMA,
+    footprint_enabled,
+    trace_radii,
+)
 from robot_sf.benchmark.metric_definitions import require_uniform_trace_schema
 
 SUPPORTED_TRACE_SCHEMA: str = "simulation-step-trace.v1"
@@ -518,6 +524,18 @@ def build_bundle(
     _validate_actor_set(frames)
     derived_rows = _build_derived_rows(frames)
     metadata = _build_metadata(row, identity, provenance, derived_rows)
+    try:
+        if footprint_enabled(trace):
+            robot_radius, ped_radius = trace_radii(trace)
+            metadata.update(
+                {
+                    FOOTPRINT_MARKER: FOOTPRINT_SCHEMA,
+                    "robot_radius_m": robot_radius,
+                    "ped_radius_m": ped_radius,
+                }
+            )
+    except (TypeError, ValueError) as exc:
+        raise TraceSeriesAdapterError(f"invalid footprint trace geometry: {exc}") from exc
     metadata["source_trace_schema_version"] = trace["schema_version"]
     metadata["source_file"] = str(episodes_jsonl)
 

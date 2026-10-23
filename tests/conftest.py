@@ -444,6 +444,9 @@ _LEGACY_FAST_FILE_PREFIXES = (
     "test_types",
 )
 _LEGACY_FAST_FILES = {
+    # DWA occupancy-clearance tests are deterministic planner contracts; keep
+    # ego-frame and far-obstacle branches in exact-head changed coverage.
+    "test_dwa.py",
     "tests/dev/test_common_setup_venv_profile.py",
     # Force validity reduction checks use small fixed NumPy arrays.
     "test_robot_force_presence.py",
@@ -1718,7 +1721,7 @@ def sample_baseline_data():
 
 
 # =====================================================================# Occupancy Grid Fixtures
-# ==============================================================
+# ================================================
 
 
 @pytest.fixture
@@ -1866,7 +1869,7 @@ def pre_generated_grid(occupancy_grid, simple_obstacles, simple_pedestrians, rob
 
 
 # =====================================================================# Shared Subprocess Mock Fixture
-# ==============================================================
+# ================================================
 
 
 def _build_matcher_predicate(

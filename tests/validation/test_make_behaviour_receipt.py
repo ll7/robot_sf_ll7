@@ -149,6 +149,17 @@ def _sweep_rows(root, label, *, source_sha="a" * 40, failing=False):
         "incomplete_trace_slots": [],
     }
     (out / "execution_main.json").write_text(json.dumps(meta))
+    (out / "contract.json").write_text(
+        json.dumps(
+            {
+                "source_sha": source_sha,
+                "full_roster": True,
+                "row_schema_sha256": "c" * 64,
+                "metric_schema_version": "robot-sf-metrics.v2",
+                "execution": {"metric_semantics_sha256": "d" * 64},
+            }
+        )
+    )
     (out / "README.md").write_text(label + "\n")
     return out
 
@@ -2080,3 +2091,68 @@ def test_sbatch_refuses_unavailable_uv_before_submission(tmp_path, monkeypatch, 
             canary=True,
         )
     assert not (tmp_path / "work").exists()
+
+
+@pytest.mark.parametrize("mode", ["existing", "local", "sbatch"])
+@pytest.mark.parametrize("fault", ["missing", "source", "roster", "schema", "metric", "semantics"])
+def test_all_modes_reject_incompatible_producing_contracts(tmp_path, monkeypatch, mode, fault):
+    """Collection and launch reject the same producing-contract defects before touching rows."""
+    head = _sweep_rows(tmp_path, "head", source_sha="a" * 40)
+    baseline = _sweep_rows(tmp_path, "baseline", source_sha="b" * 40)
+    for output, source in ((head, "a" * 40), (baseline, "b" * 40)):
+        contract = {
+            "source_sha": source,
+            "full_roster": True,
+            "row_schema_sha256": "c" * 64,
+            "metric_schema_version": "robot-sf-metrics.v2",
+            "execution": {"metric_semantics_sha256": "d" * 64},
+        }
+        if output == baseline:
+            if fault == "source":
+                contract["source_sha"] = "f" * 40
+            elif fault == "roster":
+                contract["full_roster"] = False
+            elif fault == "schema":
+                contract["row_schema_sha256"] = "e" * 64
+            elif fault == "metric":
+                contract["metric_schema_version"] = "robot-sf-metrics.v1"
+            elif fault == "semantics":
+                contract["execution"]["metric_semantics_sha256"] = "e" * 64
+        if fault != "missing" or output != baseline:
+            (output / "contract.json").write_text(json.dumps(contract))
+    if fault == "missing":
+        (baseline / "contract.json").unlink()
+    work = tmp_path / "work"
+    (work / "sweeps").mkdir(parents=True)
+    for label, output in (("head", head), ("baseline", baseline)):
+        (work / "sweeps" / label).symlink_to(output, target_is_directory=True)
+    args = producer._parse_args(
+        [
+            "--head-sha",
+            "a" * 40,
+            "--receipt-id",
+            "fixture",
+            "--mode",
+            mode,
+            "--work-dir",
+            str(work),
+            "--head-sweep-dir",
+            str(head),
+            "--baseline-sweep-dir",
+            str(baseline),
+        ]
+    )
+    touched = []
+    for name in ("_existing_sweep", "_run_local_sweep", "_submit_sbatch_sweep"):
+        monkeypatch.setattr(producer, name, lambda *a, **k: touched.append(True))
+    reason = {
+        "missing": "both preflight contracts",
+        "source": "source/full-roster",
+        "roster": "source/full-roster",
+        "schema": "row/metric schema mismatch",
+        "metric": "row/metric schema mismatch",
+        "semantics": "metric semantics mismatch",
+    }[fault]
+    with pytest.raises(ValueError, match=reason):
+        producer._prepare_sweeps(args, tmp_path, "b" * 40)
+    assert touched == []

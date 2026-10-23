@@ -1925,6 +1925,30 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def _validate_paired_contracts(sweeps: tuple[tuple[Path, str], tuple[Path, str]]) -> None:
+    """Validate producing contracts before either collection or paired execution."""
+    contracts = []
+    for directory, source in sweeps:
+        path = directory / "contract.json"
+        if not path.is_file():
+            raise ValueError(
+                "paired execution requires both preflight contracts; submit --check-only first"
+            )
+        contract = json.loads(path.read_bytes())
+        if contract.get("source_sha") != source or not contract.get("full_roster"):
+            raise ValueError("preflight contract source/full-roster differs")
+        contracts.append(contract)
+    for field in ("row_schema_sha256", "metric_schema_version"):
+        if contracts[0][field] != contracts[1][field]:
+            raise ValueError("paired preflight contract row/metric schema mismatch")
+    if contracts[0]["execution"].get(
+        "metric_semantics_sha256", contracts[0]["execution"].get("metric_definitions_sha256")
+    ) != contracts[1]["execution"].get(
+        "metric_semantics_sha256", contracts[1]["execution"].get("metric_definitions_sha256")
+    ):
+        raise ValueError("paired preflight contract metric semantics mismatch")
+
+
 def _prepare_sweeps(  # noqa: C901 - paired acquisition modes and preflight admission.
     args: argparse.Namespace, repo_root: Path, baseline_source: str
 ) -> tuple[SweepRun, SweepRun]:
@@ -1939,6 +1963,12 @@ def _prepare_sweeps(  # noqa: C901 - paired acquisition modes and preflight admi
             raise ValueError("--mode existing requires --head-sweep-dir and --baseline-sweep-dir")
         if args.sweep_harness_source_sha:
             _verify_requested_harness(args, repo_root, baseline_source)
+        _validate_paired_contracts(
+            (
+                (args.head_sweep_dir.resolve(), args.head_source_sha or args.head_sha),
+                (args.baseline_sweep_dir.resolve(), baseline_source),
+            )
+        )
         return (
             _existing_sweep(
                 args.head_source_sha or args.head_sha,
@@ -1956,26 +1986,12 @@ def _prepare_sweeps(  # noqa: C901 - paired acquisition modes and preflight admi
             ),
         )
     if not args.check_only and not getattr(args, "canary", False):
-        contracts = []
-        for label, source in (("head", args.head_sha), ("baseline", baseline_source)):
-            path = work_dir / "sweeps" / label / "contract.json"
-            if not path.is_file():
-                raise ValueError(
-                    "paired execution requires both preflight contracts; submit --check-only first"
-                )
-            contract = json.loads(path.read_bytes())
-            if contract.get("source_sha") != source or not contract.get("full_roster"):
-                raise ValueError("preflight contract source/full-roster differs")
-            contracts.append(contract)
-        for field in ("row_schema_sha256", "metric_schema_version"):
-            if contracts[0][field] != contracts[1][field]:
-                raise ValueError("paired preflight contract row/metric schema mismatch")
-        if contracts[0]["execution"].get(
-            "metric_semantics_sha256", contracts[0]["execution"].get("metric_definitions_sha256")
-        ) != contracts[1]["execution"].get(
-            "metric_semantics_sha256", contracts[1]["execution"].get("metric_definitions_sha256")
-        ):
-            raise ValueError("paired preflight contract metric semantics mismatch")
+        _validate_paired_contracts(
+            (
+                (work_dir / "sweeps" / "head", args.head_sha),
+                (work_dir / "sweeps" / "baseline", baseline_source),
+            )
+        )
     if args.mode == "local":
         return (
             _run_local_sweep(

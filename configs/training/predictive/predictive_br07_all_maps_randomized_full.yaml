@@ -6,19 +6,21 @@ output:
 
 scenarios:
   scenario_matrix: ../../scenarios/classic_interactions.yaml
-  hard_seed_manifest: ../../benchmarks/predictive_hard_seeds_v1.yaml
+  hard_seed_manifest: predictive_development_seeds_v1.yaml
   planner_grid: ../../benchmarks/predictive_sweep_planner_grid_v1.yaml
 
 base_collection:
   # Larger base coverage for a full run.
   seeds_per_scenario: 8
-  random_seed_base: 21000
+  master_seed: 100001
   max_steps: 240
   max_agents: 24
   horizon_steps: 8
   max_speed: 1.2
 
 hardcase_collection:
+  seed_manifest: predictive_hardcase_training_seeds_v1.yaml
+  master_seed: 100002
   max_steps: 260
   max_agents: 24
   horizon_steps: 8
@@ -36,7 +38,7 @@ training:
   lr: 0.0002
   weight_decay: 0.00001
   val_split: 0.2
-  seed: 42
+  seed: 100003
   # Safe CPU defaults; set these explicitly on GPU hosts when worker transfer is desired.
   num_workers: 0
   pin_memory: false

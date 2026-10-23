@@ -285,6 +285,20 @@ def _forecast_readback(policy: Any) -> list[dict]:
 
 
 def inspect_construction(scenario: dict, seed: int, **kwargs: Any) -> dict:
+    """Certify real constructors under the production episode's default-policy scope.
+
+    Returns:
+        Effective constructor snapshot, including its resolved default policy.
+    """
+    from robot_sf.common.hybrid_defaults import episode_defaults  # noqa: PLC0415
+
+    with episode_defaults(**kwargs) as policy:
+        snapshot = _inspect_construction(scenario, seed, **kwargs)
+        snapshot["hybrid_default_policy"] = dict(policy)
+        return snapshot
+
+
+def _inspect_construction(scenario: dict, seed: int, **kwargs: Any) -> dict:
     """Construct real episode context, policy, simulator; read back their effective parameters.
 
     No reset or step is performed. Signature binding deliberately uses the production defaults;
@@ -336,7 +350,12 @@ def inspect_construction(scenario: dict, seed: int, **kwargs: Any) -> dict:
             "robot": plain(native_env.simulator.robots[0].config),
             "environment": {
                 name: plain(getattr(native_env.config, name))
-                for name in ("observation_mode", "robot_config", "sim_config")
+                for name in (
+                    "observation_mode",
+                    "include_goal_next_valid",
+                    "robot_config",
+                    "sim_config",
+                )
             },
             "planner": _policy_readback(contract.policy_fn),
             "forecast_capabilities": forecasts,
@@ -444,6 +463,7 @@ def episode_inputs(cfg: Any, arm: Any, scenario: dict, kin: str, root: Path) -> 
         else None,
         "algo": arm.algo,
         "scenario_path": root / "scoped_scenarios.json",
+        "provenance_scenario_path": cfg.scenario_matrix_path,
         "algo_config_path": str(arm.algo_config_path) if arm.algo_config_path else None,
         "adapter_impact_eval": arm.adapter_impact_eval,
         "observation_mode": arm.observation_mode or cfg.observation_mode,

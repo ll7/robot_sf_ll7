@@ -133,6 +133,19 @@ def defaults_for_source(source: str | Path | None) -> Iterator[dict[str, str]]:
         _ACTIVE_POLICY.reset(token)
 
 
+@contextmanager
+def episode_defaults(**kwargs: Any) -> Iterator[dict[str, str]]:
+    """Select the same source-bound defaults for episode execution and construction."""
+    source = kwargs.get("algo_config_path")
+    if source is None and kwargs.get("algo_config") is None:
+        source = configless_release_source(
+            kwargs.get("provenance_scenario_path") or kwargs.get("scenario_path"),
+            kwargs.get("algo", ""),
+        )
+    with defaults_for_source(source) as policy:
+        yield policy
+
+
 def episode_default_policy(
     function: Callable[..., dict[str, Any]],
 ) -> Callable[..., dict[str, Any]]:
@@ -144,13 +157,7 @@ def episode_default_policy(
 
     @wraps(function)
     def wrapped(*args: Any, **kwargs: Any) -> dict[str, Any]:
-        source = kwargs.get("algo_config_path")
-        if source is None and kwargs.get("algo_config") is None:
-            source = configless_release_source(
-                kwargs.get("provenance_scenario_path") or kwargs.get("scenario_path"),
-                kwargs.get("algo", ""),
-            )
-        with defaults_for_source(source) as policy:
+        with episode_defaults(**kwargs) as policy:
             logger.debug("Typed hybrid defaults: {}", policy)
             record = function(*args, **kwargs)
             metadata = dict(record.get("algorithm_metadata") or {})

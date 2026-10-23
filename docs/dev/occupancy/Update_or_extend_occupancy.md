@@ -53,6 +53,21 @@ GridConfig(
 - `dtype`: `np.float32` for continuous occupancy, `np.uint8` for binary.
 - `use_ego_frame`: rotate grid with the robot; world frame stays fixed.
 
+### Circle sampling and policy compatibility
+
+Pedestrian and robot channels sample each cell centre: a cell is occupied when
+`(col + 0.5, row + 0.5)` is within or on the circle in continuous grid coordinates.
+This agrees with polygon filling. Small positive circles can occupy no cell if no
+cell centre is covered. The separate `rasterize_circle`/`get_affected_cells` helpers
+use circle-cell intersection for conservative queries; they have a different contract.
+
+The cell-centre correction removes the previous systematic shift towards positive
+grid x/y (about half a cell in each axis). It changes pedestrian, robot and derived
+combined observations, including ego-frame observations. Grid-trained PPO policies
+need compatibility evaluation and retraining before deployment; issue #10082 schedules
+the correction after the frozen 0.0.8 results, alongside the PPO retraining work.
+The behaviour-change gate remains pending; unit tests do not establish navigation gains.
+
 **OccupancyGrid methods**
 
 - `generate(obstacles, pedestrians, robot_pose, ego_frame=False) -> np.ndarray`: rasterize obstacles

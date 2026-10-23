@@ -522,7 +522,10 @@ def _ppo_planner_config(algo_config: dict[str, Any]) -> dict[str, Any]:
         The subset of ``algo_config`` accepted by ``PPOPlannerConfig``.
     """
     allowed = {field.name for field in fields(PPOPlannerConfig)}
-    return {key: value for key, value in algo_config.items() if key in allowed}
+    config = {key: value for key, value in algo_config.items() if key in allowed}
+    if str(algo_config.get("profile", "")).strip().lower() in {"paper", "paper-baseline"}:
+        config["require_complete_observation"] = True
+    return config
 
 
 _load_synthetic_actuation_profile = _load_synthetic_actuation_profile_impl
@@ -1237,7 +1240,7 @@ def _checkpoint_runtime_metadata(planner: Any, algo_config: dict[str, Any]) -> d
     """
     metadata = planner.get_metadata() if hasattr(planner, "get_metadata") else {}
     status = str(metadata.get("status", "unknown")).strip().lower()
-    return {
+    runtime = {
         "model_id": algo_config.get("model_id"),
         "checkpoint_sha256": None,
         "hash_source": None,
@@ -1246,6 +1249,9 @@ def _checkpoint_runtime_metadata(planner: Any, algo_config: dict[str, Any]) -> d
         "load_status": "loaded" if status == "ok" else status,
         "load_error": metadata.get("fallback_reason"),
     }
+    if metadata.get("observation_backfilled_keys"):
+        runtime["observation_backfilled_keys"] = metadata["observation_backfilled_keys"]
+    return runtime
 
 
 def _attach_checkpoint_runtime_stats(

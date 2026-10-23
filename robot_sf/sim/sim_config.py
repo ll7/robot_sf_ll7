@@ -20,6 +20,7 @@ from robot_sf.ped_npc.residual_adversary import (
     ResidualAdversaryConfig,
     _normalize_residual_adversary_config,
 )
+from robot_sf.sim.obstacle_force_profile import resolve_obstacle_force_profile
 from robot_sf.sim.pedestrian_model_variants import (
     HSFM_ALIGNMENT_TORQUE_V1,
     HSFM_ANISOTROPIC_FOV_V1,
@@ -453,10 +454,13 @@ class SimulationSettings:
     """Whether to disable robot movement in the simulator for debugging purposes"""
 
     obstacle_force_law: Any = None
-    """Versioned pedestrian obstacle-force law; 0.1.0 retains the legacy default."""
+    """Versioned pedestrian obstacle-force law; 0.1.0 defaults to radius-aligned physical_margin x10."""
 
     social_force_kernel_version: InitVar[Any] = None
     """Versioned pedestrian pair-kernel selector; missing preserves 0.0.7."""
+
+    obstacle_force_profile: InitVar[str | None] = None
+    """Opt-in wall calibration; missing preserves released parameters and hashes."""
 
     episode_step_limit: InitVar[int | None] = field(default=None, kw_only=True)
     """Explicit whole-step episode budget; None retains duration-based ceiling semantics.
@@ -470,6 +474,11 @@ class SimulationSettings:
 
     def __setattr__(self, name: str, value: Any) -> None:
         """Resolve law assignments immediately and retain selector provenance."""
+        if name == "obstacle_force_profile":
+            resolved = resolve_obstacle_force_profile(value)
+            object.__setattr__(self, "_obstacle_force_profile", resolved)
+            object.__setattr__(self, "_obstacle_force_profile_explicit", resolved.explicit)
+            return
         if name == "obstacle_force_law":
             resolved, mode = resolve_obstacle_force_law_with_mode(value)
             object.__setattr__(self, name, resolved)
@@ -498,6 +507,11 @@ class SimulationSettings:
         Returns:
             The resolved selector for ``social_force_kernel_version`` or the requested attribute.
         """
+        if name == "obstacle_force_profile":
+            try:
+                return object.__getattribute__(self, "_obstacle_force_profile")
+            except AttributeError:
+                return resolve_obstacle_force_profile()
         if name == "social_force_kernel_version":
             try:
                 return object.__getattribute__(self, "_social_force_kernel_version")
@@ -528,6 +542,8 @@ class SimulationSettings:
             overrides["group_allocation_mode"] = self.group_allocation_mode
         if self.episode_step_limit is not None:
             overrides["episode_step_limit"] = self.episode_step_limit
+        if getattr(self, "_obstacle_force_profile_explicit", False):
+            overrides["obstacle_force_profile"] = str(self.obstacle_force_profile)
         return overrides
 
     def to_dict(self) -> dict[str, Any]:
@@ -634,10 +650,11 @@ class SimulationSettings:
         """
         if init_vars:
             self.social_force_kernel_version = init_vars[0]
-        if len(init_vars) > 1:
-            self.episode_step_limit = init_vars[1]
+        self.obstacle_force_profile = init_vars[1] if len(init_vars) > 1 else None
         if len(init_vars) > 2:
-            self.group_allocation_mode = init_vars[2]
+            self.episode_step_limit = init_vars[2]
+        if len(init_vars) > 3:
+            self.group_allocation_mode = init_vars[3]
         # Check that the simulation time is positive
         if self.sim_time_in_secs <= 0:
             raise ValueError("Simulation length for episodes mustn't be negative or zero!")

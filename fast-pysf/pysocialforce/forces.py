@@ -28,6 +28,7 @@ from pysocialforce.config import (
     BODY_EDGE_EXPONENTIAL_V3_CONTACT_STIFF,
     BODY_EDGE_EXPONENTIAL_V3_MULTI_SEGMENT,
     BODY_EDGE_EXPONENTIAL_V3_PHYSICAL_MARGIN,
+    BODY_EDGE_EXPONENTIAL_V3_PHYSICAL_MARGIN10X,
     BODY_EDGE_EXPONENTIAL_V3_RANGE_ONLY,
     LEGACY_SHIFTED_GRADIENT_V1,
     OBSTACLE_FORCE_DISTANCE_FLOOR,
@@ -501,8 +502,12 @@ class ObstacleForce:
                 "range_m": BODY_EDGE_EXPONENTIAL_RANGE_M,
                 "distance_floor": OBSTACLE_FORCE_DISTANCE_FLOOR,
             }
+            if law_version == BODY_EDGE_EXPONENTIAL_V3_PHYSICAL_MARGIN10X:
+                parameters["amplitude_unscaled"] *= 10.0
+                parameters["amplitude_m_s2"] *= 10.0
             if law_version in (
                 BODY_EDGE_EXPONENTIAL_V3_PHYSICAL_MARGIN,
+                BODY_EDGE_EXPONENTIAL_V3_PHYSICAL_MARGIN10X,
                 BODY_EDGE_EXPONENTIAL_V3_CONTACT_STIFF,
             ):
                 parameters["contact_radius_margin_m"] = BODY_EDGE_EXPONENTIAL_PHYSICAL_MARGIN_M
@@ -637,7 +642,10 @@ def body_edge_exponential_force(
     ):
         return 0.0, 0.0
     radius_margin = 0.0
-    if law_version == BODY_EDGE_EXPONENTIAL_V3_PHYSICAL_MARGIN:
+    if law_version in (
+        BODY_EDGE_EXPONENTIAL_V3_PHYSICAL_MARGIN,
+        BODY_EDGE_EXPONENTIAL_V3_PHYSICAL_MARGIN10X,
+    ):
         radius_margin = BODY_EDGE_EXPONENTIAL_PHYSICAL_MARGIN_M
     elif law_version == BODY_EDGE_EXPONENTIAL_V3_CONTACT_STIFF:
         radius_margin = BODY_EDGE_EXPONENTIAL_PHYSICAL_MARGIN_M
@@ -667,6 +675,8 @@ def body_edge_exponential_force(
                 BODY_EDGE_EXPONENTIAL_CONTACT_BIAS_UNSCALED
                 + BODY_EDGE_EXPONENTIAL_CONTACT_STIFFNESS_UNSCALED_PER_M * penetration
             )
+    if law_version == BODY_EDGE_EXPONENTIAL_V3_PHYSICAL_MARGIN10X:
+        strength *= 10.0
     force_x = strength * normal_x
     force_y = strength * normal_y
     if not np.isfinite(force_x) or not np.isfinite(force_y):

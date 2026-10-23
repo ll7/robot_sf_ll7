@@ -260,3 +260,71 @@ class TestCircleOverlapWithOccupancyGrid:
         assert occupied_cells > 0, "Pedestrians overlapping grid should occupy cells"
         # Each pedestrian should contribute, so expect reasonable number
         assert occupied_cells > 10, "Multiple overlapping pedestrians should occupy multiple cells"
+
+
+@pytest.mark.parametrize(
+    "center,radius,expected",
+    [
+        ((2.5, 2.5), 0.2, {(2, 2)}),
+        ((2.5, 2.5), 1.0, {(1, 2), (2, 1), (2, 2), (2, 3), (3, 2)}),
+        ((2.5, 2.5), 1.5, {(1, 1), (1, 2), (1, 3), (2, 1), (2, 2), (2, 3), (3, 1), (3, 2), (3, 3)}),
+        # Centre on a cell boundary; both tangent cell centres are included.
+        ((3.0, 2.5), 0.5, {(2, 2), (2, 3)}),
+        ((2.25, 2.75), 0.4, {(2, 2)}),
+        # Outside centre with one tangent centre inside the clipped grid.
+        ((-0.25, 2.5), 0.75, {(2, 0)}),
+    ],
+)
+@pytest.mark.parametrize("resolution,origin", [(1.0, (0.0, 0.0)), (0.25, (-4.0, 7.0))])
+def test_fast_circle_exact_cell_centres(center, radius, expected, resolution, origin):
+    """Hand-calculated masks sample centres, including tangency and clipping."""
+    config = GridConfig(resolution=resolution, width=6 * resolution, height=6 * resolution)
+    grid = np.zeros((6, 6), dtype=np.float32)
+    world_center = tuple(origin[i] + center[i] * resolution for i in range(2))
+    rasterize_circle_fast((world_center, radius * resolution), grid, config, *origin)
+    assert {tuple(cell) for cell in np.argwhere(grid > 0)} == expected
+
+
+def test_pedestrian_circle_centroid_and_polygon_agree():
+    """A symmetric isolated pedestrian stays centred and matches polygon filling."""
+    from robot_sf.nav.occupancy_grid_rasterization import (
+        rasterize_pedestrians_array,
+        rasterize_polygon,
+    )
+
+    config = GridConfig(resolution=0.25, width=3.0, height=3.0)
+    circle_grid = np.zeros((12, 12), dtype=np.float32)
+    polygon_grid = np.zeros_like(circle_grid)
+    center = np.array([1.5, 1.5])
+    radius = 0.6  # No sampled centre lies on the polygon/circle boundary.
+    rasterize_pedestrians_array(center[None, :], np.array([radius]), circle_grid, config)
+    angles = np.linspace(0.0, 2 * np.pi, 256, endpoint=False)
+    vertices = center + radius * np.column_stack((np.cos(angles), np.sin(angles)))
+    rasterize_polygon([tuple(vertex) for vertex in vertices], polygon_grid, config)
+
+    rows, cols = np.nonzero(circle_grid)
+    centroid = (np.array([cols.mean(), rows.mean()]) + 0.5) * config.resolution
+    np.testing.assert_allclose(centroid, center, atol=0.25 * config.resolution, rtol=0)
+    np.testing.assert_array_equal(circle_grid, polygon_grid)
+
+
+@pytest.mark.parametrize("array_input", [False, True])
+def test_circle_channels_reach_observation_without_offset(array_input):
+    """List/array pedestrians and robot centres survive grid generation unchanged."""
+    from robot_sf.nav.occupancy_grid import GridChannel
+
+    config = GridConfig(
+        resolution=1.0, width=6.0, height=6.0, robot_radius=0.2, channels=list(GridChannel)
+    )
+    grid = OccupancyGrid(config)
+    pedestrians = (np.array([[2.5, 2.5]]), np.array([0.2])) if array_input else [((2.5, 2.5), 0.2)]
+    grid.generate(obstacles=[], pedestrians=pedestrians, robot_pose=((4.5, 4.5), 0.0))
+    observation = grid.to_observation()
+    for channel, expected in [
+        (GridChannel.PEDESTRIANS, {(2, 2)}),
+        (GridChannel.ROBOT, {(4, 4)}),
+        (GridChannel.COMBINED, {(2, 2), (4, 4)}),
+    ]:
+        index = config.channels.index(channel)
+        assert {tuple(cell) for cell in np.argwhere(observation[index] > 0)} == expected
+    assert not np.any(grid.get_channel(GridChannel.OBSTACLES))

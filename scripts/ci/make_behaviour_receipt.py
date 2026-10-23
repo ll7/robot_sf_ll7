@@ -7,8 +7,10 @@ import argparse
 import hashlib
 import json
 import math
+import os
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -809,7 +811,7 @@ def _release_source(repo_root: Path, baseline: str) -> str:
         return _full_sha(repo_root, f"refs/tags/{baseline}")
 
 
-def _sweep_command(
+def _sweep_command(  # noqa: PLR0913
     source_sha: str,
     output_dir: Path,
     seeds: list[int],
@@ -819,6 +821,8 @@ def _sweep_command(
     workers: int,
     check_only: bool,
     harness_sha256: str,
+    canary: bool = False,
+    first_seed_only: bool = False,
 ) -> list[str]:
     cmd = [
         "uv",
@@ -851,6 +855,10 @@ def _sweep_command(
         cmd.extend(["--scenarios", *scenarios])
     if check_only:
         cmd.append("--check-only")
+    if canary:
+        cmd.append("--canary")
+    if first_seed_only:
+        cmd.append("--first-seed-only")
     return cmd
 
 
@@ -895,6 +903,9 @@ def _install_sweep_harness(
         raise ValueError("refusing to overwrite uncommitted sweep harness")
     output_dir.mkdir(parents=True, exist_ok=True)
     manifest = output_dir / "harness.json"
+    from scripts.validation.receipt_harness import bundle_contents, install_bundle
+
+    bundle = bundle_contents(repo_root, runtime_source_sha, source)
     record = _json_bytes(
         {
             "schema_version": "behaviour-sweep-harness.v1",
@@ -904,11 +915,15 @@ def _install_sweep_harness(
             "harness_sha256": hashlib.sha256(harness).hexdigest(),
             "original_harness_sha256": hashlib.sha256(original).hexdigest(),
             "comparison": "development_reconstruction",
+            **(bundle[1] if bundle is not None else {}),
         }
     )
     if manifest.exists() and manifest.read_bytes() != record:
         raise ValueError("existing sweep harness provenance differs; use a fresh work directory")
-    target.write_bytes(harness)
+    if bundle is not None:
+        install_bundle(checkout, bundle[0], bundle[1])
+    else:
+        target.write_bytes(harness)
     manifest.write_bytes(record)
 
 
@@ -973,8 +988,24 @@ def _submit_sbatch_sweep(  # noqa: PLR0913
     scenarios: list[str] | None,
     workers: int,
     sweep_harness_source_sha: str | None = None,
+    check_only: bool = False,
+    canary: bool = False,
+    first_seed_only: bool = False,
 ) -> SweepRun:
-    checkout = _ensure_worktree(repo_root, work_dir, label, source_sha)
+    uv_binary = os.environ.get("UV_BIN") or shutil.which("uv")
+    if (
+        not uv_binary
+        or not Path(uv_binary).is_absolute()
+        or not Path(uv_binary).is_file()
+        or not os.access(uv_binary, os.X_OK)
+    ):
+        raise ValueError(
+            "uv executable is missing or not executable; set UV_BIN to an absolute path"
+        )
+    uv_binary = str(Path(uv_binary).resolve())
+    checkout = _ensure_worktree(repo_root, work_dir, label, source_sha).resolve()
+    if canary and workers > 2:
+        raise ValueError("receipt canary is limited to 1-2 CPUs")
     output_dir = work_dir / "sweeps" / label
     output_dir.mkdir(parents=True, exist_ok=True)
     if sweep_harness_source_sha:
@@ -988,7 +1019,9 @@ def _submit_sbatch_sweep(  # noqa: PLR0913
         arms=arms,
         scenarios=scenarios,
         workers=workers,
-        check_only=False,
+        check_only=check_only,
+        canary=canary,
+        first_seed_only=first_seed_only,
         harness_sha256=hashlib.sha256(
             subprocess.check_output(
                 [
@@ -1007,16 +1040,28 @@ def _submit_sbatch_sweep(  # noqa: PLR0913
                 "#!/usr/bin/env bash",
                 f"#SBATCH --job-name=behaviour-{label}",
                 f"#SBATCH --output={output_dir / 'slurm-%j.out'}",
-                "#SBATCH --time=24:00:00",
+                "#SBATCH --time=" + ("00:14:00" if canary or check_only else "24:00:00"),
+                f"#SBATCH --cpus-per-task={workers}",
                 "set -euo pipefail",
-                f"cd {shlex.quote(str(checkout))}",
-                shlex.join(cmd),
+                f"cd -- {shlex.quote(str(checkout))}",
+                "test -f scripts/validation/run_empty_world_sweep.py",
+                'export PYTHONPATH="$PWD:$PWD/fast-pysf${PYTHONPATH:+:$PYTHONPATH}"',
+                "export OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1",
+                f"UV_BIN={shlex.quote(uv_binary)}",
+                'if [[ ! -x "$UV_BIN" ]]; then',
+                '  echo "uv executable is missing or not executable; regenerate with UV_BIN set" >&2',
+                "  exit 1",
+                "fi",
+                '"$UV_BIN" sync --frozen --all-extras',
+                shlex.join([uv_binary, "run", "--frozen", "--all-extras", *cmd[2:]]),
                 "",
             ]
         ),
         encoding="utf-8",
     )
-    job_id = subprocess.check_output(["sbatch", "--parsable", str(script)], text=True).strip()
+    job_id = subprocess.check_output(
+        ["sbatch", "--parsable", f"--chdir={checkout}", str(script)], text=True
+    ).strip()
     submission = {
         "schema_version": "behaviour-sweep-submission.v1",
         "label": label,
@@ -1184,18 +1229,15 @@ def _load_sweep_rows(sweep_dir: Path) -> dict[tuple[str, str, int], dict[str, An
 
 
 def _row_success(row: dict[str, Any]) -> bool:
-    if "success" in row:
-        return bool(row["success"])
-    metrics = row.get("metrics") or {}
-    outcome = row.get("outcome") or {}
-    return bool(metrics.get("success") or outcome.get("route_complete"))
+    from robot_sf.benchmark.receipt_stages import observation_success
+
+    return observation_success(row)
 
 
 def _row_collisions(row: dict[str, Any]) -> int:
-    if row.get("collisions") is not None:
-        return int(row["collisions"])
-    metrics = row.get("metrics") or {}
-    return int(metrics.get("total_collision_count", metrics.get("collisions", 0)) or 0)
+    from robot_sf.benchmark.receipt_stages import observation_collisions
+
+    return observation_collisions(row)
 
 
 def _runtime_objects(
@@ -1598,6 +1640,17 @@ def _execution_evidence(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def compare_episode_observation(head: dict, baseline: dict) -> tuple[bool, int, bool, int]:
+    """Compare scored observations using the pinned acquisition outcome contract.
+
+    Returns:
+        Head/baseline success and collision observations.
+    """
+    from robot_sf.benchmark.receipt_stages import compare_episode_observation as compare
+
+    return compare(head, baseline)
+
+
 def build_rows_and_classifications(
     head_rows: dict[tuple[str, str, int], dict[str, Any]],
     baseline_rows: dict[tuple[str, str, int], dict[str, Any]],
@@ -1607,6 +1660,17 @@ def build_rows_and_classifications(
     evidence_base_uri: str,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, int]]:
     """Join head/baseline sweep rows into gate payload rows and classifications."""
+    from robot_sf.benchmark.metric_definitions import require_uniform_metric_schema
+
+    require_uniform_metric_schema([*head_rows.values(), *baseline_rows.values()])
+    expected = {
+        (arm, slot, seed)
+        for arm in scope["arms"]
+        for slot in scope["maps"]
+        for seed in DEFAULT_SEEDS
+    }
+    if set(head_rows) - expected or set(baseline_rows) - expected:
+        raise ValueError("unexpected episode identities in comparison inputs")
     rows: list[dict[str, Any]] = []
     classifications: list[dict[str, Any]] = []
     for arm in scope["arms"]:
@@ -1619,10 +1683,9 @@ def build_rows_and_classifications(
                     raise ValueError(f"baseline sweep omitted {key}")
                 head = head_rows[key]
                 baseline = baseline_rows[key]
-                success = _row_success(head)
-                collisions = _row_collisions(head)
-                baseline_success = _row_success(baseline)
-                baseline_collisions = _row_collisions(baseline)
+                success, collisions, baseline_success, baseline_collisions = (
+                    compare_episode_observation(head, baseline)
+                )
                 rows.append(
                     {
                         "arm": arm,
@@ -1810,6 +1873,7 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--receipt-id", required=True)
     parser.add_argument("--mode", choices=("existing", "local", "sbatch"), default="existing")
     parser.add_argument("--submit-only", action="store_true")
+    parser.add_argument("--first-seed-only", action="store_true")
     parser.add_argument("--head-sweep-dir", type=Path)
     parser.add_argument("--baseline-sweep-dir", type=Path)
     parser.add_argument("--work-dir", type=Path, default=Path("output/behaviour_receipt"))
@@ -1820,6 +1884,11 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--arms", nargs="*")
     parser.add_argument("--scenarios", nargs="*")
     parser.add_argument("--check-only", action="store_true")
+    parser.add_argument(
+        "--canary",
+        action="store_true",
+        help="Tiny scheduler integration probe outside receipt namespace",
+    )
     parser.add_argument("--head-artifact-uri", default=f"{PLACEHOLDER_EVIDENCE_URI}/head")
     parser.add_argument("--head-artifact-sha256")
     parser.add_argument("--baseline-artifact-uri", default=f"{PLACEHOLDER_EVIDENCE_URI}/baseline")
@@ -1851,9 +1920,13 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def _prepare_sweeps(
+def _prepare_sweeps(  # noqa: C901 - paired acquisition modes and preflight admission.
     args: argparse.Namespace, repo_root: Path, baseline_source: str
 ) -> tuple[SweepRun, SweepRun]:
+    if args.mode == "local" and (
+        getattr(args, "canary", False) or getattr(args, "first_seed_only", False)
+    ):
+        raise ValueError("bounded canary and first-seed modes require --mode sbatch")
     seeds = _check_seed_range(list(args.seeds))
     work_dir = (repo_root / args.work_dir).resolve()
     if args.mode == "existing":
@@ -1877,6 +1950,27 @@ def _prepare_sweeps(
                 job_id=args.baseline_job_id,
             ),
         )
+    if not args.check_only and not getattr(args, "canary", False):
+        contracts = []
+        for label, source in (("head", args.head_sha), ("baseline", baseline_source)):
+            path = work_dir / "sweeps" / label / "contract.json"
+            if not path.is_file():
+                raise ValueError(
+                    "paired execution requires both preflight contracts; submit --check-only first"
+                )
+            contract = json.loads(path.read_bytes())
+            if contract.get("source_sha") != source or not contract.get("full_roster"):
+                raise ValueError("preflight contract source/full-roster differs")
+            contracts.append(contract)
+        for field in ("row_schema_sha256", "metric_schema_version"):
+            if contracts[0][field] != contracts[1][field]:
+                raise ValueError("paired preflight contract row/metric schema mismatch")
+        if contracts[0]["execution"].get(
+            "metric_semantics_sha256", contracts[0]["execution"].get("metric_definitions_sha256")
+        ) != contracts[1]["execution"].get(
+            "metric_semantics_sha256", contracts[1]["execution"].get("metric_definitions_sha256")
+        ):
+            raise ValueError("paired preflight contract metric semantics mismatch")
     if args.mode == "local":
         return (
             _run_local_sweep(
@@ -1915,6 +2009,9 @@ def _prepare_sweeps(
             scenarios=args.scenarios,
             workers=args.workers,
             sweep_harness_source_sha=args.sweep_harness_source_sha,
+            check_only=args.check_only,
+            canary=getattr(args, "canary", False),
+            first_seed_only=getattr(args, "first_seed_only", False),
         ),
         _submit_sbatch_sweep(
             repo_root,
@@ -1926,6 +2023,9 @@ def _prepare_sweeps(
             scenarios=args.scenarios,
             workers=args.workers,
             sweep_harness_source_sha=args.sweep_harness_source_sha,
+            check_only=args.check_only,
+            canary=getattr(args, "canary", False),
+            first_seed_only=getattr(args, "first_seed_only", False),
         ),
     )
 
@@ -1966,7 +2066,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     baseline_source = _release_source(repo_root, baseline_release)
     scheduler, baseline = _prepare_sweeps(args, repo_root, baseline_source)
-    if args.submit_only:
+    if args.submit_only or args.check_only or args.canary:
         print(json.dumps({"head_job_id": scheduler.job_id, "baseline_job_id": baseline.job_id}))
         return 0
     scope = _load_scope(args.scope_path)

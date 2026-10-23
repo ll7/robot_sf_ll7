@@ -153,7 +153,7 @@ def _provenance_sweep(tmp_path, monkeypatch):
     """Load a private source image and isolate campaign I/O from provenance checks."""
     import importlib.util
 
-    from robot_sf.benchmark import camera_ready_campaign
+    from robot_sf.benchmark import camera_ready_campaign, receipt_contract
 
     script = tmp_path / "run_empty_world_sweep.py"
     loaded = Path(sweep.__file__).read_bytes()
@@ -166,6 +166,10 @@ def _provenance_sweep(tmp_path, monkeypatch):
     monkeypatch.setattr(module, "build_derived_inputs", lambda *_, **__: (tmp_path / "cfg", []))
     monkeypatch.setattr(module, "_preflight_receipt_inputs", lambda _: None)
     monkeypatch.setattr(camera_ready_campaign, "load_campaign_config", lambda _: object())
+    monkeypatch.setattr(
+        receipt_contract, "compile_contract", lambda *_, **__: {"execution_key": "e"}
+    )
+    monkeypatch.setattr(receipt_contract, "prepare_completion_views", lambda *_, **__: None)
     monkeypatch.setattr(module, "load_rows", lambda _: [])
     monkeypatch.setattr(module, "reconcile_execution", lambda *_, **__: ([], {"complete": True}))
     return module, script, camera_ready_campaign

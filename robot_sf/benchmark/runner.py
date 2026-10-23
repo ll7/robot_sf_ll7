@@ -3126,6 +3126,8 @@ def run_batch(  # noqa: PLR0913
     record_forces: bool = True,
     snqi_weights: dict[str, float] | None = None,
     snqi_baseline: dict[str, dict[str, float]] | None = None,
+    # Optional campaign-roster identity; consumed only by map-based episode records.
+    planner_key: str | None = None,
     video_enabled: bool = False,
     video_renderer: str = "none",
     append: bool = True,
@@ -3221,6 +3223,7 @@ def run_batch(  # noqa: PLR0913
             record_forces=record_forces,
             snqi_weights=snqi_weights,
             snqi_baseline=snqi_baseline,
+            planner_key=planner_key,
             algo=algo,
             algo_config_path=algo_config_path,
             benchmark_profile=benchmark_profile,

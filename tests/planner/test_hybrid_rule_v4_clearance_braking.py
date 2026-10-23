@@ -14,6 +14,7 @@ import yaml
 from robot_sf.benchmark.policy_search_manifest import resolve_candidate_manifest_runtime
 from robot_sf.planner.hybrid_rule_local_planner import (
     HYBRID_RULE_V4_CLEARANCE_BRAKING_VARIANT,
+    HYBRID_RULE_V4_GUARDED_PROGRESS_VARIANT,
     HybridRuleCandidate,
     HybridRuleLocalPlannerAdapter,
     HybridRuleLocalPlannerConfig,
@@ -34,6 +35,7 @@ from tests.planner.hybrid_rule_closed_loop_helpers import (
 
 CANDIDATES = "configs/policy_search/candidates/"
 V4_BASE = "configs/algos/hybrid_rule_v4_clearance_braking.yaml"
+V4_STOP_BAND_ESCAPE = "hybrid_rule_v4_fast_progress_static_escape_stop_band_escape_v0_1_0.yaml"
 V3_TO_V4 = {
     "hybrid_rule_v3_fast_progress_static_escape_s30_h600_release.yaml": (
         "hybrid_rule_v4_fast_progress_static_escape_s30_h600_release.yaml"
@@ -85,6 +87,31 @@ def _state(
 def _bind(planner: HybridRuleLocalPlannerAdapter, robot_config) -> None:
     env = SimpleNamespace(simulator=SimpleNamespace(robots=[SimpleNamespace(config=robot_config)]))
     planner.bind_env(env)
+
+
+def _stop_band_side_clearance_observation(clearance: float = 0.137512) -> dict:
+    """Observation with the nearest stationary pedestrian beside the robot."""
+    centre = clearance + ROBOT_RADIUS + PED_RADIUS
+    return {
+        "robot": {
+            "position": np.array([0.0, 0.0]),
+            "heading": np.array([0.0]),
+            "speed": np.array([0.0]),
+            "radius": np.array([ROBOT_RADIUS]),
+        },
+        "goal": {
+            "current": np.array([20.0, 0.0]),
+            "next": np.array([20.0, 0.0]),
+            "next_valid": np.array([1.0]),
+        },
+        "pedestrians": {
+            "positions": np.array([[0.0, centre]]),
+            "velocities": np.array([[0.0, 0.0]]),
+            "count": np.array([1.0]),
+            "radius": PED_RADIUS,
+        },
+        "sim": {"timestep": BENCHMARK_DT},
+    }
 
 
 def test_v4_continuous_static_acceptance_still_checks_pedestrian_collision(
@@ -283,6 +310,115 @@ def test_v4_levels_trigger_before_contact_for_benchmark_radii() -> None:
         )
     )
     assert v3._human_speed_cap(0.05 + ROBOT_RADIUS + PED_RADIUS) == pytest.approx(0.6)
+
+
+def test_v4_current_identity_keeps_zero_stop_band_at_stationary_side_clearance() -> None:
+    """Existing v4 identities retain the rounded zero-speed stop band."""
+    cfg = load_planner_config(
+        CANDIDATES + "hybrid_rule_v4_fast_progress_static_escape_s30_h600_release.yaml",
+        "francis2023_join_group",
+    )
+    cfg["debug_candidate_evaluator"] = True
+    planner = HybridRuleLocalPlannerAdapter(build_hybrid_rule_local_planner_config(cfg))
+    _bind(planner, DifferentialDriveSettings())
+
+    command = planner.plan(_stop_band_side_clearance_observation())
+    decision = planner.last_decision()
+
+    assert command == (0.0, 0.0)
+    assert decision["speed_safety"]["level"] == "stop"
+    assert decision["speed_safety"]["speed_cap"] == 0.0
+    assert decision["speed_safety"]["braking_cap"] > 0.15
+    assert decision["candidate_evaluator_debug"]["feasible_moving_count"] == 0
+
+
+@pytest.mark.parametrize("clearance", [0.137512, 0.08])
+def test_v4_stop_band_escape_identity_moves_below_old_stop_band_when_hard_checks_pass(
+    clearance: float,
+) -> None:
+    """Directional guards permit progress even below the radial braking margin."""
+    cfg = load_planner_config(CANDIDATES + V4_STOP_BAND_ESCAPE, "francis2023_join_group")
+    cfg["debug_candidate_evaluator"] = True
+    planner = HybridRuleLocalPlannerAdapter(build_hybrid_rule_local_planner_config(cfg))
+    _bind(planner, DifferentialDriveSettings())
+
+    command = planner.plan(_stop_band_side_clearance_observation(clearance))
+    decision = planner.last_decision()
+    speed_safety = decision["speed_safety"]
+
+    assert (
+        speed_safety["min_surface_clearance"]
+        < HybridRuleLocalPlannerConfig(
+            planner_variant=HYBRID_RULE_V4_CLEARANCE_BRAKING_VARIANT
+        ).v4_stop_clearance_human
+    )
+    assert speed_safety["speed_cap"] == pytest.approx(0.6)
+    assert command[0] > 0.0
+    assert command[1] == pytest.approx(0.0)
+    assert decision["candidate_evaluator_debug"]["feasible_moving_count"] > 0
+
+
+def test_guarded_progress_requires_braking_check() -> None:
+    """The successor cannot be constructed with its directional stopping guard disabled."""
+    with pytest.raises(ValueError, match="Guarded progress requires the v4 braking check"):
+        _v4_planner(
+            planner_variant=HYBRID_RULE_V4_GUARDED_PROGRESS_VARIANT,
+            v4_braking_check_enabled=False,
+        )
+
+
+@pytest.mark.parametrize("predictive", [False, True])
+def test_guarded_progress_still_rejects_collision_and_infeasible_braking(
+    predictive: bool,
+) -> None:
+    """Admission by the new cap does not bypass rollout or directional braking."""
+    planner = _v4_planner(
+        planner_variant=HYBRID_RULE_V4_GUARDED_PROGRESS_VARIANT,
+        physical_static_exclusion_enabled=False,
+        v4_predictive_braking_enabled=predictive,
+        v4_prediction_speed_error=0.0,
+    )
+    state = _state(clearance=0.08)
+    cap = planner._v4_human_speed_cap(state)
+    rejected = planner._evaluate_candidate(
+        candidate=HybridRuleCandidate(0.6, 0.0, "dynamic_window"),
+        state=state,
+        observation={},
+        speed_cap=cap,
+        nearest_ped=0.08 + ROBOT_RADIUS + PED_RADIUS,
+    )
+    assert rejected["accepted"] is False
+    assert rejected["reason"] == "dynamic_collision"
+    rejection = planner._v4_braking_rejection(
+        candidate=HybridRuleCandidate(2.0, 0.0, "dynamic_window"),
+        state=_state(clearance=0.4, speed=1.0),
+        collision_radius=ROBOT_RADIUS + PED_RADIUS + 0.05,
+    )
+    assert rejection is not None
+    assert rejection["reason"] == "braking_infeasible"
+
+
+def test_guarded_progress_candidate_changes_only_frozen_speed_policy() -> None:
+    """The registered successor preserves the tuned scorer and released switch values."""
+    from dataclasses import asdict
+
+    frozen_path = CANDIDATES + (
+        "hybrid_rule_v4_fast_progress_static_escape_s30_h600_release_0_0_8_frozen.yaml"
+    )
+    frozen = asdict(
+        build_hybrid_rule_local_planner_config(
+            load_planner_config(frozen_path, "francis2023_join_group"),
+            source_path=repo_root() / frozen_path,
+        )
+    )
+    successor = asdict(
+        build_hybrid_rule_local_planner_config(
+            load_planner_config(CANDIDATES + V4_STOP_BAND_ESCAPE, "francis2023_join_group")
+        )
+    )
+    assert frozen.pop("planner_variant") == HYBRID_RULE_V4_CLEARANCE_BRAKING_VARIANT
+    assert successor.pop("planner_variant") == HYBRID_RULE_V4_GUARDED_PROGRESS_VARIANT
+    assert successor == frozen
 
 
 # ---------------------------------------------------------------------------
@@ -759,3 +895,6 @@ def test_v4_candidates_are_registered_in_policy_search_registry() -> None:
         assert key in registry, key
         assert registry[key]["candidate_config_path"] == CANDIDATES + v4_name
         assert (repo_root() / registry[key]["candidate_config_path"]).is_file()
+    escape_key = V4_STOP_BAND_ESCAPE.removesuffix(".yaml")
+    assert registry[escape_key]["candidate_config_path"] == CANDIDATES + V4_STOP_BAND_ESCAPE
+    assert (repo_root() / registry[escape_key]["candidate_config_path"]).is_file()

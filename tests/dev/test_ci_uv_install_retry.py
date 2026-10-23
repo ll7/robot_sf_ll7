@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import sys
 import textwrap
 from pathlib import Path
 
@@ -42,10 +43,13 @@ def _write_stub_python(
             f"""\
             #!/usr/bin/env bash
             if [[ "$1" == "-m" && "${{2:-}}" == "pip" ]]; then
+              printf '%s\\n' "$*" >> '{log}'
+              if [[ "$*" == *"pip @ https://files.pythonhosted.org/"* ]]; then
+                exit "${{STUB_PIP_BOOTSTRAP_FAIL:-0}}"
+              fi
               n="$(cat '{counter}' 2>/dev/null || echo 0)"
               n=$((n + 1))
               printf '%s\\n' "$n" > '{counter}'
-              printf '%s\\n' "$*" >> '{log}'
               if [[ "$n" -lt {succeed_on} ]]; then
                 echo "stub pip: simulated transient index failure (call $n)" >&2
                 exit 1
@@ -239,3 +243,91 @@ def test_direct_uv_workflows_use_the_retry_helper() -> None:
         assert "scripts/dev/ci_install_uv_retry.sh" in workflow_text, relative_path
         assert "astral-sh/setup-uv@" not in workflow_text, relative_path
         assert 'UV_INSTALL_MAX_ATTEMPTS: "3"' in workflow_text, relative_path
+
+
+def test_ci_install_uv_bootstraps_hash_pinned_pip_before_index_use(tmp_path: Path) -> None:
+    """The uv fallback cannot contact the index with the runner's bundled old pip."""
+    env, _, pip_log = _retry_env(tmp_path, succeed_on=1)
+
+    result = _run_helper(tmp_path, env=env)
+
+    assert result.returncode == 0, result.stderr
+    commands = pip_log.read_text().splitlines()
+    assert "pip @ https://files.pythonhosted.org/" in commands[0]
+    assert (
+        "pip-26.2.2-py3-none-any.whl#sha256="
+        "fd7f4dfa8190e014013b9f08f3e973f4e4c26ffd179a204895533a7254813a70"
+    ) in commands[0]
+    assert "uv==0.11.21" in commands[1]
+
+
+def test_ci_install_uv_rejects_failed_secure_pip_bootstrap(tmp_path: Path) -> None:
+    """A failed secure bootstrap must stop before an insecure index request."""
+    env, counter, pip_log = _retry_env(tmp_path, succeed_on=1)
+    env["STUB_PIP_BOOTSTRAP_FAIL"] = "1"
+
+    result = _run_helper(tmp_path, env=env)
+
+    assert result.returncode != 0
+    assert not counter.exists(), "uv index install ran after the pip bootstrap failed"
+    assert "uv==" not in pip_log.read_text()
+
+
+def test_shared_setup_exposes_isolated_quoted_curl_trust_config(tmp_path: Path) -> None:
+    """Ordinary downstream curl must use only the fixed bundle and empty CA directory."""
+    steps = yaml.safe_load(_action_path().read_text())["runs"]["steps"]
+    expose = next(
+        step for step in steps if step.get("name") == "Expose the fixed CA bundle to job tools"
+    )
+    runner_temp = tmp_path / 'runner temp "quoted"'
+    runner_temp.mkdir()
+    original_curl_home = tmp_path / "existing-curl-home"
+    original_curl_home.mkdir()
+    original_config = original_curl_home / ".curlrc"
+    original_config.write_text("user-agent = user-config-preserved\n")
+    ca_bundle = tmp_path / 'bundle "quoted" with\\backslash.pem'
+    ca_bundle.touch()
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    python = fake_bin / "python"
+    python.write_text(
+        "#!/usr/bin/env bash\n"
+        'if [[ "$1" == -c ]]; then\n'
+        "  printf '%s\\n' \"$FAKE_CA_BUNDLE\"\n"
+        "else\n"
+        '  exec "$TEST_REAL_PYTHON" "$@"\n'
+        "fi\n"
+    )
+    python.chmod(0o755)
+    github_env = tmp_path / "github-env"
+    env = os.environ.copy()
+    env.update(
+        {
+            "PATH": f"{fake_bin}{os.pathsep}{env['PATH']}",
+            "FAKE_CA_BUNDLE": str(ca_bundle),
+            "TEST_REAL_PYTHON": sys.executable,
+            "RUNNER_TEMP": str(runner_temp),
+            "GITHUB_ENV": str(github_env),
+            "CURL_HOME": str(original_curl_home),
+        }
+    )
+
+    result = subprocess.run(
+        ["bash", "-e", "-c", expose["run"]], env=env, text=True, capture_output=True, check=False
+    )
+
+    assert result.returncode == 0, result.stderr
+    exported = dict(line.split("=", 1) for line in github_env.read_text().splitlines())
+    assert "CURL_HOME" in exported, "ordinary curl still falls back to its compiled CA directory"
+    curl_home = Path(exported["CURL_HOME"])
+    assert curl_home.parent == runner_temp
+    assert curl_home != original_curl_home
+    empty_ca_dir = Path(exported["SSL_CERT_DIR"])
+    assert empty_ca_dir.is_dir() and not list(empty_ca_dir.iterdir())
+    assert exported["SSL_CERT_FILE"] == exported["CURL_CA_BUNDLE"] == str(ca_bundle)
+    # Independently spell the fixture's curl escapes rather than invoking the writer's logic.
+    assert (curl_home / ".curlrc").read_text() == (
+        f'cacert = "{tmp_path}/bundle \\"quoted\\" with\\\\backslash.pem"\n'
+        f'capath = "{tmp_path}/runner temp \\"quoted\\"/{empty_ca_dir.name}"\n'
+    )
+    assert original_config.read_text() == "user-agent = user-config-preserved\n"

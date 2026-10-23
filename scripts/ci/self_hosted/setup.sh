@@ -5,7 +5,7 @@ set +x  # A registration token must never appear in a shell trace.
 
 repo="ll7/robot_sf_ll7"
 label="robot-sf-ci-ephemeral"
-image="robot-sf-ci-runner:2.336.0"
+image="${ROBOT_SF_CI_IMAGE:-robot-sf-ci-runner:2.336.0}"
 network="robot-sf-ci-egress"
 network_subnet="172.30.244.0/24"
 network_gateway="172.30.244.1"
@@ -91,12 +91,12 @@ build_image() {
 FROM ghcr.io/actions/actions-runner@sha256:0cfdcc701ce933c6d243c6b0b2da767366dc9f2e99961d4c3754b0b78084cdda
 USER root
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential cmake ffmpeg gh git-lfs \
+    ca-certificates build-essential cmake ffmpeg gh git-lfs \
     libglib2.0-0t64 libgl1 fonts-dejavu-core jq poppler-utils iputils-ping curl \
     && rm -rf /var/lib/apt/lists/* \
     && curl -fsSLo /tmp/node.tar.gz \
-      https://nodejs.org/dist/v22.23.2/node-v22.23.2-linux-x64.tar.gz \
-    && echo 'b294a556e639d64338823920e5866c21c02741742d2e1529ee1a225c1ec9252a  /tmp/node.tar.gz' | sha256sum -c - \
+      https://nodejs.org/dist/v22.23.4/node-v22.23.4-linux-x64.tar.gz \
+    && echo 'b8492284c76a54baf58d61668dd0e41ee0fc98adabf9503d30f05d08f55b4406  /tmp/node.tar.gz' | sha256sum -c - \
     && mkdir -p /opt/node \
     && tar -xzf /tmp/node.tar.gz -C /opt/node --strip-components=1 \
     && ln -s /opt/node/bin/node /usr/local/bin/node \
@@ -113,6 +113,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --chown=runner:runner setup.sh /usr/local/bin/robot-sf-runner
 COPY --chown=runner:runner job_started_hook.sh /usr/local/libexec/robot-sf-job-started.sh
 COPY --chown=runner:runner network_probe.sh /usr/local/libexec/robot-sf-network-probe
+# Embedded action runtimes also use the patched OS trust store.
+ENV NODE_OPTIONS=--use-openssl-ca
 ENV ACTIONS_RUNNER_HOOK_JOB_STARTED=/usr/local/libexec/robot-sf-job-started.sh
 USER 1001:1001
 ENTRYPOINT ["/usr/local/bin/robot-sf-runner", "container"]

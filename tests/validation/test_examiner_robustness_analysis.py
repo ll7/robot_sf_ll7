@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import gzip
 import json
+import shutil
 
 import pytest
 
 from scripts.validation import analyze_examiner_robustness_20261012 as analysis
+from scripts.validation import render_examiner_robustness_20261012 as renderer
 
 
 def _fixture(tmp_path, monkeypatch, defect=None):
@@ -103,3 +105,25 @@ def test_equal_episode_counts_do_not_become_floating_point_ranks(tmp_path, monke
     changed = json.loads((evidence / "summary.json").read_text())["rankings"][1]
     assert changed["success_tau_b"] is None
     assert [r["success"] for r in changed["planner_outcomes"]] == [0.1, 0.1]
+
+
+def test_report_regeneration_is_a_noop(tmp_path, monkeypatch):
+    """Regeneration preserves the reviewed custody archive link and every table."""
+    original = renderer.BUNDLE
+    expected = (original / "README.md").read_bytes()
+    for relative in (
+        "inputs/study.json",
+        "evidence/summary.json",
+        "evidence/cells.csv",
+        "evidence/crowd_probes.json",
+        "evidence/sanity.json",
+        "evidence/acquisition_source.json",
+    ):
+        destination = tmp_path / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(original / relative, destination)
+    monkeypatch.setattr(renderer, "BUNDLE", tmp_path)
+
+    renderer.render()
+
+    assert (tmp_path / "README.md").read_bytes() == expected

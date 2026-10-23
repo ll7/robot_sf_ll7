@@ -245,15 +245,48 @@ def _check_pointer_file(spec: PointerSpec) -> list[str]:
     return errors
 
 
+def _sync_shared_hazards(*, fix: bool) -> None:
+    """Report generated hazard drift without adding a blocking validation gate."""
+    source_path = _repo_path("docs/dev/agents/shared-hazards.md")
+    target_path = _repo_path("AGENTS.md")
+    start, end = "<!-- shared-hazards:start -->", "<!-- shared-hazards:end -->"
+    try:
+        source = source_path.read_text(encoding="utf-8")
+        target = target_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError):
+        print("report-only: shared hazards source or target is unavailable")
+        return
+    if (
+        target.count(start) != 1
+        or target.count(end) != 1
+        or target.index(start) > target.index(end)
+    ):
+        print("report-only: shared hazards need one ordered marker pair in AGENTS.md")
+        return
+    before, rest = target.split(start, 1)
+    _, after = rest.split(end, 1)
+    expected = before + start + "\n" + source.rstrip() + "\n" + end + after
+    if target == expected:
+        print("AI config shared hazards match.")
+    elif fix:
+        target_path.write_text(expected, encoding="utf-8")
+        print("AI config shared hazards regenerated from docs/dev/agents/shared-hazards.md.")
+    else:
+        print("report-only: shared hazards drift; run scripts/tools/sync_ai_config.py --fix")
+
+
 def main() -> int:
     """Return non-zero when supported AI configuration surfaces drift."""
     parser = argparse.ArgumentParser(description=__doc__)
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--check", action="store_true", help="validate without changing files")
-    group.add_argument("--fix", action="store_true", help="repair supported symlinks")
+    group.add_argument(
+        "--fix", action="store_true", help="repair supported symlinks and regenerate shared hazards"
+    )
     args = parser.parse_args()
 
     fix = args.fix
+    _sync_shared_hazards(fix=fix)
     manifest = load_manifest()
     errors: list[str] = []
     for spec in manifest.symlink_mirrors:

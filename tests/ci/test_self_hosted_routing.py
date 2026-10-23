@@ -442,7 +442,7 @@ def test_job_started_hook_path_has_runner_accepted_extension() -> None:
         assert f"job_started_hook.sh {hook_path}" in script
 
 
-APP_TOKEN_ACTION = "actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349"
+APP_TOKEN_ACTION = "actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510"
 APP_TOKEN_INPUT = "${{ steps.router-token.outputs.token }}"
 
 

@@ -46,6 +46,9 @@ EXECUTION_EVIDENCE_LOCATIONS: dict[str, Any] = {
             "configured_fallback_steps": "map_runner_episode.py:1060 always exports actual cumulative command substitution use.",
         },
     },
+    "guarded_ppo_calibration_locations": {
+        "algorithm_metadata.planner_runtime.last_decision.prediction.calibration.status": "robot_sf/planner/guarded_ppo.py:_shield_decision emits not_calibrated when calibration metadata is absent; safety_shield.py:ShieldDecision.to_metadata transports provenance, not controller execution or calibration evidence.",
+    },
     "non_runtime_locations": {
         "algorithm_metadata.config.fallback_to_goal": "robot_sf/baselines/ppo.py:95 config permission, not activation.",
         "algorithm_metadata.config.allow_fallback": "robot_sf/benchmark/map_runner_policies/socnav_family.py:422 adapter configuration permission, not actual fallback use.",
@@ -1494,6 +1497,28 @@ def _transport_path(path: tuple[str, ...]) -> tuple[str | None, ...]:
     return tuple(None if part == "*" else part for part in path)
 
 
+def _guarded_ppo_calibration_paths(row: dict[str, Any]) -> Iterator[tuple[str, ...]]:
+    """Bind the emitter's default calibration provenance without exempting its subtree."""
+    # Only the default emitted by guarded PPO's typed shield decision is
+    # provenance. Other values, transports and sibling fields remain unaudited.
+    metadata = row.get("algorithm_metadata") or {}
+    if (
+        isinstance(metadata, dict)
+        and (row.get("algo") or row.get("algorithm")) == "guarded_ppo"
+        and metadata.get("canonical_algorithm") == "guarded_ppo"
+    ):
+        for location in EXECUTION_EVIDENCE_LOCATIONS["guarded_ppo_calibration_locations"]:
+            path = tuple(location.split("."))
+            for _, decision in _runtime_objects(row, path[:-3]):
+                if (
+                    isinstance(decision, dict)
+                    and decision.get("schema_version") == "shield-decision.v1"
+                    and list(_runtime_objects(decision, path[-3:]))
+                    == [("prediction.calibration.status", "not_calibrated")]
+                ):
+                    yield path
+
+
 def _unclassified_runtime_marker(row: dict[str, Any]) -> tuple[str, str] | None:
     """Unknown fault vocabulary is evidence of an unaudited transport, even if false/zero.
 
@@ -1515,6 +1540,7 @@ def _unclassified_runtime_marker(row: dict[str, Any]) -> tuple[str, str] | None:
         _transport_path(tuple(location.split(".")))
         for location in EXECUTION_EVIDENCE_LOCATIONS["non_runtime_locations"]
     }
+    optional.update(_guarded_ppo_calibration_paths(row))
     runtime_objects = {
         _transport_path(path) for path in EXECUTION_EVIDENCE_LOCATIONS["runtime_objects"]
     }

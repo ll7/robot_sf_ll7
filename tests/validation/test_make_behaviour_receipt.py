@@ -1368,6 +1368,82 @@ def test_real_row_unclassified_fault_fields_fail_closed_even_in_optional_objects
     assert row == original
 
 
+def _guarded_ppo_calibration_row():
+    """Attach the production shield serializer to an archived raw-row shape."""
+    from robot_sf.planner.guarded_ppo import GuardedPPOAdapter, GuardedPPOConfig
+
+    guard = GuardedPPOAdapter(config=GuardedPPOConfig())
+    decision = guard._shield_decision(
+        ppo_command=(0.2, 0.0),
+        filtered_command=(0.2, 0.0),
+        label="ppo_safe",
+        reason="safe",
+        ppo_eval={"safe": True},
+        selected_eval={"safe": True},
+    ).to_metadata()
+    assert decision["prediction"]["calibration"] == {"status": "not_calibrated"}
+    row = _executed_goal_with_optional_metrics()
+    row["algo"] = "guarded_ppo"
+    metadata = row["algorithm_metadata"]
+    metadata.update(algorithm="ppo", canonical_algorithm="guarded_ppo")
+    metadata["planner_contract"]["planner_id"] = "guarded_ppo"
+    metadata["planner_runtime"] = {"last_decision": decision}
+    return row
+
+
+def test_guarded_ppo_default_calibration_is_provenance_at_raw_row_boundary():
+    row = _guarded_ppo_calibration_row()
+    original = copy.deepcopy(row)
+    assert producer._controller_runtime_marker(row, row["algorithm_metadata"], row["algo"]) is None
+    assert producer._audit_status([producer._execution_evidence(row)]) == "pass"
+    row["algorithm_metadata"]["planner_kinematics"]["execution_mode"] = "mixed"
+    assert producer._audit_status([producer._execution_evidence(row)]) == "fail"
+    row["algorithm_metadata"]["planner_kinematics"] = original["algorithm_metadata"][
+        "planner_kinematics"
+    ]
+    assert row == original
+
+
+@pytest.mark.parametrize(
+    "fault",
+    [
+        "status",
+        "sibling",
+        "parent",
+        "other_path",
+        "algorithm",
+        "canonical",
+        "schema",
+        "fallback",
+        "counter",
+    ],
+)
+def test_guarded_ppo_calibration_does_not_exempt_runtime_faults(fault):
+    row = _guarded_ppo_calibration_row()
+    metadata = row["algorithm_metadata"]
+    decision = metadata["planner_runtime"]["last_decision"]
+    calibration = decision["prediction"]["calibration"]
+    if fault == "status":
+        calibration["status"] = "degraded"
+    elif fault == "sibling":
+        calibration["sibling_status"] = "not_calibrated"
+    elif fault == "parent":
+        decision["prediction"]["status"] = "not_calibrated"
+    elif fault == "other_path":
+        metadata["other_calibration"] = calibration
+    elif fault == "algorithm":
+        row["algo"] = "goal"
+    elif fault == "canonical":
+        metadata["canonical_algorithm"] = "goal"
+    elif fault == "schema":
+        decision["schema_version"] = "unbound"
+    elif fault == "fallback":
+        metadata["planner_runtime"]["fallback_used"] = True
+    else:
+        metadata["guard_stats"] = {"uncertainty_fallback_stop": 1}
+    assert producer._controller_runtime_marker(row, metadata, row["algo"]) is not None
+
+
 def _payload_fixture(tmp_path, monkeypatch):
     git = _git_repo(tmp_path)
     _fake_release_api(tmp_path, monkeypatch)

@@ -317,6 +317,7 @@ def test_failed_campaign_does_not_claim_pinned_execution(tmp_path, monkeypatch):
         benchmark_success=False,
         runtime_sec=1,
         total_episodes=0,
+        episodes_written_this_invocation=0,
         campaign_finished_at_utc="2026-10-08T00:00:00Z",
     )
     monkeypatch.setattr(campaign, "_build_run_meta", lambda *args, **kwargs: {})

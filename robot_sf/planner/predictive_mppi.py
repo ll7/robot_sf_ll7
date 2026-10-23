@@ -1064,7 +1064,9 @@ def build_predictive_mppi_config(cfg: dict[str, object] | None) -> PredictiveMPP
     socnav_allowed = {
         field.name for field in fields(SocNavPlannerConfig)
     } | _SOCNAV_CONFIG_INIT_KEYS
-    socnav_kwargs = {key: value for key, value in cfg.items() if key in socnav_allowed}
+    socnav_kwargs: dict[str, Any] = {
+        key: value for key, value in cfg.items() if key in socnav_allowed
+    }
     socnav = SocNavPlannerConfig(**socnav_kwargs)
     return PredictiveMPPIConfig(
         socnav=socnav,

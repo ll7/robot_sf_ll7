@@ -2095,7 +2095,9 @@ def test_sbatch_refuses_unavailable_uv_before_submission(tmp_path, monkeypatch, 
 
 @pytest.mark.parametrize("mode", ["existing", "local", "sbatch"])
 @pytest.mark.parametrize("fault", ["missing", "source", "roster", "schema", "metric", "semantics"])
-def test_all_modes_reject_incompatible_producing_contracts(tmp_path, monkeypatch, mode, fault):
+def test_all_modes_reject_incompatible_producing_contracts(  # noqa: C901 - explicit producing-contract fault matrix.
+    tmp_path, monkeypatch, mode, fault
+):
     """Collection and launch reject the same producing-contract defects before touching rows."""
     head = _sweep_rows(tmp_path, "head", source_sha="a" * 40)
     baseline = _sweep_rows(tmp_path, "baseline", source_sha="b" * 40)

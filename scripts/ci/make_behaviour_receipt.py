@@ -1949,7 +1949,7 @@ def _validate_paired_contracts(sweeps: tuple[tuple[Path, str], tuple[Path, str]]
         raise ValueError("paired preflight contract metric semantics mismatch")
 
 
-def _prepare_sweeps(  # noqa: C901 - paired acquisition modes and preflight admission.
+def _prepare_sweeps(
     args: argparse.Namespace, repo_root: Path, baseline_source: str
 ) -> tuple[SweepRun, SweepRun]:
     if args.mode == "local" and (

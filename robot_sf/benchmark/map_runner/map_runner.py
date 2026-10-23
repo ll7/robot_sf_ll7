@@ -238,6 +238,11 @@ from robot_sf.benchmark.utils import (
     normalize_track_field,
 )
 from robot_sf.common.artifact_paths import get_repository_root
+from robot_sf.common.hybrid_defaults import (
+    active_default_policy,
+    configless_release_source,
+    source_default_policy,
+)
 from robot_sf.common.math_utils import wrap_angle_pi as _normalize_heading
 from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.planner.dwa import (  # noqa: F401 - compatibility re-export for tests.
@@ -2496,6 +2501,7 @@ def _run_map_episode(  # noqa: PLR0913
     snqi_baseline: dict[str, dict[str, float]] | None,
     algo: str,
     scenario_path: Path,
+    provenance_scenario_path: Path | None = None,
     algo_config: dict[str, Any] | None = None,
     algo_config_path: str | None = None,
     adapter_impact_eval: bool = False,
@@ -2535,6 +2541,11 @@ def _run_map_episode(  # noqa: PLR0913
             "snqi_baseline": snqi_baseline,
             "algo": algo,
             "scenario_path": scenario_path,
+            **(
+                {"provenance_scenario_path": provenance_scenario_path}
+                if provenance_scenario_path is not None
+                else {}
+            ),
             "algo_config": algo_config,
             "algo_config_path": algo_config_path,
             "adapter_impact_eval": adapter_impact_eval,
@@ -2618,7 +2629,7 @@ def _run_map_jobs_with_policy_cache(
     """
     circuit_breaker_threshold = normalize_circuit_breaker_threshold(circuit_breaker_threshold)
     policy_cache: dict[
-        tuple[str, str, str | None, str | None, bool], tuple[Any, dict[str, Any]]
+        tuple[str, str, str | None, str | None, bool, str], tuple[Any, dict[str, Any]]
     ] = {}
 
     def cached_policy_builder(
@@ -2640,6 +2651,7 @@ def _run_map_jobs_with_policy_cache(
             robot_kinematics,
             robot_command_mode,
             bool(adapter_impact_eval),
+            active_default_policy()["default_set"],
         )
         if key not in policy_cache:
             try:
@@ -3318,6 +3330,12 @@ def _compute_resume_identity_payload(
     Returns:
         Identity payload dict used to compute the episode ID for deduplication.
     """
+    # Match the worker: an absent algorithm file and empty parsed mapping stay absent.
+    identity_source = ctx.algo_config_path
+    if identity_source is None and not ctx.raw_policy_cfg:
+        identity_source = configless_release_source(
+            getattr(ctx, "provenance_scenario_path", None) or ctx.scenario_path, ctx.algo
+        )
     identity_scenario = _scenario_with_episode_seed_defaults(sc, seed=int(seed))
     identity_algo, identity_cfg = _policy_resolution.resolve_episode_policy_runtime(
         default_algo=ctx.algo,
@@ -3347,6 +3365,7 @@ def _compute_resume_identity_payload(
         identity_scenario,
         algo=identity_algo,
         algo_config=identity_cfg,
+        default_set=source_default_policy(identity_source)["default_set"],
         horizon=ctx.horizon,
         dt=ctx.dt,
         record_forces=ctx.record_forces,
@@ -3414,6 +3433,7 @@ def _dispatch_batch_execution(ctx: _BatchContext) -> Any:
         raw_policy_cfg=ctx.raw_policy_cfg,
         algo_config_path=ctx.algo_config_path,
         scenario_path=ctx.scenario_path,
+        provenance_scenario_path=ctx.provenance_scenario_path,
         adapter_impact_eval=ctx.adapter_impact_eval,
         experimental_ped_impact=ctx.experimental_ped_impact,
         ped_impact_radius_m=ctx.ped_impact_radius_m,

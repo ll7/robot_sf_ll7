@@ -1047,6 +1047,12 @@ def _build_observation(
         for idx in range(ped_positions.shape[0])
         if keep_mask[idx]
     ]
+    successor = {}
+    if getattr(env.env_config, "include_goal_next_valid", False):
+        next_goal = env.simulator.robot_navs[0].next_waypoint
+        successor = {
+            "goal_next_valid": [float(next_goal is not None)],
+        }
     return Observation(
         dt=float(env.env_config.sim_config.time_per_step_in_secs),
         robot={
@@ -1055,6 +1061,7 @@ def _build_observation(
             "goal": np.asarray(env.simulator.goal_pos[0], dtype=float).tolist(),
             "heading": observed_heading,
             "radius": float(robot.config.radius),
+            **successor,
         },
         agents=agents,
         obstacles=[],
@@ -1098,7 +1105,10 @@ def _socnav_adapter_observation(obs: Observation) -> dict[str, Any]:
             "speed": robot.get("velocity", [0.0, 0.0]),
             "radius": [float(robot.get("radius", 0.3))],
         },
-        "goal": {"current": robot.get("goal", [0.0, 0.0])},
+        "goal": {
+            "current": robot.get("goal", [0.0, 0.0]),
+            **({"next_valid": robot["goal_next_valid"]} if "goal_next_valid" in robot else {}),
+        },
         "pedestrians": {
             "positions": [agent.get("position", [0.0, 0.0]) for agent in agents],
             "velocities": [agent.get("velocity", [0.0, 0.0]) for agent in agents],

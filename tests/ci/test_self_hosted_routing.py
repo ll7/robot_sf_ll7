@@ -424,8 +424,8 @@ def test_container_image_preloads_routed_job_tools() -> None:
         "&& rm -rf /var/lib/apt/lists/*", 1
     )[0]
     assert {"build-essential", "cmake", "ffmpeg", "gh", "git-lfs"} <= set(apt_packages.split())
-    assert "https://nodejs.org/dist/v22.23.2/node-v22.23.2-linux-x64.tar.gz" in script
-    assert "b294a556e639d64338823920e5866c21c02741742d2e1529ee1a225c1ec9252a" in script
+    assert "https://nodejs.org/dist/v22.23.4/node-v22.23.4-linux-x64.tar.gz" in script
+    assert "b8492284c76a54baf58d61668dd0e41ee0fc98adabf9503d30f05d08f55b4406" in script
     assert "sha256sum -c -" in script
     for tool in ("node", "npm", "npx"):
         assert f"ln -s /opt/node/bin/{tool} /usr/local/bin/{tool}" in script

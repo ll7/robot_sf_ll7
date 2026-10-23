@@ -13,7 +13,7 @@ inputs:
     # Dynamic PEP 621 versions produce a root lock entry without a static
     # version. uv 0.5.11 cannot parse that valid format; keep CI on the
     # lockfile-compatible version used to generate and validate uv.lock.
-    default: "0.11.21"
+    default: "0.13.4"
   migrate-artifacts:
     description: Run the legacy artifact migration step after dependency sync.
     default: "true"
@@ -27,11 +27,6 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Set up browser test runtime
-      if: ${{ inputs.node == 'true' }}
-      uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
-      with:
-        node-version-file: .nvmrc
     - name: Retrieve pinned historical test fixture sources
       shell: bash
       run: bash scripts/dev/fetch_test_fixture_sources.sh
@@ -41,8 +36,47 @@ runs:
       with:
         python-version: ${{ inputs.python-version }}
 
+    - name: Bootstrap security-fixed pip from a hash-pinned wheel
+      shell: bash
+      run: |
+        python -m pip install --disable-pip-version-check --no-input --no-deps --only-binary=:all: --upgrade "pip @ https://files.pythonhosted.org/packages/3f/06/3e4420302363fbb71be3c7f35ce042f54bfca330e3e66b3a2e3c4cca579f/pip-26.2.2-py3-none-any.whl#sha256=fd7f4dfa8190e014013b9f08f3e973f4e4c26ffd179a204895533a7254813a70"
+
+    - name: Expose the fixed CA bundle to job tools
+      shell: bash
+      run: |
+        ca_bundle="$(python -c 'from pip._vendor import certifi; print(certifi.where())')"
+        empty_ca_dir="$(mktemp -d "${RUNNER_TEMP}/robot-sf-empty-ca.XXXXXX")"
+        curl_home="$(mktemp -d "${RUNNER_TEMP}/robot-sf-curl-home.XXXXXX")"
+        # curl can retain its compiled CA directory despite SSL_CERT_DIR. An
+        # explicit capath in a job-owned config replaces that default.
+        python - "$ca_bundle" "$empty_ca_dir" "$curl_home/.curlrc" <<'PY'
+        import pathlib
+        import sys
+
+        def curl_quote(value):
+            return '"' + value.replace('\\', '\\\\').replace('"', '\\"') + '"'
+
+        pathlib.Path(sys.argv[3]).write_text(
+            'cacert = ' + curl_quote(sys.argv[1]) + '\n'
+            + 'capath = ' + curl_quote(sys.argv[2]) + '\n'
+        )
+        PY
+        echo "SSL_CERT_FILE=$ca_bundle" >> "$GITHUB_ENV"
+        echo "CURL_CA_BUNDLE=$ca_bundle" >> "$GITHUB_ENV"
+        echo "SSL_CERT_DIR=$empty_ca_dir" >> "$GITHUB_ENV"
+        echo "CURL_HOME=$curl_home" >> "$GITHUB_ENV"
+
+    - name: Set up browser test runtime
+      if: ${{ inputs.node == 'true' }}
+      uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+      env:
+        NODE_OPTIONS: --use-openssl-ca
+      with:
+        node-version-file: .nvmrc
     - name: Install uv
       id: setup-uv
+      env:
+        NODE_OPTIONS: --use-openssl-ca
       # A transient codeload/manifest failure must reach the pinned fallback
       # below; the final version check remains fail-closed.
       continue-on-error: true
@@ -111,6 +145,12 @@ runs:
         # fallback without installing GNU Coreutils.
         CI_STEP_TIMEOUT_SECONDS: "1200"
       run: bash scripts/dev/ci_step_timer.sh "Sync dependencies (locked)" bash scripts/dev/uv_sync_retry.sh -- ${{ inputs.sync-args }}
+
+    - name: Verify certificate trust after dependency sync
+      shell: bash
+      env:
+        NODE_OPTIONS: --use-openssl-ca
+      run: uv run --no-sync python scripts/ci/check_tls_trust.py
 
     - name: Report uv cache state after sync
       if: always()

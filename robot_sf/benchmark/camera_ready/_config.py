@@ -891,6 +891,11 @@ def _load_campaign_scenarios(
         names=cfg.scenario_candidates.names,
         matrix_path=cfg.scenario_matrix_path,
     )
+    from robot_sf.benchmark.map_runner.map_runner_batch_plan import (  # noqa: PLC0415
+        validate_scenario_names,
+    )
+
+    validate_scenario_names(scenario_dicts)
     _validate_scenario_amv_override_keys(
         scenario_dicts,
         overrides=cfg.scenario_amv_overrides,

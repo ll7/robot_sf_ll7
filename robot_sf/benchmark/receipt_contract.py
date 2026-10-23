@@ -516,7 +516,6 @@ def compile_contract(
                     / f"{arm.key}__{kin}"
                     / "episodes.jsonl",
                     schema_path=root / "robot_sf/benchmark/schemas/episode.schema.v1.json",
-                    provenance_scenario_path=cfg.scenario_matrix_path,
                     benchmark_profile=arm.benchmark_profile,
                     socnav_missing_prereq_policy=(
                         "fail-fast"

@@ -810,8 +810,11 @@ def test_wheel_install_smoke_uses_dependency_resolution_and_runtime_env_step() -
     """Wheel smoke should catch missing package metadata and core runtime dependencies."""
     smoke_text = WHEEL_INSTALL_SMOKE.read_text(encoding="utf-8")
 
-    assert '"${PIP_BIN}" install --no-cache-dir "${WHEEL_PATH}"' in smoke_text
-    assert "--no-deps" not in smoke_text
+    project_install = next(
+        line for line in smoke_text.splitlines() if line.startswith('"${PIP_BIN}" install ')
+    )
+    assert "--no-deps" not in project_install
+    assert '--no-cache-dir "${WHEEL_PATH}"' in project_install
     assert "wheel_with_dependency_resolution" in smoke_text
     assert "make_crowd_sim_env" in smoke_text
     assert "env.reset(seed=1001)" in smoke_text

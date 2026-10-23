@@ -902,5 +902,6 @@ it as a repeatable workflow.
 
 The checkpoint-bound PPO velocity-delta adapter and shared release plant limitation are documented in [ppo_checkpoint_action_semantics.md](ppo_checkpoint_action_semantics.md).
 
+The four seeded contract-alignment retrains and their reproducible CPU smoke are described in [ppotrain_release_contract_plan.md](ppotrain_release_contract_plan.md).
 - [Released PPO wall probe, five dev seeds](evidence/ppo_wall_probe_dev_20261012/README.md):
   corrected absolute-target signature holds on 5/5 dev seeds (all 20 sampled targets at 2 m/s); diagnostic only.

@@ -137,6 +137,7 @@ design. See `CONTRIBUTING.md` for the strict-build contract and the curated sour
 
 ### Getting Started
 
+* **[T60 capsule collision diagnostic](./robots/t60_capsule.md)** - Explicit body configs, analytic contacts and remaining consumer limitations
 * **[Bicycle Planner Adaptation](./validation/bicycle_planner.md)** - Opt-in T60 disc configs, physical adapter contract, and dev-seed diagnostic probe
 
 * **[Development Guide](./dev_guide.md)** - First-use landing page for development workflows, setup, testing, quality gates, and coding standards

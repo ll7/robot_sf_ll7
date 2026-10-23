@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict, replace
+from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
@@ -11,6 +12,7 @@ import pytest
 from gymnasium import spaces
 from pysocialforce.config import LEGACY_SHIFTED_GRADIENT_V1
 
+from robot_sf.common.hybrid_defaults import defaults_for_source
 from robot_sf.common.types import Rect
 from robot_sf.gym_env.config_validation import get_resolved_config_dict
 from robot_sf.gym_env.env_config import EnvSettings, PedEnvSettings, RobotEnvSettings
@@ -267,15 +269,34 @@ def test_robot_env_hash_pins_explicit_body_edge_wall_identity() -> None:
 def test_default_env_variants_preserve_pre_rollover_rename_hashes(
     config_type: type, legacy_hash: str, v3_hash: str, wall_law: str | None
 ) -> None:
-    """Naming-only rollover changes must not alter default environment identity."""
+    """Preserve historical hashes under released defaults and expose current changes."""
     # Independent literals from 63e57a26e3 with the same controlled map fixture.
-    cfg = config_type(
+    current = config_type(
         sim_config=SimulationSettings(obstacle_force_law=wall_law),
         map_pool=MapDefinitionPool(maps_folder="fixture", map_defs={"fixture": _minimal_map_def()}),
     )
+    # These pins predate the current goal-validity sensor default. Select the
+    # verified released constructor policy rather than repinning old identities
+    # or hiding the intentional current-default change in the hash function.
+    release_source = (
+        Path(__file__).resolve().parents[1]
+        / "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml"
+    )
+    with defaults_for_source(release_source) as policy:
+        assert policy["default_set"] == "legacy-0.0.8"
+        cfg = config_type(
+            sim_config=SimulationSettings(obstacle_force_law=wall_law),
+            map_pool=MapDefinitionPool(
+                maps_folder="fixture", map_defs={"fixture": _minimal_map_def()}
+            ),
+        )
     assert _stable_config_hash(cfg) == (
         v3_hash if wall_law == "body_edge_exponential_v3" else legacy_hash
     )
+    if issubclass(config_type, RobotSimulationConfig):
+        assert cfg.include_goal_next_valid is False
+        assert current.include_goal_next_valid is True
+        assert _stable_config_hash(current) != _stable_config_hash(cfg)
 
 
 @pytest.mark.parametrize(

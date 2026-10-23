@@ -57,7 +57,7 @@ def _request(
             "speed": [0.0],
             "angular_velocity": [0.0],
         },
-        "goal": {"current": [2.0, 0.0], "next": [2.0, 0.0]},
+        "goal": {"current": [2.0, 0.0], "next": [2.0, 0.0], "next_valid": [1.0]},
         "pedestrians": {
             "positions": pedestrian_positions,
             "velocities": [[0.0, 0.0] for _ in pedestrian_positions],

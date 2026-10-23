@@ -2,14 +2,20 @@
 
 from __future__ import annotations
 
+import json
+from dataclasses import asdict, replace
+from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
+import pytest
 from gymnasium import spaces
 from pysocialforce.config import LEGACY_SHIFTED_GRADIENT_V1
 
+from robot_sf.common.hybrid_defaults import defaults_for_source
 from robot_sf.common.types import Rect
-from robot_sf.gym_env.env_config import EnvSettings
+from robot_sf.gym_env.config_validation import get_resolved_config_dict
+from robot_sf.gym_env.env_config import EnvSettings, PedEnvSettings, RobotEnvSettings
 from robot_sf.gym_env.env_util import (
     create_spaces,
     make_grid_observation_spaces,
@@ -24,7 +30,11 @@ from robot_sf.gym_env.robot_env import (
     _make_telemetry_run_id,
     _stable_config_hash,
 )
-from robot_sf.gym_env.unified_config import RobotSimulationConfig
+from robot_sf.gym_env.unified_config import (
+    ImageRobotConfig,
+    PedestrianSimulationConfig,
+    RobotSimulationConfig,
+)
 from robot_sf.nav.global_route import GlobalRoute
 from robot_sf.nav.map_config import (
     GOAL_COMPLETION_POLICY_GOAL_ZONE_ENTRY_V1,
@@ -34,6 +44,7 @@ from robot_sf.nav.map_config import (
     MapDefinitionPool,
 )
 from robot_sf.nav.occupancy_grid import GridChannel, GridConfig
+from robot_sf.robot.rollover_proxy import RolloverProxyParams
 from robot_sf.sim.sim_config import SimulationSettings
 
 
@@ -167,6 +178,22 @@ def test_robot_env_hash_and_run_id_stable() -> None:
     assert run_a != run_b
 
 
+def test_robot_env_hash_preserves_non_dataclass_config_and_serialization() -> None:
+    """Hash compatibility must not replace geometry on a caller-owned snapshot."""
+    cfg = SimpleNamespace(**asdict(RobotSimulationConfig()))
+    geometry = cfg.rollover_proxy_params
+    before = json.dumps(cfg.__dict__, sort_keys=True, default=str)
+    resolved_before = json.dumps(get_resolved_config_dict(cfg), sort_keys=True, default=str)
+
+    config_hash = _stable_config_hash(cfg)
+
+    assert json.dumps(get_resolved_config_dict(cfg), sort_keys=True, default=str) == resolved_before
+    assert json.dumps(cfg.__dict__, sort_keys=True, default=str) == before
+    assert cfg.rollover_proxy_params is geometry
+    assert _stable_config_hash(cfg) == config_hash
+    assert json.dumps(get_resolved_config_dict(cfg), sort_keys=True, default=str) == resolved_before
+
+
 def test_robot_env_hash_changes_only_for_opted_in_goal_policy() -> None:
     """Legacy config hashes stay stable while the zone policy is identity-visible."""
     cfg = EnvSettings()
@@ -201,8 +228,9 @@ def test_robot_env_missing_wall_selector_matches_legacy_identity_byte_for_byte()
         map_pool=MapDefinitionPool(maps_folder="fixture", map_defs={"fixture": _minimal_map_def()}),
     )
     # ab3c014bd (merged by 408ffb1ba, #10278) renamed serialized rollover fields;
-    # dae7470d0 (#10295) integrated that identity change with the wall-law pins.
-    assert _stable_config_hash(cfg).encode("ascii") == b"c8ac3dfe358aac1e"
+    # The reviewed rollover hash compatibility shim preserves the pre-rename
+    # identity pinned by the independent literals below.
+    assert _stable_config_hash(cfg).encode("ascii") == b"d280527b83ce075c"
     assert _stable_config_hash(cfg).encode("ascii") == _stable_config_hash(explicit_legacy).encode(
         "ascii"
     )
@@ -218,12 +246,119 @@ def test_robot_env_hash_pins_explicit_body_edge_wall_identity() -> None:
     )
     # ab3c014bd (#10278) renamed serialized rollover fields to
     # two_wheel_axle_track_m and single_wheel_axle_to_cog_m; dae7470d0 (#10295)
-    # integrated that identity change without updating this pin.
-    # The geometry values and wall law did not change; the config identity did.
-    assert _stable_config_hash(cfg) == "e4bcf1d2f4d295af"
+    # integrated that identity change. The reviewed compatibility shim restores
+    # the pre-rename identity for unchanged geometry and wall laws.
+    assert _stable_config_hash(cfg) == "f6c4a0545697161d"
 
     cfg.sim_config.robot_goal_sampling_policy = ROBOT_GOAL_SAMPLING_LEGACY_V1
-    assert _stable_config_hash(cfg) == "e4bcf1d2f4d295af"
+    assert _stable_config_hash(cfg) == "f6c4a0545697161d"
+
+
+@pytest.mark.parametrize(
+    ("config_type", "legacy_hash", "v3_hash"),
+    [
+        (EnvSettings, "d280527b83ce075c", "f6c4a0545697161d"),
+        (RobotEnvSettings, "cab667242e449992", "2bfd6d82449c5765"),
+        (PedEnvSettings, "df8cda4dfcd5f8fe", "6c90c61f0cf43f1d"),
+        (RobotSimulationConfig, "6a70d05f45924c0f", "6cb537efe46bc2a1"),
+        (ImageRobotConfig, "e5b690319c83c4e7", "b92b39c06ba86524"),
+        (PedestrianSimulationConfig, "a1d152cf38b718eb", "1bb72686560755e1"),
+    ],
+)
+@pytest.mark.parametrize("wall_law", [None, LEGACY_SHIFTED_GRADIENT_V1, "body_edge_exponential_v3"])
+def test_default_env_variants_preserve_pre_rollover_rename_hashes(
+    config_type: type, legacy_hash: str, v3_hash: str, wall_law: str | None
+) -> None:
+    """Preserve historical hashes under released defaults and expose current changes."""
+    # Independent literals from 63e57a26e3 with the same controlled map fixture.
+    current = config_type(
+        sim_config=SimulationSettings(obstacle_force_law=wall_law),
+        map_pool=MapDefinitionPool(maps_folder="fixture", map_defs={"fixture": _minimal_map_def()}),
+    )
+    # These pins predate the current goal-validity sensor default. Select the
+    # verified released constructor policy rather than repinning old identities
+    # or hiding the intentional current-default change in the hash function.
+    release_source = (
+        Path(__file__).resolve().parents[1]
+        / "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml"
+    )
+    with defaults_for_source(release_source) as policy:
+        assert policy["default_set"] == "legacy-0.0.8"
+        cfg = config_type(
+            sim_config=SimulationSettings(obstacle_force_law=wall_law),
+            map_pool=MapDefinitionPool(
+                maps_folder="fixture", map_defs={"fixture": _minimal_map_def()}
+            ),
+        )
+    assert _stable_config_hash(cfg) == (
+        v3_hash if wall_law == "body_edge_exponential_v3" else legacy_hash
+    )
+    if issubclass(config_type, RobotSimulationConfig):
+        assert cfg.include_goal_next_valid is False
+        assert current.include_goal_next_valid is True
+        assert _stable_config_hash(current) != _stable_config_hash(cfg)
+
+
+@pytest.mark.parametrize(
+    ("enabled", "custom_geometry", "legacy_hash", "v3_hash"),
+    [
+        (False, False, "d280527b83ce075c", "f6c4a0545697161d"),
+        (True, False, "fb674edfa14e4997", "aaf5dd339c1f2688"),
+        (False, True, "6475d1b1485b3bd9", "ef9acd99631480a4"),
+        (True, True, "bd1c28f7149f7c5e", "027c7c1d8d6683b5"),
+    ],
+)
+@pytest.mark.parametrize("wall_law", [None, LEGACY_SHIFTED_GRADIENT_V1, "body_edge_exponential_v3"])
+def test_rollover_geometry_rename_preserves_config_hash(
+    enabled: bool, custom_geometry: bool, legacy_hash: str, v3_hash: str, wall_law: str | None
+) -> None:
+    """Keep physical values and enabled state visible under historical hash keys."""
+    # These literals also come from the pre-rename 63e57a26e3 configuration.
+    params = (
+        RolloverProxyParams(
+            two_wheel_axle_track_m=0.9,
+            single_wheel_axle_to_cog_m=0.4,
+            cog_height_m=0.7,
+            wheelbase_m=1.3,
+        )
+        if custom_geometry
+        else RolloverProxyParams()
+    )
+    cfg = EnvSettings(
+        rollover_proxy_enabled=enabled,
+        rollover_proxy_params=params,
+        sim_config=SimulationSettings(obstacle_force_law=wall_law),
+        map_pool=MapDefinitionPool(maps_folder="fixture", map_defs={"fixture": _minimal_map_def()}),
+    )
+    before = asdict(params)
+    assert _stable_config_hash(cfg) == (
+        v3_hash if wall_law == "body_edge_exponential_v3" else legacy_hash
+    )
+    assert asdict(params) == before
+    assert "two_wheel_axle_track_m" in before
+    assert "single_wheel_axle_to_cog_m" in before
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("two_wheel_axle_track_m", 0.9),
+        ("single_wheel_axle_to_cog_m", 0.4),
+        ("cog_height_m", 0.7),
+        ("wheelbase_m", 1.3),
+        ("gravity_m_s2", 9.8),
+        ("schema_version", "rollover_proxy.v2"),
+    ],
+)
+def test_rollover_geometry_values_remain_hash_visible(field: str, value: float | str) -> None:
+    """Compatibility normalizes names, never discards geometry values."""
+    cfg = EnvSettings(
+        map_pool=MapDefinitionPool(maps_folder="fixture", map_defs={"fixture": _minimal_map_def()})
+    )
+    changed = replace(
+        cfg, rollover_proxy_params=replace(cfg.rollover_proxy_params, **{field: value})
+    )
+    assert _stable_config_hash(changed) != _stable_config_hash(cfg)
 
 
 def test_robot_env_hash_changes_for_corrected_goal_sampling_policy() -> None:

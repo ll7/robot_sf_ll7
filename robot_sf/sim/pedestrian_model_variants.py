@@ -15,6 +15,7 @@ from pysocialforce.scene import EXPLICIT_EULER, normalize_integration_scheme
 from robot_sf.common.math_utils import wrap_angle_pi_array
 
 SOCIAL_FORCE_DEFAULT = "social_force_default"
+ORCA_PEDESTRIANS_V1 = "orca_pedestrians_v1"
 HSFM_TOTAL_FORCE_V1 = "hsfm_total_force_v1"
 HSFM_TTC_PREDICTIVE_V1 = "hsfm_ttc_predictive_v1"
 HSFM_ZANLUNGO_COLLISION_PREDICTION_V1 = "hsfm_zanlungo_collision_prediction_v1"
@@ -23,6 +24,7 @@ HSFM_ALIGNMENT_TORQUE_V1 = "hsfm_alignment_torque_v1"
 SUPPORTED_PEDESTRIAN_MODELS = frozenset(
     {
         SOCIAL_FORCE_DEFAULT,
+        ORCA_PEDESTRIANS_V1,
         HSFM_TOTAL_FORCE_V1,
         HSFM_TTC_PREDICTIVE_V1,
         HSFM_ZANLUNGO_COLLISION_PREDICTION_V1,
@@ -1001,6 +1003,7 @@ __all__ = [
     "HSFM_TOTAL_FORCE_V1",
     "HSFM_TTC_PREDICTIVE_V1",
     "HSFM_ZANLUNGO_COLLISION_PREDICTION_V1",
+    "ORCA_PEDESTRIANS_V1",
     "PYSF_POSITION_SLICE",
     "PYSF_VELOCITY_SLICE",
     "SOCIAL_FORCE_DEFAULT",

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import math
 from collections.abc import Iterator, Mapping
 from concurrent.futures import ProcessPoolExecutor, as_completed
@@ -2578,6 +2579,10 @@ def _write_validated_to_handle(
     record: dict[str, Any],
 ) -> None:
     """Validate one episode record and append it to an open JSONL handle."""
+    from robot_sf.benchmark.receipt_stages import publish_episode  # noqa: PLC0415
+
+    if isinstance(getattr(handle, "name", None), str):
+        publish_episode(Path(handle.name), schema, record)
     _write_jsonl_record(handle, schema, record)
 
 
@@ -3370,11 +3375,21 @@ def _compute_resume_identity_payload(
 
 def _filter_resumed_jobs(ctx: _BatchContext) -> None:
     """Filter already-completed jobs when resuming a batch."""
-    existing = index_existing(ctx.out_path)
-    if not existing:
+    existing = index_existing(ctx.out_path) if ctx.out_path.exists() else set()
+    from robot_sf.benchmark.receipt_stages import find_receipt_file  # noqa: PLC0415
+
+    dispatch_path = find_receipt_file(ctx.out_path, "receipt_dispatch.json")
+    dispatch = json.loads(dispatch_path.read_bytes()) if dispatch_path is not None else None
+    if dispatch is not None:
+        descriptor = json.loads(cast("Path", find_receipt_file(ctx.out_path)).read_bytes())
+        if dispatch["execution_key"] != descriptor["execution_key"]:
+            raise ValueError("receipt dispatch execution key differs")
+    if not existing and dispatch is None:
         return
     filtered_jobs: list[tuple[dict[str, Any], int]] = []
     for sc, seed in ctx.jobs:
+        if dispatch is not None and seed not in dispatch["seeds"]:
+            continue
         identity_payload = _compute_resume_identity_payload(ctx, sc, seed)
         if _compute_map_episode_id(identity_payload, seed) not in existing:
             filtered_jobs.append((sc, seed))
@@ -3545,7 +3560,10 @@ def _execute_and_summarize(ctx: _BatchContext) -> dict[str, Any]:
     Returns:
         Final summary dict from the completed batch.
     """
+    from robot_sf.benchmark.receipt_stages import rebuild_receipt_summary_inputs  # noqa: PLC0415
+
     batch_execution = _dispatch_batch_execution(ctx)
+    batch_execution = rebuild_receipt_summary_inputs(ctx, batch_execution)
     return _build_final_summary(ctx, batch_execution)
 
 
@@ -3555,6 +3573,7 @@ def run_map_batch(  # noqa: PLR0913
     schema_path: str | Path,
     *,
     batch_config: MapBatchConfig | None = None,
+    preflight_only: bool = False,
     scenario_path: str | Path | None = None,
     provenance_scenario_path: str | Path | None = None,
     horizon: int | None = None,
@@ -3594,6 +3613,7 @@ def run_map_batch(  # noqa: PLR0913
         Summary payload with counts and failure details.
     """
     if batch_config is not None:
+        preflight_only = batch_config.preflight_only
         scenario_path = batch_config.scenario_path
         provenance_scenario_path = batch_config.provenance_scenario_path
         horizon = batch_config.horizon
@@ -3662,7 +3682,16 @@ def run_map_batch(  # noqa: PLR0913
     _run_preflight_pipeline(ctx)
     if ctx.preflight.get("status") == "skipped":
         return _build_skipped_summary(ctx)
-    if resume and ctx.out_path.exists():
+    if preflight_only:
+        return {
+            "preflight_complete": True,
+            "jobs": len(ctx.jobs),
+            "scenarios": len(ctx.filtered),
+            "preflight": ctx.preflight,
+        }
+    from robot_sf.benchmark.receipt_stages import find_receipt_file  # noqa: PLC0415
+
+    if resume and (ctx.out_path.exists() or find_receipt_file(ctx.out_path) is not None):
         _filter_resumed_jobs(ctx)
     return _execute_and_summarize(ctx)
 

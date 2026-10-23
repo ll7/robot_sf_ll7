@@ -83,7 +83,11 @@ def _raw_row(seed, *, failing=False):
         "scenario_id": "open",
         "seed": seed,
         "steps": 1,
-        "metrics": {"success": not (failing and seed == 1001), "total_collision_count": 0},
+        "metrics": {
+            "metric_schema_version": "robot-sf-metrics.v2",
+            "success": not (failing and seed == 1001),
+            "total_collision_count": 0,
+        },
         "algorithm_metadata": {
             "status": "ok",
             "planner_kinematics": {"execution_mode": "native"},
@@ -1738,3 +1742,309 @@ def test_raw_index_preserves_planted_regression_detection(tmp_path, fault, reaso
     summary_path.write_text("".join(json.dumps(row) + "\n" for row in summary))
     with pytest.raises(ValueError, match=reason):
         producer._load_sweep_rows(out)
+
+
+def test_local_sweep_uses_pinned_harness_without_changing_runtime_source(tmp_path, monkeypatch):
+    """A reconstructed baseline must run the same repaired harness as its head."""
+    repo = tmp_path / "repo"
+    git = _git_repo(repo)
+    script = repo / "scripts/validation/run_empty_world_sweep.py"
+    script.parent.mkdir(parents=True)
+    script.write_text("# historical width request: 12 steps\n")
+    (repo / "runtime.py").write_text("# baseline runtime\n")
+    git("add", ".")
+    git("commit", "-m", "baseline")
+    baseline = git("rev-parse", "HEAD")
+    script.write_text("# repaired width binding: published eight-step profile\n")
+    git("add", ".")
+    git("commit", "-m", "repaired acquisition harness")
+    harness = git("rev-parse", "HEAD")
+    work = tmp_path / "work"
+    checkout = producer._ensure_worktree(repo, work, "baseline", baseline)
+    calls = []
+
+    original_run = subprocess.run
+
+    def run(command, *, cwd, check, **kwargs):
+        if command[0] != "uv":
+            return original_run(command, cwd=cwd, check=check, **kwargs)
+        calls.append(command)
+        assert cwd == checkout
+        assert (cwd / script.relative_to(repo)).read_text() == script.read_text()
+        assert (
+            subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=cwd, text=True).strip()
+            == baseline
+        )
+        assert (cwd / "runtime.py").read_text() == "# baseline runtime\n"
+
+    monkeypatch.setattr(producer.subprocess, "run", run)
+    result = producer._run_local_sweep(
+        repo,
+        work,
+        "baseline",
+        baseline,
+        [1001, 1030],
+        arms=None,
+        scenarios=None,
+        workers=1,
+        check_only=True,
+        sweep_harness_source_sha=harness,
+    )
+    assert result.source_sha == baseline
+    manifest = json.loads((result.output_dir / "harness.json").read_text())
+    assert manifest["runtime_source_sha"] == baseline
+    assert manifest["harness_source_sha"] == harness
+    assert manifest["harness_sha256"] == hashlib.sha256(script.read_bytes()).hexdigest()
+    assert "--check-only" in calls[0]
+
+
+def test_pinned_harness_refuses_to_overwrite_local_changes(tmp_path):
+    """Installing an acquisition harness cannot discard a previous local repair."""
+    repo = tmp_path / "repo"
+    git = _git_repo(repo)
+    script = repo / "scripts/validation/run_empty_world_sweep.py"
+    script.parent.mkdir(parents=True)
+    script.write_text("# committed\n")
+    git("add", ".")
+    git("commit", "-m", "source")
+    source = git("rev-parse", "HEAD")
+    script.write_text("# someone else's local repair\n")
+    with pytest.raises(ValueError, match="uncommitted sweep harness"):
+        producer._install_sweep_harness(repo, repo, tmp_path / "out", source, source)
+    assert script.read_text() == "# someone else's local repair\n"
+
+
+def test_existing_sweep_rejects_different_executed_harness(tmp_path):
+    """A provenance file alone cannot certify which acquisition code executed."""
+    out = _sweep_rows(tmp_path, "baseline")
+    (out / "harness.json").write_text(
+        json.dumps(
+            {
+                "runtime_source_sha": "a" * 40,
+                "harness_sha256": "b" * 64,
+            }
+        )
+    )
+    with pytest.raises(ValueError, match="executed sweep harness differs"):
+        producer._verify_sweep_metadata(out, "a" * 40)
+    meta_path = out / "execution_main.json"
+    meta = json.loads(meta_path.read_text())
+    meta["sweep_harness_sha256"] = "b" * 64
+    meta_path.write_text(json.dumps(meta))
+    producer._verify_sweep_metadata(out, "a" * 40)
+
+
+def test_sbatch_sweep_pins_harness_before_submission(tmp_path, monkeypatch):
+    """Scheduler acquisition retains separate runtime and harness identities."""
+    repo = tmp_path / "repo"
+    git = _git_repo(repo)
+    script = repo / "scripts/validation/run_empty_world_sweep.py"
+    script.parent.mkdir(parents=True)
+    script.write_text("# original\n")
+    git("add", ".")
+    git("commit", "-m", "baseline")
+    baseline = git("rev-parse", "HEAD")
+    script.write_text("# repaired\n")
+    git("add", ".")
+    git("commit", "-m", "harness")
+    harness = git("rev-parse", "HEAD")
+    work = tmp_path / "work"
+    checkout = producer._ensure_worktree(repo, work, "baseline", baseline)
+    original_output = subprocess.check_output
+
+    def output(command, **kwargs):
+        if command[0] != "sbatch":
+            return original_output(command, **kwargs)
+        assert (checkout / script.relative_to(repo)).read_text() == "# repaired\n"
+        assert (work / "sweeps/baseline/harness.json").is_file()
+        submission_script = Path(command[-1]).read_text()
+        assert baseline in submission_script
+        assert "--seeds 1001 1030" in submission_script
+        return "12345\n"
+
+    monkeypatch.setattr(producer.subprocess, "check_output", output)
+    result = producer._submit_sbatch_sweep(
+        repo,
+        work,
+        "baseline",
+        baseline,
+        [1001, 1030],
+        arms=None,
+        scenarios=None,
+        workers=1,
+        sweep_harness_source_sha=harness,
+    )
+    assert result.source_sha == baseline
+    assert result.job_id == "12345"
+    assert (
+        json.loads((result.output_dir / "harness.json").read_text())["harness_source_sha"]
+        == harness
+    )
+
+
+@pytest.mark.parametrize("bad_manifest", [None, "source", "digest"])
+def test_existing_mode_honors_explicit_paired_harness(tmp_path, bad_manifest):
+    """Collection cannot ignore a requested harness or reuse older width rows."""
+    repo = tmp_path / "repo"
+    git = _git_repo(repo)
+    script = repo / "scripts/validation/run_empty_world_sweep.py"
+    script.parent.mkdir(parents=True)
+    script.write_text("# repaired acquisition\n")
+    git("add", ".")
+    git("commit", "-m", "harness")
+    source = git("rev-parse", "HEAD")
+    head = _sweep_rows(tmp_path, "head", source_sha=source)
+    baseline = _sweep_rows(tmp_path, "baseline", source_sha=source)
+    for output in (head, baseline):
+        manifest = {
+            "runtime_source_sha": source,
+            "harness_source_sha": source,
+            "harness_sha256": hashlib.sha256(script.read_bytes()).hexdigest(),
+        }
+        (output / "harness.json").write_text(json.dumps(manifest))
+        meta_path = output / "execution_main.json"
+        meta = json.loads(meta_path.read_text())
+        meta["sweep_harness_sha256"] = manifest["harness_sha256"]
+        meta_path.write_text(json.dumps(meta))
+    args = producer._parse_args(
+        [
+            "--head-sha",
+            source,
+            "--receipt-id",
+            "fixture",
+            "--mode",
+            "existing",
+            "--head-sweep-dir",
+            str(head),
+            "--baseline-sweep-dir",
+            str(baseline),
+            "--sweep-harness-source-sha",
+            source,
+        ]
+    )
+    producer._prepare_sweeps(args, repo, source)
+    path = baseline / "harness.json"
+    if bad_manifest is None:
+        path.unlink()
+    else:
+        manifest = json.loads(path.read_text())
+        manifest["harness_source_sha" if bad_manifest == "source" else "harness_sha256"] = "0" * 40
+        path.write_text(json.dumps(manifest))
+    with pytest.raises(ValueError, match="requested committed harness"):
+        producer._prepare_sweeps(args, repo, source)
+
+
+@pytest.mark.parametrize("replace_before_launch", [False, True])
+def test_sweep_launcher_executes_only_the_verified_buffer(tmp_path, replace_before_launch):
+    """A selected digest binds compiled bytes even if their pathname is replaced."""
+    script = tmp_path / "scripts/validation/run_empty_world_sweep.py"
+    script.parent.mkdir(parents=True)
+    source = (
+        b"import hashlib, json; from pathlib import Path\n"
+        b"path = Path(__file__)\n"
+        b"path.write_text('# replacement on disk\\n')\n"
+        b"print(json.dumps({'loaded': hashlib.sha256(_SWEEP_SOURCE_BYTES).hexdigest(), "
+        b"'file': __file__}))\n"
+    )
+    script.write_bytes(source)
+    digest = hashlib.sha256(source).hexdigest()
+    command = producer._sweep_command(
+        "a" * 40,
+        tmp_path / "out",
+        list(producer.DEFAULT_SEEDS),
+        arms=None,
+        scenarios=None,
+        workers=1,
+        check_only=False,
+        harness_sha256=digest,
+    )
+    if replace_before_launch:
+        script.write_text("print('UNAPPROVED EXECUTION')\n")
+    result = subprocess.run(
+        [sys.executable, *command[3:]], cwd=tmp_path, capture_output=True, text=True, check=False
+    )
+    if replace_before_launch:
+        assert result.returncode != 0
+        assert "differs from selected committed source" in result.stderr
+        assert not result.stdout
+    else:
+        assert result.returncode == 0, result.stderr
+        assert json.loads(result.stdout) == {"loaded": digest, "file": str(script)}
+        assert hashlib.sha256(script.read_bytes()).hexdigest() != digest
+
+
+@pytest.mark.parametrize("configured", [False, True])
+def test_sbatch_canary_syncs_extras_without_uv_on_batch_path(tmp_path, monkeypatch, configured):
+    """Fresh batch environments sync optional runtime imports before acquisition."""
+    repo = tmp_path / "repo"
+    git = _git_repo(repo)
+    harness = repo / "scripts/validation/run_empty_world_sweep.py"
+    harness.parent.mkdir(parents=True)
+    harness.write_text("# canary fixture\n")
+    git("add", ".")
+    git("commit", "-m", "source")
+    source = git("rev-parse", "HEAD")
+    uv = tmp_path / "tools with spaces" / "uv"
+    uv.parent.mkdir()
+    uv.write_text('#!/bin/sh\nprintf "%s\\n" "$*" >> "$UV_CALL_LOG"\n')
+    uv.chmod(0o755)
+    if configured:
+        monkeypatch.setenv("UV_BIN", str(uv))
+    else:
+        monkeypatch.delenv("UV_BIN", raising=False)
+    monkeypatch.setattr(shutil, "which", lambda name: str(uv) if name == "uv" else None)
+    original_output = subprocess.check_output
+
+    def output(command, **kwargs):
+        if command[0] == "sbatch":
+            return "12345\n"
+        return original_output(command, **kwargs)
+
+    monkeypatch.setattr(producer.subprocess, "check_output", output)
+    work = tmp_path / "work"
+    producer._submit_sbatch_sweep(
+        repo, work, "canary", source, [1001], arms=None, scenarios=None, workers=1, canary=True
+    )
+    script = work / "behaviour_receipt_canary.sbatch"
+    rendered = script.read_text()
+    assert "sync --frozen --all-extras" in rendered
+    assert "run --frozen --all-extras python" in rendered
+    assert "uv run python" not in rendered
+    log = tmp_path / "uv-calls"
+    env = {**os.environ, "PATH": "", "UV_CALL_LOG": str(log)}
+    subprocess.run(["/bin/bash", str(script)], env=env, check=True)
+    calls = log.read_text().splitlines()
+    assert calls[0] == "sync --frozen --all-extras"
+    assert calls[1].startswith("run --frozen --all-extras python ")
+    uv.unlink()
+    failed = subprocess.run(
+        ["/bin/bash", str(script)], env=env, capture_output=True, text=True, check=False
+    )
+    assert failed.returncode != 0
+    assert "uv executable is missing or not executable" in failed.stderr
+
+
+@pytest.mark.parametrize("uv_setting", [None, "relative/uv", "missing", "directory"])
+def test_sbatch_refuses_unavailable_uv_before_submission(tmp_path, monkeypatch, uv_setting):
+    """Invalid uv configuration refuses before creating worktrees or scheduler jobs."""
+    monkeypatch.setattr(shutil, "which", lambda name: None)
+    if uv_setting is None:
+        monkeypatch.delenv("UV_BIN", raising=False)
+    else:
+        value = {"missing": str(tmp_path / "missing"), "directory": str(tmp_path)}.get(
+            uv_setting, uv_setting
+        )
+        monkeypatch.setenv("UV_BIN", value)
+    with pytest.raises(ValueError, match="uv executable is missing or not executable"):
+        producer._submit_sbatch_sweep(
+            tmp_path,
+            tmp_path / "work",
+            "canary",
+            "a" * 40,
+            [1001],
+            arms=None,
+            scenarios=None,
+            workers=1,
+            canary=True,
+        )
+    assert not (tmp_path / "work").exists()

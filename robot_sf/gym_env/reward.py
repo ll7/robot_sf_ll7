@@ -567,7 +567,7 @@ def _reward_with_terms(
         "near_miss": _bounded(_float(meta, "near_misses", 0.0), 0.0, 1.0),
         "ttc_risk": _ttc_risk_from_meta(meta),
         "comfort": _bounded(_float(meta, "comfort_exposure", 0.0), 0.0, 1.0),
-        "smoothness": _bounded(_float(meta, "jerk_mean", 0.0), 0.0, 5.0) / 5.0,
+        "smoothness": _bounded(_float(meta, "jerk_step", 0.0), 0.0, 5.0) / 5.0,
         "timeout": _timeout_term(meta),
         "stagnation": _stagnation_term(meta),
         "terminal_bonus": 1.0 if route_complete and not collision_flag else 0.0,

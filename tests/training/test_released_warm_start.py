@@ -248,3 +248,31 @@ def test_initialization_seed_is_rejected_before_checkpoint_io(tmp_path, seed):
     """Out-of-range initialization cannot be hidden by a missing checkpoint error."""
     with pytest.raises(ValueError, match="training-only range"):
         load_warm_start(tmp_path / "absent.zip", init_seed=seed)
+
+
+def test_warm_start_discards_nonempty_episode_telemetry_across_save_reload(tmp_path):
+    """A fresh run must not report release outcomes before its first rollout."""
+    from collections import deque
+
+    env = DummyVecEnv([lambda: gym.make("Pendulum-v1")])
+    try:
+        source = PPO("MlpPolicy", env, seed=100001, n_steps=8, batch_size=8, device="cpu")
+        source.ep_info_buffer = deque([{"r": 7.0, "l": 12}], maxlen=100)
+        source.ep_success_buffer = deque([True, False, True], maxlen=100)
+        path = tmp_path / "source.zip"
+        source.save(path)
+        saved_source = PPO.load(path, device="cpu")
+        assert list(saved_source.ep_info_buffer) == [{"r": 7.0, "l": 12}]
+        assert list(saved_source.ep_success_buffer) == [True, False, True]
+        prepared, _ = load_warm_start(path, env=env)
+        prepared_path = tmp_path / "prepared.zip"
+        prepared.save(prepared_path)
+        reloaded = PPO.load(prepared_path, device="cpu")
+        for model in (prepared, reloaded):
+            assert model.ep_info_buffer is None
+            assert model.ep_success_buffer is None
+            assert model.num_timesteps == model._n_updates == model._episode_num == 0
+            for key, value in source.policy.state_dict().items():
+                assert torch.equal(value, model.policy.state_dict()[key]), key
+    finally:
+        env.close()

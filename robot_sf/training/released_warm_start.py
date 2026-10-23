@@ -84,5 +84,7 @@ def load_warm_start(
     model._n_updates = 0
     model._episode_num = 0
     model._last_obs = None
+    model.ep_info_buffer = None
+    model.ep_success_buffer = None
     model.policy.optimizer.state.clear()
     return model, env

@@ -1,0 +1,25 @@
+group,policy,stratum,successes,episodes,rate,interval,empty_replicates
+portal,hybrid_rule_v4_fast_progress_static_escape,traversal,4,4,1.0,"[1.0, 1.0]",142
+portal,hybrid_rule_v4_fast_progress_static_escape,no_traversal,192,206,0.9320388349514563,"[0.8878048780487805, 0.970873786407767]",0
+portal,hybrid_rule_v4_fast_progress_static_escape_continuous,traversal,4,4,1.0,"[1.0, 1.0]",142
+portal,hybrid_rule_v4_fast_progress_static_escape_continuous,no_traversal,192,206,0.9320388349514563,"[0.8894230769230769, 0.9705882352941176]",0
+portal,orca,traversal,8,12,0.6666666666666666,"[0.35714285714285715, 1.0]",0
+portal,orca,no_traversal,196,198,0.98989898989899,"[0.9746192893401016, 1.0]",0
+portal,scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4,traversal,4,4,1.0,"[1.0, 1.0]",142
+portal,scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4,no_traversal,194,206,0.941747572815534,"[0.8990384615384616, 0.9760765550239234]",0
+portal,scenario_adaptive_hybrid_orca_v2_collision_guard_v4,traversal,4,4,1.0,"[1.0, 1.0]",142
+portal,scenario_adaptive_hybrid_orca_v2_collision_guard_v4,no_traversal,194,206,0.941747572815534,"[0.8990384615384616, 0.9760765550239234]",0
+portal,socnav_sampling,traversal,0,6,0.0,"[0.0, 0.0]",9
+portal,socnav_sampling,no_traversal,174,204,0.8529411764705882,"[0.8067632850241546, 0.8970588235294118]",0
+static constriction,hybrid_rule_v4_fast_progress_static_escape,traversal,113,115,0.9826086956521739,"[0.9565217391304348, 1.0]",0
+static constriction,hybrid_rule_v4_fast_progress_static_escape,no_traversal,117,125,0.936,"[0.8951612903225806, 0.9689922480620154]",0
+static constriction,hybrid_rule_v4_fast_progress_static_escape_continuous,traversal,109,115,0.9478260869565217,"[0.8983050847457628, 0.9830508474576272]",0
+static constriction,hybrid_rule_v4_fast_progress_static_escape_continuous,no_traversal,116,125,0.928,"[0.8861788617886179, 0.967741935483871]",0
+static constriction,orca,traversal,105,110,0.9545454545454546,"[0.905982905982906, 0.9910714285714286]",0
+static constriction,orca,no_traversal,119,130,0.9153846153846154,"[0.8646616541353384, 0.9612403100775194]",0
+static constriction,scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4,traversal,110,115,0.9565217391304348,"[0.9203539823008849, 0.9911504424778761]",0
+static constriction,scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4,no_traversal,115,125,0.92,"[0.8780487804878049, 0.96]",0
+static constriction,scenario_adaptive_hybrid_orca_v2_collision_guard_v4,traversal,110,115,0.9565217391304348,"[0.9203539823008849, 0.9911504424778761]",0
+static constriction,scenario_adaptive_hybrid_orca_v2_collision_guard_v4,no_traversal,115,125,0.92,"[0.8780487804878049, 0.96]",0
+static constriction,socnav_sampling,traversal,111,113,0.9823008849557522,"[0.944954128440367, 1.0]",0
+static constriction,socnav_sampling,no_traversal,95,127,0.7480314960629921,"[0.7265625, 0.7651515151515151]",0

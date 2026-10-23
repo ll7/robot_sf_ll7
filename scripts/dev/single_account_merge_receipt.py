@@ -46,6 +46,8 @@ _REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPOSITORY_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPOSITORY_ROOT))
 
+from scripts.dev.lane_markers import extract_metadata_digests  # noqa: E402
+
 RECEIPT_SCHEMA = "single_account_merge_receipt.v1"
 VERIFY_SCHEMA = "single_account_merge_receipt_verification.v1"
 # Reasons that only mean another merge advanced base/main after the receipt was built.
@@ -320,6 +322,70 @@ def _head_of(record: Mapping[str, Any]) -> str:
 def _review_metadata(record: Mapping[str, Any]) -> str:
     """Extract the metadata epoch bound by one review carrier."""
     return _string(record.get("metadata_digest") or record.get("metadata"))
+
+
+def project_review_evidence(
+    items: Any, *, head_sha: str, expected_metadata_digest: str
+) -> list[dict[str, Any]]:
+    """Keep the raw fields needed to classify independent carriers.
+
+    Review comments can carry the canonical metadata trailer and an exact-head
+    marker even though GitHub does not expose either as a typed field.  Preserve
+    those declarations so the receipt classifier can reject stale or missing
+    bindings rather than stamping the current snapshot onto old prose.
+    """
+    if not isinstance(items, list):
+        return []
+    evidence: list[dict[str, Any]] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        author_value = item.get("author")
+        author: dict[str, Any] = author_value if isinstance(author_value, dict) else {}
+        user_value = item.get("user")
+        user: dict[str, Any] = user_value if isinstance(user_value, dict) else {}
+        body = str(item.get("body") or "")
+        declared_shas = re.findall(r"(?<![0-9a-fA-F])([0-9a-fA-F]{40})(?![0-9a-fA-F])", body)
+        observed_head = item.get("head_sha") or item.get("commit_id") or item.get("commitId")
+        if not observed_head:
+            observed_head = next(
+                (value for value in declared_shas if value.lower() == head_sha.lower()),
+                declared_shas[-1] if declared_shas else None,
+            )
+        observed_metadata = item.get("metadata_digest")
+        metadata_values = extract_metadata_digests(body)
+        if not observed_metadata:
+            observed_metadata = next(
+                (
+                    value
+                    for value in metadata_values
+                    if value.lower() == expected_metadata_digest.lower()
+                ),
+                metadata_values[-1] if metadata_values else None,
+            )
+        evidence.append(
+            {
+                "id": item.get("id"),
+                "identity": str(
+                    item.get("identity") or author.get("login") or user.get("login") or ""
+                ),
+                "authorAssociation": str(
+                    item.get("authorAssociation") or item.get("author_association") or ""
+                ).upper(),
+                "state": str(item.get("state") or ""),
+                "commit_id": item.get("commit_id") or item.get("commitId"),
+                "head_sha": observed_head,
+                "metadata_digest": observed_metadata,
+                "evidence_digest": item.get("evidence_digest") or item.get("digest"),
+                "approved_reviewer": item.get("approved_reviewer") is True,
+                "approved_source": item.get("approved_source") is True,
+                "dismissed": item.get("dismissed") is True,
+                "withdrawn": item.get("withdrawn") is True,
+                "superseded": item.get("superseded") is True,
+                "body": body,
+            }
+        )
+    return evidence
 
 
 def _candidate_state(  # noqa: C901, PLR0912 - explicit fail-closed carrier states.

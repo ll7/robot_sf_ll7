@@ -1,0 +1,9 @@
+group,policy,difference,interval,empty_replicates
+portal,hybrid_rule_v4_fast_progress_static_escape,0.33333333333333337,"[0.0, 0.6363636363636364]",142
+portal,hybrid_rule_v4_fast_progress_static_escape_continuous,0.33333333333333337,"[0.0, 0.6363636363636364]",142
+portal,scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4,0.33333333333333337,"[0.0, 0.6363636363636364]",142
+portal,scenario_adaptive_hybrid_orca_v2_collision_guard_v4,0.33333333333333337,"[0.0, 0.6363636363636364]",142
+static constriction,hybrid_rule_v4_fast_progress_static_escape,0.028063241106719317,"[-0.024216524216524205, 0.08333333333333337]",0
+static constriction,hybrid_rule_v4_fast_progress_static_escape_continuous,-0.0067193675889328786,"[-0.06619331195602385, 0.05232383808095953]",0
+static constriction,scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4,0.0019762845849802257,"[-0.05171219699884566, 0.05998978897208984]",0
+static constriction,scenario_adaptive_hybrid_orca_v2_collision_guard_v4,0.0019762845849802257,"[-0.05171219699884566, 0.05998978897208984]",0

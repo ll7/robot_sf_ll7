@@ -525,7 +525,7 @@ def test_real_diff_scope_controls(monkeypatch, tmp_path, paths, blocked):
     blockers = _checks(monkeypatch, "", changed)
     if blocked:
         assert blockers == [
-            "BLOCKER: behaviour receipt missing or duplicated for a behaviour-changing PR"
+            "BLOCKER: reviewed scope inventory is not installed; merge the release integration owner's inventory before enabling this gate"
         ]
     else:
         assert blockers == []

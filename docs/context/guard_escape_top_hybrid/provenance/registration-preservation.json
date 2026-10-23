@@ -1,0 +1,10 @@
+{
+  "passed": true,
+  "registered_files_unchanged": {
+    "target": 17,
+    "comparator": 14
+  },
+  "target_plan_commit": "55a98a1e6143a71e18278478ba4d3dff9bbf8bd4",
+  "all_task_python_code_unchanged_since_full_test_head": "22c164dde4486a4106c4b2eb2ca0f03fbd6410b0",
+  "raw_and_compact_episode_records_outside_git": true
+}

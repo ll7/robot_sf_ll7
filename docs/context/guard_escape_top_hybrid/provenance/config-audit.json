@@ -1,0 +1,6 @@
+{
+  "passed": true,
+  "episodes": 2160,
+  "effective_controller_config_equals_registered_arm_for_every_row": true,
+  "selected_map_path_and_sha256_match_registered_svg_for_every_row": true
+}

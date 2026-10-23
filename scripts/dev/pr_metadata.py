@@ -51,7 +51,16 @@ def metadata_digest(title: str, body: str) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
+# Shared by live-body gates and the carrier gate's history-aware comment scan.
+STALE_CARRIER_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"not\s+current[- ]base\s+merge\s+evidence", re.IGNORECASE),
+    re.compile(r"pending[- ]domain[- ]review", re.IGNORECASE),
+    re.compile(r"pending\s+domain(?:\s+aware)?\s+(?:approval|review)", re.IGNORECASE),
+    re.compile(r"domain[- ]?aware\s+approval\s+remain\w*\s+pending", re.IGNORECASE),
+)
+
 _NOT_READY_SENTINEL_PATTERNS: tuple[re.Pattern[str], ...] = (
+    *STALE_CARRIER_PATTERNS,
     re.compile(r"\bnot\s+merge[-\s]?ready\b", re.IGNORECASE),
     re.compile(r"\bremains\s+unapproved\b", re.IGNORECASE),
     re.compile(

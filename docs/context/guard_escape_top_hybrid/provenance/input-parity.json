@@ -1,0 +1,25 @@
+{
+  "passed": true,
+  "scenario_inputs_identical_except_development_seeds": true,
+  "all_18_cells_checked": true,
+  "numeric_analyzer_byte_identical": true,
+  "analyzer_sha256": "82d39e20877647fc5d2081fd2f2eb79d84153f994e931db9e422650ba87316a7",
+  "groups_byte_identical": true,
+  "map_asset_sha256": {
+    "maps/successor_svg_maps/issue_9762_classic_bottleneck_goal_zone_entry_v2.svg": "6a6e6c9936608a8d62c6ef1f11301159f2015a61d37a97ff72ba6e34e2cafcb5",
+    "maps/successor_svg_maps/issue_9762_classic_bottleneck_medium_goal_zone_entry_v2.svg": "0e5acaff4e020b802828365658127b96748441a12da1da08e4538faa7a1be4ad",
+    "maps/successor_svg_maps/issue_9762_classic_bottleneck_high_goal_zone_entry_v2.svg": "08df3c25d6371a7b4202d0f6b678d16266fbb7e0411e9eaf0e0f967ab4229768",
+    "maps/successor_svg_maps/issue_9762_classic_realworld_bottleneck_goal_zone_entry_v2.svg": "4de3404105d3cb5748992e0eeff2bf8478100db51eb47ee6938f0e1249fae6e4",
+    "maps/successor_svg_maps/issue_10063_classic_station_platform_safe_spawn_v1.svg": "39017d6623ca72ec8020f76025d09cd1135cc8d6868d93a58575e265375845d4",
+    "maps/successor_svg_maps/issue_9762_classic_crossing_goal_zone_entry_v2.svg": "d3bc9ad6205108a480469338282611730410787cc897abd4d71f3f0fbd47d6a8",
+    "maps/successor_svg_maps/issue_9762_classic_doorway_goal_zone_entry_v2.svg": "81f9bba890418075d0801b4463bef4c2f72a812dd81ab4d3d4d1900e16827897",
+    "maps/successor_svg_maps/issue_9762_francis2023_narrow_hallway_goal_zone_entry_v2.svg": "d4016dc32bc4a2715dc088f510da92a6e7739513d5971022bd18478e3181cb8a",
+    "maps/successor_svg_maps/issue_9856_francis2023_entering_room_route_width_v1.svg": "1506b9ddbee141c7256c92802cb6513d3add4cf5a270a9bad3dd197ec7a69166",
+    "maps/successor_svg_maps/issue_9856_francis2023_exiting_room_route_width_v1.svg": "cfd25fa09fd2a315f84f39408e57c0ec59bff14ea86d6020a07b93d75a3e434c",
+    "maps/successor_svg_maps/issue_9856_francis2023_entering_elevator_route_width_v1.svg": "1b486a22cbd1ee1677732bd9d3086892e83d7c6e86f6ad380db921c621597563",
+    "maps/successor_svg_maps/issue_9856_francis2023_exiting_elevator_route_width_v1.svg": "4d176eca64ea8528f5eabd9df4e0314a4a3b0b7ba615736933cd3a5697d3eb1d",
+    "maps/successor_svg_maps/issue_9762_francis2023_crowd_navigation_goal_zone_entry_v2.svg": "5274dbd2c17d90a7d48af38af7dbeb134e9647ba0926e0a825cf9b4af27ba4dc",
+    "maps/successor_svg_maps/issue_10063_francis2023_robot_crowding_safe_spawn_v1.svg": "8ced0ecd8402a30842a888ad7a2d463322c7383d38dde93a4e015e87b469b80f"
+  },
+  "simulation_reset_or_step": false
+}

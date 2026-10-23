@@ -1,0 +1,141 @@
+{
+  "schema": "guard-escape-replication.summary.v1",
+  "evidence_status": "diagnostic-only",
+  "repository": "ll7/robot_sf_ll7",
+  "execution_commit": "6a3ac329d25a97202b050edd69190142fd7553e7",
+  "release_base_commit": "373dbfde4f39667cf9e8732dabe7df5118bdeab1",
+  "episodes": 2160,
+  "arms": [
+    "G0E0",
+    "G0E1",
+    "G1E0",
+    "G1E1"
+  ],
+  "cells": 18,
+  "seed_blocks": 30,
+  "development_seeds": {
+    "first": 1061,
+    "last": 1090
+  },
+  "execution_census": {
+    "adapter": 2160,
+    "native": 0,
+    "fallback": 0,
+    "degraded": 0
+  },
+  "duplicates": 0,
+  "missing_slots": 0,
+  "input_sha256": "9bbca9d24e91cc92e02f3cfb1ea6f602f725ce1dfa3e2156cbf5e398185674c1",
+  "statistics": {
+    "paired_unit": "seed and cell",
+    "bootstrap_unit": "seed block across all cells and arms",
+    "bootstrap_replicates": 10000,
+    "bootstrap_rng": 1001,
+    "interval": "percentile 95%",
+    "main_effects": "Guard: mean over escape states of on-minus-off; escape: mean over guard states of on-minus-off",
+    "interaction": "Y11 - Y10 - Y01 + Y00",
+    "cell_weighting": "equal; no outcome-driven exclusions",
+    "p_values": false
+  },
+  "success_effects": {
+    "static_constriction": {
+      "guard": {
+        "difference_pp": 44.166666666666664,
+        "ci_low_pp": 39.791666666666664,
+        "ci_high_pp": 48.75,
+        "display_pp": [
+          "44.2",
+          "39.8",
+          "48.8"
+        ]
+      },
+      "escape": {
+        "difference_pp": -1.2500000000000067,
+        "ci_low_pp": -2.7083333333333375,
+        "ci_high_pp": -0.2083333333333326,
+        "display_pp": [
+          "-1.3",
+          "-2.7",
+          "-0.2"
+        ]
+      },
+      "interaction": {
+        "difference_pp": 0.8333333333333304,
+        "ci_low_pp": -0.8333333333333304,
+        "ci_high_pp": 2.500000000000002,
+        "display_pp": [
+          "0.8",
+          "-0.8",
+          "2.5"
+        ]
+      }
+    },
+    "portal": {
+      "guard": {
+        "difference_pp": 31.428571428571427,
+        "ci_low_pp": 27.857142857142854,
+        "ci_high_pp": 35.0,
+        "display_pp": [
+          "31.4",
+          "27.9",
+          "35.0"
+        ]
+      },
+      "escape": {
+        "difference_pp": -0.4761904761904745,
+        "ci_low_pp": -1.428571428571429,
+        "ci_high_pp": 0.4761904761904745,
+        "display_pp": [
+          "-0.5",
+          "-1.4",
+          "0.5"
+        ]
+      },
+      "interaction": {
+        "difference_pp": -0.952380952380949,
+        "ci_low_pp": -2.857142857142858,
+        "ci_high_pp": 0.952380952380949,
+        "display_pp": [
+          "-1.0",
+          "-2.9",
+          "1.0"
+        ]
+      }
+    },
+    "crowding_control": {
+      "guard": {
+        "difference_pp": 1.6666666666666663,
+        "ci_low_pp": -4.4444444444444455,
+        "ci_high_pp": 7.777777777777778,
+        "display_pp": [
+          "1.7",
+          "-4.4",
+          "7.8"
+        ]
+      },
+      "escape": {
+        "difference_pp": -1.6666666666666663,
+        "ci_low_pp": -5.5555555555555465,
+        "ci_high_pp": 1.1111111111111127,
+        "display_pp": [
+          "-1.7",
+          "-5.6",
+          "1.1"
+        ]
+      },
+      "interaction": {
+        "difference_pp": -1.1111111111111183,
+        "ci_low_pp": -3.3333333333333437,
+        "ci_high_pp": 1.1102230246251565e-14,
+        "display_pp": [
+          "-1.1",
+          "-3.3",
+          "0.0"
+        ]
+      }
+    }
+  },
+  "review_verdict": "NUMERICALLY_VERIFIED; no independent replication review claimed",
+  "claim_boundary": "Within-controller, fixed-roster development diagnostic; no historical ranking explanation, individual-component mediation, release evidence, or manuscript admission.",
+  "registration_commit": "55a98a1e6143a71e18278478ba4d3dff9bbf8bd4"
+}

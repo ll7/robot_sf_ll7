@@ -1,0 +1,41 @@
+{
+  "schema": "guard-escape-ablation.projection.v1",
+  "execution_commit": "6a3ac329d25a97202b050edd69190142fd7553e7",
+  "raw_root_role": "full/exp_guardesc_top_hybrid_1061_1090_exp_guardesc_top_hybrid_1061_1090_20261018_095359",
+  "files": [
+    {
+      "path": "runs/g0e0__differential_drive/episodes.jsonl",
+      "sha256": "ffd92f3f986e3ceab9689542a213d20235df3743e77215a99abaa3522334363f",
+      "size_bytes": 22899152,
+      "rows": 540
+    },
+    {
+      "path": "runs/g0e1__differential_drive/episodes.jsonl",
+      "sha256": "7361388f74474b83db77bb1187f9726c7e69e7c29bfc4a73ae77f097a134e56a",
+      "size_bytes": 22898791,
+      "rows": 540
+    },
+    {
+      "path": "runs/g1e0__differential_drive/episodes.jsonl",
+      "sha256": "ab1da063ad33a194a1668f7229dae552cc26975f4235859573d12eb537b5c57d",
+      "size_bytes": 23025908,
+      "rows": 540
+    },
+    {
+      "path": "runs/g1e1__differential_drive/episodes.jsonl",
+      "sha256": "64ced467283200395dac30fdd6c66e3982a69028cc52557df17b8f1aa685a0be",
+      "size_bytes": 23017803,
+      "rows": 540
+    }
+  ],
+  "rows": 2160,
+  "non_factor_controller_settings_equal": true,
+  "compact_sha256": "9bbca9d24e91cc92e02f3cfb1ea6f602f725ce1dfa3e2156cbf5e398185674c1",
+  "row_digest_definition": "SHA-256 of exact producer line bytes, including its newline",
+  "projection": "Endpoint metrics, outcome, arm/seed/cell, source/factor/execution identity, authored budget, termination and producer line identity; no trajectories.",
+  "metadata_identity_correction": {
+    "field": "raw_root_role",
+    "inherited_value": "full/campaigns/exp_guardesc_replication",
+    "reason": "Correct inherited replication campaign label; no producer bytes, outcomes or numerical method changed"
+  }
+}

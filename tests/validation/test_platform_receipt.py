@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import shlex
+import signal
 import sys
 import time
 from pathlib import Path
@@ -156,24 +158,77 @@ def test_startup_smoke_success_reports_metadata_and_clean_teardown(tmp_path, mon
         "Town01",
         7,
     )
+    assert section["server_exit_code"] == "not_applicable"
     assert section["terminated_cleanly"] is True and section["orphan_process_count"] == 0
 
 
 @pytest.mark.parametrize(
-    ("body", "timeout", "expected_reason"),
+    ("exit_code", "expected_reason"),
+    [(3, "server_exit_nonzero"), (0, "server_exit_without_ready")],
+)
+def test_startup_smoke_preserves_exit_status_after_stdout_eof(
+    tmp_path, monkeypatch, capsys, exit_code, expected_reason
+):
+    """Hold a real child alive until the first poll after stdout EOF observes None."""
+    release = tmp_path / "release"
+    body = (
+        "import os, sys, time\n"
+        "from pathlib import Path\n"
+        "os.close(sys.stdout.fileno())\n"
+        f"while not Path({str(release)!r}).exists():\n"
+        "    time.sleep(0.01)\n"
+        f"sys.exit({exit_code})\n"
+    )
+    popen = tool.subprocess.Popen
+    observations = []
+
+    def launch(*args, **kwargs):
+        process = popen(*args, **kwargs)
+        poll = process.poll
+
+        def poll_then_release():
+            if not observations:
+                observations.append(poll())
+                release.touch()
+                return observations[0]
+            return poll()
+
+        monkeypatch.setattr(process, "poll", poll_then_release)
+        return process
+
+    monkeypatch.setattr(tool.subprocess, "Popen", launch)
+    assert _smoke(monkeypatch, _server(tmp_path, body)) == 2
+    section = json.loads(capsys.readouterr().out)["startup_smoke"]
+    assert observations == [None]
+    assert section["unavailable_reasons"] == [expected_reason]
+    assert section["server_exit_code"] == exit_code
+    assert section["terminated_cleanly"] is True and section["orphan_process_count"] == 0
+
+
+@pytest.mark.parametrize(
+    ("body", "timeout", "expected_reason", "expected_exit_code"),
     [
-        ("import time\ntime.sleep(60)\n", 1.0, "startup_timeout"),
-        ("import sys\nsys.exit(3)\n", 2.0, "server_exit_nonzero"),
+        ("import time\ntime.sleep(60)\n", 1.0, "startup_timeout", "unavailable"),
+        (
+            "import os, time\nos.close(1)\ntime.sleep(60)\n",
+            1.0,
+            "startup_timeout",
+            "unavailable",
+        ),
+        ("import sys\nsys.exit(3)\n", 2.0, "server_exit_nonzero", 3),
+        ("import sys\nsys.exit(0)\n", 2.0, "server_exit_without_ready", 0),
     ],
 )
 def test_startup_smoke_failures_are_bounded_and_clean(
-    tmp_path, monkeypatch, capsys, body, timeout, expected_reason
+    tmp_path, monkeypatch, capsys, body, timeout, expected_reason, expected_exit_code
 ):
     start = time.monotonic()
     assert _smoke(monkeypatch, _server(tmp_path, body), timeout) == 2
     section = json.loads(capsys.readouterr().out)["startup_smoke"]
     assert section["unavailable_reasons"] == [expected_reason]
+    assert section["server_exit_code"] == expected_exit_code
     assert section["terminated_cleanly"] is True
+    assert section["orphan_process_count"] == 0
     assert time.monotonic() - start < 10
 
 
@@ -201,6 +256,44 @@ def test_startup_smoke_cleans_up_spawned_grandchild(tmp_path, monkeypatch):
             break
         time.sleep(0.05)
     assert not Path(f"/proc/{pid}").exists()
+
+
+def test_startup_smoke_cleans_up_detached_grandchild_after_stdout_eof(
+    tmp_path, monkeypatch, capsys
+):
+    """Track a descendant spawned after EOF and reparented before teardown (R1)."""
+    pid_file = tmp_path / "detached.pid"
+    body = (
+        "import os, subprocess, sys, time\n"
+        "os.close(sys.stdout.fileno())\n"
+        "time.sleep(0.3)\n"
+        "child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'], "
+        "start_new_session=True)\n"
+        f"with open({str(pid_file)!r}, 'w') as marker:\n"
+        "    marker.write(str(child.pid))\n"
+        "time.sleep(0.5)\n"
+    )
+    try:
+        assert _smoke(monkeypatch, _server(tmp_path, body), 2.0) == 2
+        section = json.loads(capsys.readouterr().out)["startup_smoke"]
+        assert pid_file.exists(), "detached descendant must be created before teardown"
+        pid = int(pid_file.read_text(encoding="utf-8"))
+        assert section["unavailable_reasons"] == ["server_exit_without_ready"]
+        assert section["server_exit_code"] == 0
+        assert section["terminated_cleanly"] is True
+        assert section["orphan_process_count"] == 0
+        assert not Path(f"/proc/{pid}").exists(), "receipt claimed cleanup but descendant survived"
+    finally:
+        if pid_file.exists():
+            pid = int(pid_file.read_text(encoding="utf-8"))
+            try:
+                os.kill(pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            try:
+                os.waitpid(pid, 0)
+            except ChildProcessError:
+                pass
 
 
 def test_receipt_projects_into_comparator_manifest(monkeypatch):

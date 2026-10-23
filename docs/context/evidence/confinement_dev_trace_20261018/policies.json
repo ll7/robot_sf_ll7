@@ -1,0 +1,273 @@
+[
+  {
+    "key": "orca",
+    "algo": "orca",
+    "path": "configs/algos/orca_release_v0_0_8.yaml",
+    "sha256": "5840b9e47088a3da14d684091ad0880a6480340fd274fbf88d3ab5b9a1bda5e4",
+    "config": {
+      "max_linear_speed": 2.0,
+      "max_angular_speed": 1.0
+    },
+    "resolved_path": "configs/algos/orca_release_v0_0_8.yaml"
+  },
+  {
+    "key": "socnav_sampling",
+    "algo": "socnav_sampling",
+    "path": "configs/algos/socnav_sampling_release_v0_0_8.yaml",
+    "sha256": "375df080cae0a1317d43bd2239cf078ecc9c5bc69b10d9973bbe153cb4d1d1a6",
+    "config": {
+      "max_linear_speed": 2.0,
+      "max_angular_speed": 1.0,
+      "socnav_sampling_version": "bounded_v2",
+      "sampling_repulsion_weight": 0.0,
+      "sampling_footprint_margin": 0.0,
+      "sampling_pedestrian_prediction": false,
+      "sampling_braking_envelope": false
+    },
+    "resolved_path": "configs/algos/socnav_sampling_release_v0_0_8.yaml"
+  },
+  {
+    "key": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+    "algo": "hybrid_rule_local_planner",
+    "path": "configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4_s30_h600_release_0_0_8_frozen.yaml",
+    "sha256": "28aafe6352543e4c4d24a146bd3ba7260105362052505af9308f6d45d9d94458",
+    "config": {
+      "name": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4_s30_h600_release_0_0_8_frozen",
+      "algo": "hybrid_rule_local_planner",
+      "allow_testing_algorithms": true,
+      "base_config_path": "configs/algos/hybrid_rule_v4_clearance_braking.yaml",
+      "params": {
+        "max_linear_speed": 2.0,
+        "static_clearance_escape_enabled": true,
+        "static_clearance_escape_min_clearance": 1.0,
+        "static_clearance_escape_max_speed": 0.3,
+        "static_clearance_escape_tolerance": 0.05,
+        "static_recenter_enabled": true,
+        "static_recenter_weight": 0.7,
+        "static_recenter_probe_speed": 0.3
+      },
+      "scenario_overrides": {
+        "classic_bottleneck_high": {
+          "v4_slow_clearance_human": 2.1,
+          "v4_moderate_clearance_human": 3.1
+        },
+        "francis2023_blind_corner": {
+          "continuous_static_clearance_enabled": true,
+          "static_hard_safety_margin": 0.0,
+          "v4_slow_clearance_human": 2.1,
+          "v4_moderate_clearance_human": 3.1
+        },
+        "francis2023_perpendicular_traffic": {
+          "very_slow_speed": 0.6,
+          "static_clearance_escape_max_speed": 0.6
+        }
+      },
+      "scenario_algo_overrides": {
+        "francis2023_leave_group": {
+          "algo": "orca",
+          "base_config_path": "configs/algos/issue707_orca_tuned.yaml",
+          "params": {
+            "max_linear_speed": 1.15,
+            "orca_time_horizon": 5.0,
+            "orca_obstacle_margin": 0.14,
+            "orca_symmetry_bias": 0.22,
+            "orca_head_on_bias": 0.3
+          }
+        }
+      },
+      "release_parameter_freeze": {
+        "status": "frozen",
+        "implementation_family": "hybrid_rule_v4_clearance_braking",
+        "source_tuning_log_path": "docs/context/evidence/issue_9748_v4_tuning_log_v1.json",
+        "source_tuning_log_sha256": "1628d5164dcc6294719246bd28a0dda45937474c696fb30c0a6a6a126e17e009",
+        "trial_id": "untuned_v4_base",
+        "effective_config_sha256": "d24da6fc70a31dc1342cb4ded16253d1b56f51d9f71d49c0e93fcc3f2a0b7fa4",
+        "freeze_decision_url": "https://github.com/ll7/robot_sf_ll7/issues/9748#issuecomment-5884539753",
+        "tuning_status": "untuned",
+        "tuning_scope": "outside_pre_registered_9748_search"
+      }
+    },
+    "resolved_path": "configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4_s30_h600_release_0_0_8_frozen.yaml"
+  },
+  {
+    "key": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+    "algo": "hybrid_rule_local_planner",
+    "path": "configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard_v4_s30_h600_release_0_0_8_frozen.yaml",
+    "sha256": "54435e7fd39e592d4684fe40f804ab1c080f39925dceb0781dd68c1ce172ef94",
+    "config": {
+      "name": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4_s30_h600_release_0_0_8_frozen",
+      "algo": "hybrid_rule_local_planner",
+      "allow_testing_algorithms": true,
+      "base_config_path": "configs/algos/hybrid_rule_v4_clearance_braking.yaml",
+      "params": {
+        "max_linear_speed": 2.0,
+        "static_clearance_escape_enabled": true,
+        "static_clearance_escape_min_clearance": 1.0,
+        "static_clearance_escape_max_speed": 0.3,
+        "static_clearance_escape_tolerance": 0.05,
+        "static_recenter_enabled": true,
+        "static_recenter_weight": 0.7,
+        "static_recenter_probe_speed": 0.3
+      },
+      "scenario_overrides": {
+        "classic_merging_low": {
+          "static_clearance_escape_enabled": false,
+          "static_recenter_enabled": false
+        },
+        "francis2023_blind_corner": {
+          "continuous_static_clearance_enabled": true,
+          "static_hard_safety_margin": 0.0,
+          "v4_slow_clearance_human": 2.1,
+          "v4_moderate_clearance_human": 3.1
+        },
+        "francis2023_perpendicular_traffic": {
+          "very_slow_speed": 0.6,
+          "static_clearance_escape_max_speed": 0.6
+        }
+      },
+      "scenario_algo_overrides": {
+        "francis2023_leave_group": {
+          "algo": "orca",
+          "base_config_path": "configs/algos/issue707_orca_tuned.yaml",
+          "params": {
+            "max_linear_speed": 1.15,
+            "orca_time_horizon": 5.0,
+            "orca_obstacle_margin": 0.14,
+            "orca_symmetry_bias": 0.22,
+            "orca_head_on_bias": 0.3
+          }
+        }
+      },
+      "release_parameter_freeze": {
+        "status": "frozen",
+        "implementation_family": "hybrid_rule_v4_clearance_braking",
+        "source_tuning_log_path": "docs/context/evidence/issue_9748_v4_tuning_log_v1.json",
+        "source_tuning_log_sha256": "1628d5164dcc6294719246bd28a0dda45937474c696fb30c0a6a6a126e17e009",
+        "trial_id": "untuned_v4_base",
+        "effective_config_sha256": "d24da6fc70a31dc1342cb4ded16253d1b56f51d9f71d49c0e93fcc3f2a0b7fa4",
+        "freeze_decision_url": "https://github.com/ll7/robot_sf_ll7/issues/9748#issuecomment-5884539753",
+        "tuning_status": "untuned",
+        "tuning_scope": "outside_pre_registered_9748_search"
+      }
+    },
+    "resolved_path": "configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard_v4_s30_h600_release_0_0_8_frozen.yaml"
+  },
+  {
+    "key": "hybrid_rule_v4_fast_progress_static_escape",
+    "algo": "hybrid_rule_local_planner",
+    "path": "configs/policy_search/candidates/hybrid_rule_v4_fast_progress_static_escape_s30_h600_release_0_0_8_frozen.yaml",
+    "sha256": "1329d3934decb0bf50a803071af69b99e3f12e534083fc3d82e20d4706c76811",
+    "config": {
+      "name": "hybrid_rule_v4_fast_progress_static_escape_s30_h600_release_0_0_8_frozen",
+      "algo": "hybrid_rule_local_planner",
+      "allow_testing_algorithms": true,
+      "base_config_path": "configs/algos/hybrid_rule_v4_clearance_braking.yaml",
+      "params": {
+        "goal_progress_weight": 4.5,
+        "max_linear_speed": 2.0,
+        "static_clearance_escape_enabled": true,
+        "static_clearance_escape_min_clearance": 1.0,
+        "static_clearance_escape_max_speed": 0.3,
+        "static_clearance_escape_tolerance": 0.05,
+        "static_recenter_enabled": true,
+        "static_recenter_weight": 0.7,
+        "static_recenter_probe_speed": 0.3,
+        "static_corridor_transit_enabled": true,
+        "static_corridor_transit_initial_band": 0.08,
+        "static_corridor_transit_tolerance": 0.08,
+        "static_corridor_transit_min_progress_3s": 0.1,
+        "static_corridor_transit_weight": 0.5
+      },
+      "scenario_overrides": {
+        "francis2023_blind_corner": {
+          "continuous_static_clearance_enabled": true,
+          "static_hard_safety_margin": 0.0,
+          "v4_slow_clearance_human": 2.1,
+          "v4_moderate_clearance_human": 3.1
+        },
+        "francis2023_perpendicular_traffic": {
+          "very_slow_speed": 0.6,
+          "static_clearance_escape_max_speed": 0.6
+        }
+      },
+      "release_parameter_freeze": {
+        "status": "frozen",
+        "implementation_family": "hybrid_rule_v4_clearance_braking",
+        "source_tuning_log_path": "docs/context/evidence/issue_9748_v4_tuning_log_v1.json",
+        "source_tuning_log_sha256": "1628d5164dcc6294719246bd28a0dda45937474c696fb30c0a6a6a126e17e009",
+        "trial_id": "goal_progress_weight_4p5",
+        "effective_config_sha256": "06cfc1dd8825a3a7ef0401489a004e7e2e9072247396d770b68477b0dd788a3d",
+        "freeze_decision_url": "https://github.com/ll7/robot_sf_ll7/issues/9748#issuecomment-5884539753"
+      }
+    },
+    "resolved_path": "configs/policy_search/candidates/hybrid_rule_v4_fast_progress_static_escape_s30_h600_release_0_0_8_frozen.yaml"
+  },
+  {
+    "key": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "algo": "hybrid_rule_local_planner",
+    "path": "configs/policy_search/candidates/hybrid_rule_v4_fast_progress_static_escape_continuous_s30_h600_release_0_0_8_frozen.yaml",
+    "sha256": "044931a38f31a7b7c01ba8a750a1d34a79a58200309806e538761a94eff94888",
+    "config": {
+      "name": "hybrid_rule_v4_fast_progress_static_escape_continuous_s30_h600_release_0_0_8_frozen",
+      "algo": "hybrid_rule_local_planner",
+      "allow_testing_algorithms": true,
+      "base_config_path": "configs/algos/hybrid_rule_v4_clearance_braking.yaml",
+      "params": {
+        "max_linear_speed": 2.0,
+        "hard_safety_margin": 0.2,
+        "static_clearance_escape_enabled": true,
+        "static_clearance_escape_min_clearance": 1.0,
+        "static_clearance_escape_max_speed": 0.3,
+        "static_clearance_escape_tolerance": 0.05,
+        "static_recenter_enabled": true,
+        "static_recenter_weight": 0.7,
+        "static_recenter_probe_speed": 0.3,
+        "static_corridor_transit_enabled": true,
+        "static_corridor_transit_initial_band": 0.08,
+        "static_corridor_transit_tolerance": 0.08,
+        "static_corridor_transit_min_progress_3s": 0.1,
+        "static_corridor_transit_weight": 0.5,
+        "corridor_subgoal_enabled": true,
+        "corridor_subgoal_speed": 0.25,
+        "corridor_subgoal_turn_in_place_error": 0.25,
+        "corridor_subgoal_heading_gain": 1.0,
+        "corridor_subgoal_min_nearest_ped_distance": 1.0,
+        "corridor_subgoal_use_continuous_static_check": true,
+        "continuous_static_clearance_enabled": true,
+        "corridor_subgoal_static_clearance_buffer": 0.0,
+        "corridor_subgoal_goal_stall_progress_3s": 0.05,
+        "corridor_subgoal_route_stall_progress_3s": 0.05,
+        "corridor_subgoal_route_regression_1s": -0.05,
+        "corridor_subgoal_min_route_remaining_distance": 0.5,
+        "corridor_subgoal_max_lateral_offset": 0.5,
+        "corridor_subgoal_route_progress_weight": 2.0,
+        "corridor_subgoal_centering_weight": 0.5,
+        "corridor_subgoal_tangent_alignment_weight": 1.2,
+        "corridor_subgoal_clearance_weight": 0.3,
+        "corridor_subgoal_continuity_weight": 0.2
+      },
+      "scenario_overrides": {
+        "francis2023_blind_corner": {
+          "hard_safety_margin": 0.05,
+          "static_hard_safety_margin": 0.0,
+          "v4_slow_clearance_human": 2.1,
+          "v4_moderate_clearance_human": 3.1
+        },
+        "francis2023_perpendicular_traffic": {
+          "very_slow_speed": 0.6,
+          "static_clearance_escape_max_speed": 0.6
+        }
+      },
+      "release_parameter_freeze": {
+        "status": "frozen",
+        "implementation_family": "hybrid_rule_v4_clearance_braking",
+        "source_tuning_log_path": "docs/context/evidence/issue_9748_v4_tuning_log_v1.json",
+        "source_tuning_log_sha256": "1628d5164dcc6294719246bd28a0dda45937474c696fb30c0a6a6a126e17e009",
+        "trial_id": "baseline",
+        "effective_config_sha256": "569bd63d6c5f808bf00681d713ab93af0c0207930230fe94ca1a8007fe82cc4c",
+        "freeze_decision_url": "https://github.com/ll7/robot_sf_ll7/issues/9748#issuecomment-5884539753"
+      }
+    },
+    "resolved_path": "configs/policy_search/candidates/hybrid_rule_v4_fast_progress_static_escape_continuous_s30_h600_release_0_0_8_frozen.yaml"
+  }
+]

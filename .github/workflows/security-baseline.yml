@@ -41,17 +41,24 @@ jobs:
       - name: Run Ruff security rules advisory baseline
         id: ruff_security
         continue-on-error: true
+        env:
+          SECURITY_LOG: output/security/ruff-security.log
         run: |
           mkdir -p output/security
-          uv run ruff check --config 'lint.ignore=[]' --select S . 2>&1 | tee output/security/ruff-security.log
+          {
+            uvx --from ruff==0.17.1 ruff check --config 'lint.ignore=[]' --select S .
+          } 2>&1 | tee "$SECURITY_LOG"
 
       - name: Summarize Ruff security baseline
         if: always()
+        env:
+          SECURITY_LOG: output/security/ruff-security.log
+          SECURITY_OUTCOME: ${{ steps.ruff_security.outcome }}
         run: |
-          if [ -f output/security/ruff-security.log ]; then
-            printf 'Ruff security advisory exit: %s\n' "${{ steps.ruff_security.outcome }}"
+          if [ -f "$SECURITY_LOG" ]; then
+            printf 'Security advisory exit: %s\n' "$SECURITY_OUTCOME"
             printf 'Finding lines: '
-            grep -c '^error\[S' output/security/ruff-security.log || true
+            grep -c '^error\[S' "$SECURITY_LOG" || true
           fi
 
       - name: Upload Ruff security baseline log

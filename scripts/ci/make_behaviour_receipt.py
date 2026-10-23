@@ -1524,7 +1524,51 @@ def _guarded_ppo_calibration_paths(row: dict[str, Any]) -> Iterator[tuple[str, .
                     yield path
 
 
-def _unclassified_runtime_marker(row: dict[str, Any]) -> tuple[str, str] | None:
+def _guarded_ppo_diagnostic_paths(
+    row: dict[str, Any],
+) -> tuple[set[tuple[str, ...]], tuple[str, str] | None]:
+    """Bind only RiskDWA diagnostic fields transported by a verified shield decision."""
+    parent = ("algorithm_metadata", "planner_runtime", "last_decision")
+    path = (*parent, "fallback_controller_state", "planner_diagnostics")
+    reports = list(_runtime_objects(row, path))
+    if not reports:
+        return set(), None
+    metadata = row.get("algorithm_metadata") or {}
+    decision = next((value for _, value in _runtime_objects(row, parent)), None)
+    report = reports[0][1]
+    valid_identity = (
+        (row.get("algo") or row.get("algorithm")) == "guarded_ppo"
+        and metadata.get("canonical_algorithm") == "guarded_ppo"
+        and isinstance(metadata.get("planner_contract"), dict)
+        and metadata["planner_contract"].get("planner_id") == "guarded_ppo"
+        and isinstance(decision, dict)
+        and decision.get("schema_version") == "shield-decision.v1"
+    )
+    if not (
+        valid_identity
+        and isinstance(report, dict)
+        and report.get("schema_version") == "risk-dwa-progress-escape.v1"
+        and isinstance(report.get("status"), str)
+        and report["status"]
+        in {"disabled", "not_evaluated", "evaluated_but_not_selected", "selected"}
+    ):
+        return set(), (".".join(path), "invalid")
+    paths = {(*path, "status")}
+    if "candidate_score_status" in report:
+        score_status = report["candidate_score_status"]
+        if not isinstance(score_status, str) or score_status not in {
+            "finite",
+            "infeasible",
+            "non_finite",
+        }:
+            return set(), (".".join((*path, "candidate_score_status")), "invalid")
+        paths.add((*path, "candidate_score_status"))
+    return paths, None
+
+
+def _unclassified_runtime_marker(  # noqa: C901 - exact-path classification plus recursive fault catcher.
+    row: dict[str, Any],
+) -> tuple[str, str] | None:
     """Unknown fault vocabulary is evidence of an unaudited transport, even if false/zero.
 
     Source-key catalog membership is deliberately insufficient. Dict keys stay
@@ -1546,6 +1590,10 @@ def _unclassified_runtime_marker(row: dict[str, Any]) -> tuple[str, str] | None:
         for location in EXECUTION_EVIDENCE_LOCATIONS["non_runtime_locations"]
     }
     optional.update(_guarded_ppo_calibration_paths(row))
+    diagnostic_paths, diagnostic_error = _guarded_ppo_diagnostic_paths(row)
+    if diagnostic_error is not None:
+        return diagnostic_error
+    optional.update(diagnostic_paths)
     runtime_objects = {
         _transport_path(path) for path in EXECUTION_EVIDENCE_LOCATIONS["runtime_objects"]
     }

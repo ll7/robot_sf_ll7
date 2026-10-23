@@ -2158,3 +2158,115 @@ def test_all_modes_reject_incompatible_producing_contracts(  # noqa: C901 - expl
     with pytest.raises(ValueError, match=reason):
         producer._prepare_sweeps(args, tmp_path, "b" * 40)
     assert touched == []
+
+
+def _guarded_ppo_risk_dwa_row():
+    """Use the real fallback adapter and ShieldDecision serializer from the review probe."""
+    from robot_sf.planner.guarded_ppo import GuardedPPOAdapter, build_guarded_ppo_config
+    from robot_sf.planner.risk_dwa import RiskDWAPlannerAdapter, RiskDWAPlannerConfig
+    from tests.planner.test_guarded_ppo import _obs
+
+    guard = GuardedPPOAdapter(
+        config=build_guarded_ppo_config(
+            {
+                "guard_near_field_distance": 2.5,
+                "guard_hard_ped_clearance": 0.45,
+                "guard_first_step_ped_clearance": 0.55,
+            }
+        ),
+        fallback_adapter=RiskDWAPlannerAdapter(
+            RiskDWAPlannerConfig(
+                linear_candidates=(0.0,),
+                angular_candidates=(0.0,),
+                progress_escape_enabled=False,
+            )
+        ),
+    )
+    decision = guard.choose_command_decision(
+        _obs(ped_positions=[(0.8, 0.0)], ped_velocities=[(0.0, 0.0)]), (0.6, 0.0)
+    ).to_metadata()
+    assert decision["decision_label"] == "fallback_safe"
+    assert decision["fallback_controller_state"]["planner_diagnostics"]["status"] == "disabled"
+    row = _guarded_ppo_calibration_row()
+    row["algorithm_metadata"]["planner_runtime"]["last_decision"] = decision
+    return row
+
+
+@pytest.mark.parametrize(
+    "status", ["disabled", "not_evaluated", "evaluated_but_not_selected", "selected"]
+)
+@pytest.mark.parametrize("score_status", [None, "finite", "infeasible", "non_finite"])
+def test_guarded_ppo_risk_dwa_diagnostic_is_non_runtime(status, score_status):
+    """Only the declared diagnostic values at the verified serializer path are exempt."""
+    row = _guarded_ppo_risk_dwa_row()
+    report = row["algorithm_metadata"]["planner_runtime"]["last_decision"][
+        "fallback_controller_state"
+    ]["planner_diagnostics"]
+    report["status"] = status
+    if score_status is not None:
+        report["candidate_score_status"] = score_status
+    original = copy.deepcopy(row)
+    assert producer._controller_runtime_marker(row, row["algorithm_metadata"], row["algo"]) is None
+    assert producer._audit_status([producer._execution_evidence(row)]) == "pass"
+    assert row == original
+
+
+@pytest.mark.parametrize(
+    "fault",
+    [
+        "algorithm",
+        "canonical",
+        "planner_id",
+        "decision_schema",
+        "diagnostic_schema",
+        "missing_status",
+        "invalid_status",
+        "status_type",
+        "score_status",
+        "score_type",
+        "unknown_path",
+        "sibling_status",
+        "fallback",
+        "degraded",
+        "controller_failure",
+    ],
+)
+def test_guarded_ppo_risk_dwa_diagnostic_does_not_hide_faults(  # noqa: C901 - explicit transported fault matrix.
+    fault,
+):
+    row = _guarded_ppo_risk_dwa_row()
+    metadata = row["algorithm_metadata"]
+    decision = metadata["planner_runtime"]["last_decision"]
+    report = decision["fallback_controller_state"]["planner_diagnostics"]
+    if fault == "algorithm":
+        row["algo"] = "goal"
+    elif fault == "canonical":
+        metadata["canonical_algorithm"] = "goal"
+    elif fault == "planner_id":
+        metadata["planner_contract"]["planner_id"] = "goal"
+    elif fault == "decision_schema":
+        decision["schema_version"] = "unknown"
+    elif fault == "diagnostic_schema":
+        report["schema_version"] = "unknown"
+    elif fault == "missing_status":
+        report.pop("status")
+    elif fault == "invalid_status":
+        report["status"] = "controller_failed"
+    elif fault == "status_type":
+        report["status"] = []
+    elif fault == "score_status":
+        report["candidate_score_status"] = "degraded"
+    elif fault == "score_type":
+        report["candidate_score_status"] = []
+    elif fault == "unknown_path":
+        metadata["other_diagnostic"] = report
+    elif fault == "sibling_status":
+        report["sibling_status"] = "disabled"
+    elif fault == "fallback":
+        metadata["planner_runtime"]["fallback_used"] = True
+    elif fault == "degraded":
+        decision["fallback_controller_state"]["degraded"] = True
+    else:
+        metadata["planner_runtime"]["status"] = "failed"
+    assert producer._controller_runtime_marker(row, metadata, row["algo"]) is not None
+    assert producer._audit_status([producer._execution_evidence(row)]) != "pass"

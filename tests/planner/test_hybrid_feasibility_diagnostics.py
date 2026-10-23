@@ -13,6 +13,8 @@ from tests.planner.test_hybrid_rule_local_planner import _obs
 
 
 def _planner(**extra):
+    extra.setdefault("physical_static_exclusion_enabled", False)
+    extra.setdefault("goal_next_validity_enabled", False)
     cfg = build_hybrid_rule_local_planner_config(
         dict(
             planner_variant="hybrid_rule_v4_clearance_braking",
@@ -33,6 +35,18 @@ def _planner(**extra):
         )
     )
     return planner
+
+
+def test_missing_candidate_probe_skips_initial_goal_stop_without_speed_cap():
+    """A real first goal stop has no speed-cap diagnostics for a counterfactual probe."""
+    from scripts.validation.run_hybrid_feasibility_diagnostics import missing_candidate_probe
+
+    planner = _planner()
+    obs = _obs(robot=(4, 15), goal=(4, 15))
+    command = planner.plan(obs)
+    assert planner.last_decision()["planner_mode"] == "GOAL_STOP"
+    assert planner._last_v4_speed_safety is None
+    assert missing_candidate_probe(planner, obs, planner._extract_state(obs), command) is None
 
 
 def test_debug_forced_stop_reports_the_actual_exclusion_radius():
@@ -291,7 +305,7 @@ def test_sensor_emits_explicit_validity_only_when_opted_in():
     from robot_sf.sensor.socnav_observation import SocNavObservationFusion, socnav_observation_space
     from tests.test_socnav_observation import _build_map_def, _build_socnav_simulator
 
-    cfg = RobotSimulationConfig()
+    cfg = RobotSimulationConfig(include_goal_next_valid=False)
     sim = _build_socnav_simulator([])
     default = SocNavObservationFusion(sim, cfg, 4).next_obs()
     assert "next_valid" not in default["goal"]
@@ -415,7 +429,9 @@ def test_map_observation_bridge_preserves_optional_successor_validity():
     from robot_sf.benchmark.map_runner.map_runner_observations import normalize_map_observation
     from robot_sf.gym_env.robot_env import _flatten_nested_dict_obs
 
-    default = _flatten_nested_dict_obs(_obs())
+    observation = _obs()
+    observation["goal"].pop("next_valid", None)
+    default = _flatten_nested_dict_obs(observation)
     assert "next_valid" not in normalize_map_observation(default)["goal"]
     default["goal_next_valid"] = np.array([0], dtype=np.float32)
     normalized = normalize_map_observation(default)

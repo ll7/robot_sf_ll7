@@ -20,6 +20,7 @@ import pytest
 import scripts.analysis.compare_release_0_0_7_to_0_0_8 as comparator
 from robot_sf.benchmark.map_runner.map_runner_identity import _scenario_identity_payload
 from robot_sf.benchmark.utils import _config_hash
+from robot_sf.common.hybrid_defaults import configless_release_source, source_default_policy
 from scripts.analysis.compare_release_0_0_7_to_0_0_8 import (
     BASELINE_CAMPAIGN,
     V4_SLOT_REPLACEMENTS,
@@ -1653,10 +1654,16 @@ def test_pinned_runtime_rebinds_real_scenario_for_arm_horizon(
     from robot_sf.benchmark.map_runner import map_runner_identity
 
     # Match the canonical producer envelope; the row slot binds dev seed 1001.
+    # The cloned matrix retains the same registered bytes; new authored matrices
+    # use current defaults. Select its original source independently of row hashes.
+    default_source = configless_release_source(
+        Path(__file__).parents[2] / cfg.scenario_matrix_path.relative_to(source), "goal"
+    )
     params = _scenario_identity_payload(
         map_runner_identity._scenario_with_episode_seed_defaults(scenario, seed=1001),
         algo="goal",
         algo_config=expected["config"],
+        default_set=source_default_policy(default_source)["default_set"],
         horizon=budget if budget is not None else cfg.horizon,
         dt=cfg.dt,
         record_forces=cfg.record_forces,

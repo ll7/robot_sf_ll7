@@ -125,6 +125,12 @@ def render() -> None:
     """Write a complete report, visibly labeling any pending acquisition."""
     summary = json.loads((BUNDLE / "evidence/summary.json").read_text())
     study = json.loads((BUNDLE / "inputs/study.json").read_text())
+    source = json.loads((BUNDLE / "evidence/acquisition_source.json").read_text())
+    custody_readme = (
+        Path(source["runtime_custody"]["identity_artifact_path"])
+        .with_name("README.md")
+        .relative_to("docs/context/robsweep")
+    )
     cells = list(csv.DictReader((BUNDLE / "evidence/cells.csv").open()))
     lookup = {(r["treatment"], r["planner"], r["family"]): r for r in cells}
     status = (
@@ -223,7 +229,7 @@ def render() -> None:
             "",
             "Detailed outcomes for **every** requested planner/treatment/family cell, including the full cap roster, typed collision incidence and missingness: [cells.csv](evidence/cells.csv). Machine-readable paired correlations and planner/family aggregates: [summary.json](evidence/summary.json). Geometry proof: [door_geometry.json](evidence/door_geometry.json). All-release fact audit: [release_fact_audit.json](evidence/release_fact_audit.json).",
             "",
-            "Custody: compressed canonical episode records (checkout-prefix normalization only), complete crowd trajectories, canary traces, exact acquisition driver and input bytes are retained. Producer sidecar references and file checksums are rebound to portable compressed artifacts in the [custody ledger](evidence/portable_custody.json); scientific values remain unchanged. [Source identity](evidence/acquisition_source.json) records an administrative Git-epoch change during acquisition; runtime/planner bytes and every acquisition input remained unchanged against the pinned base. Later tooling cleanup is separate from the archived acquisition driver. This is diagnostic provenance, not a frozen-release replay certificate.",
+            f"Custody: compressed canonical episode records (checkout-prefix normalization only), complete crowd trajectories, canary traces, exact acquisition driver and input bytes are retained. Producer sidecar references and file checksums are rebound to portable compressed artifacts in the [custody ledger](evidence/portable_custody.json); scientific values remain unchanged. [Source identity](evidence/acquisition_source.json) records an administrative Git-epoch change during acquisition. The recovered episode commit has [archived Git commit/tree identity and an independently verifiable public-base diff]({custody_readme.as_posix()}): every tracked base path and all {len(source['source_files'])} archived acquisition-source files match. Later tooling cleanup is separate from the archived acquisition driver. This is diagnostic provenance, not a frozen-release replay certificate.",
             "",
             "Archived YAML files under `inputs/` preserve exact bytes at their original relative-path layout; regenerate execution configs under `configs/benchmarks/robsweep/` before running them. [Input locations](evidence/input_locations.json) map each archived artifact to that original config path. [SHA256SUMS](evidence/SHA256SUMS) is checked from the repository root. No frozen config, release artifact, benchmark default, model weight, or locked thesis text is changed.",
         ]

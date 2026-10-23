@@ -7,8 +7,10 @@ import argparse
 import hashlib
 import json
 import math
+import os
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -987,6 +989,17 @@ def _submit_sbatch_sweep(  # noqa: PLR0913
     canary: bool = False,
     first_seed_only: bool = False,
 ) -> SweepRun:
+    uv_binary = os.environ.get("UV_BIN") or shutil.which("uv")
+    if (
+        not uv_binary
+        or not Path(uv_binary).is_absolute()
+        or not Path(uv_binary).is_file()
+        or not os.access(uv_binary, os.X_OK)
+    ):
+        raise ValueError(
+            "uv executable is missing or not executable; set UV_BIN to an absolute path"
+        )
+    uv_binary = str(Path(uv_binary).resolve())
     checkout = _ensure_worktree(repo_root, work_dir, label, source_sha).resolve()
     if canary and workers > 2:
         raise ValueError("receipt canary is limited to 1-2 CPUs")
@@ -1031,7 +1044,13 @@ def _submit_sbatch_sweep(  # noqa: PLR0913
                 "test -f scripts/validation/run_empty_world_sweep.py",
                 'export PYTHONPATH="$PWD:$PWD/fast-pysf${PYTHONPATH:+:$PYTHONPATH}"',
                 "export OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1",
-                shlex.join(cmd),
+                f"UV_BIN={shlex.quote(uv_binary)}",
+                'if [[ ! -x "$UV_BIN" ]]; then',
+                '  echo "uv executable is missing or not executable; regenerate with UV_BIN set" >&2',
+                "  exit 1",
+                "fi",
+                '"$UV_BIN" sync --frozen --all-extras',
+                shlex.join([uv_binary, "run", "--frozen", "--all-extras", *cmd[2:]]),
                 "",
             ]
         ),

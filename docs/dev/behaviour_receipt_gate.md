@@ -448,7 +448,11 @@ python scripts/ci/make_behaviour_receipt.py \
 ```
 
 The submitted script pins its immutable checkout with `sbatch --chdir`, checks its helper path,
-and limits library threads. Check-only/canary jobs have a fourteen-minute limit; canaries accept
+and limits library threads. Set `UV_BIN` to an absolute executable path when submitting, or the
+producer detects `uv` on its own PATH and embeds the resolved absolute path. The batch shell
+checks that executable, then runs `uv sync --frozen --all-extras` before
+`uv run --frozen --all-extras` so preflight and production planner imports have their dependencies.
+Check-only/canary jobs have a fourteen-minute limit; canaries accept
 at most two workers. Supply site-specific scheduling and installed-environment settings outside
 this public repository. Inspect terminal scheduler status and artifacts; submission success is
 not preflight success. Both full-roster contracts must exist, match their requested sources, and

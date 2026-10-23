@@ -1895,3 +1895,80 @@ def test_sweep_launcher_executes_only_the_verified_buffer(tmp_path, replace_befo
         assert result.returncode == 0, result.stderr
         assert json.loads(result.stdout) == {"loaded": digest, "file": str(script)}
         assert hashlib.sha256(script.read_bytes()).hexdigest() != digest
+
+
+@pytest.mark.parametrize("configured", [False, True])
+def test_sbatch_canary_syncs_extras_without_uv_on_batch_path(tmp_path, monkeypatch, configured):
+    """Fresh batch environments sync optional runtime imports before acquisition."""
+    repo = tmp_path / "repo"
+    git = _git_repo(repo)
+    harness = repo / "scripts/validation/run_empty_world_sweep.py"
+    harness.parent.mkdir(parents=True)
+    harness.write_text("# canary fixture\n")
+    git("add", ".")
+    git("commit", "-m", "source")
+    source = git("rev-parse", "HEAD")
+    uv = tmp_path / "tools with spaces" / "uv"
+    uv.parent.mkdir()
+    uv.write_text('#!/bin/sh\nprintf "%s\\n" "$*" >> "$UV_CALL_LOG"\n')
+    uv.chmod(0o755)
+    if configured:
+        monkeypatch.setenv("UV_BIN", str(uv))
+    else:
+        monkeypatch.delenv("UV_BIN", raising=False)
+    monkeypatch.setattr(shutil, "which", lambda name: str(uv) if name == "uv" else None)
+    original_output = subprocess.check_output
+
+    def output(command, **kwargs):
+        if command[0] == "sbatch":
+            return "12345\n"
+        return original_output(command, **kwargs)
+
+    monkeypatch.setattr(producer.subprocess, "check_output", output)
+    work = tmp_path / "work"
+    producer._submit_sbatch_sweep(
+        repo, work, "canary", source, [1001], arms=None, scenarios=None, workers=1, canary=True
+    )
+    script = work / "behaviour_receipt_canary.sbatch"
+    rendered = script.read_text()
+    assert "sync --frozen --all-extras" in rendered
+    assert "run --frozen --all-extras python" in rendered
+    assert "uv run python" not in rendered
+    log = tmp_path / "uv-calls"
+    env = {**os.environ, "PATH": "", "UV_CALL_LOG": str(log)}
+    subprocess.run(["/bin/bash", str(script)], env=env, check=True)
+    calls = log.read_text().splitlines()
+    assert calls[0] == "sync --frozen --all-extras"
+    assert calls[1].startswith("run --frozen --all-extras python ")
+    uv.unlink()
+    failed = subprocess.run(
+        ["/bin/bash", str(script)], env=env, capture_output=True, text=True, check=False
+    )
+    assert failed.returncode != 0
+    assert "uv executable is missing or not executable" in failed.stderr
+
+
+@pytest.mark.parametrize("uv_setting", [None, "relative/uv", "missing", "directory"])
+def test_sbatch_refuses_unavailable_uv_before_submission(tmp_path, monkeypatch, uv_setting):
+    """Invalid uv configuration refuses before creating worktrees or scheduler jobs."""
+    monkeypatch.setattr(shutil, "which", lambda name: None)
+    if uv_setting is None:
+        monkeypatch.delenv("UV_BIN", raising=False)
+    else:
+        value = {"missing": str(tmp_path / "missing"), "directory": str(tmp_path)}.get(
+            uv_setting, uv_setting
+        )
+        monkeypatch.setenv("UV_BIN", value)
+    with pytest.raises(ValueError, match="uv executable is missing or not executable"):
+        producer._submit_sbatch_sweep(
+            tmp_path,
+            tmp_path / "work",
+            "canary",
+            "a" * 40,
+            [1001],
+            arms=None,
+            scenarios=None,
+            workers=1,
+            canary=True,
+        )
+    assert not (tmp_path / "work").exists()

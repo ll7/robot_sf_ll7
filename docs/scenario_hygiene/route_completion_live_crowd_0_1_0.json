@@ -1,0 +1,919 @@
+{
+  "schema": "pedestrian_route_completion_comparison.v1",
+  "source_sha": "40505d5379a94660dc29ce3711e4d3af8471cedb",
+  "matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+  "matrix_sha256": "af4e9a7a22f9d5f373eb4a3323984e0de6d79edd4263f1c023e9efddff2fd25f",
+  "runner_sha256": "d22fe2a383a3a7ad07b80f4d3ab362b98708f07608cd0bb41fe7ff2e27e2cf26",
+  "python_version": "3.13.14",
+  "numpy_version": "2.4.6",
+  "workers": 4,
+  "numerical_threads": 1,
+  "robot_action": [
+    0.0,
+    0.0
+  ],
+  "execution": "native full authored horizon; diagnostic only",
+  "digest_format": "initial and post-step frames: little-endian int64 shape, float64 x/y/vx/vy",
+  "pairs": [
+    {
+      "scenario": "francis2023_circular_crossing",
+      "seed": 1001,
+      "old": {
+        "group_respawns": 2,
+        "pedestrian_respawns": 3,
+        "premature_group_respawns": 0,
+        "population": 6,
+        "route_groups": 5,
+        "steps": 400,
+        "dt_s": 0.1,
+        "require_final_waypoint": false,
+        "initial_sha256": "f05e38409576fcb14ebf0ad33e02cdf8c1cc43bea972831463e096e74970f92f",
+        "trajectory_sha256": "2ffc3c88ebe90906b5c0c3e3b8c10d6bc4c4b5ca28d3fb674c50a0026efe7ec9"
+      },
+      "new": {
+        "group_respawns": 2,
+        "pedestrian_respawns": 3,
+        "premature_group_respawns": 0,
+        "population": 6,
+        "route_groups": 5,
+        "steps": 400,
+        "dt_s": 0.1,
+        "require_final_waypoint": true,
+        "initial_sha256": "f05e38409576fcb14ebf0ad33e02cdf8c1cc43bea972831463e096e74970f92f",
+        "trajectory_sha256": "2ffc3c88ebe90906b5c0c3e3b8c10d6bc4c4b5ca28d3fb674c50a0026efe7ec9"
+      },
+      "trajectory_equal": true,
+      "respawns_equal": true
+    },
+    {
+      "scenario": "francis2023_circular_crossing",
+      "seed": 1002,
+      "old": {
+        "group_respawns": 2,
+        "pedestrian_respawns": 2,
+        "premature_group_respawns": 0,
+        "population": 6,
+        "route_groups": 5,
+        "steps": 400,
+        "dt_s": 0.1,
+        "require_final_waypoint": false,
+        "initial_sha256": "b740178afe1be80de7a8bd1445a0e8ff71d62fd400b0d306a4228d160a219563",
+        "trajectory_sha256": "7da2afecd9912fc385779e1b36aab355b1222c382c04a81a8584ec42ba94896a"
+      },
+      "new": {
+        "group_respawns": 2,
+        "pedestrian_respawns": 2,
+        "premature_group_respawns": 0,
+        "population": 6,
+        "route_groups": 5,
+        "steps": 400,
+        "dt_s": 0.1,
+        "require_final_waypoint": true,
+        "initial_sha256": "b740178afe1be80de7a8bd1445a0e8ff71d62fd400b0d306a4228d160a219563",
+        "trajectory_sha256": "7da2afecd9912fc385779e1b36aab355b1222c382c04a81a8584ec42ba94896a"
+      },
+      "trajectory_equal": true,
+      "respawns_equal": true
+    },
+    {
+      "scenario": "francis2023_circular_crossing",
+      "seed": 1003,
+      "old": {
+        "group_respawns": 4,
+        "pedestrian_respawns": 5,
+        "premature_group_respawns": 0,
+        "population": 6,
+        "route_groups": 5,
+        "steps": 400,
+        "dt_s": 0.1,
+        "require_final_waypoint": false,
+        "initial_sha256": "2731134e30866bc6a5bc7444d463be8df9d5c7c443b29cb3dfe60a121dfdbade",
+        "trajectory_sha256": "a1dfbf188d8a20bf4b7f7009fa61003c8f0537825433ed44e003650a734a8cbc"
+      },
+      "new": {
+        "group_respawns": 4,
+        "pedestrian_respawns": 5,
+        "premature_group_respawns": 0,
+        "population": 6,
+        "route_groups": 5,
+        "steps": 400,
+        "dt_s": 0.1,
+        "require_final_waypoint": true,
+        "initial_sha256": "2731134e30866bc6a5bc7444d463be8df9d5c7c443b29cb3dfe60a121dfdbade",
+        "trajectory_sha256": "a1dfbf188d8a20bf4b7f7009fa61003c8f0537825433ed44e003650a734a8cbc"
+      },
+      "trajectory_equal": true,
+      "respawns_equal": true
+    },
+    {
+      "scenario": "francis2023_circular_crossing",
+      "seed": 1004,
+      "old": {
+        "group_respawns": 4,
+        "pedestrian_respawns": 5,
+        "premature_group_respawns": 0,
+        "population": 6,
+        "route_groups": 5,
+        "steps": 400,
+        "dt_s": 0.1,
+        "require_final_waypoint": false,
+        "initial_sha256": "367224a82b03ffc8a691f0448b306ae40553e4f97062b2c896d5a3324a68b242",
+        "trajectory_sha256": "b0a9b43d620c06dd999846b54d900b4e0031c79bb7ee8b3ecca55414e6618f69"
+      },
+      "new": {
+        "group_respawns": 4,
+        "pedestrian_respawns": 5,
+        "premature_group_respawns": 0,
+        "population": 6,
+        "route_groups": 5,
+        "steps": 400,
+        "dt_s": 0.1,
+        "require_final_waypoint": true,
+        "initial_sha256": "367224a82b03ffc8a691f0448b306ae40553e4f97062b2c896d5a3324a68b242",
+        "trajectory_sha256": "b0a9b43d620c06dd999846b54d900b4e0031c79bb7ee8b3ecca55414e6618f69"
+      },
+      "trajectory_equal": true,
+      "respawns_equal": true
+    },
+    {
+      "scenario": "francis2023_circular_crossing",
+      "seed": 1005,
+      "old": {
+        "group_respawns": 2,
+        "pedestrian_respawns": 2,
+        "premature_group_respawns": 0,
+        "population": 6,
+        "route_groups": 4,
+        "steps": 400,
+        "dt_s": 0.1,
+        "require_final_waypoint": false,
+        "initial_sha256": "9f5f7fca0afaa513d2a71e0e352492eb6924af90b488cb133a6a8b794d958f26",
+        "trajectory_sha256": "b783fa9e672389363628b985d359a1e677c030076f855abc0a2b4875ac3e3b9b"
+      },
+      "new": {
+        "group_respawns": 2,
+        "pedestrian_respawns": 2,
+        "premature_group_respawns": 0,
+        "population": 6,
+        "route_groups": 4,
+        "steps": 400,
+        "dt_s": 0.1,
+        "require_final_waypoint": true,
+        "initial_sha256": "9f5f7fca0afaa513d2a71e0e352492eb6924af90b488cb133a6a8b794d958f26",
+        "trajectory_sha256": "b783fa9e672389363628b985d359a1e677c030076f855abc0a2b4875ac3e3b9b"
+      },
+      "trajectory_equal": true,
+      "respawns_equal": true
+    },
+    {
+      "scenario": "francis2023_circular_crossing",
+      "seed": 1006,
+      "old": {
+        "group_respawns": 4,
+        "pedestrian_respawns": 5,
+        "premature_group_respawns": 0,
+        "population": 6,
+        "route_groups": 5,
+        "steps": 400,
+        "dt_s": 0.1,
+        "require_final_waypoint": false,
+        "initial_sha256": "90086f6c6258d651ad035de1e67f363f2cf08621c4784bfd112cff5e78c1ba43",
+        "trajectory_sha256": "e8c6c1bb09b25817d4bf26f74ee4372105515a8397adce4eb3fb8194ebf26425"
+      },
+      "new": {
+        "group_respawns": 4,
+        "pedestrian_respawns": 5,
+        "premature_group_respawns": 0,
+        "population": 6,
+        "route_groups": 5,
+        "steps": 400,
+        "dt_s": 0.1,
+        "require_final_waypoint": true,
+        "initial_sha256": "90086f6c6258d651ad035de1e67f363f2cf08621c4784bfd112cff5e78c1ba43",
+        "trajectory_sha256": "e8c6c1bb09b25817d4bf26f74ee4372105515a8397adce4eb3fb8194ebf26425"
+      },
+      "trajectory_equal": true,
+      "respawns_equal": true
+    },
+    {
+      "scenario": "francis2023_circular_crossing",
+      "seed": 1007,
+      "old": {
+        "group_respawns": 4,
+        "pedestrian_respawns": 4,
+        "premature_group_respawns": 0,
+        "population": 6,
+        "route_groups": 5,
+        "steps": 400,
+        "dt_s": 0.1,
+        "require_final_waypoint": false,
+        "initial_sha256": "9c4790f18ede68f94fab3f4a03a7b7bfec6f81ebc4db5a6ce1a1028de924e59d",
+        "trajectory_sha256": "212e597d43faaad7c62a1eace1383415a07afd51187c7ab06c99cbfbd8745048"
+      },
+      "new": {
+        "group_respawns": 4,
+        "pedestrian_respawns": 4,
+        "premature_group_respawns": 0,
+        "population": 6,
+        "route_groups": 5,
+        "steps": 400,
+        "dt_s": 0.1,
+        "require_final_waypoint": true,
+        "initial_sha256": "9c4790f18ede68f94fab3f4a03a7b7bfec6f81ebc4db5a6ce1a1028de924e59d",
+        "trajectory_sha256": "212e597d43faaad7c62a1eace1383415a07afd51187c7ab06c99cbfbd8745048"
+      },
+      "trajectory_equal": true,
+      "respawns_equal": true
+    },
+    {
+      "scenario": "francis2023_circular_crossing",
+      "seed": 1008,
+      "old": {
+        "group_respawns": 5,
+        "pedestrian_respawns": 5,
+        "premature_group_respawns": 0,
+        "population": 6,
+        "route_groups": 6,
+        "steps": 400,
+        "dt_s": 0.1,
+        "require_final_waypoint": false,
+        "initial_sha256": "a0700c2b3340ddc0e0215d951f8e9b39566c4eb16a07c6984486e997100bd2ed",
+        "trajectory_sha256": "d053d94c15e1afcf4e4f35c1e43b9c64595c4b45a1dd8eb93dc4db294cbafad0"
+      },
+      "new": {
+        "group_respawns": 5,
+        "pedestrian_respawns": 5,
+        "premature_group_respawns": 0,
+        "population": 6,
+        "route_groups": 6,
+        "steps": 400,
+        "dt_s": 0.1,
+        "require_final_waypoint": true,
+        "initial_sha256": "a0700c2b3340ddc0e0215d951f8e9b39566c4eb16a07c6984486e997100bd2ed",
+        "trajectory_sha256": "d053d94c15e1afcf4e4f35c1e43b9c64595c4b45a1dd8eb93dc4db294cbafad0"
+      },
+      "trajectory_equal": true,
+      "respawns_equal": true
+    },
+    {
+      "scenario": "francis2023_circular_crossing",
+      "seed": 1009,
+      "old": {
+        "group_respawns": 4,
+        "pedestrian_respawns": 6,
+        "premature_group_respawns": 0,
+        "population": 6,
+        "route_groups": 4,
+        "steps": 400,
+        "dt_s": 0.1,
+        "require_final_waypoint": false,
+        "initial_sha256": "e78cbfdcfb0d5d8bf042d35c9b027e0b513bc5c843a15c7683e0b46d7e246b1c",
+        "trajectory_sha256": "c80ed41a08896626bc9eca939d77bf8162448f2d76934ce2ce99b28ec3c55772"
+      },
+      "new": {
+        "group_respawns": 4,
+        "pedestrian_respawns": 6,
+        "premature_group_respawns": 0,
+        "population": 6,
+        "route_groups": 4,
+        "steps": 400,
+        "dt_s": 0.1,
+        "require_final_waypoint": true,
+        "initial_sha256": "e78cbfdcfb0d5d8bf042d35c9b027e0b513bc5c843a15c7683e0b46d7e246b1c",
+        "trajectory_sha256": "c80ed41a08896626bc9eca939d77bf8162448f2d76934ce2ce99b28ec3c55772"
+      },
+      "trajectory_equal": true,
+      "respawns_equal": true
+    },
+    {
+      "scenario": "francis2023_circular_crossing",
+      "seed": 1010,
+      "old": {
+        "group_respawns": 2,
+        "pedestrian_respawns": 2,
+        "premature_group_respawns": 0,
+        "population": 6,
+        "route_groups": 5,
+        "steps": 400,
+        "dt_s": 0.1,
+        "require_final_waypoint": false,
+        "initial_sha256": "42956aefb13d40bece389577f496fa9ac57952d3fe8777935521a65dce7d8684",
+        "trajectory_sha256": "c5b811019beae98ab8891ada2dbd1d83349c38c6b303552dae9bf899c9f3bdf6"
+      },
+      "new": {
+        "group_respawns": 2,
+        "pedestrian_respawns": 2,
+        "premature_group_respawns": 0,
+        "population": 6,
+        "route_groups": 5,
+        "steps": 400,
+        "dt_s": 0.1,
+        "require_final_waypoint": true,
+        "initial_sha256": "42956aefb13d40bece389577f496fa9ac57952d3fe8777935521a65dce7d8684",
+        "trajectory_sha256": "c5b811019beae98ab8891ada2dbd1d83349c38c6b303552dae9bf899c9f3bdf6"
+      },
+      "trajectory_equal": true,
+      "respawns_equal": true
+    },
+    {
+      "scenario": "francis2023_parallel_traffic",
+      "seed": 1001,
+      "old": {
+        "group_respawns": 4,
+        "pedestrian_respawns": 6,
+        "premature_group_respawns": 0,
+        "population": 8,
+        "route_groups": 6,
+        "steps": 400,
+        "dt_s": 0.1,
+        "require_final_waypoint": false,
+        "initial_sha256": "5c64b8fa029a75816748921b6f3a142170bba974bdd8a637037a63aac0f4a015",
+        "trajectory_sha256": "4b74668cec88a90417fcb1a1aebf1a74208c8e149b7f157e02196034e8f98b3c"
+      },
+      "new": {
+        "group_respawns": 4,
+        "pedestrian_respawns": 6,
+        "premature_group_respawns": 0,
+        "population": 8,
+        "route_groups": 6,
+        "steps": 400,
+        "dt_s": 0.1,
+        "require_final_waypoint": true,
+        "initial_sha256": "5c64b8fa029a75816748921b6f3a142170bba974bdd8a637037a63aac0f4a015",
+        "trajectory_sha256": "4b74668cec88a90417fcb1a1aebf1a74208c8e149b7f157e02196034e8f98b3c"
+      },
+      "trajectory_equal": true,
+      "respawns_equal": true
+    },
+    {
+      "scenario": "francis2023_parallel_traffic",
+      "seed": 1002,
+      "old": {
+        "group_respawns": 2,
+        "pedestrian_respawns": 2,
+        "premature_group_respawns": 0,
+        "population": 8,
+        "route_groups": 5,
+        "steps": 400,
+        "dt_s": 0.1,
+        "require_final_waypoint": false,
+        "initial_sha256": "8ec568aa8209a9b114eb5eb5e117be8ac466b021a797e944fd14952a962cabaa",
+        "trajectory_sha256": "2d0590ed90f5add265c370391d62592eccbdebcd95994aae2487b5fea4f422f3"
+      },
+      "new": {
+        "group_respawns": 2,
+        "pedestrian_respawns": 2,
+        "premature_group_respawns": 0,
+        "population": 8,
+        "route_groups": 5,
+        "steps": 400,
+        "dt_s": 0.1,
+        "require_final_waypoint": true,
+        "initial_sha256": "8ec568aa8209a9b114eb5eb5e117be8ac466b021a797e944fd14952a962cabaa",
+        "trajectory_sha256": "2d0590ed90f5add265c370391d62592eccbdebcd95994aae2487b5fea4f422f3"
+      },
+      "trajectory_equal": true,
+      "respawns_equal": true
+    },
+    {
+      "scenario": "francis2023_parallel_traffic",
+      "seed": 1003,
+      "old": {
+        "group_respawns": 6,
+        "pedestrian_respawns": 7,
+        "premature_group_respawns": 0,
+        "population": 8,
+        "route_groups": 7,
+        "steps": 400,
+        "dt_s": 0.1,
+        "require_final_waypoint": false,
+        "initial_sha256": "d2c007bc519c334704de5aedf426aff5b0c5f8d087fc3de7ca34bab5f9ecdac2",
+        "trajectory_sha256": "b743b75943867ebef9990a76d00328df20f1c351fe89cb7c61d30aa920deff42"
+      },
+      "new": {
+        "group_respawns": 6,
+        "pedestrian_respawns": 7,
+        "premature_group_respawns": 0,
+        "population": 8,
+        "route_groups": 7,
+        "steps": 400,
+        "dt_s": 0.1,
+        "require_final_waypoint": true,
+        "initial_sha256": "d2c007bc519c334704de5aedf426aff5b0c5f8d087fc3de7ca34bab5f9ecdac2",
+        "trajectory_sha256": "b743b75943867ebef9990a76d00328df20f1c351fe89cb7c61d30aa920deff42"
+      },
+      "trajectory_equal": true,
+      "respawns_equal": true
+    },
+    {
+      "scenario": "francis2023_parallel_traffic",
+      "seed": 1004,
+      "old": {
+        "group_respawns": 4,
+        "pedestrian_respawns": 7,
+        "premature_group_respawns": 0,
+        "population": 8,
+        "route_groups": 5,
+        "steps": 400,
+        "dt_s": 0.1,
+        "require_final_waypoint": false,
+        "initial_sha256": "56863580baf46f60ee1f0220a423d6745e72b6fa58b066276f6397426d7906c8",
+        "trajectory_sha256": "ee3f9f0134931dcc0256601597d6ff2e69851b4934a580bfeba335f2109e6e7c"
+      },
+      "new": {
+        "group_respawns": 4,
+        "pedestrian_respawns": 7,
+        "premature_group_respawns": 0,
+        "population": 8,
+        "route_groups": 5,
+        "steps": 400,
+        "dt_s": 0.1,
+        "require_final_waypoint": true,
+        "initial_sha256": "56863580baf46f60ee1f0220a423d6745e72b6fa58b066276f6397426d7906c8",
+        "trajectory_sha256": "ee3f9f0134931dcc0256601597d6ff2e69851b4934a580bfeba335f2109e6e7c"
+      },
+      "trajectory_equal": true,
+      "respawns_equal": true
+    },
+    {
+      "scenario": "francis2023_parallel_traffic",
+      "seed": 1005,
+      "old": {
+        "group_respawns": 1,
+        "pedestrian_respawns": 1,
+        "premature_group_respawns": 0,
+        "population": 8,
+        "route_groups": 5,
+        "steps": 400,
+        "dt_s": 0.1,
+        "require_final_waypoint": false,
+        "initial_sha256": "5fc7918a06077d3d29adf61dfcc425ed9b79a7157b8091d3cc94141c975b0ca1",
+        "trajectory_sha256": "f506072c77667cb87c822686ee4b6fea67c9ca93f15c7f93e360f1f689588912"
+      },
+      "new": {
+        "group_respawns": 1,
+        "pedestrian_respawns": 1,
+        "premature_group_respawns": 0,
+        "population": 8,
+        "route_groups": 5,
+        "steps": 400,
+        "dt_s": 0.1,
+        "require_final_waypoint": true,
+        "initial_sha256": "5fc7918a06077d3d29adf61dfcc425ed9b79a7157b8091d3cc94141c975b0ca1",
+        "trajectory_sha256": "f506072c77667cb87c822686ee4b6fea67c9ca93f15c7f93e360f1f689588912"
+      },
+      "trajectory_equal": true,
+      "respawns_equal": true
+    },
+    {
+      "scenario": "francis2023_parallel_traffic",
+      "seed": 1006,
+      "old": {
+        "group_respawns": 6,
+        "pedestrian_respawns": 7,
+        "premature_group_respawns": 0,
+        "population": 8,
+        "route_groups": 7,
+        "steps": 400,
+        "dt_s": 0.1,
+        "require_final_waypoint": false,
+        "initial_sha256": "849ed32432a3b449c67e91e7788d5bc507c5ccb02d703239cdb79867ed6378ce",
+        "trajectory_sha256": "1ea2a32c742633ddb6564172e27f6a1c3efb9603ed8fe076d4acdbaef3ef8cb0"
+      },
+      "new": {
+        "group_respawns": 6,
+        "pedestrian_respawns": 7,
+        "premature_group_respawns": 0,
+        "population": 8,
+        "route_groups": 7,
+        "steps": 400,
+        "dt_s": 0.1,
+        "require_final_waypoint": true,
+        "initial_sha256": "849ed32432a3b449c67e91e7788d5bc507c5ccb02d703239cdb79867ed6378ce",
+        "trajectory_sha256": "1ea2a32c742633ddb6564172e27f6a1c3efb9603ed8fe076d4acdbaef3ef8cb0"
+      },
+      "trajectory_equal": true,
+      "respawns_equal": true
+    },
+    {
+      "scenario": "francis2023_parallel_traffic",
+      "seed": 1007,
+      "old": {
+        "group_respawns": 4,
+        "pedestrian_respawns": 5,
+        "premature_group_respawns": 0,
+        "population": 8,
+        "route_groups": 6,
+        "steps": 400,
+        "dt_s": 0.1,
+        "require_final_waypoint": false,
+        "initial_sha256": "a7c965251382e817e7833dda295b92f2d1fde3d4988e27872d8c07182c78cd11",
+        "trajectory_sha256": "db24d635d74ca9bec9205261e9dece400465a9eeeb82e1f07607c421c530a697"
+      },
+      "new": {
+        "group_respawns": 4,
+        "pedestrian_respawns": 5,
+        "premature_group_respawns": 0,
+        "population": 8,
+        "route_groups": 6,
+        "steps": 400,
+        "dt_s": 0.1,
+        "require_final_waypoint": true,
+        "initial_sha256": "a7c965251382e817e7833dda295b92f2d1fde3d4988e27872d8c07182c78cd11",
+        "trajectory_sha256": "db24d635d74ca9bec9205261e9dece400465a9eeeb82e1f07607c421c530a697"
+      },
+      "trajectory_equal": true,
+      "respawns_equal": true
+    },
+    {
+      "scenario": "francis2023_parallel_traffic",
+      "seed": 1008,
+      "old": {
+        "group_respawns": 7,
+        "pedestrian_respawns": 8,
+        "premature_group_respawns": 0,
+        "population": 8,
+        "route_groups": 7,
+        "steps": 400,
+        "dt_s": 0.1,
+        "require_final_waypoint": false,
+        "initial_sha256": "3cc779630ed0fffb626016fb768fb04848b5140821c0b2a743678ce2802b1ae9",
+        "trajectory_sha256": "f360059a8ea117ab460229bbc87a2a01c031a0920a3b6a59b0f05c603ff4a641"
+      },
+      "new": {
+        "group_respawns": 7,
+        "pedestrian_respawns": 8,
+        "premature_group_respawns": 0,
+        "population": 8,
+        "route_groups": 7,
+        "steps": 400,
+        "dt_s": 0.1,
+        "require_final_waypoint": true,
+        "initial_sha256": "3cc779630ed0fffb626016fb768fb04848b5140821c0b2a743678ce2802b1ae9",
+        "trajectory_sha256": "f360059a8ea117ab460229bbc87a2a01c031a0920a3b6a59b0f05c603ff4a641"
+      },
+      "trajectory_equal": true,
+      "respawns_equal": true
+    },
+    {
+      "scenario": "francis2023_parallel_traffic",
+      "seed": 1009,
+      "old": {
+        "group_respawns": 5,
+        "pedestrian_respawns": 8,
+        "premature_group_respawns": 0,
+        "population": 8,
+        "route_groups": 5,
+        "steps": 400,
+        "dt_s": 0.1,
+        "require_final_waypoint": false,
+        "initial_sha256": "8a23680d4c43997dca103de9c8876305f1ba030e47d1bab57b41e1fcc81aef3b",
+        "trajectory_sha256": "bc2ff6582cce9ac27de5850c8bc7e787e61b64aa5abaa0ca9f59ec974ca8d572"
+      },
+      "new": {
+        "group_respawns": 5,
+        "pedestrian_respawns": 8,
+        "premature_group_respawns": 0,
+        "population": 8,
+        "route_groups": 5,
+        "steps": 400,
+        "dt_s": 0.1,
+        "require_final_waypoint": true,
+        "initial_sha256": "8a23680d4c43997dca103de9c8876305f1ba030e47d1bab57b41e1fcc81aef3b",
+        "trajectory_sha256": "bc2ff6582cce9ac27de5850c8bc7e787e61b64aa5abaa0ca9f59ec974ca8d572"
+      },
+      "trajectory_equal": true,
+      "respawns_equal": true
+    },
+    {
+      "scenario": "francis2023_parallel_traffic",
+      "seed": 1010,
+      "old": {
+        "group_respawns": 7,
+        "pedestrian_respawns": 7,
+        "premature_group_respawns": 0,
+        "population": 8,
+        "route_groups": 8,
+        "steps": 400,
+        "dt_s": 0.1,
+        "require_final_waypoint": false,
+        "initial_sha256": "a4a2047a9551db37f223300c4f2fd83144a79bb5bd6b5b6fc3c5b45524722c07",
+        "trajectory_sha256": "42713f0fbff74a1076c2dd71f2eea4c34b70b1f1f205ed2c64f3eccfd108c79d"
+      },
+      "new": {
+        "group_respawns": 7,
+        "pedestrian_respawns": 7,
+        "premature_group_respawns": 0,
+        "population": 8,
+        "route_groups": 8,
+        "steps": 400,
+        "dt_s": 0.1,
+        "require_final_waypoint": true,
+        "initial_sha256": "a4a2047a9551db37f223300c4f2fd83144a79bb5bd6b5b6fc3c5b45524722c07",
+        "trajectory_sha256": "42713f0fbff74a1076c2dd71f2eea4c34b70b1f1f205ed2c64f3eccfd108c79d"
+      },
+      "trajectory_equal": true,
+      "respawns_equal": true
+    },
+    {
+      "scenario": "classic_head_on_corridor_medium",
+      "seed": 1001,
+      "old": {
+        "group_respawns": 4,
+        "pedestrian_respawns": 6,
+        "premature_group_respawns": 0,
+        "population": 4,
+        "route_groups": 3,
+        "steps": 500,
+        "dt_s": 0.1,
+        "require_final_waypoint": false,
+        "initial_sha256": "08fd827e5da947689a2a6ef15a04dc86bb11041e00de3acecb521befd87295b8",
+        "trajectory_sha256": "0fac515b9755b96c433d83dc21967e88c6da1b9758f136d5aac212f09b2fa591"
+      },
+      "new": {
+        "group_respawns": 4,
+        "pedestrian_respawns": 6,
+        "premature_group_respawns": 0,
+        "population": 4,
+        "route_groups": 3,
+        "steps": 500,
+        "dt_s": 0.1,
+        "require_final_waypoint": true,
+        "initial_sha256": "08fd827e5da947689a2a6ef15a04dc86bb11041e00de3acecb521befd87295b8",
+        "trajectory_sha256": "0fac515b9755b96c433d83dc21967e88c6da1b9758f136d5aac212f09b2fa591"
+      },
+      "trajectory_equal": true,
+      "respawns_equal": true
+    },
+    {
+      "scenario": "classic_head_on_corridor_medium",
+      "seed": 1002,
+      "old": {
+        "group_respawns": 3,
+        "pedestrian_respawns": 4,
+        "premature_group_respawns": 0,
+        "population": 4,
+        "route_groups": 3,
+        "steps": 500,
+        "dt_s": 0.1,
+        "require_final_waypoint": false,
+        "initial_sha256": "14c6b4127321358cdf091910462a50c43a9f1d8c21c2b32ebaf585dd3e8e1557",
+        "trajectory_sha256": "5eeccf86755b8354ba62183fec261f76b4f530ab17ad7595e49a3a9e40eed381"
+      },
+      "new": {
+        "group_respawns": 3,
+        "pedestrian_respawns": 4,
+        "premature_group_respawns": 0,
+        "population": 4,
+        "route_groups": 3,
+        "steps": 500,
+        "dt_s": 0.1,
+        "require_final_waypoint": true,
+        "initial_sha256": "14c6b4127321358cdf091910462a50c43a9f1d8c21c2b32ebaf585dd3e8e1557",
+        "trajectory_sha256": "5eeccf86755b8354ba62183fec261f76b4f530ab17ad7595e49a3a9e40eed381"
+      },
+      "trajectory_equal": true,
+      "respawns_equal": true
+    },
+    {
+      "scenario": "classic_head_on_corridor_medium",
+      "seed": 1003,
+      "old": {
+        "group_respawns": 5,
+        "pedestrian_respawns": 5,
+        "premature_group_respawns": 0,
+        "population": 4,
+        "route_groups": 4,
+        "steps": 500,
+        "dt_s": 0.1,
+        "require_final_waypoint": false,
+        "initial_sha256": "bd680cc7a9dd347a6da6511a1cd200168219a989eb88a4eace8fccea2e4000a0",
+        "trajectory_sha256": "524b9ec007f056d2f525c0b90962d8e91c798fc2ac388c8fcc57b66c8211ec68"
+      },
+      "new": {
+        "group_respawns": 5,
+        "pedestrian_respawns": 5,
+        "premature_group_respawns": 0,
+        "population": 4,
+        "route_groups": 4,
+        "steps": 500,
+        "dt_s": 0.1,
+        "require_final_waypoint": true,
+        "initial_sha256": "bd680cc7a9dd347a6da6511a1cd200168219a989eb88a4eace8fccea2e4000a0",
+        "trajectory_sha256": "524b9ec007f056d2f525c0b90962d8e91c798fc2ac388c8fcc57b66c8211ec68"
+      },
+      "trajectory_equal": true,
+      "respawns_equal": true
+    },
+    {
+      "scenario": "classic_head_on_corridor_medium",
+      "seed": 1004,
+      "old": {
+        "group_respawns": 5,
+        "pedestrian_respawns": 7,
+        "premature_group_respawns": 0,
+        "population": 4,
+        "route_groups": 3,
+        "steps": 500,
+        "dt_s": 0.1,
+        "require_final_waypoint": false,
+        "initial_sha256": "4e589d5f66d9182dd97798d6d646bedce9c37cfb7c30c4705bae8863d0b9f347",
+        "trajectory_sha256": "8ac642eb3bb2b1ac0ae04e13013c05ef17f6290c93df60fd69ca17eb2dcd8206"
+      },
+      "new": {
+        "group_respawns": 5,
+        "pedestrian_respawns": 7,
+        "premature_group_respawns": 0,
+        "population": 4,
+        "route_groups": 3,
+        "steps": 500,
+        "dt_s": 0.1,
+        "require_final_waypoint": true,
+        "initial_sha256": "4e589d5f66d9182dd97798d6d646bedce9c37cfb7c30c4705bae8863d0b9f347",
+        "trajectory_sha256": "8ac642eb3bb2b1ac0ae04e13013c05ef17f6290c93df60fd69ca17eb2dcd8206"
+      },
+      "trajectory_equal": true,
+      "respawns_equal": true
+    },
+    {
+      "scenario": "classic_head_on_corridor_medium",
+      "seed": 1005,
+      "old": {
+        "group_respawns": 2,
+        "pedestrian_respawns": 4,
+        "premature_group_respawns": 0,
+        "population": 4,
+        "route_groups": 2,
+        "steps": 500,
+        "dt_s": 0.1,
+        "require_final_waypoint": false,
+        "initial_sha256": "aaed388c87a62a9fd9f080d2559efadb86e2025f63be28d3e5985dee90cbcdca",
+        "trajectory_sha256": "74faa9c81b23b59d7ddca333148d74c82a55b1d9ac356b01c8989a0866cb33de"
+      },
+      "new": {
+        "group_respawns": 2,
+        "pedestrian_respawns": 4,
+        "premature_group_respawns": 0,
+        "population": 4,
+        "route_groups": 2,
+        "steps": 500,
+        "dt_s": 0.1,
+        "require_final_waypoint": true,
+        "initial_sha256": "aaed388c87a62a9fd9f080d2559efadb86e2025f63be28d3e5985dee90cbcdca",
+        "trajectory_sha256": "74faa9c81b23b59d7ddca333148d74c82a55b1d9ac356b01c8989a0866cb33de"
+      },
+      "trajectory_equal": true,
+      "respawns_equal": true
+    },
+    {
+      "scenario": "classic_head_on_corridor_medium",
+      "seed": 1006,
+      "old": {
+        "group_respawns": 4,
+        "pedestrian_respawns": 5,
+        "premature_group_respawns": 0,
+        "population": 4,
+        "route_groups": 3,
+        "steps": 500,
+        "dt_s": 0.1,
+        "require_final_waypoint": false,
+        "initial_sha256": "a0744b8121cdaf257fd2437ba3cbda8b705879a400ea0418bc80f76a127b6c50",
+        "trajectory_sha256": "941b720a3116524bbd76f44776ac61a976ca391504d2a9c144a1eb2f77f56fc4"
+      },
+      "new": {
+        "group_respawns": 4,
+        "pedestrian_respawns": 5,
+        "premature_group_respawns": 0,
+        "population": 4,
+        "route_groups": 3,
+        "steps": 500,
+        "dt_s": 0.1,
+        "require_final_waypoint": true,
+        "initial_sha256": "a0744b8121cdaf257fd2437ba3cbda8b705879a400ea0418bc80f76a127b6c50",
+        "trajectory_sha256": "941b720a3116524bbd76f44776ac61a976ca391504d2a9c144a1eb2f77f56fc4"
+      },
+      "trajectory_equal": true,
+      "respawns_equal": true
+    },
+    {
+      "scenario": "classic_head_on_corridor_medium",
+      "seed": 1007,
+      "old": {
+        "group_respawns": 7,
+        "pedestrian_respawns": 7,
+        "premature_group_respawns": 0,
+        "population": 4,
+        "route_groups": 4,
+        "steps": 500,
+        "dt_s": 0.1,
+        "require_final_waypoint": false,
+        "initial_sha256": "3219c855869c68fab5b838808ab4caa8ef5f6712b5d2e02daf1ee7dbe0064615",
+        "trajectory_sha256": "a4679e64a58de4a8c4d3a44661cd2c5cbf06ca3fa37a1ebe8dee66b45b1a83bd"
+      },
+      "new": {
+        "group_respawns": 7,
+        "pedestrian_respawns": 7,
+        "premature_group_respawns": 0,
+        "population": 4,
+        "route_groups": 4,
+        "steps": 500,
+        "dt_s": 0.1,
+        "require_final_waypoint": true,
+        "initial_sha256": "3219c855869c68fab5b838808ab4caa8ef5f6712b5d2e02daf1ee7dbe0064615",
+        "trajectory_sha256": "a4679e64a58de4a8c4d3a44661cd2c5cbf06ca3fa37a1ebe8dee66b45b1a83bd"
+      },
+      "trajectory_equal": true,
+      "respawns_equal": true
+    },
+    {
+      "scenario": "classic_head_on_corridor_medium",
+      "seed": 1008,
+      "old": {
+        "group_respawns": 4,
+        "pedestrian_respawns": 4,
+        "premature_group_respawns": 0,
+        "population": 4,
+        "route_groups": 4,
+        "steps": 500,
+        "dt_s": 0.1,
+        "require_final_waypoint": false,
+        "initial_sha256": "cc2d5d01a0663c3aeb9d5e7d5ece8074c362663b9920b0aadfb15eb2529a63a9",
+        "trajectory_sha256": "91dd383e5f8d5994c1c84aef9a1bb36830b7acb38b06b56866a4c8a46a6906c7"
+      },
+      "new": {
+        "group_respawns": 4,
+        "pedestrian_respawns": 4,
+        "premature_group_respawns": 0,
+        "population": 4,
+        "route_groups": 4,
+        "steps": 500,
+        "dt_s": 0.1,
+        "require_final_waypoint": true,
+        "initial_sha256": "cc2d5d01a0663c3aeb9d5e7d5ece8074c362663b9920b0aadfb15eb2529a63a9",
+        "trajectory_sha256": "91dd383e5f8d5994c1c84aef9a1bb36830b7acb38b06b56866a4c8a46a6906c7"
+      },
+      "trajectory_equal": true,
+      "respawns_equal": true
+    },
+    {
+      "scenario": "classic_head_on_corridor_medium",
+      "seed": 1009,
+      "old": {
+        "group_respawns": 4,
+        "pedestrian_respawns": 6,
+        "premature_group_respawns": 0,
+        "population": 4,
+        "route_groups": 3,
+        "steps": 500,
+        "dt_s": 0.1,
+        "require_final_waypoint": false,
+        "initial_sha256": "2495e0e30a1e8f2addca2f26d250dc0c4fb5234e992c422e39db057224e4bc2f",
+        "trajectory_sha256": "b67b0a42a2755efee5c3e7f29a6e5a1b54447bb4371c491c7a7d35600a94aaf9"
+      },
+      "new": {
+        "group_respawns": 4,
+        "pedestrian_respawns": 6,
+        "premature_group_respawns": 0,
+        "population": 4,
+        "route_groups": 3,
+        "steps": 500,
+        "dt_s": 0.1,
+        "require_final_waypoint": true,
+        "initial_sha256": "2495e0e30a1e8f2addca2f26d250dc0c4fb5234e992c422e39db057224e4bc2f",
+        "trajectory_sha256": "b67b0a42a2755efee5c3e7f29a6e5a1b54447bb4371c491c7a7d35600a94aaf9"
+      },
+      "trajectory_equal": true,
+      "respawns_equal": true
+    },
+    {
+      "scenario": "classic_head_on_corridor_medium",
+      "seed": 1010,
+      "old": {
+        "group_respawns": 4,
+        "pedestrian_respawns": 5,
+        "premature_group_respawns": 0,
+        "population": 4,
+        "route_groups": 3,
+        "steps": 500,
+        "dt_s": 0.1,
+        "require_final_waypoint": false,
+        "initial_sha256": "f59fed7feebdb793fe8121c4fd9e8ef60a281aa126ae3ef2dc7dd259fadc1b33",
+        "trajectory_sha256": "062ee5d07dfddfe535f67de5777856c7ac3223381281ac8cc2a86fd5c784753d"
+      },
+      "new": {
+        "group_respawns": 4,
+        "pedestrian_respawns": 5,
+        "premature_group_respawns": 0,
+        "population": 4,
+        "route_groups": 3,
+        "steps": 500,
+        "dt_s": 0.1,
+        "require_final_waypoint": true,
+        "initial_sha256": "f59fed7feebdb793fe8121c4fd9e8ef60a281aa126ae3ef2dc7dd259fadc1b33",
+        "trajectory_sha256": "062ee5d07dfddfe535f67de5777856c7ac3223381281ac8cc2a86fd5c784753d"
+      },
+      "trajectory_equal": true,
+      "respawns_equal": true
+    }
+  ]
+}

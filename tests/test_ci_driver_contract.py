@@ -422,6 +422,23 @@ def test_ci_workflow_splits_fast_feedback_from_smoke_artifacts() -> None:
     ]
 
 
+def test_ci_driver_perf_command_inherits_safe_path_for_cold_samples() -> None:
+    """Cold Python children must not import benchmark/types.py as stdlib types."""
+    driver = CI_DRIVER.read_text(encoding="utf-8")
+    perf_array = driver.split("local perf_cmd=(", 1)[1].split(")", 1)[0]
+    assert shlex.split(perf_array)[:7] == [
+        "env",
+        "PYTHONSAFEPATH=1",
+        "uv",
+        "run",
+        "python",
+        "-m",
+        "robot_sf.benchmark.perf_cold_warm",
+    ]
+    assert '"${perf_cmd[@]}" --fail-on-regression' in driver
+    assert '\n    "${perf_cmd[@]}"\n' in driver
+
+
 def test_ci_workflow_combines_sharded_main_coverage_before_enforcing_floor() -> None:
     """Keep main fast by combining complete coverage from six full-suite shards."""
     workflow = yaml.safe_load(_workflow_text())

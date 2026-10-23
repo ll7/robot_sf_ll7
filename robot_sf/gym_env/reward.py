@@ -473,20 +473,18 @@ def _bounded(value: float, lo: float, hi: float) -> float:
 
 
 def _ttc_risk_from_meta(meta: Mapping[str, object]) -> float:
-    """Compute bounded TTC risk from metadata using inverse TTC or near-miss fallback.
+    """Compute bounded inverse TTC risk independently of pedestrian clearance.
 
     Args:
-        meta: Reward metadata mapping; reads ``time_to_collision`` and ``near_misses``.
+        meta: Reward metadata mapping; reads ``time_to_collision`` in seconds.
 
     Returns:
         Risk proxy in ``[0, 1]`` where larger values indicate higher collision risk.
     """
-    # Prefer explicit TTC if available; otherwise fall back to near-miss proxy.
     ttc = _float(meta, "time_to_collision", float("inf"))
-    if np.isfinite(ttc) and ttc > 0.0:
+    if np.isfinite(ttc) and ttc >= 0.0:
         return _bounded(1.0 / max(ttc, 1e-3), 0.0, 1.0)
-    near_misses = _float(meta, "near_misses", 0.0)
-    return _bounded(near_misses, 0.0, 1.0)
+    return 0.0
 
 
 def _progress_term(meta: Mapping[str, object]) -> float:

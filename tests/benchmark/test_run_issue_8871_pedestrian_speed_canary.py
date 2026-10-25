@@ -278,3 +278,27 @@ def test_journal_event_is_json_lines_and_flushes(tmp_path: Path) -> None:
         "identity_key": "x",
         "row_status": "native",
     }
+
+
+def test_symbolic_speed_seed_resolves_before_loader_without_mutating_scenario(tmp_path) -> None:
+    """A registered symbolic seed reaches the strict loader as a concrete dev seed."""
+    from copy import deepcopy
+
+    from robot_sf.benchmark.map_runner import map_runner_episode
+
+    controls = {
+        "ped_speed_tier": None,
+        "desired_speed_mean": 0.65,
+        "desired_speed_std": 0.19,
+        "desired_speed_seed": "episode_seed",
+    }
+    scenario = {"name": "binding-probe", "simulation_config": dict(controls)}
+    original = deepcopy(scenario)
+    with canary._runtime_binding_context(controls, seed=1001):
+        config = map_runner_episode._build_env_config(
+            scenario, scenario_path=tmp_path / "scenario.yaml"
+        )
+    assert config.sim_config.desired_speed_seed == 1001
+    assert config.sim_config.desired_speed_mean == 0.65
+    assert config.sim_config.desired_speed_std == 0.19
+    assert scenario == original

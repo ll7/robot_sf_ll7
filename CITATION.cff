@@ -2,7 +2,7 @@ cff-version: 1.2.0
 title: robot_sf_ll7
 message: >-
   If you use this repository or its benchmark release protocol, please cite the
-  published v0.0.7 software release using this metadata.
+  software release corresponding to this metadata.
 type: software
 authors:
   - name: Lennart Luttkus
@@ -13,7 +13,7 @@ license: GPL-3.0-only
 # release workflow and scripts/dev/check_version_alignment.py. The git
 # tag/release line is the single source of truth for the version; the benchmark
 # release protocol context lives in the title/abstract, not here.
-version: 0.0.7
+version: 0.0.8
 abstract: >-
   Social navigation simulation and benchmark tooling with a paper-facing,
   pre-1.0 benchmark release protocol.

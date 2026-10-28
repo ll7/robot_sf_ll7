@@ -314,6 +314,10 @@ class HybridRuleLocalPlannerConfig:
     hard_safety_margin: float = 0.05
     static_hard_safety_margin: float = -1.0
     debug_candidate_evaluator: bool = False
+    # Diagnostic ablation only: keep speed limits, forecast, rollout and soft
+    # scores intact while removing collision/clearance/braking rejection.
+    # False preserves the release execution path; never enable for release use.
+    ablation_disable_hard_guard: bool = False
     physical_static_exclusion_enabled: bool = False
     goal_next_validity_enabled: bool = False
     desired_static_clearance: float = 0.7
@@ -489,6 +493,8 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         self._v4_clearance_braking = (
             self.config.planner_variant == HYBRID_RULE_V4_CLEARANCE_BRAKING_VARIANT
         )
+        if self.config.ablation_disable_hard_guard and not self._v4_clearance_braking:
+            raise ValueError("Hard-guard ablation is restricted to the v4 diagnostic controller.")
         # v4 only: drive limits start from the DifferentialDriveSettings defaults
         # and are replaced by the bound environment's robot config in bind_env.
         self._drive_limits: dict[str, Any] | None = (
@@ -2831,7 +2837,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             use_continuous_static_check=ctx["use_continuous_static_check"],
             t=t,
         )
-        if static_rejection is not None:
+        if static_rejection is not None and not self.config.ablation_disable_hard_guard:
             return static_rejection, min_static_clearance, False
         min_static_clearance = min(
             min_static_clearance,
@@ -2891,7 +2897,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
                 ctx["previous_linear"], ctx["previous_angular"] = step_linear, step_angular
                 geometry = self._continuous_static_context.swept_geometry
                 arc_padding = abs(distance * delta_heading) / 8.0
-                if (
+                if not self.config.ablation_disable_hard_guard and (
                     geometry.clearance(
                         robot_pos, ctx["hard_static_clearance"] + arc_padding, previous
                     )
@@ -2932,7 +2938,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
                 progress_windows=progress_windows,
                 t=t,
             )
-            if static_result is not None:
+            if static_result is not None and not self.config.ablation_disable_hard_guard:
                 return static_result
             if skip_dynamic:
                 continue
@@ -2946,7 +2952,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
                 min_dynamic_clearance=min_dynamic_clearance,
                 t=t,
             )
-            if dynamic_rejection is not None:
+            if dynamic_rejection is not None and not self.config.ablation_disable_hard_guard:
                 return dynamic_rejection
 
         ctx["robot_pos"] = robot_pos
@@ -3519,7 +3525,11 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         )
         if collision_rejection is not None:
             return collision_rejection
-        if self._v4_clearance_braking and bool(self.config.v4_braking_check_enabled):
+        if (
+            self._v4_clearance_braking
+            and bool(self.config.v4_braking_check_enabled)
+            and not self.config.ablation_disable_hard_guard
+        ):
             wall_rejection = self._v4_wall_stopping_rejection(candidate, state)
             if wall_rejection is not None:
                 return wall_rejection

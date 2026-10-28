@@ -1,0 +1,50 @@
+{
+  "schema": "xorca-analysis-repair.v1",
+  "reviewed_packet_head": "73c902e70e5a8f41be71c0042c492ced1ca75da3",
+  "execution_and_contract_commit": "a4a31e3575a130bbc0dfccec7fbc173ff114fa42",
+  "scope": "Post-registration extraction tie repair; no campaign rerun or contract change.",
+  "tie_rule": "Among non-moving and non-missing classes with the greatest terminal count, choose the lexicographically smallest label; use none when there are no stall steps.",
+  "episode_rows_compared": 450,
+  "changed_episode_rows": [
+    {
+      "config": "hybrid_v4c_dd",
+      "cell": "doorway_matched_2p80",
+      "seed": 1172,
+      "tail_moving": 98,
+      "tied_counts": {"plant_zero": 1, "command_zero": 1},
+      "old_tail_dominant_stall": "plant_zero",
+      "new_tail_dominant_stall": "command_zero"
+    },
+    {
+      "config": "sf_dd",
+      "cell": "doorway_matched_2p40",
+      "seed": 1180,
+      "tail_moving": 81,
+      "tied_counts": {"solver_zero": 9, "projection_zero": 9},
+      "old_tail_dominant_stall": "solver_zero",
+      "new_tail_dominant_stall": "projection_zero"
+    }
+  ],
+  "changed_cell_rows": [
+    {
+      "config": "hybrid_v4c_dd",
+      "cell": "doorway_matched_2p80",
+      "failed_dominant_plant_zero": {"old": 1, "new": 0},
+      "failed_dominant_command_zero": {"old": 0, "new": 1}
+    },
+    {
+      "config": "sf_dd",
+      "cell": "doorway_matched_2p40",
+      "failed_dominant_solver_zero": {"old": 30, "new": 29},
+      "failed_dominant_projection_zero": {"old": 0, "new": 1}
+    }
+  ],
+  "unchanged": [
+    "all other episode and cell fields",
+    "paired effects",
+    "exploratory values",
+    "predeclared rule outcomes and numerical summary",
+    "uncompressed compact ORCA step table"
+  ],
+  "summary_change": "Adds a noncausal interpretation boundary; numerical values are unchanged."
+}

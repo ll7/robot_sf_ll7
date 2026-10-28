@@ -1,0 +1,95 @@
+# ORCA adapter attribution: execution contract (preregistration).
+# Frozen and committed before any main-seed episode ran; pilot seeds were used
+# only to qualify the cells and the harness and are never pooled with main runs.
+schema: xorca-contract.v1
+frozen_on: 2026-10-28
+question: >-
+  In the feasible matched-route doorway cells where ORCA on the differential-drive
+  robot completes no episode (2.40 and 2.60 m), where does ORCA's motion request become
+  zero: in the RVO2 solver, in the adapter's differential-drive projection, or between the
+  executed command and the measured post-step motion? Does a native holonomic execution
+  of the same ORCA adapter change the outcome?
+evidence_tier: >-
+  Development-seed diagnostic on the 0.0.8 release code; new current-version execution.
+  Not release evidence, not admitted to the thesis.
+source:
+  robot_sf_commit: 373dbfde4f39667cf9e8732dabe7df5118bdeab1
+  package_change: none  # robot_sf/, fast-pysf/, configs/, maps/ are byte-identical to the commit
+  diagnostic_harness: run_xorca.py wraps functions at runtime (see its docstring); all
+    configurations, control and treatment, run through the same harness and commit.
+scenario_matrix: inputs/stage1_scenarios.yaml
+geometry_note: >-
+  Cells reconstruct the matched-route width series (packet doorway_matched_route-20261015,
+  not available on the executing host): francis2023_narrow_doorway.svg with robot route
+  [[7,5],[25.5,5]] unchanged and the wall gap widened symmetrically about y=5 m. Pilot seeds
+  qualify the reconstruction against the reported ORCA results (0/30 at 2.40 and 2.60 m,
+  25/30 at 2.80 m, deadlock with terminal x near 14.2-14.4 m).
+horizon_steps: 400
+dt: 0.1
+cells: [doorway_matched_2p40, doorway_matched_2p60, doorway_matched_2p80]
+deficit_cells: [doorway_matched_2p40, doorway_matched_2p60]
+configurations:
+  - {key: orca_dd, algo: orca, kinematics: differential_drive, benchmark_profile: baseline-safe}
+  - {key: orca_holo, algo: orca, kinematics: holonomic, benchmark_profile: baseline-safe}
+  - {key: sf_dd, algo: social_force, algo_config: configs/algos/social_force_resolution_independent_v2_kernel_wrapped_v2.yaml, kinematics: differential_drive, benchmark_profile: baseline-safe}
+  - {key: sf_holo, algo: social_force, algo_config: configs/algos/social_force_resolution_independent_v2_kernel_wrapped_v2.yaml, kinematics: holonomic, benchmark_profile: baseline-safe}
+  - {key: hybrid_v4c_dd, algo: hybrid_rule_local_planner, algo_config: configs/policy_search/candidates/hybrid_rule_v4_fast_progress_static_escape_continuous_s30_h600_release_0_0_8_frozen.yaml, kinematics: differential_drive, benchmark_profile: experimental}
+matching: >-
+  Within each planner the same seeds, cells, initial pose (verified per row), 1.0 m robot
+  radius and 2.0 m/s speed cap; ORCA and social-force algorithm configs identical across
+  kinematics. The holonomic plant has no acceleration or heading constraint; the
+  differential-drive plant has 1.0 m/s^2 and 1.0 rad/s^2 limits and 1.0 rad/s turn rate.
+seeds:
+  pilot: [1001, 1002, 1003, 1004, 1005, 1006, 1007, 1008, 1009, 1010]
+  main: [1161, 1162, 1163, 1164, 1165, 1166, 1167, 1168, 1169, 1170,
+         1171, 1172, 1173, 1174, 1175, 1176, 1177, 1178, 1179, 1180,
+         1181, 1182, 1183, 1184, 1185, 1186, 1187, 1188, 1189, 1190]
+thresholds:
+  eps_mps: 0.05             # request/command/motion counted as zero below this speed
+  terminal_window_steps: 100 # last 10 s of each episode
+  wall_far_x_m: 16.0        # crossed the wall when robot x exceeds this
+  passable_successes: 27    # of 30, the thesis's passable-width rule
+  robot_diameter_m: 2.0
+outcome_measures:
+  per_row: [success, collision, timeout, deadlock_metric, crossed_wall, terminal_x, min_ped_dist, mode]
+  per_step: [pref_final_world, solver_world, occ_penalty, adapter_cmd, selected_action,
+             applied_environment_action, pre/post pose, measured_speed, door_gap_m]
+  stall_classes: [pref_zero, solver_zero, projection_zero, plant_zero, command_zero]
+  E1: paired success difference orca_holo - orca_dd per cell and pooled over deficit_cells
+  E2: paired success difference sf_holo - sf_dd per cell and pooled over deficit_cells
+  A1: share of failed orca_dd episodes in deficit_cells whose terminal window is dominated by solver_zero or pref_zero
+  A2: share of failed orca_dd episodes in deficit_cells whose terminal window is dominated by projection_zero
+  A3: count of orca_dd steps anywhere in deficit_cells with a goal-ward solver request >= eps and executed translation < eps
+  M1: median door_gap_m (free gap between solver obstacle squares at the wall) per cell and configuration
+analysis: >-
+  analyze.py. Paired by seed within cell. 95 % intervals: 10,000 bootstrap draws resampling
+  the 30 main seeds as complete blocks (every cell kept), numpy default_rng(1001), 2.5/97.5
+  percentiles. Counts and denominators reported for every cell; no hypothesis tests.
+outcome_rules:  # evaluated on the main seeds only, in this order; several may hold
+  R1_native_removes_deficit: >-
+    orca_holo >= 27/30 at both 2.40 and 2.60 m and E1 pooled lower bound > 0. Thesis: the
+    feasible-doorway deficit is sensitive to the executed stack; withdraw any
+    algorithm-level reading.
+  R2_projection_suppresses: >-
+    A2 >= 0.5. Thesis: the trace supports a concrete adaptation mechanism (projection
+    suppresses useful nonzero requests).
+  R3_solver_requests_zero: >-
+    A1 >= 0.8. Thesis: the projection is not the immediate explanation; obstacle
+    representation or routing remains implicated (M1 < 2.0 m strengthens this).
+  R4_native_worsens: >-
+    E1 upper bound < 0 in any cell. Thesis: the projection may provide a useful restriction
+    (confounded with motion authority).
+  R5_little_difference: >-
+    E1 pooled interval inside [-0.10, +0.10]. Thesis: narrow the stack explanation in these
+    cells. If both arms sit at 0/30 the interval is degenerate: report a shared floor, not
+    a bounded effect beyond these cells.
+  otherwise: the limitation stays open.
+stage2_trigger: >-
+  Run stage 2 (classic_head_on_corridor_medium, classic_bottleneck_medium,
+  classic_crossing_medium of the 0.0.8 release matrix, same five configurations and seeds)
+  only if neither R2 nor R3 holds on the main stage-1 data.
+cannot_separate: >-
+  Native holonomic execution changes motion authority (instant velocity, no heading or
+  acceleration limit) together with removing the projection; it does not isolate a pure
+  projection effect, and the holonomic run keeps the same grid-based obstacle inflation of
+  the ORCA adapter. It is not an algorithm ranking.

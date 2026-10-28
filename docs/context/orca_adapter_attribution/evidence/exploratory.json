@@ -1,0 +1,174 @@
+{
+  "final_zero_run_onset": {
+    "orca_dd|doorway_matched_2p40": {
+      "robot_x_m": {
+        "max": 14.201937,
+        "median": 14.155029500000001,
+        "min": 14.06726,
+        "n": 30
+      },
+      "step": {
+        "max": 188.0,
+        "median": 150.0,
+        "min": 120.0,
+        "n": 30
+      }
+    },
+    "orca_dd|doorway_matched_2p60": {
+      "robot_x_m": {
+        "max": 14.627869,
+        "median": 14.368191,
+        "min": 13.105432,
+        "n": 30
+      },
+      "step": {
+        "max": 184.0,
+        "median": 135.0,
+        "min": 56.0,
+        "n": 30
+      }
+    },
+    "orca_dd|doorway_matched_2p80": {
+      "robot_x_m": {
+        "max": 14.694181,
+        "median": 14.694181,
+        "min": 14.694181,
+        "n": 1
+      },
+      "step": {
+        "max": 73.0,
+        "median": 73.0,
+        "min": 73.0,
+        "n": 1
+      }
+    },
+    "orca_holo|doorway_matched_2p40": {
+      "robot_x_m": {
+        "max": 14.158104,
+        "median": 14.065227,
+        "min": 14.025091,
+        "n": 30
+      },
+      "step": {
+        "max": 175.0,
+        "median": 139.5,
+        "min": 124.0,
+        "n": 30
+      }
+    },
+    "orca_holo|doorway_matched_2p60": {
+      "robot_x_m": {
+        "max": 14.315597,
+        "median": 14.1977525,
+        "min": 14.101619,
+        "n": 30
+      },
+      "step": {
+        "max": 177.0,
+        "median": 127.5,
+        "min": 110.0,
+        "n": 30
+      }
+    },
+    "orca_holo|doorway_matched_2p80": {
+      "robot_x_m": {
+        "max": 14.919874,
+        "median": 14.881573,
+        "min": 14.684699,
+        "n": 30
+      },
+      "step": {
+        "max": 137.0,
+        "median": 130.5,
+        "min": 110.0,
+        "n": 30
+      }
+    }
+  },
+  "median_solver_speed_5s_before_onset_mps": {
+    "orca_dd|doorway_matched_2p40": {
+      "max": 0.14331174024669563,
+      "median": 0.03665253110811114,
+      "min": 0.01115555013943919,
+      "n": 30
+    },
+    "orca_dd|doorway_matched_2p60": {
+      "max": 2.999999774120491,
+      "median": 0.04350891467929778,
+      "min": 0.010870004484875876,
+      "n": 30
+    },
+    "orca_dd|doorway_matched_2p80": {
+      "max": 2.9968134810912845,
+      "median": 2.9968134810912845,
+      "min": 2.9968134810912845,
+      "n": 1
+    },
+    "orca_holo|doorway_matched_2p40": {
+      "max": 0.14313904728555854,
+      "median": 0.09192994094436246,
+      "min": 0.0393180815170239,
+      "n": 30
+    },
+    "orca_holo|doorway_matched_2p60": {
+      "max": 0.2184447303561416,
+      "median": 0.09899912017799087,
+      "min": 0.06266594440771467,
+      "n": 30
+    },
+    "orca_holo|doorway_matched_2p80": {
+      "max": 0.23759169542250919,
+      "median": 0.18120365991852697,
+      "min": 0.14110257536277535,
+      "n": 30
+    }
+  },
+  "min_door_gap_m_successful": {
+    "orca_dd|doorway_matched_2p80": {
+      "max": 1.946958,
+      "median": 1.769909,
+      "min": 1.673657,
+      "n": 27
+    }
+  },
+  "note": "exploratory; not preregistered",
+  "schema": "xorca-exploratory.v1",
+  "terminal_window_door_gap_m_failed": {
+    "orca_dd|doorway_matched_2p40": {
+      "max": 1.706604,
+      "median": 1.646732,
+      "min": 1.482703,
+      "n": 30
+    },
+    "orca_dd|doorway_matched_2p60": {
+      "max": 1.823116,
+      "median": 1.7022975,
+      "min": 1.605787,
+      "n": 30
+    },
+    "orca_dd|doorway_matched_2p80": {
+      "max": 2.011489,
+      "median": 1.998029,
+      "min": 1.875314,
+      "n": 3
+    },
+    "orca_holo|doorway_matched_2p40": {
+      "max": 1.607496,
+      "median": 1.5552510000000002,
+      "min": 1.369217,
+      "n": 30
+    },
+    "orca_holo|doorway_matched_2p60": {
+      "max": 1.848872,
+      "median": 1.7056335,
+      "min": 1.559581,
+      "n": 30
+    },
+    "orca_holo|doorway_matched_2p80": {
+      "max": 1.957934,
+      "median": 1.83258,
+      "min": 1.744659,
+      "n": 30
+    }
+  }
+}

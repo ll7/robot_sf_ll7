@@ -101,6 +101,14 @@ taken from per-episode reset receipts and per-step pedestrian state:
   under the same 1e-6 absolute and 1e-5 relative tolerances. Other reset fields are not
   covered by this cross-planner assertion.
 
+`contract.yaml` is retained byte-for-byte from preregistration. Its shorthand that the
+same reset is "identical" across planners means only the five cross-planner fields and
+tolerances listed above; it was not a comparison of every reset field. Its pilot
+`seconds_per_episode_mean` values are arithmetic means of the recorded episode wall times,
+with equal weight for each of 80 pilot episodes per planner (four cells, two conditions,
+10 pilot seeds). In the main table, `command_execution_mode` matches between conditions
+for all 800 planner/cell/seed pairs: 1,200 rows say `adapter` and 400 say `native`.
+
 The scenario loader rejects an explicit `desired_speed_mean` as an unknown key
 (`qualification/override_probe.txt`). In code, setting one would resample every speed and
 erase the mixture. The pilot (seeds 1001-1010) is in [`qualification/`](qualification/) and is

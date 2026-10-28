@@ -1,0 +1,26 @@
+{
+  "schema": "xped.raw-bundle.v1",
+  "lane": "xped",
+  "topic": "guard_crossing_pedestrians",
+  "repository": "ll7/robot_sf_ll7",
+  "branch": "xped-guard-crossing",
+  "release_base_commit": "373dbfde4f39667cf9e8732dabe7df5118bdeab1",
+  "runtime_commit": "a1c07ce529e1cff3c860fa571b8d26a68ff4a798",
+  "contract_commit": "d0e2aa1d9363c7fe6e1eb62e225c4721e7fa7271",
+  "sensitivity_commit": "3e44ba944a3f243557f0d1f64e80c8df0287006c",
+  "pilot_note": "pilot robot rows ran on the uncommitted working tree with the runtime patch (rows record the base commit); no-robot pilot rerun after the route_spawn_seed fix",
+  "python": "3.13.14",
+  "uv_lock_sha256": "def82098b23281e7c49f1f05e052e412c2de54ae2da53f1708bc0ddc2a30d023",
+  "host_class": "shared 32-core x86_64 workstation, CPU only",
+  "os": "Linux-6.8.0-87-generic-x86_64-with-glibc2.39",
+  "main_seeds": "1121-1130,1161-1200",
+  "pilot_seeds": "1001-1010",
+  "runs": {
+    "main": "1200 robot episodes + 400 no-robot runs",
+    "pilot": "240 robot + 80 no-robot (qualification, never pooled)",
+    "sens_remove": "400 robot episodes, post-hoc failure-parking=remove (G0E1, orca traverse)"
+  },
+  "logs": "per-job stdout/stderr gzip -9 compressed after the run (lossless)",
+  "main_robot_rows_git_hash": "d0e2aa1d9363c7fe6e1eb62e225c4721e7fa7271",
+  "no_robot_commit_note": "No-robot trajectories have no embedded git hash; archive manifest/logs record acquisition context, not per-row commit attestation."
+}

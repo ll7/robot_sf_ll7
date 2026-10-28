@@ -1,0 +1,189 @@
+schema: guard-crossing-pedestrians.contract.v1
+status: frozen before any main-run (non-pilot) episode
+question: >-
+  Does the hard-guard bundle of the continuous hybrid v4 controller still raise
+  collision-free completion when pedestrians must pass the same restriction as the
+  robot during its approach, and does it delay or block those pedestrians?
+evidence_tier: development-seed diagnostic
+execution_label: new current-version execution
+release_evidence: false
+claim_admission: none (this packet changes no thesis text, claim, release or frozen artifact)
+
+source:
+  repository: ll7/robot_sf_ll7
+  release_base_commit: 373dbfde4f39667cf9e8732dabe7df5118bdeab1
+  runtime_commit: a1c07ce52  # branch xped-guard-crossing; parent 373dbfde
+  execution_commit: the commit that adds this contract (child of the runtime commit; every main row records git_hash)
+  runtime_change:
+    reason: >-
+      The 0.0.8 runtime has no switch for the complete hard-guard bundle. The diagnostic
+      switch ablation_disable_hard_guard of the earlier guard/escape ablation is rebuilt
+      from that packet's acquisition-source.patch (commit object 0035fba0 is not fetchable).
+    files:
+      robot_sf/planner/hybrid_rule_local_planner.py: {git_blob: 4a1180c6faa1f48b372e9c100dd1d1440db06e1b}
+      tests/planner/test_guardesc_ablation.py: {git_blob: bd58eef51f7a4d6b8cd2678b947d176425c7fbbf}
+    verification: >-
+      Both reconstructed files have exactly the git blob ids that the ablation patch records
+      for execution commit 0035fba0 (index lines 5614c5b99..4a1180c6f and 000000000..bd58eef51),
+      so the planner bytes equal those of the ablation's guard-off acquisition. The 7
+      ablation unit tests pass. Default False leaves release behaviour unchanged.
+  diagnostic_tooling: >-
+    tools/xped_run.py wraps three private map-runner functions at import time (no runtime
+    file change): it records true pedestrian/robot positions after reset and every step and,
+    after the runner has written the robot episode row, continues the same simulator to the
+    end of the observation window under the parking rule. tools/xped_lib.py runs no-robot
+    controls through the benchmark env builder.
+
+configurations:
+  # Control and treatment run on the same commit, environment and host.
+  G1E1:
+    role: hybrid v4 continuous, hard guard ON, escape ON (control)
+    algo: hybrid_rule_local_planner
+    config: inputs/G1E1.yaml  # byte copy of the ablation's G1E1; resolved release controller
+    benchmark_profile: experimental
+  G0E1:
+    role: same controller with the complete hard-guard bundle disabled, escape ON (treatment)
+    algo: hybrid_rule_local_planner
+    config: inputs/G0E1.yaml  # differs from G1E1 only in ablation_disable_hard_guard: true
+    benchmark_profile: experimental
+  orca:
+    role: reference planner
+    algo: orca
+    config: configs/algos/orca_release_v0_0_8.yaml
+    benchmark_profile: baseline-safe
+  none:
+    role: no-robot control (same scenario and seed; robot removed from the scene right after reset)
+
+cells:
+  source: configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml
+  included: [classic_doorway_medium, classic_doorway_high, classic_bottleneck_medium, classic_bottleneck_high]
+  excluded: {francis2023_narrow_doorway: infeasible aperture, as in the ablation}
+route_conditions:
+  matrix: inputs/scenarios.yaml (built by tools/build_inputs.py)
+  traverse: >-
+    The release cell exactly as authored. Its pedestrian routes already lead through the
+    restriction against the robot's direction: doorway crowd route (6,22)->(22,13.9)->(38,6)
+    through the 3.3 m door; bottleneck single pedestrians (x,6)->(x,34) through the
+    4.3 m x 16 m corridor. No release-time change was needed (pilot: passage in the window).
+  outside: >-
+    Same map, robot start/goal sampling, pedestrian count, speed model, spawn rule and
+    start states; routes never enter the restriction. Doorway: one route of the same
+    length (same density -> same count) from the same spawn zone, turning back 2.5 m
+    before the wall face on the robot-goal side (inputs/doorway_outside_routes.yaml).
+    Bottleneck: same single pedestrians from the same starts, walking a lap in the lower
+    room >= 3 m below the corridor mouth (path 24.5-26.5 m vs 28 m traverse).
+
+seeds:
+  pilot_qualification: [1001, 1002, 1003, 1004, 1005, 1006, 1007, 1008, 1009, 1010]  # never pooled
+  main: {ranges: [[1121, 1130], [1161, 1200]], count: 50}
+  forbidden: [paper_eval_s30 111-140, sealed release band, training seeds]
+planned_main:
+  robot_episodes: 1200  # 3 configurations x 4 cells x 2 conditions x 50 seeds
+  no_robot_runs: 400    # 4 cells x 2 conditions x 50 seeds
+horizon:
+  robot_budget_steps: 500  # authored per-cell budget, release_0_0_8_authored_v1 (sha256 032bbf8a...)
+  dt_s: 0.1
+observation_window:
+  steps: 500   # 50.0 s from reset, identical for every robot and no-robot run
+  rule: pedestrians are observed for the full window whatever the robot does
+parking_rule: >-
+  After robot termination the same simulator keeps running to the end of the window with
+  zero robot command. A robot that terminated by route completion (success) leaves the
+  scene (moved far outside the map, no force on pedestrians). A robot that terminated for
+  any other reason (collision) is stopped in place and stays present. A robot that uses
+  the whole budget (timeout) needs no continuation.
+
+outcome_measures:
+  robot:
+    success: route complete without any collision (metrics.success cross-checked)
+    ped_contact: ped_collision_count > 0
+    wall_contact: obstacle_collision_count > 0
+    timeout: budget exhausted without success or collision
+  pedestrian:
+    gate: >-
+      Bottleneck: segment y=20.08, x in [17.79, 22.10], direction +y. Doorway: segment
+      x=22.0, y in [12.24, 15.54], direction +x. A passage is a crossing between
+      consecutive frames; jumps > 1.0 m (route respawns) are ignored.
+    passages: designed-direction gate passages in the window
+    nr_passers: pedestrians (by index) that pass at least once in the paired no-robot run
+    blocked_frac: share of nr_passers with no passage in the robot run (undefined if none)
+    mean_delay_censored_s: >-
+      mean over nr_passers of (first passage time in robot run, or 50.0 s if none) minus
+      first passage time in the no-robot run; censoring makes this a lower bound
+    throughput_loss: no-robot passages minus robot-run passages
+  pairing_checks: pedestrian positions after reset equal between robot and no-robot run
+    (t0_ped_match); simulator config digest equal (sim_config_match)
+  mode_column: planner_kinematics.execution_mode per row; fallback/degraded marker
+    (runtime_fallback_or_degraded_marker) and fallback_count counted and reported
+
+analysis:
+  script: analyze.py (project -> evidence/episodes.csv.gz; analyze -> rates, paired effects, summary)
+  paired_unit: seed x cell x condition
+  cell_weighting: equal over the four cells; per-cell results always reported
+  bootstrap: 10000 resamples of the 50 seed blocks, numpy default_rng(1001), percentile 95%
+  contrasts:
+    guard: G1E1 minus G0E1, per condition, pooled and per cell
+    interaction: guard effect in traverse minus guard effect in outside
+    hybrid_minus_orca: G1E1 minus orca (descriptive reference)
+  exclusions: none; every assigned encounter is analysed, blocked ones included
+  p_values: none
+
+qualification_gate:
+  seeds: pilot 1001-1010, no robot
+  pass: >-
+    In each cell, traverse has >= 1 designed-direction passage in >= 9 of 10 pilot seeds,
+    and outside has 0 passages in all pilot seeds.
+  fail_action: stop with TERMINAL=BLOCKED_EXTERNAL and report the no-robot passage counts
+  note: the threshold was written after a 2-seed no-robot probe of the fixture and before
+    the 10-seed pilot finished. The outcome rule and analyze.py were written while the
+    pilot was running and before any pilot result was viewed; neither changed afterwards.
+  result: >-
+    PASSED (evidence/pilot/summary.json). No-robot passages, traverse: doorway medium 28
+    (10/10 seeds), doorway high 44 (10/10), bottleneck medium 10 (10/10), bottleneck high
+    30 (10/10); outside: 0 in all 40 cell-seeds. Pilot robot episodes (240) had 0
+    fallback/degraded rows, 240/240 start-state and sim-config pairing matches, and close
+    traverse encounters (median closest robot-pedestrian centre distance 1.5-2.3 m vs
+    3.3-7.6 m outside). Pilot fix before freezing: the no-robot driver now applies the
+    runner's seed-derived scenario defaults (route_spawn_seed); the 80 pilot no-robot runs
+    were rerun. Pilot rows are never pooled with main rows.
+  observed_fixture_property: >-
+    Without any robot, some doorway pedestrians jam in front of the door (e.g. one of six
+    stays about 2 m before the wall for the whole window); only about half of the doorway
+    pedestrians pass within 50 s. Recorded, not repaired; the no-robot pairing absorbs it.
+
+outcome_rule:
+  # Evaluated on the pooled (equal-cell) traverse estimates; intervals are the 95% seed-block intervals.
+  O4_pedestrians_fail_to_pass_without_robot:
+    when: the qualification criterion fails on the main-run no-robot controls
+    thesis: keep the limitation (the crowd model/fixture prevents the test); do not interpret robot scores
+  O3_benefit_shrinks_reverses_or_contacts_increase:
+    when: >-
+      guard success effect in traverse has upper bound <= 0, OR the traverse-minus-outside
+      guard interaction has upper bound < 0, OR the guard raises pedestrian contacts in
+      traverse (lower bound > 0), OR guarded-arm pedestrian contacts are higher in
+      traverse than outside (lower bound > 0)
+    thesis: state that the large original guard effect chiefly characterises wall-dominated conditions
+  O2_success_improves_but_pedestrian_cost_rises:
+    when: guard success effect in traverse lower bound > 0 AND (guard effect on censored delay lower bound > 0 s OR on blocked share lower bound > 0 pp)
+    thesis: keep the wall-avoidance finding and explicitly qualify its social interpretation
+  O1_benefit_survives_pedestrian_progress_preserved:
+    when: guard success effect in traverse lower bound > 0 AND guard delay effect upper bound <= 2.0 s AND guard blocked-share effect upper bound <= 5 pp, and neither O2 nor O3 holds
+    thesis: replace "crossing pedestrians untested" with a bounded positive result for these designed encounters
+  O0_inconclusive:
+    when: none of the above
+    thesis: the limitation stays open (wide intervals are not evidence of no effect)
+  separation_limits: >-
+    Estimates the hard-guard bundle effect with escape on (the earlier factorial averaged
+    over escape). It cannot identify individual guard components, generalise beyond these
+    four authored cells, or separate pedestrian-model artefacts (e.g. door jams present
+    without a robot) from robot effects except through the no-robot pairing.
+
+run_command: >-
+  docs/context/guard_crossing_pedestrians/tools/run_campaign.sh <python> <out> 1121,...,1130,1161,...,1200 20
+compute:
+  host_class: shared 32-core workstation, CPU only, one serial process per (arm, scenario)
+  parallel_processes: 20 (>= 4 cores left free)
+environment:
+  python: 3.13.14
+  uv_lock_sha256: def82098b23281e7c49f1f05e052e412c2de54ae2da53f1708bc0ddc2a30d023
+hard_stops: [no thesis edits, no merge or main push, no release/tag/publication, no frozen artifact change, no claim admission]

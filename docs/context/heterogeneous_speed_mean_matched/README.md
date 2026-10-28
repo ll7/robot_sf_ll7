@@ -162,6 +162,10 @@ Full campaign rerun (about 1 h on 8 cores; the script starts 20 processes):
 `bash docs/context/heterogeneous_speed_mean_matched/rerun_campaign.sh`. It runs at acquisition commit
 `94081a52` (whose runtime is the unchanged `373dbfde` base) with this packet, `uv sync --frozen --extra benchmark --extra training`
 (uv.lock sha256 `def82098...d023`, Python 3.13.17) and the PPO checkpoint `764a7d88...24bc`.
+The packet's current driver and shell wrappers include post-acquisition type and failure-
+propagation fixes; the original acquisition used the files at `94081a52`. The full rerun
+now stops before analysis if a worker fails or the expected episode, pairing and classified-
+native counts are incomplete.
 
 ### Reconstruction comparison contract
 

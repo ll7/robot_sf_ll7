@@ -322,6 +322,7 @@ def main() -> int:
     _episode._prepare_episode_env = observer.wrap(_episode._prepare_episode_env)
     spec = PLANNERS[args.planner]
     log = out / "batches.jsonl"
+    failed = False
     for cell in args.cells:
         scenarios = expand_per_seed(build_scenarios(cell, args.seeds))
         t0 = time.time()
@@ -342,6 +343,9 @@ def main() -> int:
             resume=True,
         )
         observer.flush()
+        failed_jobs = summary.get("failed_jobs")
+        if not isinstance(failed_jobs, int) or failed_jobs != 0:
+            failed = True
         with log.open("a") as fh:
             fh.write(
                 json.dumps(
@@ -362,7 +366,7 @@ def main() -> int:
                 )
                 + "\n"
             )
-    return 0
+    return int(failed)
 
 
 if __name__ == "__main__":

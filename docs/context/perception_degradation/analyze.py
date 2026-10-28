@@ -135,6 +135,15 @@ def validity(rows: list[dict], cells: list[str]) -> dict:
                 "modes": modes,
                 "fallback_or_degraded": fallback,
                 "status_not_ok": sum(1 for r in sub if r["status"] != "ok"),
+                "checkpoint_not_loaded": sum(
+                    1
+                    for r in sub
+                    if planner == "ppo"
+                    and (
+                        r["checkpoint_load_status"] != "loaded"
+                        or r["checkpoint_fallback_triggered"]
+                    )
+                ),
                 "effective_view_degraded": sum(1 for r in sub if r["effective_view_degraded"]),
                 "channel_not_consumed_every_step": unconsumed,
                 "episodes_with_pedestrians": len(with_peds),
@@ -151,9 +160,9 @@ def validity(rows: list[dict], cells: list[str]) -> dict:
                 else None,
             }
             report["by_planner_condition"][f"{planner}|{cond}"] = entry
-            if fallback or unconsumed or entry["status_not_ok"]:
+            if fallback or unconsumed or entry["status_not_ok"] or entry["checkpoint_not_loaded"]:
                 failures.append(f"{planner}|{cond}: invalid execution rows")
-            if cond != "oracle" and undisturbed:
+            if cond in ("position_noise", "delay") and undisturbed:
                 failures.append(f"{planner}|{cond}: {undisturbed} episodes never perturbed")
             if cond == "oracle" and entry["oracle_differs_from_truth"]:
                 failures.append(f"{planner}|oracle: control differs from truth")
@@ -171,6 +180,25 @@ def validity(rows: list[dict], cells: list[str]) -> dict:
         }
     report["failures"] = failures
     return report
+
+
+def negative_control(y: np.ndarray, cells: list[str], occl_cells: list[str]) -> dict:
+    """In cells without occlusion the inputs equal oracle, so outcomes must match exactly.
+
+    Returns:
+        Per non-analysis cell: number of seed x planner pairs whose endpoints differ.
+    """
+    oracle, occl = CONDITIONS.index("oracle"), CONDITIONS.index("static_occlusion")
+    out = {}
+    for ci, cell in enumerate(cells):
+        if cell in occl_cells:
+            continue
+        a, b = y[:, ci, :, oracle, :5], y[:, ci, :, occl, :5]
+        out[cell] = {
+            "pairs": int(a.shape[0] * a.shape[1]),
+            "differ": int(np.any(a != b, axis=-1).sum()),
+        }
+    return out
 
 
 def bootstrap(y: np.ndarray, fn, seed: int = 1001) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -193,15 +221,30 @@ def bootstrap(y: np.ndarray, fn, seed: int = 1001) -> tuple[np.ndarray, np.ndarr
     return point, np.percentile(stacked, 2.5, axis=0), np.percentile(stacked, 97.5, axis=0)
 
 
-def with_pooled(m: np.ndarray) -> np.ndarray:
-    """Append the equal-cell pooled mean as an extra cell index.
+def pool_weights(cells: list[str], contract: dict) -> np.ndarray:
+    """Return equal-cell pooling weights per condition, shape [condition, cell].
+
+    Occlusion pools only the cells where the pilot showed it is exercised (frozen in
+    the contract); its treatment and control are averaged over the same cells.
+
+    Returns:
+        Row-normalized weights.
+    """
+    w = np.ones((len(CONDITIONS), len(cells)))
+    occl_cells = contract.get("occlusion_analysis_cells")
+    if occl_cells is not None:
+        w[CONDITIONS.index("static_occlusion")] = [float(c in occl_cells) for c in cells]
+    return w / w.sum(axis=1, keepdims=True)
+
+
+def append_pooled(x: np.ndarray, w: np.ndarray) -> np.ndarray:
+    """Append the pooled mean as an extra cell for ``x`` shaped [..., cell, A, cond, ep].
 
     Returns:
         Array with the cell axis extended by one (last = pooled).
     """
-    cell_axis = m.ndim - 4
-    pooled = np.mean(m, axis=cell_axis, keepdims=True)
-    return np.concatenate([m, pooled], axis=cell_axis)
+    pooled = np.einsum("...cake,kc->...ake", x, w)[..., None, :, :, :]
+    return np.concatenate([x, pooled], axis=-4)
 
 
 def main() -> None:  # noqa: C901, PLR0912, PLR0915
@@ -217,7 +260,8 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
     (args.output / "validity.json").write_text(json.dumps(valid, indent=2) + "\n")
     cell_names = [*cells, "POOLED_EQUAL_CELL"]
 
-    rate, rlo, rhi = bootstrap(y, with_pooled)
+    weights = pool_weights(cells, contract)
+    rate, rlo, rhi = bootstrap(y, lambda m: append_pooled(m, weights))
     with (args.output / "rates.csv").open("w", newline="") as fh:
         w = csv.writer(fh)
         w.writerow(
@@ -247,12 +291,17 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
     )
 
     def effects(m: np.ndarray) -> np.ndarray:
-        m = with_pooled(m)
+        # Per-cell contrasts first, then condition-aware pooling of each contrast.
         cond_eff = m[..., :, 1:, :] - m[..., :, :1, :]  # [.., cell, planner, cond-1, ep]
         diff = np.stack([m[..., a, :, :] - m[..., b, :, :] for a, b in pairs], axis=-3)
         rank_change = diff[..., :, 1:, :] - diff[..., :, :1, :]
-        guard = m[..., on, :, :] - m[..., off, :, :]  # [.., cell, cond, ep]
+        guard = (m[..., on, :, :] - m[..., off, :, :])[..., None, :, :]
         guard_dep = guard[..., 1:, :] - guard[..., :1, :]
+        cond_eff = append_pooled(cond_eff, weights[1:])
+        diff = append_pooled(diff, weights)
+        rank_change = append_pooled(rank_change, weights[1:])
+        guard = append_pooled(guard, weights)[..., 0, :, :]
+        guard_dep = append_pooled(guard_dep, weights[1:])[..., 0, :, :]
         return np.concatenate(
             [
                 cond_eff.reshape(*cond_eff.shape[:-3], -1),
@@ -392,11 +441,13 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
                 for a, b in pairs
             )
             rule["O4_uniform_deterioration"][f"{cond}|{ep}"] = bool(same_sign and no_rank)
+    occl_cells = contract.get("occlusion_analysis_cells") or cells
     rule["O5_intervention_failed"] = list(valid["failures"]) + [
-        f"static_occlusion not exercised in {cell}"
+        f"static_occlusion not exercised in analysis cell {cell}"
         for cell, v in valid["occlusion_exercise"].items()
-        if not v["exercised"]
+        if not v["exercised"] and cell in occl_cells
     ]
+    rule["occlusion_negative_control"] = negative_control(y, cells, occl_cells)
     summary = {
         "schema": "xperc-perception-degradation.summary.v1",
         "episodes": len(rows),

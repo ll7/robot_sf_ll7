@@ -53,9 +53,20 @@ def project_line(raw: dict, planner_key: str) -> dict:
             "pedestrian_perception_trace",
         )
     }
+    # The canonical parser reads every *fallback* key as a counter, so PPO's boolean
+    # config flag ``fallback_to_goal: false`` would be reported as "invalid". It is
+    # recorded explicitly below and must be False; everything else is parsed as-is.
+    config_fallback_to_goal = (runtime_meta.get("config") or {}).get("fallback_to_goal")
+    if config_fallback_to_goal is False:
+        runtime_meta["config"] = {
+            k: v for k, v in runtime_meta["config"].items() if k != "fallback_to_goal"
+        }
     marker = runtime_fallback_or_degraded_marker(
         runtime_meta, expected_algorithm=PLANNERS[planner_key]
     )
+    if config_fallback_to_goal not in (None, False):
+        marker = marker or ["config.fallback_to_goal", "enabled"]
+    checkpoint = (meta.get("planner_runtime") or {}).get("checkpoint_provenance") or {}
     perception = meta.get("pedestrian_perception") or {}
     noise = raw.get("observation_noise") or {}
     kin = meta.get("planner_kinematics") or {}
@@ -72,6 +83,9 @@ def project_line(raw: dict, planner_key: str) -> dict:
         "status": meta.get("status"),
         "fallback_count": runtime.get("fallback_count"),
         "fallback_or_degraded_marker": marker,
+        "config_fallback_to_goal": config_fallback_to_goal,
+        "checkpoint_load_status": checkpoint.get("load_status"),
+        "checkpoint_fallback_triggered": checkpoint.get("fallback_triggered"),
         "pedestrian_model_status": (raw.get("pedestrian_model") or {}).get(
             "fallback_degraded_status"
         ),

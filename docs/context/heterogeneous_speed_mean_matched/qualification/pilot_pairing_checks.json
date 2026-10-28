@@ -1,0 +1,15 @@
+{
+ "captured_steps_mismatch": 0,
+ "condition_pairs_checked": 160,
+ "cross_planner_resets_checked": 240,
+ "episodes": 320,
+ "failures": [],
+ "mode_counts": {
+  "native": 320
+ },
+ "n_failures": 0,
+ "observer_errors": 0,
+ "pairs_with_speed_coupled_relocation_difference": 24,
+ "pass": true,
+ "speed_changed_after_reset": 0
+}

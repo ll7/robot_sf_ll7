@@ -229,7 +229,11 @@ def main() -> int:  # noqa: PLR0915
                     )
                 }
                 stall_tail = [c for c in tail if c not in ("moving", "missing")]
-                dominant = min(stall_tail, key=lambda label: (-counts[label], label)) if stall_tail else "none"
+                dominant = (
+                    min(stall_tail, key=lambda label: (-counts[label], label))
+                    if stall_tail
+                    else "none"
+                )
                 all_counts = {
                     k: classes.count(k) for k in ("solver_zero", "projection_zero", "plant_zero")
                 }

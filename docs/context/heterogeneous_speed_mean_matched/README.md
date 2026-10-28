@@ -65,7 +65,8 @@ equally weighted. Time-to-goal uses only pairs successful in both conditions.
   Social force and PPO swap point-estimate positions: 37.5 % versus 34.0 % in uniform,
   31.0 % versus 33.0 % in mixed. Their uniform difference (+3.5 pp [-2.5, +9.5]) was not
   resolved, so the swap does not trigger the preregistered resolved-pair order-change rule.
-- Pedestrian lost-time fraction rises under mixing for every planner (+0.04 to +0.06 overall).
+- Pedestrian lost-time fraction rises under mixing for every planner
+  (overall point estimates +0.041348 to +0.061303).
   In each episode, lost time is summed over steps, divided by episode duration, then
   averaged equally across all 12 pedestrians or the specified speed stratum. The resulting
   episode values are averaged over retained paired seeds within each cell, then the four
@@ -159,7 +160,7 @@ fallback status from this counter is **unknown**, not zero, for those planners. 
 checkpoint records report a successful load and no checkpoint fallback. Checkpoint provenance
 is absent for the other, non-checkpoint planners. Thus the native classification summarizes
 the recorded indicators, not proof that every possible fallback was instrumented. PPO
-checkpoint loading in particular does not prove that later policy steps never fell back.
+checkpoint load success alone does not establish full coverage of later policy steps.
 The effective view is recorded as probed for the 1,200 hybrid, ORCA and social-force episodes;
 all 400 PPO records say `probed: false` and `pedestrian_blind_by_design: true`. PPO's
 `degraded: false` is therefore a recorded status, not an independent probe.
@@ -171,6 +172,46 @@ generated summaries label their input and retained populations and report teleme
 retained population. The separate **pilot population** has 320 episodes: 80 hybrid counters
 report zero, 240 counters are missing (80 per other planner), and all 80 pilot PPO views are
 unprobed by design. Pilot rows are not included in either main analysis.
+
+### Acquisition-commit planner-path audit
+
+This audit concerns the code at acquisition commit `94081a52ef8a7fddd9cf163a75a0d73a5bb7cf65`,
+the frozen settings and the main-population records. Code paths and configuration describe
+what is allowed; missing counters do not establish whether an unrecorded path was exercised.
+The [acquisition driver (`docs/context/heterogeneous_speed_mean_matched/driver.py:57`)](https://github.com/ll7/robot_sf_ll7/blob/94081a52ef8a7fddd9cf163a75a0d73a5bb7cf65/docs/context/heterogeneous_speed_mean_matched/driver.py#L57-L81)
+selects the three planners and their frozen config paths.
+
+- **ORCA.** The [adapter (`robot_sf/planner/socnav_orca.py:161`)](https://github.com/ll7/robot_sf_ll7/blob/94081a52ef8a7fddd9cf163a75a0d73a5bb7cf65/robot_sf/planner/socnav_orca.py#L161-L180)
+  permits heuristic ORCA when RVO2 is missing and `allow_fallback` is enabled, and raises
+  otherwise. The [family spec (`robot_sf/benchmark/map_runner_policies/socnav_family.py:95`)](https://github.com/ll7/robot_sf_ll7/blob/94081a52ef8a7fddd9cf163a75a0d73a5bb7cf65/robot_sf/benchmark/map_runner_policies/socnav_family.py#L95-L106)
+  defaults the flag to false and the [builder (`socnav_family.py:420`)](https://github.com/ll7/robot_sf_ll7/blob/94081a52ef8a7fddd9cf163a75a0d73a5bb7cf65/robot_sf/benchmark/map_runner_policies/socnav_family.py#L420-L425)
+  passes that default when the key is absent. The [acquisition driver (`docs/context/heterogeneous_speed_mean_matched/driver.py:290`)](https://github.com/ll7/robot_sf_ll7/blob/94081a52ef8a7fddd9cf163a75a0d73a5bb7cf65/docs/context/heterogeneous_speed_mean_matched/driver.py#L290-L303)
+  requests fail-fast; [preflight (`robot_sf/benchmark/map_runner/map_runner.py:794`)](https://github.com/ll7/robot_sf_ll7/blob/94081a52ef8a7fddd9cf163a75a0d73a5bb7cf65/robot_sf/benchmark/map_runner/map_runner.py#L794-L802)
+  disables an enabled flag under that policy. All 400 ORCA rows omit `allow_fallback` from
+  their recorded algorithm config, as does the [frozen ORCA config
+  (`configs/algos/orca_release_v0_0_8.yaml:1`)](https://github.com/ll7/robot_sf_ll7/blob/94081a52ef8a7fddd9cf163a75a0d73a5bb7cf65/configs/algos/orca_release_v0_0_8.yaml#L1-L6),
+  so the effective configs do not enable this path.
+- **Social force.** The [selected adapter (`robot_sf/planner/socnav_social_force.py:94`)](https://github.com/ll7/robot_sf_ll7/blob/94081a52ef8a7fddd9cf163a75a0d73a5bb7cf65/robot_sf/planner/socnav_social_force.py#L94-L101)
+  raises if its `fast-pysf` dependency is unavailable; inspection of this adapter found no
+  alternate-planner fallback. It can substitute inputs: for example, [missing pedestrian
+  velocities become zero (`socnav_social_force.py:513`)](https://github.com/ll7/robot_sf_ll7/blob/94081a52ef8a7fddd9cf163a75a0d73a5bb7cf65/robot_sf/planner/socnav_social_force.py#L513-L526).
+  Such input substitution is not a switch to another planner; the records do not establish
+  whether or how often it occurred.
+- **PPO.** The planner has goal-action fallback paths for [load errors
+  (`robot_sf/baselines/ppo.py:222`)](https://github.com/ll7/robot_sf_ll7/blob/94081a52ef8a7fddd9cf163a75a0d73a5bb7cf65/robot_sf/baselines/ppo.py#L222-L299)
+  and [prediction errors (`ppo.py:376`)](https://github.com/ll7/robot_sf_ll7/blob/94081a52ef8a7fddd9cf163a75a0d73a5bb7cf65/robot_sf/baselines/ppo.py#L376-L423).
+  The [frozen config (`configs/baselines/ppo_release_robot_0_0_8_cpu.yaml:12`)](https://github.com/ll7/robot_sf_ll7/blob/94081a52ef8a7fddd9cf163a75a0d73a5bb7cf65/configs/baselines/ppo_release_robot_0_0_8_cpu.yaml#L12)
+  sets `fallback_to_goal: false`, as recorded in all 400 main PPO configs; this disables those
+  goal-action paths. Independently, [dict-observation alignment (`ppo.py:616`)](https://github.com/ll7/robot_sf_ll7/blob/94081a52ef8a7fddd9cf163a75a0d73a5bb7cf65/robot_sf/baselines/ppo.py#L616-L674)
+  can backfill missing model inputs with defaults and logs this at debug level. In the
+  [reviewer's instrumented replay](https://github.com/ll7/robot_sf_ll7/pull/10494#issuecomment-6481016662),
+  the selected seed's crossing cell had no missing keys in 513 alignment calls; this does not
+  establish what happened across the original cohort. Top-level algorithm metadata is
+  [initialized before policy steps (`robot_sf/benchmark/map_runner/map_runner.py:1324`)](https://github.com/ll7/robot_sf_ll7/blob/94081a52ef8a7fddd9cf163a75a0d73a5bb7cf65/robot_sf/benchmark/map_runner/map_runner.py#L1324-L1332),
+  while the live checkpoint snapshot is [captured at episode teardown
+  (`robot_sf/benchmark/map_runner/map_runner_episode.py:3573`)](https://github.com/ll7/robot_sf_ll7/blob/94081a52ef8a7fddd9cf163a75a0d73a5bb7cf65/robot_sf/benchmark/map_runner/map_runner_episode.py#L3573-L3595)
+  via the [checkpoint stats hook (`map_runner.py:1232`)](https://github.com/ll7/robot_sf_ll7/blob/94081a52ef8a7fddd9cf163a75a0d73a5bb7cf65/robot_sf/benchmark/map_runner/map_runner.py#L1232-L1266).
+  Neither provides complete coverage of the input-default path.
 
 ### Known limitation of the preregistration
 
@@ -195,7 +236,7 @@ it could say that, under this release's mixed-speed
 intervention, ORCA success changed by -12.0 pp [-19.0, -5.0] and collisions by +11.5 pp
 [+4.5, +18.5] across four authored cells and 50 development seeds. The grouped success order
 remained hybrid > ORCA > {social force, PPO}, although the social-force and PPO point estimates
-swapped positions. Hybrid and PPO pooled point estimates changed by at most 7 pp on success
+swapped positions. Hybrid and PPO pooled point estimates changed by at most 1.5 pp on success
 and collision, but the intervals do not establish equivalence or no change (PPO collision
 reaches +7.5 pp). The slow-stratum near-robot contribution increased with intervals above zero
 for three planners as a secondary observation; it combines exposure with slowdown, and neither

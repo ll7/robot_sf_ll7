@@ -100,7 +100,7 @@ def campaign(stage: str, condition: str) -> dict:
         "seed_policy": {"mode": "fixed-list", "seeds": list(STAGES[stage]["seeds"])},
         "snqi_weights": None,
         "snqi_baseline": None,
-        "workers": 12,
+        "workers": 8,
         "scenario_horizons": "configs/benchmarks/horizon_schedules/release_0_0_8_authored_v1.yaml",
         "scenario_horizons_sha256": (
             "032bbf8ad354ea9394492659aa50188e2bc40078930975ef30cd3ba77208675e"

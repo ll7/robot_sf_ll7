@@ -1,0 +1,28 @@
+{
+  "host_archive": "lane host archive experiments/xbike/<stage>/ with per-stage MANIFEST.sha256 (not cross-host replicated)",
+  "main_wall_clock": "2026-10-28 16:26:31 to 16:29:13 +01:00, 10 local workers",
+  "precursor_corpus_archived_host_only": {
+    "precursor_kinprobe_job16192/kinprobe_diagnostics.tar.gz": "7d76c185793c68720a10f73908abb91c66769f63fb0e40f3b3efcfaf6a2bcb9a"
+  },
+  "production_tree": "373dbfde4f39667cf9e8732dabe7df5118bdeab1",
+  "python": "3.13.14",
+  "run_commit": "3cf7d7c3b0d0d8d72e7755e74e448b0d983413a2",
+  "schema": "bicycle-bounded-custody.v1",
+  "stage_tarball_sha256": {
+    "main/xbike_main_raw.tar.gz": "071c52cb9cb05acbc8d2ce0a8e2fa6d80159ba62ba220fb02569f53a506c8737",
+    "pilot/xbike_pilot_raw.tar.gz": "8bee6b1b0258d24a5628a3de41e402135520b22432d59cbecd3ac39d33f999a2",
+    "pilot_b/xbike_pilot_b_raw.tar.gz": "14d0d8a081e3eb62ac7ee12f0bdd4fdcaaea29306fc88d2ca2bd6f7ad1b67c2d",
+    "smoke/xbike_smoke_raw.tar.gz": "6e17d5a961bad234f1818e90298ab6a5c7be23f22f3ec485d130d6fc4e8b54e5",
+    "smoke2/xbike_smoke2_raw.tar.gz": "8a56f8df9bfb748f98a5cc54659ccfe88e1fc67313c1ca17847e08405c9d463b"
+  },
+  "stages": {
+    "main": "1230 episodes, seeds 1161-1190 and 1121-1125",
+    "pilot": "seeds 1002-1008, first harness (superseded, kept)",
+    "pilot_b": "seeds 1002-1008, final harness",
+    "smoke": "seed 1001, first harness",
+    "smoke2": "seed 1001, final harness"
+  },
+  "uv_lock_sha256": "def82098b23281e7c49f1f05e052e412c2de54ae2da53f1708bc0ddc2a30d023",
+  "wandb_artifact": "wandb://ll7/robot_sf/campaign-xbike_bicycle_bounded_373dbfde_20261028:v0",
+  "wandb_state_readback": "COMMITTED, 10 files, sizes match local tarballs"
+}

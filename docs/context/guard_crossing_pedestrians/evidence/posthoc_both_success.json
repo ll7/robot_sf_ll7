@@ -1,0 +1,22 @@
+{
+ "classic_bottleneck_high": {
+  "pairs": 38,
+  "delay_diff_s_mean": -1.927,
+  "blocked_diff_pp_mean": -2.632
+ },
+ "classic_bottleneck_medium": {
+  "pairs": 43,
+  "delay_diff_s_mean": -0.779,
+  "blocked_diff_pp_mean": 0.0
+ },
+ "classic_doorway_high": {
+  "pairs": 3,
+  "delay_diff_s_mean": -4.418,
+  "blocked_diff_pp_mean": -6.667
+ },
+ "classic_doorway_medium": {
+  "pairs": 6,
+  "delay_diff_s_mean": 1.894,
+  "blocked_diff_pp_mean": 11.111
+ }
+}

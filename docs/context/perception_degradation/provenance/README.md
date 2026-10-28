@@ -6,6 +6,16 @@ The main acquisition and frozen contract are both at commit
 `373dbfde4f39667cf9e8732dabe7df5118bdeab1`. The packet-only branch is based
 on later main and does not itself install the experimental runtime hook.
 
+The execution commit's Git author and committer timestamps are 2026-10-28
+16:09:11 UTC. The archived main `environment.txt` records a start at
+16:09:36 UTC; the earliest producer episode's `timestamps.start` is
+16:09:45.092746 UTC. On this host, the earliest remote-tracking reflog entry
+observing the execution SHA is a fetch at 16:10:22 UTC; the original PR was
+opened at 16:10:32 UTC. The Git timestamp supports a pre-episode commit but
+does not independently establish when it was pushed. No earlier push receipt
+or independent remote observation was found in the available xperc lane and
+archive records. This is an unresolved proof gap, not evidence of a late push.
+
 [`runtime.patch`](runtime.patch) is the zero-context release-to-acquisition diff for all
 five changed runtime files and the two associated diagnostic tests. It
 contains both the guard-switch ablation and the pedestrian-perception hook.

@@ -37,25 +37,53 @@ TOL = 1e-9
 # ----------------------------------------------------------------------------- extract
 
 
+def _counter_state(value: object) -> str:
+    """Return zero, positive, or unknown without coercing missing/invalid counters."""
+    if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+        return "unknown"
+    return "zero" if value == 0 else "positive"
+
+
+def _planner_fallback_indicators(am: dict, pr: dict) -> tuple[list[str], list[str], list[str]]:
+    """Distinguish recorded fallback evidence from missing planner telemetry."""
+    reasons_fb, reasons_dg, unknown = [], [], []
+    fallback_count = pr.get("fallback_count")
+    if fallback_count is None:
+        unknown.append("planner_fallback_counter_unavailable")
+    elif _counter_state(fallback_count) == "positive":
+        reasons_fb.append(f"planner_fallback_count={fallback_count}")
+    elif _counter_state(fallback_count) == "unknown":
+        unknown.append("planner_fallback_counter_invalid")
+    if am.get("fallback_used") or am.get("used_fallback"):
+        reasons_fb.append("algorithm_fallback_used")
+    algorithm_status = am.get("status")
+    if algorithm_status is None:
+        unknown.append("algorithm_status_unavailable")
+    elif "fallback" in str(algorithm_status).lower():
+        reasons_fb.append(f"algorithm_status={algorithm_status}")
+    elif str(algorithm_status).lower() in ("error", "failed", "failed_run"):
+        reasons_dg.append(f"algorithm_status={algorithm_status}")
+    elif str(algorithm_status).lower() != "ok":
+        unknown.append(f"algorithm_status_unrecognized={algorithm_status}")
+    if am.get("fallback_reason") or pr.get("fallback_reason"):
+        reasons_fb.append("recorded_fallback_reason")
+    return reasons_fb, reasons_dg, unknown
+
+
 def _mode(rec: dict) -> tuple[str, str]:  # noqa: C901
-    """Return (mode, reason): native | fallback | degraded, verified from the record."""
+    """Classify recorded indicators and retain unknown telemetry in the reason."""
     am = rec.get("algorithm_metadata", {}) or {}
     pr = am.get("planner_runtime", {}) or {}
-    reasons_fb, reasons_dg = [], []
+    reasons_fb, reasons_dg, unknown = _planner_fallback_indicators(am, pr)
     cp = pr.get("checkpoint_provenance") or {}
     if cp:
         if cp.get("fallback_triggered"):
             reasons_fb.append("checkpoint_fallback")
         if cp.get("load_succeeded") is False:
             reasons_fb.append("checkpoint_not_loaded")
-    if int(pr.get("fallback_count", 0) or 0) > 0:
-        reasons_fb.append(f"planner_fallback_count={pr.get('fallback_count')}")
     for key in ("goal_posterior_avoidance", "proxemic_costmap"):
         if (pr.get(key) or {}).get("fallback_or_degraded"):
             reasons_dg.append(f"{key}_fallback_or_degraded")
-    cfg = am.get("config", {}) or {}
-    if am.get("fallback_used") or am.get("used_fallback"):
-        reasons_fb.append("algorithm_fallback_used")
     if ((rec.get("integrity") or {}).get("effective_view") or {}).get("degraded"):
         reasons_dg.append("effective_view_degraded")
     if (rec.get("pedestrian_model") or {}).get("fallback_degraded_status", "native") != "native":
@@ -64,12 +92,11 @@ def _mode(rec: dict) -> tuple[str, str]:  # noqa: C901
         reasons_dg.append("invalid_spawn")
     if str(rec.get("status")) in ("error", "failed_run"):
         reasons_dg.append("status_error")
-    _ = cfg
     if reasons_fb:
-        return "fallback", ";".join(reasons_fb + reasons_dg)
+        return "fallback", ";".join(reasons_fb + reasons_dg + unknown)
     if reasons_dg:
-        return "degraded", ";".join(reasons_dg)
-    return "native", ""
+        return "degraded", ";".join(reasons_dg + unknown)
+    return "native", ";".join(unknown)
 
 
 def _ped_delay(npz_path: str, labels: list[str]) -> dict:
@@ -154,6 +181,8 @@ def extract(runs: str, out: str) -> None:
                 )
                 pd = _ped_delay(stem + ".npz", labels)
                 am = rec.get("algorithm_metadata", {}) or {}
+                pr = am.get("planner_runtime", {}) or {}
+                cp = pr.get("checkpoint_provenance") or {}
                 success = bool(m.get("success"))
                 row = {
                     "planner": planner,
@@ -162,6 +191,9 @@ def extract(runs: str, out: str) -> None:
                     "seed": seed,
                     "mode": mode,
                     "mode_reason": reason,
+                    "algorithm_status": am.get("status"),
+                    "planner_fallback_count": pr.get("fallback_count"),
+                    "planner_fallback_counter_state": _counter_state(pr.get("fallback_count")),
                     "command_execution_mode": (am.get("planner_kinematics") or {}).get(
                         "execution_mode"
                     ),
@@ -182,9 +214,9 @@ def extract(runs: str, out: str) -> None:
                     "observer_error": rc.get("observer_error", ""),
                     "git_hash": (rec.get("provenance") or {}).get("git_hash"),
                     "algo_config_hash": (rec.get("scenario_params") or {}).get("algo_config_hash"),
-                    "checkpoint_load": (
-                        (am.get("planner_runtime") or {}).get("checkpoint_provenance") or {}
-                    ).get("load_status", ""),
+                    "checkpoint_load": cp.get("load_status", ""),
+                    "checkpoint_load_succeeded": cp.get("load_succeeded"),
+                    "checkpoint_fallback_triggered": cp.get("fallback_triggered"),
                 }
                 row.update(pd)
                 rows.append(row)
@@ -197,8 +229,42 @@ def extract(runs: str, out: str) -> None:
         w = csv.DictWriter(fh, fieldnames=order, restval="")
         w.writeheader()
         w.writerows(rows)
+    _write_mode_counts(out_p / "mode_counts.csv", rows)
     (out_p / "pairing_checks.json").write_text(json.dumps(checks, indent=1, sort_keys=True))
     print(json.dumps({k: v for k, v in checks.items() if k != "failures"}, indent=1))
+
+
+def _write_mode_counts(path: Path, rows: list[dict]) -> None:
+    """Record classified modes and observed versus unavailable planner counters."""
+    grouped: dict = {}
+    for row in rows:
+        key = (row["planner"], row["cell"], row["condition"])
+        if key not in grouped:
+            grouped[key] = dict.fromkeys(
+                (
+                    "native",
+                    "fallback",
+                    "degraded",
+                    "total",
+                    "counter_zero",
+                    "counter_positive",
+                    "counter_unknown",
+                ),
+                0,
+            )
+        counts = grouped[key]
+        counts[row["mode"]] += 1
+        counts["total"] += 1
+        value = row["planner_fallback_count"]
+        counter = _counter_state(value)
+        counts[f"counter_{counter}"] += 1
+    _write_csv(
+        path,
+        [
+            {"planner": p, "cell": c, "condition": cond, **counts}
+            for (p, c, cond), counts in sorted(grouped.items())
+        ],
+    )
 
 
 def _same(a, b) -> bool:
@@ -320,6 +386,37 @@ def _f(x):
     if x in ("", None):
         return math.nan
     return float(x)
+
+
+def _telemetry_summary(rows: list[dict]) -> dict:
+    """Summarize observable indicators without counting missing counters as zero."""
+    counters = {p: {"zero": 0, "positive": 0, "unknown": 0} for p in PLANNERS}
+    statuses = {"ok": 0, "other": 0, "unknown": 0}
+    checkpoints = {"loaded_without_checkpoint_fallback": 0, "failed_or_fallback": 0, "unknown": 0}
+    for row in rows:
+        state = row.get("planner_fallback_counter_state", "unknown")
+        if state not in ("zero", "positive", "unknown"):
+            state = "unknown"
+        counters[row["planner"]][state] += 1
+        status = row.get("algorithm_status")
+        statuses["ok" if status == "ok" else "other" if status else "unknown"] += 1
+        if row["planner"] == "ppo_release":
+            loaded, fallback = (
+                row.get("checkpoint_load_succeeded"),
+                row.get("checkpoint_fallback_triggered"),
+            )
+            if loaded == "True" and fallback == "False":
+                checkpoints["loaded_without_checkpoint_fallback"] += 1
+            elif loaded in ("True", "False") and fallback in ("True", "False"):
+                checkpoints["failed_or_fallback"] += 1
+            else:
+                checkpoints["unknown"] += 1
+    return {
+        "planner_fallback_counters": counters,
+        "algorithm_status": statuses,
+        "ppo_checkpoint": checkpoints,
+        "native_interpretation": "Classification reflects recorded indicators; unknown counters are not zero.",
+    }
 
 
 def analyze(episodes: str, contract: str, out: str, exclude_relocation_pairs: bool = False) -> None:  # noqa: C901, PLR0915
@@ -456,6 +553,7 @@ def analyze(episodes: str, contract: str, out: str, exclude_relocation_pairs: bo
     verdict = decide(con["outcome_rule"], pooled, inter, order)
     summary = {
         "counts": counts,
+        "telemetry": _telemetry_summary(rows),
         "order": order,
         "verdict": verdict,
         "pooled_effects": {f"{n}|{p}": list(map(float, v)) for (n, p), v in pooled.items()},
@@ -534,14 +632,18 @@ def decide(rule: dict, pooled: dict, inter: list, order: dict) -> dict:  # noqa:
         outcome = "A_PERSIST_FINITE_SENSITIVITY"
     else:
         outcome = "D_INCONCLUSIVE_RETAIN_LIMITATION"
-    qualifier = "C_SLOW_PED_DELAY_QUALIFIER" if ped else None
+    qualifier = (
+        "C_SLOW_PED_DELAY_QUALIFIER"
+        if ped and outcome in ("A_PERSIST_FINITE_SENSITIVITY", "D_INCONCLUSIVE_RETAIN_LIMITATION")
+        else None
+    )
     return {
         "outcome": outcome,
         "qualifier": qualifier,
         "triggers": triggers,
         "too_wide": too_wide,
         "within_persist_bound": within,
-        "slow_ped_near_delay_increase_planners": ped,
+        "secondary_observations": {"slow_ped_near_delay_increase_planners": ped},
     }
 
 

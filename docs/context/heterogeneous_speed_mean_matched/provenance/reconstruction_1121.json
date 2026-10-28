@@ -5,6 +5,7 @@
     "wall_time_s"
   ],
   "checkpoint_sha256": "764a7d88f5b608237641d973634899e05a67b25e65f8b1607cfca025459824bc",
+  "comparison_analyzer": "Current packet analyzer applied to both existing archived and replay records; no new simulation.",
   "episode_exact_fields": [
     "planner",
     "cell",
@@ -12,6 +13,9 @@
     "seed",
     "mode",
     "mode_reason",
+    "algorithm_status",
+    "planner_fallback_count",
+    "planner_fallback_counter_state",
     "command_execution_mode",
     "status",
     "termination_reason",
@@ -29,6 +33,8 @@
     "observer_error",
     "algo_config_hash",
     "checkpoint_load",
+    "checkpoint_load_succeeded",
+    "checkpoint_fallback_triggered",
     "ped_steps",
     "ped_delay_rate_all",
     "ped_near_delay_rate_all",

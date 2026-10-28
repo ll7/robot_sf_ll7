@@ -1,7 +1,7 @@
 """Compare one development seed's reconstructed episodes and raw reset receipts.
 
-Run after extracting the rerun with the acquisition commit's analyzer. The raw
-archive layout and rerun layout are both ``planner/chunk/observer``.
+Extract archive and rerun with the same packet analyzer before comparison. The
+raw archive layout and rerun layout are both ``planner/chunk/observer``.
 """
 
 from __future__ import annotations

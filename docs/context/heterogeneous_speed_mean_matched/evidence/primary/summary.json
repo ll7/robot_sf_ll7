@@ -322,14 +322,51 @@
    14.0
   ]
  },
+ "telemetry": {
+  "algorithm_status": {
+   "ok": 1600,
+   "other": 0,
+   "unknown": 0
+  },
+  "native_interpretation": "Classification reflects recorded indicators; unknown counters are not zero.",
+  "planner_fallback_counters": {
+   "hybrid_v4_continuous": {
+    "positive": 0,
+    "unknown": 0,
+    "zero": 400
+   },
+   "orca": {
+    "positive": 0,
+    "unknown": 400,
+    "zero": 0
+   },
+   "ppo_release": {
+    "positive": 0,
+    "unknown": 400,
+    "zero": 0
+   },
+   "social_force": {
+    "positive": 0,
+    "unknown": 400,
+    "zero": 0
+   }
+  },
+  "ppo_checkpoint": {
+   "failed_or_fallback": 0,
+   "loaded_without_checkpoint_fallback": 400,
+   "unknown": 0
+  }
+ },
  "verdict": {
   "outcome": "B_ORDER_CHANGE_OR_SELECTIVE_DETERIORATION",
-  "qualifier": "C_SLOW_PED_DELAY_QUALIFIER",
-  "slow_ped_near_delay_increase_planners": [
-   "hybrid_v4_continuous",
-   "orca",
-   "social_force"
-  ],
+  "qualifier": null,
+  "secondary_observations": {
+   "slow_ped_near_delay_increase_planners": [
+    "hybrid_v4_continuous",
+    "orca",
+    "social_force"
+   ]
+  },
   "too_wide": [],
   "triggers": [
    "selective_interaction:hybrid_v4_continuous-orca",

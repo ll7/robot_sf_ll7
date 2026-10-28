@@ -15,4 +15,5 @@ unchanged as [`../contract.yaml`](../contract.yaml).
 
 The raw main, pilot and smoke stages have separately verified SHA-256 manifests
 in the lab host archive. The pilot compact qualification is tracked in this
-packet. Main-stage W&B preservation is being verified.
+packet. The main-stage W&B URI, digest and file-manifest readback are recorded
+in [`preservation.json`](preservation.json).

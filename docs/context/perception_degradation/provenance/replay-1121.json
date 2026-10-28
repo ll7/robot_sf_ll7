@@ -1,0 +1,16 @@
+{
+  "archived_commit": "4e16d46908789c37651a4b851a23f10bf1540e7b",
+  "complete_row_matches": 0,
+  "excluded_fields": [
+    "git_hash",
+    "source_line",
+    "source_line_sha256",
+    "source_path"
+  ],
+  "expected_rows": 96,
+  "field_differences": {},
+  "normalized_matches": 96,
+  "replay_commit": "4e16d46908789c37651a4b851a23f10bf1540e7b",
+  "schema": "xperc.reconstruction-comparison.v1",
+  "seed": 1121
+}

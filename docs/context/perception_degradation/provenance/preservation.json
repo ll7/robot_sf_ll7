@@ -1,0 +1,31 @@
+{
+  "schema": "xperc.preservation.v1",
+  "execution_commit": "4e16d46908789c37651a4b851a23f10bf1540e7b",
+  "contract_commit": "4e16d46908789c37651a4b851a23f10bf1540e7b",
+  "retained_branch": "xperc-perception-degradation",
+  "main": {
+    "manifest": "MANIFEST.sha256",
+    "manifest_sha256": "560549f976eb1010abbcf46072eb73ad10c04b4588e912d277265eda598bd8b2",
+    "files_including_manifest": 228,
+    "size_bytes": 4413563822,
+    "locations": [
+      {
+        "kind": "wandb_artifact",
+        "uri": "wandb://ll7/robot_sf/campaign-xperc_perception_degradation_main_4e16d4690:v0",
+        "state": "COMMITTED",
+        "artifact_digest": "dfa056b7ee2e55aff08120bcfb4eb89f",
+        "verification": "Remote manifest read back: all 228 relative paths, sizes and MD5 digests match local files; no full remote download.",
+        "uploads": 1
+      },
+      {
+        "kind": "lab_host_archive",
+        "verification": "SHA-256 manifest verified for all 227 listed files."
+      }
+    ]
+  },
+  "pilot_and_smoke": {
+    "location": "lab host archive",
+    "verification": "Separate SHA-256 manifests verified: 230 pilot files and 233 smoke files.",
+    "boundary": "Pilot compact qualification is in Git; smoke is not pooled into main evidence."
+  }
+}

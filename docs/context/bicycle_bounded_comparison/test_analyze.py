@@ -9,6 +9,7 @@ import yaml
 
 PACKET = Path(__file__).resolve().parent
 SPEC = importlib.util.spec_from_file_location("bounded_analyze", PACKET / "analyze.py")
+assert SPEC is not None and SPEC.loader is not None
 ANALYZER = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(ANALYZER)
 

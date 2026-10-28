@@ -37,6 +37,7 @@ import sys
 import time
 import traceback
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import yaml
@@ -44,15 +45,20 @@ from loguru import logger
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "scripts/validation"))
-from bicycle_probe_metrics import displacement_stuck_steps  # noqa: E402
+if TYPE_CHECKING:
+    from scripts.validation.bicycle_probe_metrics import displacement_stuck_steps
+else:
+    from bicycle_probe_metrics import displacement_stuck_steps
 
 import robot_sf  # noqa: E402
-from robot_sf.benchmark.map_runner import map_runner_episode as episode  # noqa: E402
+from robot_sf.benchmark.map_runner import map_runner_episode as _episode  # noqa: E402
 from robot_sf.benchmark.map_runner.map_runner import _build_policy  # noqa: E402
 from robot_sf.planner.kinematics_model import BicycleDriveKinematicsModel  # noqa: E402
 from robot_sf.robot.action_adapters import holonomic_to_diff_drive_action  # noqa: E402
 from robot_sf.sim.spawn_validation import reset_spawn_clearance  # noqa: E402
 from robot_sf.training.scenario_loader import load_scenarios  # noqa: E402
+
+episode: Any = _episode
 
 logger.remove()
 OUT = Path(os.environ["BOUNDED_OUTPUT"]).resolve()
@@ -147,7 +153,7 @@ def action_capture(*, env, config, command, **kwargs):
 
 def make_capture(*args, **kwargs):
     assert int(kwargs["seed"]) in ACTIVE["allowed_seeds"], "STOP: seed outside allowlist"
-    env = ORIG_MAKE(*args, **kwargs)
+    env: Any = ORIG_MAKE(*args, **kwargs)
     cfg = env.simulator.robots[0].config
     for k, v in ACTIVE["expected_config"].items():
         if k in {"type", "creep_speed", "limited_reverse"}:

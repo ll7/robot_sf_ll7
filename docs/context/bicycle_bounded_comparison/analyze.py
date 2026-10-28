@@ -16,6 +16,7 @@ import argparse
 import csv
 import json
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import yaml
@@ -172,7 +173,7 @@ def analyze(episodes, contract, outdir):
     s_dd, s_bi = arr[("success", "DD")], arr[("success", "BI")]
     for a in range(len(planners)):
         for b in range(a + 1, len(planners)):
-            rec = {"pair": f"{planners[a]}-minus-{planners[b]}"}
+            rec: dict[str, Any] = {"pair": f"{planners[a]}-minus-{planners[b]}"}
             for pl, s in (("DD", s_dd), ("BI", s_bi)):
                 per_seed = np.nanmean(s[a] - s[b], axis=0)
                 rec[pl] = {

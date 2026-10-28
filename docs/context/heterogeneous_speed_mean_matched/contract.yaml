@@ -1,0 +1,184 @@
+# Execution contract (preregistration) for the mean-matched heterogeneous-speed diagnostic.
+# Committed before any non-pilot (main-seed) episode runs. Pilot seeds 1001-1010 were used
+# only to qualify the intervention and measure runtime; they are never pooled with main runs.
+schema_version: xhet-hetspeed.contract.v1
+created: 2026-10-28
+evidence_tier: >-
+  Development-seed diagnostic, new current-version execution on the 0.0.8 release source.
+  Not release evidence; it admits nothing into the thesis by itself.
+question: >-
+  Do the robot-outcome findings of the four planners depend on every pedestrian sharing one
+  preferred speed? Compare all 12 pedestrians at 0.65 m/s against 3 x 0.325, 6 x 0.65 and
+  3 x 0.975 m/s, with the realized mean held at exactly 0.65 m/s and with the same
+  identities, starts, goals, groups and radii.
+limitation_addressed: >-
+  Thesis section 9.3, Threat 3 (shared preferred-speed assumption) and the inconclusive
+  six-episode mixed-speed diagnostic in Appendix D.4.9.
+
+source:
+  repository: ll7/robot_sf_ll7
+  commit: 373dbfde4f39667cf9e8732dabe7df5118bdeab1  # 0.0.8 release commit, unmodified
+  diagnostic_code_change: none  # driver/observer live in this packet; no repository code edited
+  uv_lock_sha256: def82098b23281e7c49f1f05e052e412c2de54ae2da53f1708bc0ddc2a30d023
+  python: 3.13.17
+  environment: "uv sync --frozen --extra benchmark --extra training (worktree-local .venv)"
+
+entry_point: >-
+  robot_sf.benchmark.map_runner.map_runner.run_map_batch (the normal campaign batch runner),
+  called by driver.py with each planner's frozen release algo_config_path. The dedicated
+  heterogeneous_population_ablation_runner is not used (it passes no algo_config).
+
+planners:
+  hybrid_v4_continuous:
+    algo: hybrid_rule_local_planner
+    algo_config_path: configs/policy_search/candidates/hybrid_rule_v4_fast_progress_static_escape_continuous_s30_h600_release_0_0_8_frozen.yaml
+    algo_config_sha256: see provenance/inputs.sha256
+    benchmark_profile: experimental
+  orca:
+    algo: orca
+    algo_config_path: configs/algos/orca_release_v0_0_8.yaml
+    benchmark_profile: baseline-safe
+    backend: native RVO2 (rvo2 importable; fail-fast on missing prerequisite)
+  social_force:
+    algo: social_force
+    algo_config_path: configs/algos/social_force_release_v0_0_8.yaml
+    benchmark_profile: baseline-safe
+  ppo_release:
+    algo: ppo
+    algo_config_path: configs/baselines/ppo_release_robot_0_0_8_cpu.yaml
+    benchmark_profile: experimental
+    adapter_impact_eval: true
+    model_id: ppo_release_robot_b1002_last_20261001
+    checkpoint_sha256: 764a7d88f5b608237641d973634899e05a67b25e65f8b1607cfca025459824bc
+    checkpoint_source: GitHub release models-ppo-release-robot-2026-10-01 (hash equals model/registry.yaml)
+
+scenario_matrix: configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml
+cells:
+  # Design names -> release scenario. "crossing" uses classic_cross_trap_medium, the
+  # canonical replacement of the deprecated classic_crossing alias.
+  crossing: classic_cross_trap_medium
+  group_crossing: classic_group_crossing_medium
+  head_on_corridor: classic_head_on_corridor_medium
+  overtaking: classic_overtaking_medium
+horizon: release authored max_episode_steps (600 / 500 / 500 / 600 steps at dt = 0.1 s)
+population:
+  population_size: 12
+  radius: release scene agent_radius 0.35 m for every pedestrian, both conditions
+  conditions:
+    uniform: {archetype_composition: {standard: 1.0}, archetype_speed_factors: {standard: 1.0}}
+    mixed:
+      archetype_composition: {slow: 0.25, standard: 0.5, fast: 0.25}
+      archetype_speed_factors: {slow: 0.5, standard: 1.0, fast: 1.5}
+  archetype_seed: equal to the episode seed (stratum-to-slot assignment varies by seed)
+  preferred_speed: max_speed_multiplier 1.3 x spawn speed 0.5 m/s x factor
+  desired_speed_mean: must be None (verified per episode; the scenario route rejects the key)
+  archetype_registry: not used (the registry also changes radii)
+  known_speed_coupled_mechanism: >-
+    The release reset rule moves pedestrians that start near the robot by a buffer that
+    grows with the population's maximum preferred speed; route respawns use the same
+    exclusion. Mixed (max 0.975 m/s) therefore has a 0.325 m larger exclusion than uniform.
+    This is part of the treatment as the release code implements it; every affected pair is
+    flagged (pair_relocation_differs) and a sensitivity analysis excludes those pairs.
+
+seeds:
+  pilot: [1001, 1002, 1003, 1004, 1005, 1006, 1007, 1008, 1009, 1010]  # never pooled
+  main: [1121, 1122, 1123, 1124, 1125, 1126, 1127, 1128, 1129, 1130,
+         1161, 1162, 1163, 1164, 1165, 1166, 1167, 1168, 1169, 1170,
+         1171, 1172, 1173, 1174, 1175, 1176, 1177, 1178, 1179, 1180,
+         1181, 1182, 1183, 1184, 1185, 1186, 1187, 1188, 1189, 1190,
+         1191, 1192, 1193, 1194, 1195, 1196, 1197, 1198, 1199, 1200]
+episodes_main: 1600  # 4 planners x 4 cells x 2 conditions x 50 seeds
+
+execution_modes: >-
+  Every row has mode in {native, fallback, degraded} from checkpoint provenance, planner
+  fallback counters, effective-view integrity, pedestrian-model status and spawn validity.
+  Only native rows enter effects; fallback/degraded rows are counted and reported.
+  command_execution_mode (release command adapter) is reported separately and is identical
+  across conditions.
+
+realized_input_checks:  # all must pass on every main episode; failures are reported
+  - 12 pedestrians; preferred speeds sorted equal 3 x 0.325, 6 x 0.65, 3 x 0.975 (mixed) or 12 x 0.65 (uniform); mean 0.65
+  - desired_speed_mean and explicit desired speeds are None
+  - goals, tau, groups, behaviors, radius, robot start pose and robot goal equal between conditions
+  - start positions equal between conditions except rows moved by the speed-coupled reset relocation
+  - initial velocity of unmoved rows equals uniform velocity x speed factor
+  - preferred speeds unchanged over the episode (except release start-delay zeros)
+  - the same (cell, condition, seed) reset is identical across planners
+
+outcome_measures:
+  robot: [success, collision (any), ped_contact, obstacle_contact, timeout,
+          time_to_goal_s (pairs successful in both conditions), min_distance_m]
+  pedestrian:
+    definition: >-
+      Lost time of pedestrian i = sum over steps of dt * (1 - v_i . e_i / v0_i), with e_i the
+      unit vector to its current goal and v0_i its preferred speed; delay_rate = lost time /
+      episode duration, averaged over pedestrians. Near share counts only steps with the
+      robot centre within 3.0 m of the pedestrian centre.
+    measures: [ped_delay_rate_all, ped_delay_rate_slow, ped_delay_rate_fast,
+               ped_near_delay_rate_all, ped_near_delay_rate_slow, ped_near_delay_rate_fast]
+    strata_pairing: >-
+      slow/fast strata are the slots the mixed condition assigns (archetype seed = episode
+      seed); in the uniform condition the same slots are evaluated at 0.65 m/s.
+  raw_preserved: full episode records (JSONL), reset receipts, per-step pedestrian
+    position/velocity/goal/preferred speed, robot position and command (NPZ)
+
+analysis:
+  script: analyze.py
+  effect: mixed minus uniform, paired by seed within planner and cell; planner-level effect is
+    the equal-weight mean over the four cells
+  interval: seed-block bootstrap (resample the 50 seeds with replacement, keeping every
+    planner, cell and condition of a seed), percentile 95 %
+  bootstrap_draws: 10000
+  bootstrap_seed: 1001
+  ranking: success-rate order of the four planners (equal-cell) in each condition, plus
+    planner-pair difference-in-differences with intervals
+  sensitivity: same analysis excluding pairs with pair_relocation_differs = 1
+  scenario_specific: all per-cell effects are reported, not only pooled ones
+  no_p_values: true
+
+outcome_rule:
+  material_pp: 5.0
+  persist_bound_pp: 10.0
+  inconclusive_ci_width_pp: 20.0
+  rules:
+    B_ORDER_CHANGE_OR_SELECTIVE_DETERIORATION: >-
+      Triggered if a planner pair whose uniform success difference has a 95 % interval
+      excluding 0 changes sign under mixed; or a pair's success interaction has an interval
+      excluding 0 with |estimate| >= 5 pp; or a planner's pooled success or collision effect
+      has an interval excluding 0 with |estimate| >= 5 pp.
+      Thesis consequence: explain that matching mean speed does not preserve the benchmark
+      conclusion for the named planner(s) and cells.
+    D_INCONCLUSIVE_RETAIN_LIMITATION: >-
+      Not B, and any planner's pooled success or collision interval is wider than 20 pp, or
+      some interval exceeds +-10 pp. Thesis consequence: keep the limitation as written;
+      a larger inconclusive pilot does not earn a main-text result section.
+    A_PERSIST_FINITE_SENSITIVITY: >-
+      Not B and every planner's pooled success and collision interval lies within +-10 pp.
+      Thesis consequence: replace the inconclusive Appendix D.4.9 paragraph with this finite
+      sensitivity result (bounded effect, stated intervals, four cells, 50 dev seeds).
+    C_SLOW_PED_DELAY_QUALIFIER: >-
+      Applies on top of A or D when, for any planner, the pooled slow-stratum robot-near
+      delay effect has a 95 % interval above 0. Thesis consequence: qualify robot-only
+      interpretations of social performance (robot outcomes can be stable while slow
+      pedestrians bear more delay near the robot).
+  precedence: B, then D, then A; C is a qualifier
+  separability: >-
+    The design separates the speed mixture (with the release's speed-coupled spawn exclusion)
+    from a fixed-speed population at equal mean. It cannot separate which stratum causes an
+    effect, cannot validate the strata as human categories, and cannot address AMMV
+    interaction calibration.
+
+qualification:  # pilot seeds 1001-1010, 320 episodes, run before this contract was committed
+  realized_input_checks: pass on 320/320 (qualification/pilot_pairing_checks.json)
+  modes: 320 native, 0 fallback, 0 degraded
+  speed_coupled_relocation_pairs: 24 of 160 pairs, all in the crossing cell (6 of 10 seeds, same seeds for every planner)
+  desired_speed_mean_override: rejected by the scenario loader as an unknown simulation_config key (qualification/override_probe.txt); in code, a set mean would resample every preferred speed and erase the mixture
+  seconds_per_episode_mean: {hybrid_v4_continuous: 37.1, orca: 2.6, social_force: 3.5, ppo_release: 1.9}
+  projected_main_wall_clock: about 1 h on 8 local processes; no cluster submission needed
+  note: >-
+    Pilot effect estimates were computed once to test analyze.py before this commit. The
+    outcome rule above was drafted before that and was not changed afterwards. Pilot rows are
+    never pooled with main rows.
+execution:
+  host_class: local workstation (12 logical CPUs, at most 8 worker processes)
+  command: see README.md "Rerun"

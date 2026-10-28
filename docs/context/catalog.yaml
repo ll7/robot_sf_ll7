@@ -36,6 +36,14 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/heterogeneous_speed_mean_matched/README.md
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/heterogeneous_speed_mean_matched/SHA256SUMS
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
 - path: docs/context/robsweep/README.md
   status: evidence
   freshness: evidence

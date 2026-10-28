@@ -1,0 +1,439 @@
+{
+ "analysis_population": {
+  "excluded_non_main_episodes": 0,
+  "excluded_relocation_episodes": 216,
+  "input_episodes": 1600,
+  "input_main_episodes": 1600,
+  "retained_episodes": 1384,
+  "selection": "main_excluding_relocation_pairs",
+  "telemetry_scope": "retained episodes before mode exclusion"
+ },
+ "counts": {
+  "episodes_expected": 1600,
+  "episodes_native": 1384,
+  "episodes_non_native": 0,
+  "episodes_present": 1384,
+  "seeds": 50
+ },
+ "evidence_limitations": {
+  "fallback": "Recorded indicators do not prove all planner steps fallback-free; missing counters remain unknown. These effects are diagnostic.",
+  "pilot_rule_timing": "The contract reports that the rule was drafted before pilot effects were computed; the available records do not independently date that drafting.",
+  "respawn_events": "Reset relocation is recorded, but the observer did not independently log individual respawn events."
+ },
+ "order": {
+  "collision": {
+   "mixed": [
+    "ppo_release",
+    "orca",
+    "hybrid_v4_continuous",
+    "social_force"
+   ],
+   "mixed_levels_pp": {
+    "hybrid_v4_continuous": 0.0,
+    "orca": 28.789115646258505,
+    "ppo_release": 68.72108843537414,
+    "social_force": 0.0
+   },
+   "uniform": [
+    "ppo_release",
+    "orca",
+    "hybrid_v4_continuous",
+    "social_force"
+   ],
+   "uniform_levels_pp": {
+    "hybrid_v4_continuous": 0.0,
+    "orca": 15.633503401360546,
+    "ppo_release": 67.23214285714286,
+    "social_force": 0.0
+   }
+  },
+  "success": {
+   "mixed": [
+    "hybrid_v4_continuous",
+    "orca",
+    "social_force",
+    "ppo_release"
+   ],
+   "mixed_levels_pp": {
+    "hybrid_v4_continuous": 97.48979591836735,
+    "orca": 70.21088435374149,
+    "ppo_release": 30.77891156462585,
+    "social_force": 32.199829931972786
+   },
+   "uniform": [
+    "hybrid_v4_continuous",
+    "orca",
+    "social_force",
+    "ppo_release"
+   ],
+   "uniform_levels_pp": {
+    "hybrid_v4_continuous": 96.40646258503402,
+    "orca": 83.86649659863946,
+    "ppo_release": 31.767857142857142,
+    "social_force": 36.56292517006803
+   }
+  }
+ },
+ "pooled_effects": {
+  "collision|hybrid_v4_continuous": [
+   0.0,
+   0.0,
+   0.0
+  ],
+  "collision|orca": [
+   13.15561224489796,
+   6.188659050576752,
+   20.439739986903852
+  ],
+  "collision|ppo_release": [
+   1.4889455782312921,
+   -5.772853535353536,
+   8.53540031397174
+  ],
+  "collision|social_force": [
+   0.0,
+   0.0,
+   0.0
+  ],
+  "min_distance_m|hybrid_v4_continuous": [
+   -0.033011050499981015,
+   -0.054095505961801044,
+   -0.01234158095291496
+  ],
+  "min_distance_m|orca": [
+   -0.025745044290073904,
+   -0.050081076196658136,
+   -0.0027818111536082844
+  ],
+  "min_distance_m|ppo_release": [
+   -0.09121914290358142,
+   -0.1608215828924908,
+   -0.022124256920346114
+  ],
+  "min_distance_m|social_force": [
+   -0.08886416672190309,
+   -0.12212742199054057,
+   -0.05316296339301661
+  ],
+  "obstacle_contact|hybrid_v4_continuous": [
+   0.0,
+   0.0,
+   0.0
+  ],
+  "obstacle_contact|orca": [
+   0.0,
+   0.0,
+   0.0
+  ],
+  "obstacle_contact|ppo_release": [
+   -7.135204081632653,
+   -13.443599106309192,
+   -0.8157894736842106
+  ],
+  "obstacle_contact|social_force": [
+   0.0,
+   0.0,
+   0.0
+  ],
+  "ped_contact|hybrid_v4_continuous": [
+   0.0,
+   0.0,
+   0.0
+  ],
+  "ped_contact|orca": [
+   13.15561224489796,
+   6.188659050576752,
+   20.439739986903852
+  ],
+  "ped_contact|ppo_release": [
+   8.624149659863946,
+   1.573086734693878,
+   15.674199571132798
+  ],
+  "ped_contact|social_force": [
+   0.0,
+   0.0,
+   0.0
+  ],
+  "ped_delay_rate_all|hybrid_v4_continuous": [
+   0.06233414309226027,
+   0.050262495430282224,
+   0.07347982891163748
+  ],
+  "ped_delay_rate_all|orca": [
+   0.05544920017702036,
+   0.04660598193555253,
+   0.06444239489106543
+  ],
+  "ped_delay_rate_all|ppo_release": [
+   0.04412230548569236,
+   0.038136254415775436,
+   0.05043639449639322
+  ],
+  "ped_delay_rate_all|social_force": [
+   0.06006336535536209,
+   0.050887476388650286,
+   0.0691916891834545
+  ],
+  "ped_delay_rate_fast|hybrid_v4_continuous": [
+   0.07371556330326513,
+   0.04688921036056127,
+   0.10063005735801836
+  ],
+  "ped_delay_rate_fast|orca": [
+   0.07117680744983915,
+   0.042444555345787505,
+   0.09958780541201474
+  ],
+  "ped_delay_rate_fast|ppo_release": [
+   0.0741230978764638,
+   0.05314827850349964,
+   0.09545644924270838
+  ],
+  "ped_delay_rate_fast|social_force": [
+   0.07224588013716599,
+   0.041584128967831896,
+   0.10242902077737322
+  ],
+  "ped_delay_rate_slow|hybrid_v4_continuous": [
+   0.0863025255504438,
+   0.05390317028603207,
+   0.11906273837115802
+  ],
+  "ped_delay_rate_slow|orca": [
+   0.05723104873931885,
+   0.03042261658123874,
+   0.08465370330250829
+  ],
+  "ped_delay_rate_slow|ppo_release": [
+   0.03306173951616099,
+   0.013802230904828905,
+   0.05213960513495036
+  ],
+  "ped_delay_rate_slow|social_force": [
+   0.06564877336863809,
+   0.03235940117068394,
+   0.10117718611085669
+  ],
+  "ped_near_delay_rate_all|hybrid_v4_continuous": [
+   0.012867576489217108,
+   0.0004936210630303361,
+   0.023648656399176553
+  ],
+  "ped_near_delay_rate_all|orca": [
+   0.01001823535210415,
+   0.0034273324864762898,
+   0.01717382147086845
+  ],
+  "ped_near_delay_rate_all|ppo_release": [
+   0.0016638976911334342,
+   0.0004345584056655865,
+   0.0029346132188652735
+  ],
+  "ped_near_delay_rate_all|social_force": [
+   0.00891245284813815,
+   0.002155137806600833,
+   0.015510105928437119
+  ],
+  "ped_near_delay_rate_fast|hybrid_v4_continuous": [
+   0.005524334105225751,
+   -0.005977488328730044,
+   0.01623969713360438
+  ],
+  "ped_near_delay_rate_fast|orca": [
+   0.009976888532216318,
+   -0.002240936966942535,
+   0.020702581356332853
+  ],
+  "ped_near_delay_rate_fast|ppo_release": [
+   0.0023739662826853932,
+   -0.0003536287860726044,
+   0.005062417246884204
+  ],
+  "ped_near_delay_rate_fast|social_force": [
+   -8.945839918433635e-07,
+   -0.012251306232264753,
+   0.01159843538541913
+  ],
+  "ped_near_delay_rate_slow|hybrid_v4_continuous": [
+   0.0395414418824434,
+   0.01624720527697839,
+   0.06165566454712178
+  ],
+  "ped_near_delay_rate_slow|orca": [
+   0.01800495739883513,
+   0.006628821769643756,
+   0.02959288293488846
+  ],
+  "ped_near_delay_rate_slow|ppo_release": [
+   0.00019525174711981867,
+   -0.002571696937290798,
+   0.003120639425578474
+  ],
+  "ped_near_delay_rate_slow|social_force": [
+   0.02075608848485633,
+   0.00430313616193217,
+   0.038027992443963966
+  ],
+  "success|hybrid_v4_continuous": [
+   1.0833333333333335,
+   -2.0208333333333335,
+   4.727614795918366
+  ],
+  "success|orca": [
+   -13.65561224489796,
+   -20.93359343737495,
+   -6.847795207509882
+  ],
+  "success|ppo_release": [
+   -0.9889455782312921,
+   -8.040816326530612,
+   6.1458733974358974
+  ],
+  "success|social_force": [
+   -4.363095238095239,
+   -12.097018291012057,
+   3.602046614100186
+  ],
+  "time_to_goal_s|hybrid_v4_continuous": [
+   1.3348345044013736,
+   0.31545124113475187,
+   2.3547113596871547
+  ],
+  "time_to_goal_s|orca": [
+   1.4417424242424235,
+   -0.22066306602837216,
+   3.129200310559007
+  ],
+  "time_to_goal_s|ppo_release": [
+   0.3145833333333332,
+   -1.0083396739130435,
+   3.22084375
+  ],
+  "time_to_goal_s|social_force": [
+   -0.42692307692307696,
+   -1.161993243243243,
+   1.1634318323952468
+  ],
+  "timeout|hybrid_v4_continuous": [
+   -1.0833333333333335,
+   -4.727614795918367,
+   2.0208333333333335
+  ],
+  "timeout|orca": [
+   0.5,
+   -1.0,
+   2.5
+  ],
+  "timeout|ppo_release": [
+   -0.5,
+   -1.5,
+   0.0
+  ],
+  "timeout|social_force": [
+   4.363095238095239,
+   -3.602046614100186,
+   12.097018291012056
+  ]
+ },
+ "telemetry": {
+  "algorithm_status": {
+   "ok": 1384,
+   "other": 0,
+   "unknown": 0
+  },
+  "effective_view_by_planner": {
+   "hybrid_v4_continuous": {
+    "blind_by_design": 0,
+    "blind_design_unknown": 0,
+    "degraded_unknown": 0,
+    "not_blind_by_design": 346,
+    "probe_unknown": 0,
+    "probed": 346,
+    "recorded_degraded_false": 346,
+    "recorded_degraded_true": 0,
+    "unprobed": 0
+   },
+   "orca": {
+    "blind_by_design": 0,
+    "blind_design_unknown": 0,
+    "degraded_unknown": 0,
+    "not_blind_by_design": 346,
+    "probe_unknown": 0,
+    "probed": 346,
+    "recorded_degraded_false": 346,
+    "recorded_degraded_true": 0,
+    "unprobed": 0
+   },
+   "ppo_release": {
+    "blind_by_design": 346,
+    "blind_design_unknown": 0,
+    "degraded_unknown": 0,
+    "not_blind_by_design": 0,
+    "probe_unknown": 0,
+    "probed": 0,
+    "recorded_degraded_false": 346,
+    "recorded_degraded_true": 0,
+    "unprobed": 346
+   },
+   "social_force": {
+    "blind_by_design": 0,
+    "blind_design_unknown": 0,
+    "degraded_unknown": 0,
+    "not_blind_by_design": 346,
+    "probe_unknown": 0,
+    "probed": 346,
+    "recorded_degraded_false": 346,
+    "recorded_degraded_true": 0,
+    "unprobed": 0
+   }
+  },
+  "native_interpretation": "Native is a classification of recorded indicators, not proof of fallback-free execution. Unknown counters are not zero; recorded status and checkpoint loading do not independently rule out later planner-step fallback.",
+  "planner_fallback_counters": {
+   "hybrid_v4_continuous": {
+    "positive": 0,
+    "unknown": 0,
+    "zero": 346
+   },
+   "orca": {
+    "positive": 0,
+    "unknown": 346,
+    "zero": 0
+   },
+   "ppo_release": {
+    "positive": 0,
+    "unknown": 346,
+    "zero": 0
+   },
+   "social_force": {
+    "positive": 0,
+    "unknown": 346,
+    "zero": 0
+   }
+  },
+  "ppo_checkpoint": {
+   "failed_or_fallback": 0,
+   "loaded_without_checkpoint_fallback": 346,
+   "unknown": 0
+  }
+ },
+ "verdict": {
+  "outcome": "B_ORDER_CHANGE_OR_SELECTIVE_DETERIORATION",
+  "qualifier": null,
+  "secondary_observations": {
+   "slow_ped_near_delay_increase_planners": [
+    "hybrid_v4_continuous",
+    "orca",
+    "social_force"
+   ]
+  },
+  "too_wide": [],
+  "triggers": [
+   "selective_interaction:hybrid_v4_continuous-orca",
+   "selective_interaction:orca-ppo_release",
+   "selective_deterioration:success:orca",
+   "selective_deterioration:collision:orca"
+  ],
+  "within_persist_bound": false
+ }
+}

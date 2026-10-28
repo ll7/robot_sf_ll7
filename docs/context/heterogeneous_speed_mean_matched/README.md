@@ -87,6 +87,14 @@ The scenario loader rejects an explicit `desired_speed_mean` as an unknown key
 erase the mixture. The pilot (seeds 1001-1010) is in [`qualification/`](qualification/) and is
 never pooled.
 
+## Raw archive custody
+
+- W&B artifact: `wandb://ll7/robot_sf/xhet-hetspeed-raw-20261028:v0`.
+- W&B artifact digest: `cacc7e8dc9d2c4200f5ab71d51a344f9`.
+- Host copy: lab host archive.
+- Readback: the artifact was `COMMITTED`; all 4,124 paths, sizes, and file MD5 digests
+  matched the host archive. The artifact digest matched the local and remote manifests.
+
 ## Reproduction
 
 Analysis only (seconds; needs NumPy and PyYAML; output must go outside the packet):

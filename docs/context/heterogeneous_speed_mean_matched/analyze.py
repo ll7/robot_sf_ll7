@@ -183,6 +183,7 @@ def extract(runs: str, out: str) -> None:
                 am = rec.get("algorithm_metadata", {}) or {}
                 pr = am.get("planner_runtime", {}) or {}
                 cp = pr.get("checkpoint_provenance") or {}
+                view = (rec.get("integrity") or {}).get("effective_view") or {}
                 success = bool(m.get("success"))
                 row = {
                     "planner": planner,
@@ -194,6 +195,9 @@ def extract(runs: str, out: str) -> None:
                     "algorithm_status": am.get("status"),
                     "planner_fallback_count": pr.get("fallback_count"),
                     "planner_fallback_counter_state": _counter_state(pr.get("fallback_count")),
+                    "effective_view_degraded": view.get("degraded"),
+                    "effective_view_probed": view.get("probed"),
+                    "effective_view_blind_by_design": view.get("pedestrian_blind_by_design"),
                     "command_execution_mode": (am.get("planner_kinematics") or {}).get(
                         "execution_mode"
                     ),
@@ -391,6 +395,23 @@ def _f(x):
 def _telemetry_summary(rows: list[dict]) -> dict:
     """Summarize observable indicators without counting missing counters as zero."""
     counters = {p: {"zero": 0, "positive": 0, "unknown": 0} for p in PLANNERS}
+    views = {
+        p: dict.fromkeys(
+            (
+                "recorded_degraded_false",
+                "recorded_degraded_true",
+                "degraded_unknown",
+                "probed",
+                "unprobed",
+                "probe_unknown",
+                "blind_by_design",
+                "not_blind_by_design",
+                "blind_design_unknown",
+            ),
+            0,
+        )
+        for p in PLANNERS
+    }
     statuses = {"ok": 0, "other": 0, "unknown": 0}
     checkpoints = {"loaded_without_checkpoint_fallback": 0, "failed_or_fallback": 0, "unknown": 0}
     for row in rows:
@@ -398,6 +419,31 @@ def _telemetry_summary(rows: list[dict]) -> dict:
         if state not in ("zero", "positive", "unknown"):
             state = "unknown"
         counters[row["planner"]][state] += 1
+        view_counts = views[row["planner"]]
+        for field, yes, no, unknown in (
+            (
+                "effective_view_degraded",
+                "recorded_degraded_true",
+                "recorded_degraded_false",
+                "degraded_unknown",
+            ),
+            ("effective_view_probed", "probed", "unprobed", "probe_unknown"),
+            (
+                "effective_view_blind_by_design",
+                "blind_by_design",
+                "not_blind_by_design",
+                "blind_design_unknown",
+            ),
+        ):
+            value = row.get(field)
+            key = (
+                yes
+                if value is True or value == "True"
+                else no
+                if value is False or value == "False"
+                else unknown
+            )
+            view_counts[key] += 1
         status = row.get("algorithm_status")
         statuses["ok" if status == "ok" else "other" if status else "unknown"] += 1
         if row["planner"] == "ppo_release":
@@ -415,7 +461,12 @@ def _telemetry_summary(rows: list[dict]) -> dict:
         "planner_fallback_counters": counters,
         "algorithm_status": statuses,
         "ppo_checkpoint": checkpoints,
-        "native_interpretation": "Classification reflects recorded indicators; unknown counters are not zero.",
+        "effective_view_by_planner": views,
+        "native_interpretation": (
+            "Native is a classification of recorded indicators, not proof of fallback-free "
+            "execution. Unknown counters are not zero; recorded status and checkpoint "
+            "loading do not independently rule out later planner-step fallback."
+        ),
     }
 
 
@@ -427,9 +478,20 @@ def analyze(episodes: str, contract: str, out: str, exclude_relocation_pairs: bo
     an = con["analysis"]
     seeds_main = [int(s) for s in con["seeds"]["main"]]
     rows = list(csv.DictReader(open(episodes)))
+    input_episodes = len(rows)
     rows = [r for r in rows if int(r["seed"]) in set(seeds_main)]
+    main_episodes = len(rows)
     if exclude_relocation_pairs:
         rows = [r for r in rows if str(r.get("pair_relocation_differs", "0")) != "1"]
+    population = {
+        "input_episodes": input_episodes,
+        "input_main_episodes": main_episodes,
+        "excluded_non_main_episodes": input_episodes - main_episodes,
+        "excluded_relocation_episodes": main_episodes - len(rows),
+        "retained_episodes": len(rows),
+        "selection": "main_excluding_relocation_pairs" if exclude_relocation_pairs else "main_all",
+        "telemetry_scope": "retained episodes before mode exclusion",
+    }
     seeds = sorted({int(r["seed"]) for r in rows})
     S, P, C = len(seeds), len(PLANNERS), len(CELLS)
     sidx = {s: i for i, s in enumerate(seeds)}
@@ -545,15 +607,30 @@ def analyze(episodes: str, contract: str, out: str, exclude_relocation_pairs: bo
     _write_csv(out_p / "planner_pair_interactions.csv", inter)
     counts = {
         "seeds": S,
-        "episodes_expected": P * C * 2 * S,
+        "episodes_expected": P * C * 2 * len(seeds_main),
         "episodes_present": int(present.sum()),
         "episodes_native": int(native.sum()),
         "episodes_non_native": int(present.sum() - native.sum()),
     }
     verdict = decide(con["outcome_rule"], pooled, inter, order)
     summary = {
+        "analysis_population": population,
         "counts": counts,
         "telemetry": _telemetry_summary(rows),
+        "evidence_limitations": {
+            "fallback": (
+                "Recorded indicators do not prove all planner steps fallback-free; "
+                "missing counters remain unknown. These effects are diagnostic."
+            ),
+            "pilot_rule_timing": (
+                "The contract reports that the rule was drafted before pilot effects were "
+                "computed; the available records do not independently date that drafting."
+            ),
+            "respawn_events": (
+                "Reset relocation is recorded, but the observer did not independently "
+                "log individual respawn events."
+            ),
+        },
         "order": order,
         "verdict": verdict,
         "pooled_effects": {f"{n}|{p}": list(map(float, v)) for (n, p), v in pooled.items()},
@@ -598,7 +675,8 @@ def decide(rule: dict, pooled: dict, inter: list, order: dict) -> dict:  # noqa:
         if it["endpoint"] != "success":
             continue
         resolved = it["diff_uniform_lo"] > 0 or it["diff_uniform_hi"] < 0
-        flipped = np.sign(it["diff_uniform_pp"]) != np.sign(it["diff_mixed_pp"])
+        uniform, mixed = it["diff_uniform_pp"], it["diff_mixed_pp"]
+        flipped = (uniform > 0 and mixed < 0) or (uniform < 0 and mixed > 0)
         if resolved and flipped:
             triggers.append(f"order_change:{it['planner_a']}>{it['planner_b']}")
         if (it["interaction_lo"] > 0 or it["interaction_hi"] < 0) and abs(

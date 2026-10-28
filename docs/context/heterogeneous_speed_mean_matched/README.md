@@ -3,8 +3,10 @@
 **Diagnostic only: development seeds, new current-version execution on the 0.0.8 release
 source (`373dbfde`), not release evidence.** This packet admits nothing into the thesis.
 The recorded classifier labels all 1,600 main episodes (4 planners x 4 cells x 2 conditions x
-50 seeds) native; its limits and counts for every configuration are described below. Every
-recorded realized-input check passes.
+50 seeds) native from the available indicators; 1,200 lack planner fallback counters, so this
+label does not establish fallback-free execution. The stronger zero-fallback evidence required
+for admission is unavailable. The results below remain diagnostic, and every recorded
+realized-input check passes.
 
 Question: do the robot outcomes depend on every pedestrian sharing one preferred speed?
 The **uniform** condition puts all 12 pedestrians at 0.65 m/s. The **mixed** condition uses
@@ -19,6 +21,12 @@ The frozen rule gives **B, order change or selective deterioration**, triggered 
 pooled success and collision effects and resolved planner interactions. It gives **no C
 qualifier** for B: the contract permits C only on top of A or D. The sensitivity run that
 excludes relocation-affected pairs also gives B without C.
+
+The rule's order-change trigger requires opposite, nonzero signs: a mixed-condition tie is
+not a sign reversal. The previous analyzer treated a tie as a reversal. None of the observed
+planner-pair mixed success differences is zero; correcting the boundary changes neither observed
+verdict nor trigger list. These verdicts apply to the recorded-indicator population described
+below, including rows with unknown fallback counters.
 
 **Secondary description:** the slow-stratum robot-near delay contribution has positive
 intervals for three planners (values below). This observation meets C's numerical condition,
@@ -78,11 +86,13 @@ relocation-affected pairs removed are in [`evidence/sensitivity_excl_relocation/
 
 - **Speed-coupled reset relocation.** At reset, the release moves pedestrians away from the
   robot start by a buffer that grows with the population's maximum preferred speed. Route
-  respawns use the same exclusion. Mixed therefore keeps pedestrians 0.325 m further away.
+  respawns use the same exclusion rule, whose mixed-condition buffer is 0.325 m larger.
   This changes start positions in 26 of 50 crossing-cell seeds and 1 of 50 overtaking seeds
   (the same seeds for every planner; 108 of 800 pairs). It is
   part of the treatment as the release implements it. Excluding these pairs retains the same outcome-rule verdict (ORCA success -13.7
-  [-20.9, -6.8], collision +13.2 [+6.2, +20.4]).
+  [-20.9, -6.8], collision +13.2 [+6.2, +20.4]). Reset relocation is in the receipts;
+  individual respawn events were not independently logged, so their occurrence and number
+  are not established by these records.
 - **No pedestrian-only control.** Much of the pedestrian delay increase occurs far from the
   robot. Pedestrian-pedestrian interaction is one possible explanation, not an identified
   cause. The near-robot share is a proxy, not a robot-attributable delay, and mixes exposure
@@ -125,7 +135,9 @@ for all 800 planner/cell/seed pairs: 1,200 rows say `adapter` and 400 say `nativ
 The scenario loader rejects an explicit `desired_speed_mean` as an unknown key
 (`qualification/override_probe.txt`). In code, setting one would resample every speed and
 erase the mixture. The pilot (seeds 1001-1010) is in [`qualification/`](qualification/) and is
-never pooled.
+never pooled. The contract says the outcome rule was drafted before pilot effects were
+computed; the available records do not independently date that drafting or establish when
+the pilot effect estimates were first inspected.
 
 ## Execution-mode accounting
 
@@ -138,19 +150,48 @@ unknown in the row reason and counted separately, not interpreted as a zero coun
 episode table preserves the counter's classified state separately from its serialized value,
 and the generated summaries report that state by planner.
 
-All 1,600 raw records have effective-view `degraded: false`, native pedestrian-model status,
-valid spawn and algorithm status `ok`. All 400 hybrid planner fallback counters are zero.
+The following counts are for the **main population of 1,600 episodes**, not the pilot or the
+relocation-excluded sensitivity population. All 1,600 main records have effective-view
+`degraded: false`, native pedestrian-model status, valid spawn and algorithm status `ok`.
+All 400 hybrid planner fallback counters are zero.
 The counter is absent in all 400 ORCA, all 400 social-force and all 400 PPO rows; therefore
-zero planner fallback is not verified by that telemetry for those planners. All 400 PPO
+fallback status from this counter is **unknown**, not zero, for those planners. All 400 PPO
 checkpoint records report a successful load and no checkpoint fallback. Checkpoint provenance
 is absent for the other, non-checkpoint planners. Thus the native classification summarizes
 the recorded indicators, not proof that every possible fallback was instrumented. PPO
 checkpoint loading in particular does not prove that later policy steps never fell back.
+The effective view is recorded as probed for the 1,200 hybrid, ORCA and social-force episodes;
+all 400 PPO records say `probed: false` and `pedestrian_blind_by_design: true`. PPO's
+`degraded: false` is therefore a recorded status, not an independent probe.
+
+The **sensitivity population** retains 1,384 episodes after excluding 216 episodes in 108
+relocation-difference pairs; it has 346 rows per planner. Of those, 346 hybrid counters
+report zero and 1,038 counters are unknown, split equally among the other planners. The
+generated summaries label their input and retained populations and report telemetry on the
+retained population. The separate **pilot population** has 320 episodes: 80 hybrid counters
+report zero, 240 counters are missing (80 per other planner), and all 80 pilot PPO views are
+unprobed by design. Pilot rows are not included in either main analysis.
+
+### Known limitation of the preregistration
+
+The frozen contract assumes that planner fallback counters support the mode classification,
+but does not prescribe how missing counters should affect eligibility. The original
+recorded-indicator classification retains rows without a counter as `native`; this is not a
+verified fallback-free classification. **Secondary, conservative reading:** if a recorded
+zero counter were required for eligibility, the 1,200 main rows with unknown counters would
+be excluded, leaving only the 400 hybrid rows with a recorded zero counter. Those counter
+values do not independently prove that every possible fallback path was instrumented. This
+reading does not support a four-planner comparison or a four-planner outcome classification.
+No conclusion about whether a fallback actually occurred can be drawn from the absent counts.
 
 ## Thesis-wording guidance
 
 This diagnostic does not itself admit or change any thesis claim. If independently reviewed
-and later admitted, a bounded description could say that, under this release's mixed-speed
+and later admitted under an appropriate evidence standard, a bounded description must state
+that fallback-free execution is unverified for ORCA, social force and PPO: their planner
+counters are absent, and PPO's recorded effective view was unprobed by design. The stronger
+zero-fallback admission requirement is not met by these records. Subject to that limitation,
+it could say that, under this release's mixed-speed
 intervention, ORCA success changed by -12.0 pp [-19.0, -5.0] and collisions by +11.5 pp
 [+4.5, +18.5] across four authored cells and 50 development seeds. The grouped success order
 remained hybrid > ORCA > {social force, PPO}, although the social-force and PPO point estimates
@@ -159,7 +200,9 @@ and collision, but the intervals do not establish equivalence or no change (PPO 
 reaches +7.5 pp). The slow-stratum near-robot contribution increased with intervals above zero
 for three planners as a secondary observation; it combines exposure with slowdown, and neither
 robot-caused delay nor a per-unit-near-time slowdown is identified. The historical raw-archive
-report's broader wording is superseded by the qualified statements in this packet.
+report's broader wording is superseded by the qualified statements in this packet. The reported
+drafting of the outcome rule before pilot estimates lacks an independent timestamp; individual
+respawn events were not independently logged.
 
 ## Raw archive custody
 
@@ -187,6 +230,8 @@ P=docs/context/heterogeneous_speed_mean_matched
 gunzip -c $P/evidence/episodes.csv.gz > /tmp/xhet_episodes.csv
 python $P/analyze.py analyze --episodes /tmp/xhet_episodes.csv --contract $P/contract.yaml --out /tmp/xhet_primary
 cmp /tmp/xhet_primary/summary.json $P/evidence/primary/summary.json
+python $P/analyze.py analyze --episodes /tmp/xhet_episodes.csv --contract $P/contract.yaml --out /tmp/xhet_sensitivity --exclude-relocation-pairs
+cmp /tmp/xhet_sensitivity/summary.json $P/evidence/sensitivity_excl_relocation/summary.json
 scripts/dev/run_worktree_shared_venv.sh -- uv run pytest "$P/test_analyze.py" -q
 (cd $P && sha256sum -c SHA256SUMS)
 ```

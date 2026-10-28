@@ -1,10 +1,24 @@
 {
+ "analysis_population": {
+  "excluded_non_main_episodes": 0,
+  "excluded_relocation_episodes": 216,
+  "input_episodes": 1600,
+  "input_main_episodes": 1600,
+  "retained_episodes": 1384,
+  "selection": "main_excluding_relocation_pairs",
+  "telemetry_scope": "retained episodes before mode exclusion"
+ },
  "counts": {
   "episodes_expected": 1600,
   "episodes_native": 1384,
   "episodes_non_native": 0,
   "episodes_present": 1384,
   "seeds": 50
+ },
+ "evidence_limitations": {
+  "fallback": "Recorded indicators do not prove all planner steps fallback-free; missing counters remain unknown. These effects are diagnostic.",
+  "pilot_rule_timing": "The contract reports that the rule was drafted before pilot effects were computed; the available records do not independently date that drafting.",
+  "respawn_events": "Reset relocation is recorded, but the observer did not independently log individual respawn events."
  },
  "order": {
   "collision": {
@@ -328,7 +342,53 @@
    "other": 0,
    "unknown": 0
   },
-  "native_interpretation": "Classification reflects recorded indicators; unknown counters are not zero.",
+  "effective_view_by_planner": {
+   "hybrid_v4_continuous": {
+    "blind_by_design": 0,
+    "blind_design_unknown": 0,
+    "degraded_unknown": 0,
+    "not_blind_by_design": 346,
+    "probe_unknown": 0,
+    "probed": 346,
+    "recorded_degraded_false": 346,
+    "recorded_degraded_true": 0,
+    "unprobed": 0
+   },
+   "orca": {
+    "blind_by_design": 0,
+    "blind_design_unknown": 0,
+    "degraded_unknown": 0,
+    "not_blind_by_design": 346,
+    "probe_unknown": 0,
+    "probed": 346,
+    "recorded_degraded_false": 346,
+    "recorded_degraded_true": 0,
+    "unprobed": 0
+   },
+   "ppo_release": {
+    "blind_by_design": 346,
+    "blind_design_unknown": 0,
+    "degraded_unknown": 0,
+    "not_blind_by_design": 0,
+    "probe_unknown": 0,
+    "probed": 0,
+    "recorded_degraded_false": 346,
+    "recorded_degraded_true": 0,
+    "unprobed": 346
+   },
+   "social_force": {
+    "blind_by_design": 0,
+    "blind_design_unknown": 0,
+    "degraded_unknown": 0,
+    "not_blind_by_design": 346,
+    "probe_unknown": 0,
+    "probed": 346,
+    "recorded_degraded_false": 346,
+    "recorded_degraded_true": 0,
+    "unprobed": 0
+   }
+  },
+  "native_interpretation": "Native is a classification of recorded indicators, not proof of fallback-free execution. Unknown counters are not zero; recorded status and checkpoint loading do not independently rule out later planner-step fallback.",
   "planner_fallback_counters": {
    "hybrid_v4_continuous": {
     "positive": 0,

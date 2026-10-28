@@ -55,6 +55,43 @@ def test_outcome_rule_applies_c_only_on_top_of_a_or_d(
 
 
 @pytest.mark.parametrize(
+    ("uniform", "interval", "mixed", "expected"),
+    [
+        (3.0, (1.0, 5.0), 0.0, False),
+        (-3.0, (-5.0, -1.0), 0.0, False),
+        (3.0, (1.0, 5.0), -2.0, True),
+        (-3.0, (-5.0, -1.0), 2.0, True),
+        (3.0, (-1.0, 5.0), -2.0, False),
+    ],
+)
+def test_resolved_order_change_requires_opposite_nonzero_signs(uniform, interval, mixed, expected):
+    """A tie or an unresolved original difference is not a change of sign."""
+    rule = yaml.safe_load((PACKET / "contract.yaml").read_text())["outcome_rule"]
+    pooled = {
+        (endpoint, planner): (0.0, -1.0, 1.0)
+        for endpoint in ("success", "collision", "ped_near_delay_rate_slow")
+        for planner in analyzer.PLANNERS
+    }
+    interaction = {
+        "endpoint": "success",
+        "planner_a": "orca",
+        "planner_b": "social_force",
+        "diff_uniform_pp": uniform,
+        "diff_uniform_lo": interval[0],
+        "diff_uniform_hi": interval[1],
+        "diff_mixed_pp": mixed,
+        "interaction_pp": mixed - uniform,
+        "interaction_lo": min(mixed - uniform, 0),
+        "interaction_hi": max(mixed - uniform, 0),
+    }
+    result = analyzer.decide(rule, pooled, [interaction], {})
+    assert result["triggers"] == (["order_change:orca>social_force"] if expected else [])
+    assert result["outcome"] == (
+        "B_ORDER_CHANGE_OR_SELECTIVE_DETERIORATION" if expected else "A_PERSIST_FINITE_SENSITIVITY"
+    )
+
+
+@pytest.mark.parametrize(
     "metadata",
     [
         {"status": "policy_step_error_fallback", "planner_runtime": {"fallback_count": 0}},
@@ -148,3 +185,79 @@ def test_summary_keeps_checkpoint_and_missing_counter_evidence_separate():
     assert summary["planner_fallback_counters"]["hybrid_v4_continuous"]["zero"] == 1
     assert summary["ppo_checkpoint"]["loaded_without_checkpoint_fallback"] == 1
     assert summary["algorithm_status"] == {"ok": 1, "other": 0, "unknown": 1}
+
+
+def test_summary_separates_recorded_view_status_from_probe():
+    """An undegraded recorded status is not an independently probed view."""
+    rows = [
+        {
+            "planner": "ppo_release",
+            "effective_view_degraded": "False",
+            "effective_view_probed": "False",
+            "effective_view_blind_by_design": "True",
+        },
+        {
+            "planner": "hybrid_v4_continuous",
+            "effective_view_degraded": "False",
+            "effective_view_probed": "True",
+            "effective_view_blind_by_design": "False",
+        },
+        {"planner": "ppo_release"},
+    ]
+    views = analyzer._telemetry_summary(rows)["effective_view_by_planner"]
+    assert views["ppo_release"] == {
+        "recorded_degraded_false": 1,
+        "recorded_degraded_true": 0,
+        "degraded_unknown": 1,
+        "probed": 0,
+        "unprobed": 1,
+        "probe_unknown": 1,
+        "blind_by_design": 1,
+        "not_blind_by_design": 0,
+        "blind_design_unknown": 1,
+    }
+    assert views["hybrid_v4_continuous"]["probed"] == 1
+
+
+def test_sensitivity_summary_separates_input_and_retained_populations(tmp_path):
+    """Relocation exclusions are not missing or non-native episodes."""
+    import csv
+    import json
+
+    rule = yaml.safe_load((PACKET / "contract.yaml").read_text())
+    rule["seeds"]["main"] = [1001, 1002]
+    rule["analysis"]["bootstrap_draws"] = 2
+    contract = tmp_path / "contract.yaml"
+    contract.write_text(yaml.safe_dump(rule))
+    rows = []
+    for planner in analyzer.PLANNERS:
+        for cell in analyzer.CELLS:
+            for seed in rule["seeds"]["main"]:
+                for condition in analyzer.CONDS:
+                    row: dict[str, object] = {col: 1.0 for _, col, _, _ in analyzer.ENDPOINTS}
+                    row.update(
+                        planner=planner,
+                        cell=cell,
+                        seed=seed,
+                        condition=condition,
+                        mode="native",
+                        pair_relocation_differs=int(
+                            planner == "orca" and cell == "crossing" and seed == 1001
+                        ),
+                        planner_fallback_counter_state="unknown",
+                    )
+                    rows.append(row)
+    episodes = tmp_path / "episodes.csv"
+    with episodes.open("w", newline="") as stream:
+        writer = csv.DictWriter(stream, fieldnames=list(rows[0]))
+        writer.writeheader()
+        writer.writerows(rows)
+    analyzer.analyze(str(episodes), str(contract), str(tmp_path / "out"), True)
+    summary = json.loads((tmp_path / "out" / "summary.json").read_text())
+    population = summary["analysis_population"]
+    assert population["input_main_episodes"] == 64
+    assert population["excluded_relocation_episodes"] == 2
+    assert population["retained_episodes"] == 62
+    assert summary["counts"]["episodes_expected"] == 64
+    assert summary["counts"]["episodes_present"] == 62
+    assert summary["counts"]["episodes_non_native"] == 0

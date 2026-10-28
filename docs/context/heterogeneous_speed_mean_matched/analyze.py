@@ -37,7 +37,7 @@ TOL = 1e-9
 # ----------------------------------------------------------------------------- extract
 
 
-def _mode(rec: dict) -> tuple[str, str]:
+def _mode(rec: dict) -> tuple[str, str]:  # noqa: C901
     """Return (mode, reason): native | fallback | degraded, verified from the record."""
     am = rec.get("algorithm_metadata", {}) or {}
     pr = am.get("planner_runtime", {}) or {}
@@ -118,7 +118,7 @@ def _ped_delay(npz_path: str, labels: list[str]) -> dict:
 
 
 def _mixed_labels(n: int, seed: int) -> list[str]:
-    from robot_sf.ped_npc.ped_archetypes import assign_archetype_labels  # noqa: PLC0415
+    from robot_sf.ped_npc.ped_archetypes import assign_archetype_labels
 
     return [
         str(x)
@@ -129,6 +129,7 @@ def _mixed_labels(n: int, seed: int) -> list[str]:
 
 
 def extract(runs: str, out: str) -> None:
+    """Extract episode rows and realized-input checks from raw observations."""
     out_p = Path(out)
     out_p.mkdir(parents=True, exist_ok=True)
     rows, receipts = [], {}
@@ -148,7 +149,9 @@ def extract(runs: str, out: str) -> None:
                 mode, reason = _mode(rec)
                 # stratum labels: mixed uses its own; uniform uses the labels the mixed arm
                 # assigns to the same slots (same archetype seed), for identity-paired delay
-                labels = rc["stratum_labels"] if cond == "mixed" else _mixed_labels(rc["n_peds"], seed)
+                labels = (
+                    rc["stratum_labels"] if cond == "mixed" else _mixed_labels(rc["n_peds"], seed)
+                )
                 pd = _ped_delay(stem + ".npz", labels)
                 am = rec.get("algorithm_metadata", {}) or {}
                 success = bool(m.get("success"))
@@ -179,8 +182,9 @@ def extract(runs: str, out: str) -> None:
                     "observer_error": rc.get("observer_error", ""),
                     "git_hash": (rec.get("provenance") or {}).get("git_hash"),
                     "algo_config_hash": (rec.get("scenario_params") or {}).get("algo_config_hash"),
-                    "checkpoint_load": ((am.get("planner_runtime") or {}).get(
-                        "checkpoint_provenance") or {}).get("load_status", ""),
+                    "checkpoint_load": (
+                        (am.get("planner_runtime") or {}).get("checkpoint_provenance") or {}
+                    ).get("load_status", ""),
                 }
                 row.update(pd)
                 rows.append(row)
@@ -206,7 +210,8 @@ def _relocated_rows(rc: dict) -> set:
     return {int(k) for k in rel}
 
 
-def pairing_checks(rows: list[dict], receipts: dict) -> dict:
+def pairing_checks(rows: list[dict], receipts: dict) -> dict:  # noqa: C901, PLR0912
+    """Verify observed conditions, planner resets, and episode capture."""
     fails: list[str] = []
     n_pairs = 0
     relocation_pairs: set = set()
@@ -249,10 +254,11 @@ def pairing_checks(rows: list[dict], receipts: dict) -> dict:
         # initial velocity differs only by each pedestrian's speed factor
         fac = np.asarray(other["max_speeds"]) / 0.65
         keep = [i for i in range(rc["n_peds"]) if i not in moved]
-        if not _same((np.asarray(rc["start_vel"]) * fac[:, None])[keep],
-                     np.asarray(other["start_vel"])[keep]):
+        if not _same(
+            (np.asarray(rc["start_vel"]) * fac[:, None])[keep], np.asarray(other["start_vel"])[keep]
+        ):
             fails.append(f"{planner}/{cell}/{seed}: start_vel not factor-scaled")
-    # the same (cell, condition, seed) reset is identical across planners
+    # Compare start_pos, goal, max_speeds, robot_pose and robot_goal across planners.
     cross = 0
     for (planner, cell, cond, seed), rc in receipts.items():
         ref = receipts.get((PLANNERS[1], cell, cond, seed))
@@ -283,8 +289,10 @@ def pairing_checks(rows: list[dict], receipts: dict) -> dict:
         **extra,
         "n_failures": len(fails),
         "failures": fails[:200],
-        "pass": not fails and extra["speed_changed_after_reset"] == 0
-        and extra["observer_errors"] == 0 and extra["captured_steps_mismatch"] == 0,
+        "pass": not fails
+        and extra["speed_changed_after_reset"] == 0
+        and extra["observer_errors"] == 0
+        and extra["captured_steps_mismatch"] == 0,
     }
 
 
@@ -314,8 +322,9 @@ def _f(x):
     return float(x)
 
 
-def analyze(episodes: str, contract: str, out: str, exclude_relocation_pairs: bool = False) -> None:
-    import yaml  # noqa: PLC0415
+def analyze(episodes: str, contract: str, out: str, exclude_relocation_pairs: bool = False) -> None:  # noqa: C901, PLR0915
+    """Compute the preregistered paired effects, intervals, and decision."""
+    import yaml
 
     con = yaml.safe_load(open(contract))
     an = con["analysis"]
@@ -384,8 +393,17 @@ def analyze(episodes: str, contract: str, out: str, exclude_relocation_pairs: bo
             lo, hi = np.nanpercentile(pooled_b[:, i], [2.5, 97.5])
             with np.errstate(all="ignore"):
                 effects.append(
-                    _eff_row(name, p, "ALL_equal_cell", np.nanmean(lu[i]), np.nanmean(lm[i]),
-                             pooled_pt[i], lo, hi, int(np.sum(~np.isnan(X[name][i, :, 0]) & ~np.isnan(X[name][i, :, 1]))))
+                    _eff_row(
+                        name,
+                        p,
+                        "ALL_equal_cell",
+                        np.nanmean(lu[i]),
+                        np.nanmean(lm[i]),
+                        pooled_pt[i],
+                        lo,
+                        hi,
+                        int(np.sum(~np.isnan(X[name][i, :, 0]) & ~np.isnan(X[name][i, :, 1]))),
+                    )
                 )
             pooled[(name, p)] = (pooled_pt[i], lo, hi)
     # planner-pair interactions on success and collision: (A-B)_mixed - (A-B)_uniform
@@ -399,8 +417,8 @@ def analyze(episodes: str, contract: str, out: str, exclude_relocation_pairs: bo
         order[name] = {
             "uniform": [PLANNERS[i] for i in np.argsort(-level_u, kind="stable")],
             "mixed": [PLANNERS[i] for i in np.argsort(-level_m, kind="stable")],
-            "uniform_levels_pp": dict(zip(PLANNERS, map(float, level_u))),
-            "mixed_levels_pp": dict(zip(PLANNERS, map(float, level_m))),
+            "uniform_levels_pp": dict(zip(PLANNERS, map(float, level_u), strict=True)),
+            "mixed_levels_pp": dict(zip(PLANNERS, map(float, level_m), strict=True)),
         }
         for a in range(P):
             for b in range(a + 1, P):
@@ -410,33 +428,54 @@ def analyze(episodes: str, contract: str, out: str, exclude_relocation_pairs: bo
                 bu = np.array([np.nanmean(bb[1][a] - bb[1][b]) for bb in bstack])
                 dm = float(level_m[a] - level_m[b])
                 bm = np.array([np.nanmean(bb[2][a] - bb[2][b]) for bb in bstack])
-                inter.append({
-                    "endpoint": name, "planner_a": PLANNERS[a], "planner_b": PLANNERS[b],
-                    "diff_uniform_pp": du, "diff_uniform_lo": float(np.nanpercentile(bu, 2.5)),
-                    "diff_uniform_hi": float(np.nanpercentile(bu, 97.5)),
-                    "diff_mixed_pp": dm, "diff_mixed_lo": float(np.nanpercentile(bm, 2.5)),
-                    "diff_mixed_hi": float(np.nanpercentile(bm, 97.5)),
-                    "interaction_pp": pt, "interaction_lo": float(np.nanpercentile(bs, 2.5)),
-                    "interaction_hi": float(np.nanpercentile(bs, 97.5)),
-                })
+                inter.append(
+                    {
+                        "endpoint": name,
+                        "planner_a": PLANNERS[a],
+                        "planner_b": PLANNERS[b],
+                        "diff_uniform_pp": du,
+                        "diff_uniform_lo": float(np.nanpercentile(bu, 2.5)),
+                        "diff_uniform_hi": float(np.nanpercentile(bu, 97.5)),
+                        "diff_mixed_pp": dm,
+                        "diff_mixed_lo": float(np.nanpercentile(bm, 2.5)),
+                        "diff_mixed_hi": float(np.nanpercentile(bm, 97.5)),
+                        "interaction_pp": pt,
+                        "interaction_lo": float(np.nanpercentile(bs, 2.5)),
+                        "interaction_hi": float(np.nanpercentile(bs, 97.5)),
+                    }
+                )
     _write_csv(out_p / "paired_effects.csv", effects)
     _write_csv(out_p / "planner_pair_interactions.csv", inter)
     counts = {
-        "seeds": S, "episodes_expected": P * C * 2 * S, "episodes_present": int(present.sum()),
+        "seeds": S,
+        "episodes_expected": P * C * 2 * S,
+        "episodes_present": int(present.sum()),
         "episodes_native": int(native.sum()),
         "episodes_non_native": int(present.sum() - native.sum()),
     }
     verdict = decide(con["outcome_rule"], pooled, inter, order)
-    summary = {"counts": counts, "order": order, "verdict": verdict,
-               "pooled_effects": {f"{n}|{p}": list(map(float, v)) for (n, p), v in pooled.items()}}
+    summary = {
+        "counts": counts,
+        "order": order,
+        "verdict": verdict,
+        "pooled_effects": {f"{n}|{p}": list(map(float, v)) for (n, p), v in pooled.items()},
+    }
     (out_p / "summary.json").write_text(json.dumps(summary, indent=1, sort_keys=True))
     print(json.dumps({"counts": counts, "verdict": verdict, "order": order}, indent=1))
 
 
-def _eff_row(name, p, c, lu, lm, d, lo, hi, pairs):
-    return {"endpoint": name, "planner": p, "cell": c, "uniform": _r(lu), "mixed": _r(lm),
-            "effect_mixed_minus_uniform": _r(d), "ci_lo": _r(lo), "ci_hi": _r(hi),
-            "paired_n": pairs}
+def _eff_row(name, p, c, lu, lm, d, lo, hi, pairs):  # noqa: PLR0913
+    return {
+        "endpoint": name,
+        "planner": p,
+        "cell": c,
+        "uniform": _r(lu),
+        "mixed": _r(lm),
+        "effect_mixed_minus_uniform": _r(d),
+        "ci_lo": _r(lo),
+        "ci_hi": _r(hi),
+        "paired_n": pairs,
+    }
 
 
 def _r(x):
@@ -450,7 +489,7 @@ def _write_csv(path, rows):
         w.writerows(rows)
 
 
-def decide(rule: dict, pooled: dict, inter: list, order: dict) -> dict:
+def decide(rule: dict, pooled: dict, inter: list, order: dict) -> dict:  # noqa: C901
     """Apply the predeclared outcome rule (contract.yaml: outcome_rule)."""
     mat = float(rule["material_pp"])
     wide = float(rule["inconclusive_ci_width_pp"])
@@ -464,16 +503,24 @@ def decide(rule: dict, pooled: dict, inter: list, order: dict) -> dict:
         flipped = np.sign(it["diff_uniform_pp"]) != np.sign(it["diff_mixed_pp"])
         if resolved and flipped:
             triggers.append(f"order_change:{it['planner_a']}>{it['planner_b']}")
-        if (it["interaction_lo"] > 0 or it["interaction_hi"] < 0) and abs(it["interaction_pp"]) >= mat:
+        if (it["interaction_lo"] > 0 or it["interaction_hi"] < 0) and abs(
+            it["interaction_pp"]
+        ) >= mat:
             triggers.append(f"selective_interaction:{it['planner_a']}-{it['planner_b']}")
     for (name, p), (pt, lo, hi) in pooled.items():
         if name in ("success", "collision") and (lo > 0 or hi < 0) and abs(pt) >= mat:
             triggers.append(f"selective_deterioration:{name}:{p}")
-    widths = {f"{n}|{p}": hi - lo for (n, p), (pt, lo, hi) in pooled.items()
-              if n in ("success", "collision")}
+    widths = {
+        f"{n}|{p}": hi - lo
+        for (n, p), (pt, lo, hi) in pooled.items()
+        if n in ("success", "collision")
+    }
     too_wide = [k for k, w in widths.items() if w > wide]
-    within = all(lo >= -persist_bound and hi <= persist_bound
-                 for (n, p), (pt, lo, hi) in pooled.items() if n in ("success", "collision"))
+    within = all(
+        lo >= -persist_bound and hi <= persist_bound
+        for (n, p), (pt, lo, hi) in pooled.items()
+        if n in ("success", "collision")
+    )
     ped = []
     for p in PLANNERS:
         pt, lo, hi = pooled[("ped_near_delay_rate_slow", p)]
@@ -488,12 +535,18 @@ def decide(rule: dict, pooled: dict, inter: list, order: dict) -> dict:
     else:
         outcome = "D_INCONCLUSIVE_RETAIN_LIMITATION"
     qualifier = "C_SLOW_PED_DELAY_QUALIFIER" if ped else None
-    return {"outcome": outcome, "qualifier": qualifier, "triggers": triggers,
-            "too_wide": too_wide, "within_persist_bound": within,
-            "slow_ped_near_delay_increase_planners": ped}
+    return {
+        "outcome": outcome,
+        "qualifier": qualifier,
+        "triggers": triggers,
+        "too_wide": too_wide,
+        "within_persist_bound": within,
+        "slow_ped_near_delay_increase_planners": ped,
+    }
 
 
 def main() -> None:
+    """Dispatch extraction or analysis from the command line."""
     ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest="cmd", required=True)
     e = sub.add_parser("extract")

@@ -5,7 +5,8 @@ Runs the repository's normal campaign entry point (``run_map_batch``) on the
 cell is run twice per seed: ``uniform`` (all 12 pedestrians at 0.65 m/s) and
 ``mixed`` (3 x 0.325, 6 x 0.65, 3 x 0.975 m/s). Both conditions use the same
 archetype code path (``uniform`` is the one-archetype composition with factor
-1.0), so spawn positions, routes, groups and radii are drawn identically.
+1.0). The recorded checks compare reset fields by name; speed-coupled
+relocation can change start positions.
 
 A read-only, in-process observer wraps ``_prepare_episode_env`` to write the
 realized population after reset (receipt JSON) and per-step pedestrian/robot
@@ -26,6 +27,7 @@ import os
 import sys
 import time
 from pathlib import Path
+from typing import Literal, TypedDict
 
 import numpy as np
 
@@ -54,7 +56,18 @@ CONDITIONS = {
         "archetype_speed_factors": {"slow": 0.5, "standard": 1.0, "fast": 1.5},
     },
 }
-PLANNERS = {
+
+
+class PlannerSpec(TypedDict):
+    """Frozen planner configuration used by the acquisition driver."""
+
+    algo: str
+    algo_config_path: str
+    benchmark_profile: Literal["baseline-safe", "paper-baseline", "experimental"]
+    adapter_impact_eval: bool
+
+
+PLANNERS: dict[str, PlannerSpec] = {
     "hybrid_v4_continuous": {
         "algo": "hybrid_rule_local_planner",
         "algo_config_path": "configs/policy_search/candidates/"
@@ -116,7 +129,7 @@ def expand_per_seed(scenarios: list[dict]) -> list[dict]:
             one = copy.deepcopy(sc)
             one["seeds"] = [seed]
             # run_map_batch rejects duplicate ids; the seed suffix is bookkeeping only
-            # (episode RNG comes from the seed, verified identical across conditions).
+            # (both conditions use the same episode seed).
             one["name"] = f"{sc['name']}__a{int(seed)}"
             one["simulation_config"]["archetype_seed"] = int(seed)
             expanded.append(one)
@@ -147,17 +160,27 @@ class Observer:
     """Read-only after-reset and per-step capture of realized pedestrian state."""
 
     def __init__(self, out_dir: Path) -> None:
+        """Initialize the output location and pending observation."""
         self.out_dir = out_dir
         self.pending: dict | None = None
 
     def flush(self) -> None:
+        """Write the pending episode observations and its reset receipt."""
         p = self.pending
         if p is None:
             return
         self.pending = None
         stem = self.out_dir / f"{p['scenario']}__s{p['seed']}"
         arrays = {k: np.asarray(v, dtype=np.float32) for k, v in p["steps"].items()}
-        np.savez_compressed(f"{stem}.npz", **arrays)
+        np.savez_compressed(
+            f"{stem}.npz",
+            ped_pos=arrays["ped_pos"],
+            ped_vel=arrays["ped_vel"],
+            ped_goal=arrays["ped_goal"],
+            ped_max_speed=arrays["ped_max_speed"],
+            robot_pos=arrays["robot_pos"],
+            action=arrays["action"],
+        )
         p["receipt"]["captured_steps"] = int(arrays["ped_pos"].shape[0])
         Path(f"{stem}.receipt.json").write_text(json.dumps(p["receipt"], sort_keys=True))
 
@@ -165,17 +188,25 @@ class Observer:
         sim = env.simulator
         peds = sim.pysf_sim.peds
         st = np.asarray(peds.state, dtype=float)
-        s = self.pending["steps"]
+        pending = self.pending
+        if pending is None:
+            raise RuntimeError("cannot snapshot without a pending episode")
+        s = pending["steps"]
         s["ped_pos"].append(st[:, 0:2].copy())
         s["ped_vel"].append(st[:, 2:4].copy())
         s["ped_goal"].append(st[:, 4:6].copy())
         s["ped_max_speed"].append(np.asarray(peds.max_speeds, dtype=float).copy())
         rp = np.asarray(sim.robot_poses[0][0] if hasattr(sim, "robot_poses") else sim.robot_pos[0])
         s["robot_pos"].append(np.asarray(rp, dtype=float).reshape(-1)[:2].copy())
-        a = np.full(2, np.nan) if action is None else np.asarray(action, dtype=float).reshape(-1)[:2]
+        a = (
+            np.full(2, np.nan)
+            if action is None
+            else np.asarray(action, dtype=float).reshape(-1)[:2]
+        )
         s["action"].append(a.copy())
 
     def wrap(self, original):
+        """Wrap environment preparation to record resets and step observations."""
         observer = self
 
         def _prepare(env, **kwargs):
@@ -238,7 +269,12 @@ class Observer:
                 "steps": {
                     k: []
                     for k in (
-                        "ped_pos", "ped_vel", "ped_goal", "ped_max_speed", "robot_pos", "action",
+                        "ped_pos",
+                        "ped_vel",
+                        "ped_goal",
+                        "ped_max_speed",
+                        "robot_pos",
+                        "action",
                     )
                 },
             }
@@ -260,6 +296,7 @@ class Observer:
 
 
 def sha256_file(path: str) -> str:
+    """Hash an input file for the acquisition receipt."""
     h = hashlib.sha256()
     with open(path, "rb") as fh:
         for chunk in iter(lambda: fh.read(1 << 20), b""):
@@ -268,6 +305,7 @@ def sha256_file(path: str) -> str:
 
 
 def main() -> int:
+    """Run the selected planner and development seeds."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--planner", required=True, choices=sorted(PLANNERS))
     ap.add_argument("--seeds", type=int, nargs="+", required=True)

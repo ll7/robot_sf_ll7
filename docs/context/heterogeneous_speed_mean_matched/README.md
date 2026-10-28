@@ -45,12 +45,14 @@ equally weighted. Time-to-goal uses only pairs successful in both conditions.
   are in group crossing (success -20 pp [-38, -2]) and head-on corridor
   (-16 pp [-32, -2]). The hybrid-ORCA success gap widens from 13.5 to 26.0 pp
   (interaction +12.5 [+4.5, +20.5]).
-- Social force's pooled effect is small, but its cell effects point in opposite directions:
-  crossing +12 pp [0, +26], group crossing -26 pp [-42, -10], overtaking -14 pp [-26, -4].
+- Social force's pooled success point estimate is -6.5 pp [-14.0, +1.5]. Its cell
+  estimates point in opposite directions: crossing +12 pp [0, +26], group crossing
+  -26 pp [-42, -10], overtaking -14 pp [-26, -4].
   In crossing, timeouts change by -14 pp [-28, 0] while collisions change from 2 % to 4 %
   (+2 pp [-4, +8]); the cell pattern cannot be described as having no collision change.
-- PPO's total collision effect is +1.5 pp [-4.5, +7.5], while contact types shift: pedestrian contacts
-  +7.5 pp [+1.0, +14.5], obstacle contacts -6.0 pp [-12.5, +0.5].
+- PPO's total collision point estimate is +1.5 pp [-4.5, +7.5]. Its pedestrian-contact
+  estimate is +7.5 pp [+1.0, +14.5] and its obstacle-contact estimate is -6.0 pp
+  [-12.5, +0.5].
 - The grouped success order is hybrid > ORCA > {social force, PPO} in both conditions.
   Social force and PPO swap point-estimate positions: 37.5 % versus 34.0 % in uniform,
   31.0 % versus 33.0 % in mixed. Their uniform difference (+3.5 pp [-2.5, +9.5]) was not

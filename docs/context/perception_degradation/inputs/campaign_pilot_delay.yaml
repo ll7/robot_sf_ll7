@@ -5,12 +5,12 @@ paper_profile_version: paper-matrix-v1
 scenario_matrix: configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml
 scenario_candidates:
 - francis2023_blind_corner
-- classic_urban_crossing_medium
+- classic_cross_trap_medium
 - classic_head_on_corridor_medium
 - classic_overtaking_medium
 - classic_doorway_medium
 - classic_bottleneck_high
-- classic_cross_trap_medium
+- classic_urban_crossing_medium
 comparability_mapping: configs/benchmarks/alyassi_comparability_map_v2.yaml
 route_clearance_certifications: configs/benchmarks/route_clearance_certifications_v1.yaml
 seed_policy:

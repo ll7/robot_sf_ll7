@@ -18,14 +18,16 @@ INPUTS = PACKET / "inputs"
 
 CELLS = [
     "francis2023_blind_corner",
-    "classic_urban_crossing_medium",
+    # Pilot qualification: classic_urban_crossing_medium came within 2.5 m of a pedestrian
+    # in 53% of oracle pilot episodes; the medium-density classic crossing map did in 93%.
+    "classic_cross_trap_medium",
     "classic_head_on_corridor_medium",
     "classic_overtaking_medium",
     "classic_doorway_medium",
     "classic_bottleneck_high",
 ]
-# Pilot-only candidate: qualifies whether the crossing cell produces real encounters.
-PILOT_EXTRA_CELLS = ["classic_cross_trap_medium"]
+# Pilot ran urban crossing as the original crossing cell plus the candidate below.
+PILOT_CELLS = [*CELLS, "classic_urban_crossing_medium"]
 
 CONDITIONS = {
     "oracle": {"condition": "oracle"},
@@ -94,7 +96,7 @@ def campaign(stage: str, condition: str) -> dict:
         "paper_facing": False,
         "paper_profile_version": "paper-matrix-v1",
         "scenario_matrix": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
-        "scenario_candidates": list(CELLS) + (PILOT_EXTRA_CELLS if stage == "pilot" else []),
+        "scenario_candidates": list(PILOT_CELLS if stage == "pilot" else CELLS),
         "comparability_mapping": "configs/benchmarks/alyassi_comparability_map_v2.yaml",
         "route_clearance_certifications": "configs/benchmarks/route_clearance_certifications_v1.yaml",
         "seed_policy": {"mode": "fixed-list", "seeds": list(STAGES[stage]["seeds"])},

@@ -1,5 +1,5 @@
 schema: xperc-perception-degradation.contract.v1
-status: draft_pre_pilot  # set to frozen_before_main_runs at the freeze commit
+status: frozen_before_main_runs
 evidence_tier: >-
   Development-seed diagnostic on the 0.0.8 release code plus a minimal diagnostic
   perception hook and the guard-escape ablation switch. New current-version execution,
@@ -20,7 +20,7 @@ source:
   guard_switch_note: >-
     Release plus the guard-escape ablation's ablation_disable_hard_guard switch
     (docs/context/guard_escape_ablation at acd878b4028341846e1fc1c8b0bf0c3ef9923dad).
-  execution_commit: SET_AT_FREEZE  # the commit that contains this file; all arms and conditions run on it
+  execution_commit: the commit that sets status frozen_before_main_runs (recorded in README and every row's git_hash); all arms and conditions of the main run use it
   diagnostic_change: >-
     robot_sf/sensor/pedestrian_perception.py plus hooks in robot_env.py,
     socnav_observation.py and map_runner_episode.py. Without an
@@ -43,11 +43,19 @@ planners:
 
 cells:  # release scenario matrix configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml
   - francis2023_blind_corner          # blind corner
-  - classic_urban_crossing_medium     # medium-density crossing
+  - classic_cross_trap_medium         # medium-density crossing (classic crossing map, density 0.05); replaced classic_urban_crossing_medium after pilot qualification
   - classic_head_on_corridor_medium   # medium-density head-on corridor
   - classic_overtaking_medium         # medium-density overtaking
   - classic_doorway_medium            # ordinary doorway, medium density
   - classic_bottleneck_high           # high-density bottleneck
+occlusion_analysis_cells:  # pooled occlusion effects use only cells where the pilot showed occlusion
+  - francis2023_blind_corner
+  - classic_cross_trap_medium
+  - classic_overtaking_medium
+  - classic_doorway_medium
+occlusion_negative_control_cells:  # no static wall between robot and pedestrians: inputs equal oracle, outcomes must equal oracle exactly
+  - classic_head_on_corridor_medium
+  - classic_bottleneck_high
 horizon: release authored horizons configs/benchmarks/horizon_schedules/release_0_0_8_authored_v1.yaml (sha256 032bbf8a...675e), dt 0.1 s
 
 conditions:  # one effect at a time; oracle is the control
@@ -67,6 +75,17 @@ seeds:
   smoke: [1001]
   pilot_qualification: 1001-1010 (never pooled with main)
   main: 1121-1130 and 1161-1200 (50 development seeds)
+pilot_qualification:  # seeds 1001-1010, 7 cells, 1120 episodes; never pooled with main
+  trace_violations: 0 of 231917 traced steps (perceived state equals the declared transform of truth)
+  channels_consumed_every_step: 1120 of 1120 episodes
+  position_noise_axis_sd_m: 0.04995 (n=526164 axis draws)
+  delay: exact two-step replay, initial snapshot held two steps
+  occlusion_share_of_steps: {blind_corner: 0.527, cross_trap_medium: 0.895, overtaking_medium: 0.431, doorway_medium: 0.687, urban_crossing_medium: 0.733, head_on_corridor_medium: 0.0, bottleneck_high: 0.0}
+  encounter_check: oracle episodes within 2.5 m of a pedestrian (contact at 1.4 m centre distance) -> urban_crossing 53%, cross_trap 93%, other main cells 88-100%
+  guard_switch: arms differ only in ablation_disable_hard_guard; scenario overrides applied to both
+  seconds_per_episode_mean_8_workers: {orca: 3.1, ppo: 3.8, guard_on: 26.8, guard_off: 18.9}
+  ppo_checkpoint: loaded in every episode, no fallback; the canonical marker parser misreads config.fallback_to_goal=false as an invalid counter, so that flag is checked explicitly instead
+  provenance_note: pilot oracle rows carry two commit hashes (docs-only commits during the run); pilot is qualification only
 design_size: 4 planners x 6 cells x 4 conditions x 50 seeds = 4800 main episodes
 
 outcomes:

@@ -43,6 +43,7 @@ def main() -> int:  # noqa: C901, PLR0915
     parser.add_argument("--evidence", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--stage", default="main")
+    parser.add_argument("--steps", default="steps.csv.gz", help="step table inside --evidence")
     args = parser.parse_args()
     contract = yaml.safe_load(args.contract.read_text(encoding="utf-8"))
     th = contract["thresholds"]
@@ -115,7 +116,7 @@ def main() -> int:  # noqa: C901, PLR0915
     a3_eps = defaultdict(set)
     gaps = defaultdict(list)
     proj_steps = Counter()
-    with gzip.open(args.evidence / "steps.csv.gz", "rt", encoding="utf-8") as fh:
+    with gzip.open(args.evidence / args.steps, "rt", encoding="utf-8") as fh:
         for r in csv.DictReader(fh):
             if int(r["seed"]) not in set(seeds):
                 continue

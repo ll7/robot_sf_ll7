@@ -1,0 +1,22 @@
+{
+ "schema": "xorca-custody.v1",
+ "robot_sf_source_commit": "373dbfde4f39667cf9e8732dabe7df5118bdeab1",
+ "preregistration_commit": "a4a31e3575a130bbc0dfccec7fbc173ff114fa42",
+ "wandb_artifact": "wandb://ll7/robot_sf/xorca-orca-adapter-attribution:v0",
+ "wandb_artifact_digest": "9558267f19fe2e5e47e5f9de6d9eb7b0",
+ "wandb_readback": "21 of 21 files, sizes equal to the private archive, state COMMITTED",
+ "private_archive": "host-local experiment archive (path not published); MANIFEST.sha256 verified",
+ "archive_manifest_sha256": "80b74e2a1e099c8e24bd7441712e3f1cb77c3f1e93ad06d7f79d9ab4c1c0808d",
+ "raw_bundles_sha256": {
+  "raw/xorca_raw_main.tar.gz": "e841f870612960ff1874ba1331a8198677ca2a25f03954904e182c55724d95aa",
+  "raw/xorca_raw_neutrality.tar.gz": "2ddf8379156507e5c3bbf8c8a0cb45f65a032c593870e20e9293fb2e0fca8e90",
+  "raw/xorca_raw_pilot.tar.gz": "2199d5a538f0aa0f4e2797828333888de35d6b1f2f78f7a6054f451d85f7a7cd",
+  "raw/xorca_raw_pilot_v1.tar.gz": "dc3a91f2ae67b1657e2925fb3b0f3a688007abccd18206720458eefbea17def7",
+  "raw/xorca_raw_smoke.tar.gz": "923ece9af83155d467a083c230abbc9e876e919b72c13fb1974ed43a7096748e"
+ },
+ "packet_inputs": {
+  "evidence/episodes.csv": "byte-exact copy of extract.py output on the main raw rows",
+  "evidence/orca_steps.csv.gz": "extract.py step table restricted to orca_dd/orca_holo, selected columns, floats rounded to 6 decimals; analyze.py counts and rules identical to the full-precision run",
+  "evidence/summary.json, cell_table.csv, paired_effects.csv, exploratory.json": "regenerated from the two packet inputs above"
+ }
+}

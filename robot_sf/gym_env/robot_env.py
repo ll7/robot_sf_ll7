@@ -870,6 +870,44 @@ class RobotEnv(BaseEnv):
                     return nested
         return None
 
+    pedestrian_perception: Any = None
+
+    def set_pedestrian_perception(self, perception: Any) -> None:
+        """Route every planner-facing pedestrian channel through one perceived snapshot.
+
+        Diagnostic only: the SocNav pedestrian rows and the occupancy-grid pedestrian
+        layer both consume ``perception.current``; metrics keep simulator truth.
+        """
+        fusion = getattr(self, "_socnav_fusion", None)
+        if fusion is None:
+            raise ValueError("pedestrian perception requires the SOCNAV_STRUCT observation mode")
+        channels = ["socnav_pedestrian_rows"]
+        if self.occupancy_grid is not None:
+            channels.append("occupancy_grid_pedestrians")
+        perception.expected_channels = tuple(channels)
+        fusion.pedestrian_perception = perception
+        self.pedestrian_perception = perception
+
+    def _grid_pedestrians(self, true_positions: Any) -> tuple[np.ndarray, np.ndarray]:
+        """Return pedestrian positions and radii for the occupancy grid.
+
+        Returns:
+            Perceived rows when a perception stressor is attached, else simulator truth.
+        """
+        ped_radii = getattr(self.simulator, "ped_radii", None)
+        if self.pedestrian_perception is not None:
+            snapshot = self.pedestrian_perception.consume("occupancy_grid_pedestrians")
+            ped_positions = np.asarray(snapshot.positions, dtype=float).reshape(-1, 2)
+            if ped_radii is None:
+                return ped_positions, np.full(len(ped_positions), 0.35)
+            return ped_positions, np.asarray(ped_radii, dtype=float)[snapshot.source_slots]
+        ped_positions = true_positions
+        if ped_radii is None:
+            ped_radii = np.full(len(ped_positions), 0.35)
+        else:
+            ped_radii = np.asarray(ped_radii, dtype=float)
+        return ped_positions, ped_radii
+
     def _setup_socnav_observation(self, env_config: EnvSettings):
         """Configure SocNav observation space and sensor adapter.
 
@@ -891,6 +929,7 @@ class RobotEnv(BaseEnv):
             max_pedestrians=max_peds,
             robot_index=0,
         )
+        self._socnav_fusion = socnav_fusion
 
         # T044: When adding occupancy grid, flatten the nested observation space
         # for StableBaselines3 compatibility (SB3 doesn't support nested Dict spaces)
@@ -1118,6 +1157,8 @@ class RobotEnv(BaseEnv):
 
         # Perform simulation step
         self.simulator.step_once([action])
+        if self.pedestrian_perception is not None:
+            self.pedestrian_perception.observe(self.simulator)
         # Get updated observation
         obs: Any = self.state.step()
 
@@ -1131,12 +1172,7 @@ class RobotEnv(BaseEnv):
         if self.occupancy_grid is not None:
             obstacles, obstacle_polygons = self._get_static_grid_obstacles()
             # Extract updated pedestrian positions and radii
-            ped_positions = step_ped_positions
-            ped_radii = getattr(self.simulator, "ped_radii", None)
-            if ped_radii is None:
-                ped_radii = np.full(len(ped_positions), 0.35)
-            else:
-                ped_radii = np.asarray(ped_radii, dtype=float)
+            ped_positions, ped_radii = self._grid_pedestrians(step_ped_positions)
             # Get updated robot pose (already in RobotPose format: ((x, y), theta))
             robot_pose = self.simulator.robot_poses[0]
             # Regenerate grid (allow grid config to opt into ego frame)
@@ -1245,6 +1281,9 @@ class RobotEnv(BaseEnv):
             self._reset_action_latency_queue()
             # Reset internal simulator state
             self.simulator.reset_state()
+            if self.pedestrian_perception is not None:
+                self.pedestrian_perception.reset()
+                self.pedestrian_perception.observe(self.simulator)
             # Reset the environment's state and return the initial observation
             reset_episode_counter_for_seed(self.state, seed)
             obs: Any = self.state.reset()
@@ -1259,12 +1298,7 @@ class RobotEnv(BaseEnv):
                 self._clear_grid_obstacle_cache()
                 obstacles, obstacle_polygons = self._get_static_grid_obstacles()
                 # Extract pedestrian positions and radii from simulator
-                ped_positions = self.simulator.ped_pos
-                ped_radii = getattr(self.simulator, "ped_radii", None)
-                if ped_radii is None:
-                    ped_radii = np.full(len(ped_positions), 0.35)
-                else:
-                    ped_radii = np.asarray(ped_radii, dtype=float)
+                ped_positions, ped_radii = self._grid_pedestrians(self.simulator.ped_pos)
                 # Get robot pose (already in RobotPose format: ((x, y), theta))
                 robot_pose = self.simulator.robot_poses[0]
                 # Generate grid (allow grid config to opt into ego frame)

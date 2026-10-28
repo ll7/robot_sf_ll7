@@ -328,6 +328,9 @@ class SocNavObservationFusion:
     _current_tracking_result: PedestrianTrackingResult | None = field(
         init=False, default=None, repr=False
     )
+    # Diagnostic perception stressor: when set, pedestrian rows come from its
+    # per-step perceived snapshot instead of simulator truth.
+    pedestrian_perception: Any = field(init=False, default=None, repr=False)
 
     def __post_init__(self) -> None:
         """Initialize optional predictive foresight encoder and reusable buffers."""
@@ -889,11 +892,16 @@ class SocNavObservationFusion:
 
     def next_obs(self) -> dict[str, Any]:
         """Return the latest structured observation aligned to the declared space."""
-        ped_positions = np.asarray(self.simulator.ped_pos, dtype=np.float32)
-        try:
-            ped_velocities = np.asarray(self.simulator.ped_vel, dtype=np.float32)
-        except (AttributeError, TypeError, ValueError):  # pragma: no cover - defensive fallback
-            ped_velocities = np.zeros_like(ped_positions, dtype=np.float32)
+        if self.pedestrian_perception is not None:
+            snapshot = self.pedestrian_perception.consume("socnav_pedestrian_rows")
+            ped_positions = np.asarray(snapshot.positions, dtype=np.float32).reshape(-1, 2)
+            ped_velocities = np.asarray(snapshot.velocities, dtype=np.float32).reshape(-1, 2)
+        else:
+            ped_positions = np.asarray(self.simulator.ped_pos, dtype=np.float32)
+            try:
+                ped_velocities = np.asarray(self.simulator.ped_vel, dtype=np.float32)
+            except (AttributeError, TypeError, ValueError):  # pragma: no cover - defensive
+                ped_velocities = np.zeros_like(ped_positions, dtype=np.float32)
         total_peds = ped_positions.shape[0]
         if total_peds > self.max_pedestrians and not self.truncation_warned:
             logger.warning(

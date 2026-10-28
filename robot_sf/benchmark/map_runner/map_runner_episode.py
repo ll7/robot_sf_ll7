@@ -216,6 +216,10 @@ from robot_sf.planner.safety_shield import shield_metrics_from_stats
 from robot_sf.robot.bicycle_drive import BicycleDriveSettings
 from robot_sf.robot.reverse_drive import bound_drive_settings, warn_unsupported_reverse
 from robot_sf.robot.safety_wrapper import DeadlockRecoveryMonitor  # noqa: TC001
+from robot_sf.sensor.pedestrian_perception import (
+    PedestrianPerception,
+    PedestrianPerceptionSpec,
+)
 from robot_sf.sim.spawn_validation import reset_spawn_clearance
 
 # Policy builders are migrated incrementally; the episode boundary narrows the
@@ -3813,6 +3817,24 @@ def _execute_step_loop(
             break
 
 
+def _attach_pedestrian_perception(env: Any, args: _StepLoopSetupArgs) -> Any:
+    """Attach the optional diagnostic pedestrian-perception stressor to ``env``.
+
+    Returns:
+        The attached ``PedestrianPerception`` or ``None`` when not configured.
+    """
+    noise_spec = getattr(args.noise, "spec", None)
+    raw = noise_spec.get("pedestrian_perception") if isinstance(noise_spec, Mapping) else None
+    spec = PedestrianPerceptionSpec.from_mapping(raw)
+    if spec is None:
+        return None
+    scenario = args.scenario or {}
+    scenario_id = str(scenario.get("name") or scenario.get("scenario_id") or "unknown")
+    perception = PedestrianPerception(spec=spec, scenario_id=scenario_id, seed=int(args.seed))
+    env.set_pedestrian_perception(perception)
+    return perception
+
+
 def _setup_and_run_step_loop(args: _StepLoopSetupArgs) -> _EpisodeStepLoopResult:
     """Create env, run the step loop, teardown, and return the result bundle.
 
@@ -3822,6 +3844,7 @@ def _setup_and_run_step_loop(args: _StepLoopSetupArgs) -> _EpisodeStepLoopResult
     policy_fn = args.planner_runtime.policy_fn
     env = make_robot_env(config=args.config, seed=int(args.seed), debug=False)
     state: _StepLoopState | None = None
+    perception = _attach_pedestrian_perception(env, args)
     try:
         adapter = getattr(policy_fn, "_planner_adapter", None)
         if adapter is not None:
@@ -3888,6 +3911,10 @@ def _setup_and_run_step_loop(args: _StepLoopSetupArgs) -> _EpisodeStepLoopResult
         state.planner_obstacle_force_law_metadata = _read_policy_obstacle_force_law_metadata(
             args.planner_runtime.policy_fn
         )
+        if perception is not None:
+            args.algo_meta["pedestrian_perception"] = perception.summary()
+            if perception.spec.record_trace:
+                args.algo_meta["pedestrian_perception_trace"] = list(perception.trace)
         if getattr(env, "simulator", None) is not None:
             state.respawn_overlap_events = _read_respawn_overlap_events(env.simulator)
             state.simulator_obstacle_force_law_metadata = _read_obstacle_force_law_metadata(env)

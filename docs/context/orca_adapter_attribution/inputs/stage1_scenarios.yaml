@@ -1,0 +1,68 @@
+# Stage 1 cells: matched-route doorway, widths 2.40/2.60/2.80 m.
+scenarios:
+- name: doorway_matched_2p40
+  map_file: maps/doorway_matched_2p40.svg
+  simulation_config:
+    max_episode_steps: 400
+    ped_density: 0.0
+    goal_completion_policy: goal_zone_entry_v1
+    social_force_kernel_version: wrapped_v2
+    robot_goal_sampling_policy: footprint_clearance_v1
+  single_pedestrians:
+  - id: h1
+    goal_poi: poi_h1_goal
+  robot_config: {}
+  metadata:
+    archetype: narrow_doorway
+    flow: bi
+    behavior: none
+    width_m: 2.4
+    route: 'matched: robot route [[7,5],[25.5,5]] of francis2023_narrow_doorway.svg;
+      only the gap is widened symmetrically about y=5'
+    source: xorca reconstruction of doorway_matched_route-20261015 geometry
+  seeds:
+  - 1001
+- name: doorway_matched_2p60
+  map_file: maps/doorway_matched_2p60.svg
+  simulation_config:
+    max_episode_steps: 400
+    ped_density: 0.0
+    goal_completion_policy: goal_zone_entry_v1
+    social_force_kernel_version: wrapped_v2
+    robot_goal_sampling_policy: footprint_clearance_v1
+  single_pedestrians:
+  - id: h1
+    goal_poi: poi_h1_goal
+  robot_config: {}
+  metadata:
+    archetype: narrow_doorway
+    flow: bi
+    behavior: none
+    width_m: 2.6
+    route: 'matched: robot route [[7,5],[25.5,5]] of francis2023_narrow_doorway.svg;
+      only the gap is widened symmetrically about y=5'
+    source: xorca reconstruction of doorway_matched_route-20261015 geometry
+  seeds:
+  - 1001
+- name: doorway_matched_2p80
+  map_file: maps/doorway_matched_2p80.svg
+  simulation_config:
+    max_episode_steps: 400
+    ped_density: 0.0
+    goal_completion_policy: goal_zone_entry_v1
+    social_force_kernel_version: wrapped_v2
+    robot_goal_sampling_policy: footprint_clearance_v1
+  single_pedestrians:
+  - id: h1
+    goal_poi: poi_h1_goal
+  robot_config: {}
+  metadata:
+    archetype: narrow_doorway
+    flow: bi
+    behavior: none
+    width_m: 2.8
+    route: 'matched: robot route [[7,5],[25.5,5]] of francis2023_narrow_doorway.svg;
+      only the gap is widened symmetrically about y=5'
+    source: xorca reconstruction of doorway_matched_route-20261015 geometry
+  seeds:
+  - 1001

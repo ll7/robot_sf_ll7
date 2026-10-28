@@ -186,6 +186,14 @@ python docs/context/heterogeneous_speed_mean_matched/provenance/compare_reconstr
   --rerun-episodes <extracted>/episodes.csv --seed 1121 --out <comparison.json>
 ```
 
+The one-seed rerun at acquisition commit `94081a52` passed this comparison for all 32
+configurations: all required episode fields and reset-receipt fields matched, with zero
+field differences. The extractor also checked 16 condition pairs and 24 cross-planner
+resets without failures. The [comparison receipt](provenance/reconstruction_1121.json)
+records the exact fields. The rerun used Python 3.13.14, because the original 3.13.17 was
+not available here; it used NumPy 2.4.6, the same release lock and the same verified PPO
+checkpoint. This result covers the selected seed, not the other 49 seeds.
+
 The committed analysis CSVs use LF line endings; their archived counterparts use CRLF.
 After normalizing only line endings the historical values match, and the current analyzer
 reproduces the committed CSVs and JSON summaries byte-for-byte.

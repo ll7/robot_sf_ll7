@@ -1,0 +1,86 @@
+{
+  "rows": 1120,
+  "files": [
+    {
+      "path": "xperc_pilot_delay_delay_20261028_164701/runs/hybrid_v4_continuous_guard_off__differential_drive/episodes.jsonl",
+      "sha256": "eb7b6d81aa0ba1c46b8fec6e56318cdce7133a71d7c270fe465e97f420401e8c",
+      "rows": 70
+    },
+    {
+      "path": "xperc_pilot_delay_delay_20261028_164701/runs/hybrid_v4_continuous_guard_on__differential_drive/episodes.jsonl",
+      "sha256": "8a228a830f0a688e1da8a4512d5a5e07c1c37e8c47fb2175b2390aedebe324ff",
+      "rows": 70
+    },
+    {
+      "path": "xperc_pilot_delay_delay_20261028_164701/runs/orca__differential_drive/episodes.jsonl",
+      "sha256": "c022fcc09f509c2e301a6ee5412fd738bcf492033c805b76adf9ed7c70e97397",
+      "rows": 70
+    },
+    {
+      "path": "xperc_pilot_delay_delay_20261028_164701/runs/ppo__differential_drive/episodes.jsonl",
+      "sha256": "4504f72f8a91855e10fafafeb8c1cadffd649e1d8a5c895606d24f1054b33d46",
+      "rows": 70
+    },
+    {
+      "path": "xperc_pilot_noise_noise_20261028_163945/runs/hybrid_v4_continuous_guard_off__differential_drive/episodes.jsonl",
+      "sha256": "8712ee8fbb5de2f16423388b3e4aaf4f8d02eea06cbb848ce8799ffae2fa2a81",
+      "rows": 70
+    },
+    {
+      "path": "xperc_pilot_noise_noise_20261028_163945/runs/hybrid_v4_continuous_guard_on__differential_drive/episodes.jsonl",
+      "sha256": "f978af59dd13803e273c60a7c07d122b93ede265b3dfb30d898beaefef5aac13",
+      "rows": 70
+    },
+    {
+      "path": "xperc_pilot_noise_noise_20261028_163945/runs/orca__differential_drive/episodes.jsonl",
+      "sha256": "669112ee85dbf47b2f003c9da69474a493a37cae56d068f17597b6dd25fa3bc4",
+      "rows": 70
+    },
+    {
+      "path": "xperc_pilot_noise_noise_20261028_163945/runs/ppo__differential_drive/episodes.jsonl",
+      "sha256": "5df865caeacfc48f47ba76ea79a7216f778eaca05e435f6f7fb209d235a6a4a3",
+      "rows": 70
+    },
+    {
+      "path": "xperc_pilot_occlusion_occlusion_20261028_165714/runs/hybrid_v4_continuous_guard_off__differential_drive/episodes.jsonl",
+      "sha256": "74f4277c0585ea2b84416966036fab0aabeeaa7c15dbd1de057622c4f6fcee67",
+      "rows": 70
+    },
+    {
+      "path": "xperc_pilot_occlusion_occlusion_20261028_165714/runs/hybrid_v4_continuous_guard_on__differential_drive/episodes.jsonl",
+      "sha256": "9d3fe5fb1f90143faabc3b7678a8533f73742570e6cddb95fbed0aa8fd28876b",
+      "rows": 70
+    },
+    {
+      "path": "xperc_pilot_occlusion_occlusion_20261028_165714/runs/orca__differential_drive/episodes.jsonl",
+      "sha256": "d9cbdd9eac0bff1e8a3dcb9b7c9a1fc8df499d11e1e74263e8feb69b07cf253e",
+      "rows": 70
+    },
+    {
+      "path": "xperc_pilot_occlusion_occlusion_20261028_165714/runs/ppo__differential_drive/episodes.jsonl",
+      "sha256": "8b1921fbacf2b1b1bc7691e1df72c5e8fd2d3fc8ba9d17bf7dba1a1fbd1cb2eb",
+      "rows": 70
+    },
+    {
+      "path": "xperc_pilot_oracle_oracle_20261028_163153/runs/hybrid_v4_continuous_guard_off__differential_drive/episodes.jsonl",
+      "sha256": "4bbe9f03a4b0c493f9b76c741213a0e4176d0968da55e95a29bfdb004e210264",
+      "rows": 70
+    },
+    {
+      "path": "xperc_pilot_oracle_oracle_20261028_163153/runs/hybrid_v4_continuous_guard_on__differential_drive/episodes.jsonl",
+      "sha256": "bda0a25f0b4c399370cd92d0d5fb7af9e5978fcecb4bdec79030ad9393b44051",
+      "rows": 70
+    },
+    {
+      "path": "xperc_pilot_oracle_oracle_20261028_163153/runs/orca__differential_drive/episodes.jsonl",
+      "sha256": "d62a7d4927810b18ebe4154ce656054daafd7a45a57246060e7ef0b8f5ac9934",
+      "rows": 70
+    },
+    {
+      "path": "xperc_pilot_oracle_oracle_20261028_163153/runs/ppo__differential_drive/episodes.jsonl",
+      "sha256": "3b24cf49110c08bab3e2728854bc23f6c14c9283845c46387f19403db8e72f1a",
+      "rows": 70
+    }
+  ],
+  "compact_sha256": "2759743b03a85d72f2c01599b5ece9a848ace67a04cad32d3f90a9a2f2d18833"
+}

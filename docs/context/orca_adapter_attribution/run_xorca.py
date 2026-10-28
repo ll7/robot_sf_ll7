@@ -32,10 +32,17 @@ import math
 import os
 import time
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import yaml
+
+if TYPE_CHECKING:
+    from robot_sf.benchmark.map_runner.map_runner_episode import (
+        _StepLoopConfig,
+        _StepLoopState,
+        _StepSimResult,
+    )
 
 _CAP: dict[str, Any] = {"calls": [], "pending": None, "fallback_steps": 0}
 
@@ -172,7 +179,9 @@ def install_instrumentation() -> None:  # noqa: C901, PLR0915
         _CAP["calls"].append({"kind": "pref", "v": world})
         return value
 
-    orca_cls._preferred_velocity = staticmethod(pref)
+    # These targets are dynamic because instrumentation replaces their attributes at runtime.
+    instrumented_orca: Any = orca_cls
+    instrumented_orca._preferred_velocity = staticmethod(pref)
 
     original_bias = orca_cls._apply_commit_bias
 
@@ -211,18 +220,23 @@ def install_instrumentation() -> None:  # noqa: C901, PLR0915
 
     original_spi = ep._step_policy_inference
 
-    def spi(state: Any, slc: Any, *, env: Any) -> Any:
+    def spi(
+        state: _StepLoopState, slc: _StepLoopConfig, *, env: Any
+    ) -> tuple[Any, np.ndarray | None]:
         _CAP["calls"] = []
         pre = _robot_snapshot(env)
         out = original_spi(state, slc, env=env)
         _CAP["pending"] = {"calls": list(_CAP["calls"]), "pre": pre, "env": env}
         return out
 
-    ep._step_policy_inference = spi
+    instrumented_episode: Any = ep
+    instrumented_episode._step_policy_inference = spi
 
     original_trace = ep._step_build_simulation_trace
 
-    def trace(state: Any, slc: Any, *, step_idx: int, sim: Any) -> None:
+    def trace(
+        state: _StepLoopState, slc: _StepLoopConfig, *, step_idx: int, sim: _StepSimResult
+    ) -> None:
         original_trace(state, slc, step_idx=step_idx, sim=sim)
         pending = _CAP.get("pending")
         if not pending or not state.simulation_step_trace:
@@ -264,7 +278,7 @@ def install_instrumentation() -> None:  # noqa: C901, PLR0915
         state.simulation_step_trace[-1]["xorca"] = record
         _CAP["pending"] = None
 
-    ep._step_build_simulation_trace = trace
+    instrumented_episode._step_build_simulation_trace = trace
     _CAP["installed"] = True
 
 

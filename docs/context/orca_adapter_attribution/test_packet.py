@@ -257,6 +257,7 @@ class ReconstructionTests(unittest.TestCase):
         with path.open(newline="", encoding="utf-8") as handle:
             reader = csv.DictReader(handle)
             fields = reader.fieldnames
+            assert fields is not None
             rows = list(reader)
         rows[0]["success"] = "1"
         with path.open("w", newline="", encoding="utf-8") as handle:

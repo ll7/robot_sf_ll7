@@ -14,6 +14,10 @@ import json
 import re
 from collections import Counter
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 ORIGINAL_COMMIT = "a4a31e3575a130bbc0dfccec7fbc173ff114fa42"
 KEY_FIELDS = ("config", "cell", "seed")
@@ -50,7 +54,7 @@ RAW_VOLATILE_FIELDS = (
 )
 
 
-def _key(config: str, cell: str, seed: object) -> tuple[str, str, str]:
+def _key(config: str, cell: str, seed: str | int | float) -> tuple[str, str, str]:
     return config, cell, str(int(seed))
 
 
@@ -100,7 +104,7 @@ def _read_record(location: tuple[Path, int]) -> dict:
         return json.loads(handle.readline())
 
 
-def _episodes(directory: Path, raw: dict, expected_commit: str) -> tuple[dict, list]:
+def _episodes(directory: Path, raw: dict, expected_commit: str) -> tuple[dict, Sequence[str]]:
     with (directory / "episodes.csv").open(newline="", encoding="utf-8") as handle:
         reader = csv.DictReader(handle)
         fields = reader.fieldnames or []
@@ -121,7 +125,7 @@ def _episodes(directory: Path, raw: dict, expected_commit: str) -> tuple[dict, l
     return rows, fields
 
 
-def _steps(directory: Path, selected: set, known_episodes: set) -> tuple[dict, list]:
+def _steps(directory: Path, selected: set, known_episodes: set) -> tuple[dict, Sequence[str]]:
     rows = {}
     with gzip.open(directory / "steps.csv.gz", "rt", newline="", encoding="utf-8") as handle:
         reader = csv.DictReader(handle)

@@ -16,9 +16,30 @@ import json
 import math
 from collections import Counter, defaultdict
 from pathlib import Path
+from typing import TYPE_CHECKING, TypedDict
 
 import numpy as np
 import yaml
+
+if TYPE_CHECKING:
+    from typing import Any
+
+
+class Effect(TypedDict):
+    """One paired effect and its seed-block interval."""
+
+    effect: str
+    treatment: str
+    control: str
+    scope: str
+    endpoint: str
+    n_seeds: int
+    treatment_count: int
+    control_count: int
+    denominator: int
+    estimate: float
+    ci95: list[float]
+
 
 DRAWS = 10_000
 RNG_SEED = 1001
@@ -73,7 +94,7 @@ def main() -> int:  # noqa: C901, PLR0915
     init_matched = all(len(v) == 1 for v in init_ids.values())
 
     # Cell table.
-    cell_rows = []
+    cell_rows: list[dict[str, Any]] = []
     for cfg in configs:
         for cell in cells:
             sub = [by[(cfg, cell, s)] for s in seeds if (cfg, cell, s) in by]
@@ -129,7 +150,7 @@ def main() -> int:  # noqa: C901, PLR0915
             sx, sy = _f(r["solver_vx"]), _f(r["solver_vy"])
             gx, gy = _f(r["goal_x"]), _f(r["goal_y"])
             sel = _f(r["sel_a"])
-            if None in (sx, sy, gx, gy, sel):
+            if sx is None or sy is None or gx is None or gy is None or sel is None:
                 continue
             dx, dy = gx - float(r["x"]), gy - float(r["y"])
             norm = math.hypot(dx, dy) or 1.0
@@ -148,7 +169,7 @@ def main() -> int:  # noqa: C901, PLR0915
             [[float(by[(cfg, c, s)][field]) for c in cell_list] for s in seeds], dtype=float
         )
 
-    effects = []
+    effects: list[Effect] = []
     for treat, ctrl, label in (("orca_holo", "orca_dd", "E1"), ("sf_holo", "sf_dd", "E2")):
         for scope, cl in [*((c, [c]) for c in cells), ("deficit_pooled", deficit)]:
             for field in ("success", "crossed_wall", "deadlock_metric", "collision"):
@@ -200,7 +221,7 @@ def main() -> int:  # noqa: C901, PLR0915
         for cell in cells
     }
 
-    def eff(label: str, scope: str, field: str = "success") -> dict:
+    def eff(label: str, scope: str, field: str = "success") -> Effect:
         return next(
             e
             for e in effects

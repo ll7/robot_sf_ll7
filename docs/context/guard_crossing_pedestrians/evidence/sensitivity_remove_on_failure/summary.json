@@ -1,0 +1,1211 @@
+{
+  "admission": {
+    "arm_guard_flags": [
+      [
+        "G0E1",
+        "True"
+      ],
+      [
+        "G1E1",
+        "False"
+      ],
+      [
+        "orca",
+        ""
+      ]
+    ],
+    "arm_modes": [
+      [
+        "G0E1",
+        "adapter"
+      ],
+      [
+        "G1E1",
+        "adapter"
+      ],
+      [
+        "orca",
+        "adapter"
+      ]
+    ],
+    "fallback_or_degraded_rows": 0,
+    "no_robot_runs": 400,
+    "robot_episodes": 1200,
+    "sim_config_match_rows": "1200/1200",
+    "t0_pedestrian_state_match_rows": "1200/1200"
+  },
+  "effects": {
+    "blocked_frac|classic_bottleneck_high|outside|guard": [
+      NaN,
+      NaN,
+      NaN,
+      0
+    ],
+    "blocked_frac|classic_bottleneck_high|outside|hybrid_minus_orca": [
+      NaN,
+      NaN,
+      NaN,
+      0
+    ],
+    "blocked_frac|classic_bottleneck_high|traverse_minus_outside|guard": [
+      NaN,
+      NaN,
+      NaN,
+      0
+    ],
+    "blocked_frac|classic_bottleneck_high|traverse|guard": [
+      6.0,
+      -2.666666666666666,
+      15.333333333333332,
+      50
+    ],
+    "blocked_frac|classic_bottleneck_high|traverse|hybrid_minus_orca": [
+      17.333333333333332,
+      9.999999999999998,
+      25.33333333333333,
+      50
+    ],
+    "blocked_frac|classic_bottleneck_medium|outside|guard": [
+      NaN,
+      NaN,
+      NaN,
+      0
+    ],
+    "blocked_frac|classic_bottleneck_medium|outside|hybrid_minus_orca": [
+      NaN,
+      NaN,
+      NaN,
+      0
+    ],
+    "blocked_frac|classic_bottleneck_medium|traverse_minus_outside|guard": [
+      NaN,
+      NaN,
+      NaN,
+      0
+    ],
+    "blocked_frac|classic_bottleneck_medium|traverse|guard": [
+      4.0,
+      0.0,
+      10.0,
+      50
+    ],
+    "blocked_frac|classic_bottleneck_medium|traverse|hybrid_minus_orca": [
+      4.0,
+      0.0,
+      10.0,
+      50
+    ],
+    "blocked_frac|classic_doorway_high|outside|guard": [
+      NaN,
+      NaN,
+      NaN,
+      0
+    ],
+    "blocked_frac|classic_doorway_high|outside|hybrid_minus_orca": [
+      NaN,
+      NaN,
+      NaN,
+      0
+    ],
+    "blocked_frac|classic_doorway_high|traverse_minus_outside|guard": [
+      NaN,
+      NaN,
+      NaN,
+      0
+    ],
+    "blocked_frac|classic_doorway_high|traverse|guard": [
+      24.266666666666666,
+      18.3,
+      30.166666666666664,
+      50
+    ],
+    "blocked_frac|classic_doorway_high|traverse|hybrid_minus_orca": [
+      -11.233333333333333,
+      -20.666666666666664,
+      -2.1991666666666783,
+      50
+    ],
+    "blocked_frac|classic_doorway_medium|outside|guard": [
+      NaN,
+      NaN,
+      NaN,
+      0
+    ],
+    "blocked_frac|classic_doorway_medium|outside|hybrid_minus_orca": [
+      NaN,
+      NaN,
+      NaN,
+      0
+    ],
+    "blocked_frac|classic_doorway_medium|traverse_minus_outside|guard": [
+      NaN,
+      NaN,
+      NaN,
+      0
+    ],
+    "blocked_frac|classic_doorway_medium|traverse|guard": [
+      15.666666666666664,
+      10.999999999999998,
+      20.333333333333332,
+      50
+    ],
+    "blocked_frac|classic_doorway_medium|traverse|hybrid_minus_orca": [
+      -3.9999999999999987,
+      -11.999999999999998,
+      3.9999999999999987,
+      50
+    ],
+    "blocked_frac|pooled|outside|guard": [
+      NaN,
+      NaN,
+      NaN,
+      0
+    ],
+    "blocked_frac|pooled|outside|hybrid_minus_orca": [
+      NaN,
+      NaN,
+      NaN,
+      0
+    ],
+    "blocked_frac|pooled|traverse_minus_outside|guard": [
+      NaN,
+      NaN,
+      NaN,
+      0
+    ],
+    "blocked_frac|pooled|traverse|guard": [
+      12.48333333333333,
+      9.833333333333336,
+      15.133541666666664,
+      200
+    ],
+    "blocked_frac|pooled|traverse|hybrid_minus_orca": [
+      1.5249999999999992,
+      -2.05,
+      5.2,
+      200
+    ],
+    "mean_delay_censored_s|classic_bottleneck_high|outside|guard": [
+      NaN,
+      NaN,
+      NaN,
+      0
+    ],
+    "mean_delay_censored_s|classic_bottleneck_high|outside|hybrid_minus_orca": [
+      NaN,
+      NaN,
+      NaN,
+      0
+    ],
+    "mean_delay_censored_s|classic_bottleneck_high|traverse_minus_outside|guard": [
+      NaN,
+      NaN,
+      NaN,
+      0
+    ],
+    "mean_delay_censored_s|classic_bottleneck_high|traverse|guard": [
+      1.7627200000000005,
+      -0.35525699999999955,
+      4.060774999999999,
+      50
+    ],
+    "mean_delay_censored_s|classic_bottleneck_high|traverse|hybrid_minus_orca": [
+      3.9873200000000004,
+      2.6134175000000006,
+      5.430017999999998,
+      50
+    ],
+    "mean_delay_censored_s|classic_bottleneck_medium|outside|guard": [
+      NaN,
+      NaN,
+      NaN,
+      0
+    ],
+    "mean_delay_censored_s|classic_bottleneck_medium|outside|hybrid_minus_orca": [
+      NaN,
+      NaN,
+      NaN,
+      0
+    ],
+    "mean_delay_censored_s|classic_bottleneck_medium|traverse_minus_outside|guard": [
+      NaN,
+      NaN,
+      NaN,
+      0
+    ],
+    "mean_delay_censored_s|classic_bottleneck_medium|traverse|guard": [
+      1.5840000000000003,
+      -0.7980999999999997,
+      4.05605,
+      50
+    ],
+    "mean_delay_censored_s|classic_bottleneck_medium|traverse|hybrid_minus_orca": [
+      6.3260000000000005,
+      4.31395,
+      8.438049999999999,
+      50
+    ],
+    "mean_delay_censored_s|classic_doorway_high|outside|guard": [
+      NaN,
+      NaN,
+      NaN,
+      0
+    ],
+    "mean_delay_censored_s|classic_doorway_high|outside|hybrid_minus_orca": [
+      NaN,
+      NaN,
+      NaN,
+      0
+    ],
+    "mean_delay_censored_s|classic_doorway_high|traverse_minus_outside|guard": [
+      NaN,
+      NaN,
+      NaN,
+      0
+    ],
+    "mean_delay_censored_s|classic_doorway_high|traverse|guard": [
+      3.7196,
+      2.5996830000000006,
+      4.869145,
+      50
+    ],
+    "mean_delay_censored_s|classic_doorway_high|traverse|hybrid_minus_orca": [
+      -2.2152999999999996,
+      -3.5307655,
+      -0.834207,
+      50
+    ],
+    "mean_delay_censored_s|classic_doorway_medium|outside|guard": [
+      NaN,
+      NaN,
+      NaN,
+      0
+    ],
+    "mean_delay_censored_s|classic_doorway_medium|outside|hybrid_minus_orca": [
+      NaN,
+      NaN,
+      NaN,
+      0
+    ],
+    "mean_delay_censored_s|classic_doorway_medium|traverse_minus_outside|guard": [
+      NaN,
+      NaN,
+      NaN,
+      0
+    ],
+    "mean_delay_censored_s|classic_doorway_medium|traverse|guard": [
+      2.03472,
+      0.9366289999999999,
+      3.1660424999999996,
+      50
+    ],
+    "mean_delay_censored_s|classic_doorway_medium|traverse|hybrid_minus_orca": [
+      -0.3969399999999999,
+      -1.6297415000000004,
+      0.9388499999999994,
+      50
+    ],
+    "mean_delay_censored_s|pooled|outside|guard": [
+      NaN,
+      NaN,
+      NaN,
+      0
+    ],
+    "mean_delay_censored_s|pooled|outside|hybrid_minus_orca": [
+      NaN,
+      NaN,
+      NaN,
+      0
+    ],
+    "mean_delay_censored_s|pooled|traverse_minus_outside|guard": [
+      NaN,
+      NaN,
+      NaN,
+      0
+    ],
+    "mean_delay_censored_s|pooled|traverse|guard": [
+      2.2752600000000003,
+      1.459841125,
+      3.0888479999999996,
+      200
+    ],
+    "mean_delay_censored_s|pooled|traverse|hybrid_minus_orca": [
+      1.9252699999999998,
+      1.165886125,
+      2.7370506249999997,
+      200
+    ],
+    "ped_contact|classic_bottleneck_high|outside|guard": [
+      0.0,
+      0.0,
+      0.0,
+      50
+    ],
+    "ped_contact|classic_bottleneck_high|outside|hybrid_minus_orca": [
+      0.0,
+      0.0,
+      0.0,
+      50
+    ],
+    "ped_contact|classic_bottleneck_high|traverse_minus_outside|G1E1_level": [
+      0.0,
+      0.0,
+      0.0,
+      50
+    ],
+    "ped_contact|classic_bottleneck_high|traverse_minus_outside|guard": [
+      -20.0,
+      -32.0,
+      -10.0,
+      50
+    ],
+    "ped_contact|classic_bottleneck_high|traverse|guard": [
+      -20.0,
+      -32.0,
+      -10.0,
+      50
+    ],
+    "ped_contact|classic_bottleneck_high|traverse|hybrid_minus_orca": [
+      -18.0,
+      -30.0,
+      -8.0,
+      50
+    ],
+    "ped_contact|classic_bottleneck_medium|outside|guard": [
+      0.0,
+      0.0,
+      0.0,
+      50
+    ],
+    "ped_contact|classic_bottleneck_medium|outside|hybrid_minus_orca": [
+      0.0,
+      0.0,
+      0.0,
+      50
+    ],
+    "ped_contact|classic_bottleneck_medium|traverse_minus_outside|G1E1_level": [
+      0.0,
+      0.0,
+      0.0,
+      50
+    ],
+    "ped_contact|classic_bottleneck_medium|traverse_minus_outside|guard": [
+      -6.0,
+      -14.0,
+      0.0,
+      50
+    ],
+    "ped_contact|classic_bottleneck_medium|traverse|guard": [
+      -6.0,
+      -14.0,
+      0.0,
+      50
+    ],
+    "ped_contact|classic_bottleneck_medium|traverse|hybrid_minus_orca": [
+      0.0,
+      0.0,
+      0.0,
+      50
+    ],
+    "ped_contact|classic_doorway_high|outside|guard": [
+      0.0,
+      0.0,
+      0.0,
+      50
+    ],
+    "ped_contact|classic_doorway_high|outside|hybrid_minus_orca": [
+      0.0,
+      0.0,
+      0.0,
+      50
+    ],
+    "ped_contact|classic_doorway_high|traverse_minus_outside|G1E1_level": [
+      0.0,
+      0.0,
+      0.0,
+      50
+    ],
+    "ped_contact|classic_doorway_high|traverse_minus_outside|guard": [
+      0.0,
+      0.0,
+      0.0,
+      50
+    ],
+    "ped_contact|classic_doorway_high|traverse|guard": [
+      0.0,
+      0.0,
+      0.0,
+      50
+    ],
+    "ped_contact|classic_doorway_high|traverse|hybrid_minus_orca": [
+      -8.0,
+      -16.0,
+      -2.0,
+      50
+    ],
+    "ped_contact|classic_doorway_medium|outside|guard": [
+      0.0,
+      0.0,
+      0.0,
+      50
+    ],
+    "ped_contact|classic_doorway_medium|outside|hybrid_minus_orca": [
+      0.0,
+      0.0,
+      0.0,
+      50
+    ],
+    "ped_contact|classic_doorway_medium|traverse_minus_outside|G1E1_level": [
+      0.0,
+      0.0,
+      0.0,
+      50
+    ],
+    "ped_contact|classic_doorway_medium|traverse_minus_outside|guard": [
+      0.0,
+      0.0,
+      0.0,
+      50
+    ],
+    "ped_contact|classic_doorway_medium|traverse|guard": [
+      0.0,
+      0.0,
+      0.0,
+      50
+    ],
+    "ped_contact|classic_doorway_medium|traverse|hybrid_minus_orca": [
+      -2.0,
+      -6.0,
+      0.0,
+      50
+    ],
+    "ped_contact|pooled|outside|guard": [
+      0.0,
+      0.0,
+      0.0,
+      200
+    ],
+    "ped_contact|pooled|outside|hybrid_minus_orca": [
+      0.0,
+      0.0,
+      0.0,
+      200
+    ],
+    "ped_contact|pooled|traverse_minus_outside|G1E1_level": [
+      0.0,
+      0.0,
+      0.0,
+      50
+    ],
+    "ped_contact|pooled|traverse_minus_outside|guard": [
+      -6.5,
+      -10.0,
+      -3.5,
+      50
+    ],
+    "ped_contact|pooled|traverse|guard": [
+      -6.5,
+      -10.0,
+      -3.5,
+      200
+    ],
+    "ped_contact|pooled|traverse|hybrid_minus_orca": [
+      -7.0,
+      -10.0,
+      -4.0,
+      200
+    ],
+    "success|classic_bottleneck_high|outside|guard": [
+      0.0,
+      0.0,
+      0.0,
+      50
+    ],
+    "success|classic_bottleneck_high|outside|hybrid_minus_orca": [
+      0.0,
+      0.0,
+      0.0,
+      50
+    ],
+    "success|classic_bottleneck_high|traverse_minus_outside|guard": [
+      24.0,
+      12.0,
+      36.0,
+      50
+    ],
+    "success|classic_bottleneck_high|traverse|guard": [
+      24.0,
+      12.0,
+      36.0,
+      50
+    ],
+    "success|classic_bottleneck_high|traverse|hybrid_minus_orca": [
+      20.0,
+      10.0,
+      32.0,
+      50
+    ],
+    "success|classic_bottleneck_medium|outside|guard": [
+      0.0,
+      0.0,
+      0.0,
+      50
+    ],
+    "success|classic_bottleneck_medium|outside|hybrid_minus_orca": [
+      0.0,
+      0.0,
+      0.0,
+      50
+    ],
+    "success|classic_bottleneck_medium|traverse_minus_outside|guard": [
+      14.0,
+      6.0,
+      24.0,
+      50
+    ],
+    "success|classic_bottleneck_medium|traverse|guard": [
+      14.0,
+      6.0,
+      24.0,
+      50
+    ],
+    "success|classic_bottleneck_medium|traverse|hybrid_minus_orca": [
+      0.0,
+      0.0,
+      0.0,
+      50
+    ],
+    "success|classic_doorway_high|outside|guard": [
+      42.0,
+      28.0,
+      56.0,
+      50
+    ],
+    "success|classic_doorway_high|outside|hybrid_minus_orca": [
+      0.0,
+      0.0,
+      0.0,
+      50
+    ],
+    "success|classic_doorway_high|traverse_minus_outside|guard": [
+      52.0,
+      38.0,
+      66.0,
+      50
+    ],
+    "success|classic_doorway_high|traverse|guard": [
+      94.0,
+      86.0,
+      100.0,
+      50
+    ],
+    "success|classic_doorway_high|traverse|hybrid_minus_orca": [
+      18.0,
+      8.0,
+      28.0,
+      50
+    ],
+    "success|classic_doorway_medium|outside|guard": [
+      42.0,
+      28.0,
+      56.0,
+      50
+    ],
+    "success|classic_doorway_medium|outside|hybrid_minus_orca": [
+      0.0,
+      0.0,
+      0.0,
+      50
+    ],
+    "success|classic_doorway_medium|traverse_minus_outside|guard": [
+      46.0,
+      30.0,
+      62.0,
+      50
+    ],
+    "success|classic_doorway_medium|traverse|guard": [
+      88.0,
+      78.0,
+      96.0,
+      50
+    ],
+    "success|classic_doorway_medium|traverse|hybrid_minus_orca": [
+      2.0,
+      0.0,
+      6.0,
+      50
+    ],
+    "success|pooled|outside|guard": [
+      21.0,
+      14.0,
+      28.0,
+      200
+    ],
+    "success|pooled|outside|hybrid_minus_orca": [
+      0.0,
+      0.0,
+      0.0,
+      200
+    ],
+    "success|pooled|traverse_minus_outside|guard": [
+      34.0,
+      26.0,
+      42.5,
+      50
+    ],
+    "success|pooled|traverse|guard": [
+      55.0,
+      50.5,
+      59.5,
+      200
+    ],
+    "success|pooled|traverse|hybrid_minus_orca": [
+      10.0,
+      6.5,
+      14.0,
+      200
+    ],
+    "throughput_loss|classic_bottleneck_high|outside|guard": [
+      0.0,
+      0.0,
+      0.0,
+      50
+    ],
+    "throughput_loss|classic_bottleneck_high|outside|hybrid_minus_orca": [
+      0.0,
+      0.0,
+      0.0,
+      50
+    ],
+    "throughput_loss|classic_bottleneck_high|traverse_minus_outside|guard": [
+      0.18,
+      -0.08,
+      0.46,
+      50
+    ],
+    "throughput_loss|classic_bottleneck_high|traverse|guard": [
+      0.18,
+      -0.08,
+      0.46,
+      50
+    ],
+    "throughput_loss|classic_bottleneck_high|traverse|hybrid_minus_orca": [
+      0.52,
+      0.3,
+      0.76,
+      50
+    ],
+    "throughput_loss|classic_bottleneck_medium|outside|guard": [
+      0.0,
+      0.0,
+      0.0,
+      50
+    ],
+    "throughput_loss|classic_bottleneck_medium|outside|hybrid_minus_orca": [
+      0.0,
+      0.0,
+      0.0,
+      50
+    ],
+    "throughput_loss|classic_bottleneck_medium|traverse_minus_outside|guard": [
+      0.04,
+      0.0,
+      0.1,
+      50
+    ],
+    "throughput_loss|classic_bottleneck_medium|traverse|guard": [
+      0.04,
+      0.0,
+      0.1,
+      50
+    ],
+    "throughput_loss|classic_bottleneck_medium|traverse|hybrid_minus_orca": [
+      0.04,
+      0.0,
+      0.1,
+      50
+    ],
+    "throughput_loss|classic_doorway_high|outside|guard": [
+      0.0,
+      0.0,
+      0.0,
+      50
+    ],
+    "throughput_loss|classic_doorway_high|outside|hybrid_minus_orca": [
+      0.0,
+      0.0,
+      0.0,
+      50
+    ],
+    "throughput_loss|classic_doorway_high|traverse_minus_outside|guard": [
+      0.14,
+      -0.02,
+      0.3,
+      50
+    ],
+    "throughput_loss|classic_doorway_high|traverse|guard": [
+      0.14,
+      -0.02,
+      0.3,
+      50
+    ],
+    "throughput_loss|classic_doorway_high|traverse|hybrid_minus_orca": [
+      -0.8,
+      -1.04,
+      -0.54,
+      50
+    ],
+    "throughput_loss|classic_doorway_medium|outside|guard": [
+      0.0,
+      0.0,
+      0.0,
+      50
+    ],
+    "throughput_loss|classic_doorway_medium|outside|hybrid_minus_orca": [
+      0.0,
+      0.0,
+      0.0,
+      50
+    ],
+    "throughput_loss|classic_doorway_medium|traverse_minus_outside|guard": [
+      -0.04,
+      -0.1,
+      0.0,
+      50
+    ],
+    "throughput_loss|classic_doorway_medium|traverse|guard": [
+      -0.04,
+      -0.1,
+      0.0,
+      50
+    ],
+    "throughput_loss|classic_doorway_medium|traverse|hybrid_minus_orca": [
+      -0.14,
+      -0.28,
+      -0.02,
+      50
+    ],
+    "throughput_loss|pooled|outside|guard": [
+      0.0,
+      0.0,
+      0.0,
+      200
+    ],
+    "throughput_loss|pooled|outside|hybrid_minus_orca": [
+      0.0,
+      0.0,
+      0.0,
+      200
+    ],
+    "throughput_loss|pooled|traverse_minus_outside|guard": [
+      0.08,
+      0.005,
+      0.155,
+      50
+    ],
+    "throughput_loss|pooled|traverse|guard": [
+      0.08,
+      0.005,
+      0.155,
+      200
+    ],
+    "throughput_loss|pooled|traverse|hybrid_minus_orca": [
+      -0.095,
+      -0.18,
+      -0.005,
+      200
+    ],
+    "timeout|classic_bottleneck_high|outside|guard": [
+      0.0,
+      0.0,
+      0.0,
+      50
+    ],
+    "timeout|classic_bottleneck_high|outside|hybrid_minus_orca": [
+      0.0,
+      0.0,
+      0.0,
+      50
+    ],
+    "timeout|classic_bottleneck_high|traverse_minus_outside|guard": [
+      0.0,
+      0.0,
+      0.0,
+      50
+    ],
+    "timeout|classic_bottleneck_high|traverse|guard": [
+      0.0,
+      0.0,
+      0.0,
+      50
+    ],
+    "timeout|classic_bottleneck_high|traverse|hybrid_minus_orca": [
+      0.0,
+      0.0,
+      0.0,
+      50
+    ],
+    "timeout|classic_bottleneck_medium|outside|guard": [
+      0.0,
+      0.0,
+      0.0,
+      50
+    ],
+    "timeout|classic_bottleneck_medium|outside|hybrid_minus_orca": [
+      0.0,
+      0.0,
+      0.0,
+      50
+    ],
+    "timeout|classic_bottleneck_medium|traverse_minus_outside|guard": [
+      0.0,
+      0.0,
+      0.0,
+      50
+    ],
+    "timeout|classic_bottleneck_medium|traverse|guard": [
+      0.0,
+      0.0,
+      0.0,
+      50
+    ],
+    "timeout|classic_bottleneck_medium|traverse|hybrid_minus_orca": [
+      0.0,
+      0.0,
+      0.0,
+      50
+    ],
+    "timeout|classic_doorway_high|outside|guard": [
+      0.0,
+      0.0,
+      0.0,
+      50
+    ],
+    "timeout|classic_doorway_high|outside|hybrid_minus_orca": [
+      0.0,
+      0.0,
+      0.0,
+      50
+    ],
+    "timeout|classic_doorway_high|traverse_minus_outside|guard": [
+      0.0,
+      0.0,
+      0.0,
+      50
+    ],
+    "timeout|classic_doorway_high|traverse|guard": [
+      0.0,
+      0.0,
+      0.0,
+      50
+    ],
+    "timeout|classic_doorway_high|traverse|hybrid_minus_orca": [
+      -8.0,
+      -16.0,
+      -2.0,
+      50
+    ],
+    "timeout|classic_doorway_medium|outside|guard": [
+      0.0,
+      0.0,
+      0.0,
+      50
+    ],
+    "timeout|classic_doorway_medium|outside|hybrid_minus_orca": [
+      0.0,
+      0.0,
+      0.0,
+      50
+    ],
+    "timeout|classic_doorway_medium|traverse_minus_outside|guard": [
+      0.0,
+      0.0,
+      0.0,
+      50
+    ],
+    "timeout|classic_doorway_medium|traverse|guard": [
+      0.0,
+      0.0,
+      0.0,
+      50
+    ],
+    "timeout|classic_doorway_medium|traverse|hybrid_minus_orca": [
+      0.0,
+      0.0,
+      0.0,
+      50
+    ],
+    "timeout|pooled|outside|guard": [
+      0.0,
+      0.0,
+      0.0,
+      200
+    ],
+    "timeout|pooled|outside|hybrid_minus_orca": [
+      0.0,
+      0.0,
+      0.0,
+      200
+    ],
+    "timeout|pooled|traverse_minus_outside|guard": [
+      0.0,
+      0.0,
+      0.0,
+      50
+    ],
+    "timeout|pooled|traverse|guard": [
+      0.0,
+      0.0,
+      0.0,
+      200
+    ],
+    "timeout|pooled|traverse|hybrid_minus_orca": [
+      -2.0,
+      -4.0,
+      -0.5,
+      200
+    ],
+    "wall_contact|classic_bottleneck_high|outside|guard": [
+      0.0,
+      0.0,
+      0.0,
+      50
+    ],
+    "wall_contact|classic_bottleneck_high|outside|hybrid_minus_orca": [
+      0.0,
+      0.0,
+      0.0,
+      50
+    ],
+    "wall_contact|classic_bottleneck_high|traverse_minus_outside|guard": [
+      -4.0,
+      -10.0,
+      0.0,
+      50
+    ],
+    "wall_contact|classic_bottleneck_high|traverse|guard": [
+      -4.0,
+      -10.0,
+      0.0,
+      50
+    ],
+    "wall_contact|classic_bottleneck_high|traverse|hybrid_minus_orca": [
+      -2.0,
+      -6.0,
+      0.0,
+      50
+    ],
+    "wall_contact|classic_bottleneck_medium|outside|guard": [
+      0.0,
+      0.0,
+      0.0,
+      50
+    ],
+    "wall_contact|classic_bottleneck_medium|outside|hybrid_minus_orca": [
+      0.0,
+      0.0,
+      0.0,
+      50
+    ],
+    "wall_contact|classic_bottleneck_medium|traverse_minus_outside|guard": [
+      -8.0,
+      -16.0,
+      -2.0,
+      50
+    ],
+    "wall_contact|classic_bottleneck_medium|traverse|guard": [
+      -8.0,
+      -16.0,
+      -2.0,
+      50
+    ],
+    "wall_contact|classic_bottleneck_medium|traverse|hybrid_minus_orca": [
+      0.0,
+      0.0,
+      0.0,
+      50
+    ],
+    "wall_contact|classic_doorway_high|outside|guard": [
+      -42.0,
+      -56.0,
+      -28.0,
+      50
+    ],
+    "wall_contact|classic_doorway_high|outside|hybrid_minus_orca": [
+      0.0,
+      0.0,
+      0.0,
+      50
+    ],
+    "wall_contact|classic_doorway_high|traverse_minus_outside|guard": [
+      -52.0,
+      -66.0,
+      -38.0,
+      50
+    ],
+    "wall_contact|classic_doorway_high|traverse|guard": [
+      -94.0,
+      -100.0,
+      -86.0,
+      50
+    ],
+    "wall_contact|classic_doorway_high|traverse|hybrid_minus_orca": [
+      -2.0,
+      -6.0,
+      0.0,
+      50
+    ],
+    "wall_contact|classic_doorway_medium|outside|guard": [
+      -42.0,
+      -56.0,
+      -28.0,
+      50
+    ],
+    "wall_contact|classic_doorway_medium|outside|hybrid_minus_orca": [
+      0.0,
+      0.0,
+      0.0,
+      50
+    ],
+    "wall_contact|classic_doorway_medium|traverse_minus_outside|guard": [
+      -46.0,
+      -62.0,
+      -30.0,
+      50
+    ],
+    "wall_contact|classic_doorway_medium|traverse|guard": [
+      -88.0,
+      -96.0,
+      -78.0,
+      50
+    ],
+    "wall_contact|classic_doorway_medium|traverse|hybrid_minus_orca": [
+      0.0,
+      0.0,
+      0.0,
+      50
+    ],
+    "wall_contact|pooled|outside|guard": [
+      -21.0,
+      -28.0,
+      -14.0,
+      200
+    ],
+    "wall_contact|pooled|outside|hybrid_minus_orca": [
+      0.0,
+      0.0,
+      0.0,
+      200
+    ],
+    "wall_contact|pooled|traverse_minus_outside|guard": [
+      -27.5,
+      -35.0,
+      -20.0,
+      50
+    ],
+    "wall_contact|pooled|traverse|guard": [
+      -48.5,
+      -52.0,
+      -45.0,
+      200
+    ],
+    "wall_contact|pooled|traverse|hybrid_minus_orca": [
+      -1.0,
+      -2.5,
+      0.0,
+      200
+    ]
+  },
+  "no_robot_passage": {
+    "classic_bottleneck_high|outside": {
+      "passages_total": 0,
+      "peds_total": 150,
+      "runs": 50,
+      "runs_with_passage": 0
+    },
+    "classic_bottleneck_high|traverse": {
+      "passages_total": 150,
+      "peds_total": 150,
+      "runs": 50,
+      "runs_with_passage": 50
+    },
+    "classic_bottleneck_medium|outside": {
+      "passages_total": 0,
+      "peds_total": 50,
+      "runs": 50,
+      "runs_with_passage": 0
+    },
+    "classic_bottleneck_medium|traverse": {
+      "passages_total": 50,
+      "peds_total": 50,
+      "runs": 50,
+      "runs_with_passage": 50
+    },
+    "classic_doorway_high|outside": {
+      "passages_total": 0,
+      "peds_total": 450,
+      "runs": 50,
+      "runs_with_passage": 0
+    },
+    "classic_doorway_high|traverse": {
+      "passages_total": 219,
+      "peds_total": 450,
+      "runs": 50,
+      "runs_with_passage": 50
+    },
+    "classic_doorway_medium|outside": {
+      "passages_total": 0,
+      "peds_total": 300,
+      "runs": 50,
+      "runs_with_passage": 0
+    },
+    "classic_doorway_medium|traverse": {
+      "passages_total": 147,
+      "peds_total": 300,
+      "runs": 50,
+      "runs_with_passage": 50
+    }
+  },
+  "outcome_rule": {
+    "inputs": {
+      "guard_blocked_traverse_pp": [
+        12.48333333333333,
+        9.833333333333336,
+        15.133541666666664
+      ],
+      "guard_delay_traverse_s": [
+        2.2752600000000003,
+        1.459841125,
+        3.0888479999999996
+      ],
+      "guard_pedcontact_traverse_pp": [
+        -6.5,
+        -10.0,
+        -3.5
+      ],
+      "guard_success_interaction_pp": [
+        34.0,
+        26.0,
+        42.5
+      ],
+      "guard_success_traverse_pp": [
+        55.0,
+        50.5,
+        59.5
+      ],
+      "guarded_pedcontact_traverse_minus_outside_pp": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "triggered": [
+      "O2_success_improves_but_pedestrian_cost_rises"
+    ]
+  },
+  "seed_range": [
+    1121,
+    1200
+  ],
+  "seeds": 50
+}

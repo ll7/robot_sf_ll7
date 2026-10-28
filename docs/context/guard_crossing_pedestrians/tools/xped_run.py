@@ -73,7 +73,7 @@ def install_wrappers(out_dir: Path, arm: str) -> None:
         reason = str(state.termination_reason)
         # Declared parking rule: a robot that completed its route leaves the scene;
         # any other termination (collision etc.) stops the robot where it is.
-        remove = reason == "success"
+        remove = reason == "success" or CTX.get("failure_parking") == "remove"
         if robot_steps < L.WINDOW_STEPS:
             L.park_robot(env, remove=remove)
         for _ in range(L.WINDOW_STEPS - robot_steps):
@@ -148,7 +148,14 @@ def main() -> None:
     p.add_argument("--scenario", required=True)
     p.add_argument("--seeds", required=True)
     p.add_argument("--out", required=True, type=Path)
+    p.add_argument(
+        "--failure-parking",
+        choices=["stop", "remove"],
+        default="stop",
+        help="post-hoc sensitivity only; the contract's parking rule is 'stop'",
+    )
     a = p.parse_args()
+    CTX["failure_parking"] = a.failure_parking
     seeds = [int(s) for s in a.seeds.split(",")]
     for s in seeds:
         if s < 1001 or 50000 <= s < 60000:

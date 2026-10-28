@@ -1,0 +1,774 @@
+diff --git a/robot_sf/benchmark/map_runner/map_runner_episode.py b/robot_sf/benchmark/map_runner/map_runner_episode.py
+index 83ce62195..b13ca5d0c 100644
+--- a/robot_sf/benchmark/map_runner/map_runner_episode.py
++++ b/robot_sf/benchmark/map_runner/map_runner_episode.py
+@@ -218,0 +219,4 @@ from robot_sf.robot.safety_wrapper import DeadlockRecoveryMonitor  # noqa: TC001
++from robot_sf.sensor.pedestrian_perception import (
++    PedestrianPerception,
++    PedestrianPerceptionSpec,
++)
+@@ -3815,0 +3820,18 @@ def _execute_step_loop(
++def _attach_pedestrian_perception(env: Any, args: _StepLoopSetupArgs) -> Any:
++    """Attach the optional diagnostic pedestrian-perception stressor to ``env``.
++
++    Returns:
++        The attached ``PedestrianPerception`` or ``None`` when not configured.
++    """
++    noise_spec = getattr(args.noise, "spec", None)
++    raw = noise_spec.get("pedestrian_perception") if isinstance(noise_spec, Mapping) else None
++    spec = PedestrianPerceptionSpec.from_mapping(raw)
++    if spec is None:
++        return None
++    scenario = args.scenario or {}
++    scenario_id = str(scenario.get("name") or scenario.get("scenario_id") or "unknown")
++    perception = PedestrianPerception(spec=spec, scenario_id=scenario_id, seed=int(args.seed))
++    env.set_pedestrian_perception(perception)
++    return perception
++
++
+@@ -3824,0 +3847 @@ def _setup_and_run_step_loop(args: _StepLoopSetupArgs) -> _EpisodeStepLoopResult
++    perception = _attach_pedestrian_perception(env, args)
+@@ -3890,0 +3914,4 @@ def _setup_and_run_step_loop(args: _StepLoopSetupArgs) -> _EpisodeStepLoopResult
++        if perception is not None:
++            args.algo_meta["pedestrian_perception"] = perception.summary()
++            if perception.spec.record_trace:
++                args.algo_meta["pedestrian_perception_trace"] = list(perception.trace)
+diff --git a/robot_sf/gym_env/robot_env.py b/robot_sf/gym_env/robot_env.py
+index 4ac94a1e3..2ad269f11 100644
+--- a/robot_sf/gym_env/robot_env.py
++++ b/robot_sf/gym_env/robot_env.py
+@@ -872,0 +873,38 @@ class RobotEnv(BaseEnv):
++    pedestrian_perception: Any = None
++
++    def set_pedestrian_perception(self, perception: Any) -> None:
++        """Route every planner-facing pedestrian channel through one perceived snapshot.
++
++        Diagnostic only: the SocNav pedestrian rows and the occupancy-grid pedestrian
++        layer both consume ``perception.current``; metrics keep simulator truth.
++        """
++        fusion = getattr(self, "_socnav_fusion", None)
++        if fusion is None:
++            raise ValueError("pedestrian perception requires the SOCNAV_STRUCT observation mode")
++        channels = ["socnav_pedestrian_rows"]
++        if self.occupancy_grid is not None:
++            channels.append("occupancy_grid_pedestrians")
++        perception.expected_channels = tuple(channels)
++        fusion.pedestrian_perception = perception
++        self.pedestrian_perception = perception
++
++    def _grid_pedestrians(self, true_positions: Any) -> tuple[np.ndarray, np.ndarray]:
++        """Return pedestrian positions and radii for the occupancy grid.
++
++        Returns:
++            Perceived rows when a perception stressor is attached, else simulator truth.
++        """
++        ped_radii = getattr(self.simulator, "ped_radii", None)
++        if self.pedestrian_perception is not None:
++            snapshot = self.pedestrian_perception.consume("occupancy_grid_pedestrians")
++            ped_positions = np.asarray(snapshot.positions, dtype=float).reshape(-1, 2)
++            if ped_radii is None:
++                return ped_positions, np.full(len(ped_positions), 0.35)
++            return ped_positions, np.asarray(ped_radii, dtype=float)[snapshot.source_slots]
++        ped_positions = true_positions
++        if ped_radii is None:
++            ped_radii = np.full(len(ped_positions), 0.35)
++        else:
++            ped_radii = np.asarray(ped_radii, dtype=float)
++        return ped_positions, ped_radii
++
+@@ -893,0 +932 @@ class RobotEnv(BaseEnv):
++        self._socnav_fusion = socnav_fusion
+@@ -1120,0 +1160,2 @@ class RobotEnv(BaseEnv):
++        if self.pedestrian_perception is not None:
++            self.pedestrian_perception.observe(self.simulator)
+@@ -1134,6 +1175 @@ class RobotEnv(BaseEnv):
+-            ped_positions = step_ped_positions
+-            ped_radii = getattr(self.simulator, "ped_radii", None)
+-            if ped_radii is None:
+-                ped_radii = np.full(len(ped_positions), 0.35)
+-            else:
+-                ped_radii = np.asarray(ped_radii, dtype=float)
++            ped_positions, ped_radii = self._grid_pedestrians(step_ped_positions)
+@@ -1247,0 +1284,3 @@ class RobotEnv(BaseEnv):
++            if self.pedestrian_perception is not None:
++                self.pedestrian_perception.reset()
++                self.pedestrian_perception.observe(self.simulator)
+@@ -1262,6 +1301 @@ class RobotEnv(BaseEnv):
+-                ped_positions = self.simulator.ped_pos
+-                ped_radii = getattr(self.simulator, "ped_radii", None)
+-                if ped_radii is None:
+-                    ped_radii = np.full(len(ped_positions), 0.35)
+-                else:
+-                    ped_radii = np.asarray(ped_radii, dtype=float)
++                ped_positions, ped_radii = self._grid_pedestrians(self.simulator.ped_pos)
+diff --git a/robot_sf/planner/hybrid_rule_local_planner.py b/robot_sf/planner/hybrid_rule_local_planner.py
+index 5614c5b99..4a1180c6f 100644
+--- a/robot_sf/planner/hybrid_rule_local_planner.py
++++ b/robot_sf/planner/hybrid_rule_local_planner.py
+@@ -316,0 +317,4 @@ class HybridRuleLocalPlannerConfig:
++    # Diagnostic ablation only: keep speed limits, forecast, rollout and soft
++    # scores intact while removing collision/clearance/braking rejection.
++    # False preserves the release execution path; never enable for release use.
++    ablation_disable_hard_guard: bool = False
+@@ -491,0 +496,2 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
++        if self.config.ablation_disable_hard_guard and not self._v4_clearance_braking:
++            raise ValueError("Hard-guard ablation is restricted to the v4 diagnostic controller.")
+@@ -2834 +2840 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
+-        if static_rejection is not None:
++        if static_rejection is not None and not self.config.ablation_disable_hard_guard:
+@@ -2894 +2900 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
+-                if (
++                if not self.config.ablation_disable_hard_guard and (
+@@ -2935 +2941 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
+-            if static_result is not None:
++            if static_result is not None and not self.config.ablation_disable_hard_guard:
+@@ -2949 +2955 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
+-            if dynamic_rejection is not None:
++            if dynamic_rejection is not None and not self.config.ablation_disable_hard_guard:
+@@ -3522 +3528,5 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
+-        if self._v4_clearance_braking and bool(self.config.v4_braking_check_enabled):
++        if (
++            self._v4_clearance_braking
++            and bool(self.config.v4_braking_check_enabled)
++            and not self.config.ablation_disable_hard_guard
++        ):
+diff --git a/robot_sf/sensor/pedestrian_perception.py b/robot_sf/sensor/pedestrian_perception.py
+new file mode 100644
+index 000000000..637daebaa
+--- /dev/null
++++ b/robot_sf/sensor/pedestrian_perception.py
+@@ -0,0 +1,321 @@
++"""Single perceived-pedestrian snapshot shared by every planner-facing pedestrian channel.
++
++Diagnostic stressor for matched pedestrian-perception degradation. One snapshot is
++computed per simulator step from simulator truth and then consumed by both the
++SocNav pedestrian rows and the occupancy-grid pedestrian layer, so no planner input
++keeps exposing true pedestrian positions under a treatment condition.
++
++Conditions (one effect at a time; declared synthetic stressors, not a sensor model):
++
++- ``oracle``: perceived state equals simulator truth (control; same code path).
++- ``position_noise``: i.i.d. Gaussian offset on each pedestrian position, indexed by
++  (episode key, step, simulator slot). Velocities stay exact.
++- ``delay``: positions and world-frame velocities from ``delay_steps`` steps earlier;
++  the first snapshot is held until enough history exists. Robot state stays current.
++- ``static_occlusion``: pedestrians whose robot-to-pedestrian segment crosses a static
++  obstacle interior are removed. Static map knowledge stays exact.
++"""
++
++from __future__ import annotations
++
++import hashlib
++import json
++from collections import deque
++from dataclasses import dataclass, field
++from typing import Any
++
++import numpy as np
++from shapely.geometry import LineString
++from shapely.prepared import prep
++
++PERCEPTION_CONDITIONS = ("oracle", "position_noise", "delay", "static_occlusion")
++PERCEPTION_INTERPRETATION = "declared_synthetic_pedestrian_perception_stressor_not_a_sensor_model"
++CONSUMER_CHANNELS = ("socnav_pedestrian_rows", "occupancy_grid_pedestrians")
++
++
++@dataclass(frozen=True)
++class PedestrianPerceptionSpec:
++    """Normalized one-effect-at-a-time perception condition."""
++
++    condition: str = "oracle"
++    position_noise_std_m: float = 0.0
++    delay_steps: int = 0
++    record_trace: bool = False
++
++    def __post_init__(self) -> None:
++        """Validate that exactly the declared effect is active."""
++        if self.condition not in PERCEPTION_CONDITIONS:
++            raise ValueError(f"unknown pedestrian perception condition: {self.condition!r}")
++        if self.position_noise_std_m < 0.0 or self.delay_steps < 0:
++            raise ValueError("noise std and delay steps must be non-negative")
++        if (self.position_noise_std_m > 0.0) != (self.condition == "position_noise"):
++            raise ValueError("position_noise_std_m > 0 exactly when condition is position_noise")
++        if (self.delay_steps > 0) != (self.condition == "delay"):
++            raise ValueError("delay_steps > 0 exactly when condition is delay")
++
++    @classmethod
++    def from_mapping(cls, raw: Any) -> PedestrianPerceptionSpec | None:
++        """Build a spec from an observation-noise payload entry, or ``None`` when absent.
++
++        Returns:
++            Validated spec, or ``None`` when no perception block is configured.
++        """
++        if raw is None:
++            return None
++        if not isinstance(raw, dict):
++            raise TypeError("pedestrian_perception must be a mapping")
++        unknown = set(raw) - {"condition", "position_noise_std_m", "delay_steps", "record_trace"}
++        if unknown:
++            raise ValueError(f"unknown pedestrian_perception keys: {sorted(unknown)}")
++        return cls(
++            condition=str(raw.get("condition", "oracle")),
++            position_noise_std_m=float(raw.get("position_noise_std_m", 0.0) or 0.0),
++            delay_steps=int(raw.get("delay_steps", 0) or 0),
++            record_trace=bool(raw.get("record_trace", False)),
++        )
++
++
++@dataclass(frozen=True)
++class PerceivedPedestrianSnapshot:
++    """World-frame perceived pedestrian rows for one step."""
++
++    step: int
++    positions: np.ndarray
++    velocities: np.ndarray
++    source_slots: np.ndarray
++
++
++def perception_episode_key(*, scenario_id: str, seed: int, condition: str) -> int:
++    """Return a 64-bit key shared by all planners for one (cell, seed, condition).
++
++    Returns:
++        Unsigned 64-bit integer derived from SHA-256.
++    """
++    material = json.dumps(
++        {"scenario_id": str(scenario_id), "seed": int(seed), "condition": str(condition)},
++        sort_keys=True,
++        separators=(",", ":"),
++    ).encode("utf-8")
++    return int.from_bytes(hashlib.sha256(material).digest()[:8], "big", signed=False)
++
++
++def position_noise_offsets(
++    episode_key: int, step: int, slots: np.ndarray, std_m: float
++) -> np.ndarray:
++    """Return reproducible Gaussian offsets indexed by (episode, step, slot).
++
++    Each offset comes from its own counter-based stream, so a pedestrian's offset
++    does not depend on how many other pedestrians exist.
++
++    Returns:
++        ``(N, 2)`` offsets in meters.
++    """
++    out = np.zeros((slots.shape[0], 2), dtype=float)
++    for row, slot in enumerate(slots):
++        bitgen = np.random.Philox(key=int(episode_key), counter=[int(step), int(slot), 0, 0])
++        out[row] = np.random.Generator(bitgen).normal(0.0, std_m, size=2)
++    return out
++
++
++@dataclass
++class PedestrianPerception:
++    """Compute one perceived snapshot per step and account for every consumer."""
++
++    spec: PedestrianPerceptionSpec
++    scenario_id: str
++    seed: int
++    episode_key: int = field(init=False)
++    current: PerceivedPedestrianSnapshot | None = field(init=False, default=None)
++    _step: int = field(init=False, default=-1)
++    _history: deque = field(init=False)
++    _obstacles: list[tuple[Any, Any]] | None = field(init=False, default=None)
++    expected_channels: tuple[str, ...] = CONSUMER_CHANNELS
++    _consumed: dict[str, int] = field(init=False)
++    _last_consumed_step: dict[str, int] = field(init=False)
++    _stats: dict[str, float] = field(init=False)
++    trace: list[dict[str, Any]] = field(init=False)
++
++    def __post_init__(self) -> None:
++        """Derive the episode key and zero the counters."""
++        self.episode_key = perception_episode_key(
++            scenario_id=self.scenario_id, seed=self.seed, condition=self.spec.condition
++        )
++        self.reset()
++
++    def reset(self) -> None:
++        """Start a new episode (called by the environment before the reset snapshot)."""
++        self.current = None
++        self._step = -1
++        self._history = deque(maxlen=self.spec.delay_steps + 1)
++        self._consumed = dict.fromkeys(CONSUMER_CHANNELS, 0)
++        self._last_consumed_step = dict.fromkeys(CONSUMER_CHANNELS, -1)
++        self._stats = {
++            "snapshots": 0,
++            "true_rows": 0,
++            "perceived_rows": 0,
++            "rows_occluded": 0,
++            "steps_with_occlusion": 0,
++            "rows_position_differs": 0,
++            "steps_perceived_differs": 0,
++            "abs_position_error_sum_m": 0.0,
++            "max_position_error_m": 0.0,
++            "delay_held_initial_steps": 0,
++        }
++        self.trace = []
++
++    def _static_obstacles(self, simulator: Any) -> list[tuple[Any, Any]]:
++        if self._obstacles is None:
++            prepared: list[tuple[Any, Any]] = []
++            map_def = getattr(simulator, "map_def", None)
++            for obstacle in getattr(map_def, "obstacles", None) or []:
++                polygons = (
++                    obstacle.iter_polygons()
++                    if hasattr(obstacle, "iter_polygons")
++                    else [getattr(obstacle, "geometry", None)]
++                )
++                for polygon in polygons:
++                    if polygon is None or getattr(polygon, "is_empty", False):
++                        continue
++                    prepared.append((prep(polygon), polygon))
++            self._obstacles = prepared
++        return self._obstacles
++
++    def _occluded(self, simulator: Any, robot_pos: np.ndarray, ped_pos: np.ndarray) -> bool:
++        """Same line-of-sight semantics as ``SocNavObservationFusion._statically_occluded``.
++
++        Returns:
++            True when the segment crosses a static obstacle interior.
++        """
++        segment = LineString(
++            [(float(robot_pos[0]), float(robot_pos[1])), tuple(map(float, ped_pos))]
++        )
++        if segment.length <= 0.0:
++            return False
++        for prep_geom, raw_poly in self._static_obstacles(simulator):
++            if prep_geom.intersects(segment) and not segment.touches(raw_poly):
++                return True
++        return False
++
++    def observe(self, simulator: Any) -> PerceivedPedestrianSnapshot:
++        """Compute this step's perceived snapshot from simulator truth.
++
++        Returns:
++            The snapshot every pedestrian channel must consume this step.
++        """
++        self._step += 1
++        step = self._step
++        true_pos = np.asarray(simulator.ped_pos, dtype=float).reshape(-1, 2).copy()
++        try:
++            true_vel = np.asarray(simulator.ped_vel, dtype=float).reshape(-1, 2).copy()
++        except (AttributeError, TypeError, ValueError):
++            true_vel = np.zeros_like(true_pos)
++        slots = np.arange(true_pos.shape[0], dtype=np.int64)
++        truth = PerceivedPedestrianSnapshot(step, true_pos, true_vel, slots)
++        robot_pos = np.asarray(simulator.robots[0].pose[0], dtype=float).reshape(2)
++
++        condition = self.spec.condition
++        occluded_rows = 0
++        if condition == "oracle":
++            snap = truth
++        elif condition == "position_noise":
++            offsets = position_noise_offsets(
++                self.episode_key, step, slots, self.spec.position_noise_std_m
++            )
++            snap = PerceivedPedestrianSnapshot(step, true_pos + offsets, true_vel, slots)
++        elif condition == "delay":
++            self._history.append(truth)
++            if len(self._history) <= self.spec.delay_steps:
++                self._stats["delay_held_initial_steps"] += 1
++            old = self._history[0]
++            snap = PerceivedPedestrianSnapshot(
++                step, old.positions, old.velocities, old.source_slots
++            )
++        else:  # static_occlusion
++            keep = np.array(
++                [not self._occluded(simulator, robot_pos, p) for p in true_pos], dtype=bool
++            )
++            occluded_rows = int(true_pos.shape[0] - np.count_nonzero(keep))
++            snap = PerceivedPedestrianSnapshot(step, true_pos[keep], true_vel[keep], slots[keep])
++        self.current = snap
++        self._account(truth, snap, occluded_rows, robot_pos)
++        return snap
++
++    def _account(
++        self,
++        truth: PerceivedPedestrianSnapshot,
++        snap: PerceivedPedestrianSnapshot,
++        occluded_rows: int,
++        robot_pos: np.ndarray,
++    ) -> None:
++        stats = self._stats
++        stats["snapshots"] += 1
++        stats["true_rows"] += int(truth.positions.shape[0])
++        stats["perceived_rows"] += int(snap.positions.shape[0])
++        stats["rows_occluded"] += occluded_rows
++        stats["steps_with_occlusion"] += int(occluded_rows > 0)
++        errors = np.zeros((0,), dtype=float)
++        if snap.positions.shape[0] > 0 and truth.positions.shape[0] > 0:
++            valid = snap.source_slots < truth.positions.shape[0]
++            errors = np.linalg.norm(
++                snap.positions[valid] - truth.positions[snap.source_slots[valid]], axis=1
++            )
++        differs = bool(
++            snap.positions.shape != truth.positions.shape
++            or not np.array_equal(snap.positions, truth.positions)
++            or not np.array_equal(snap.velocities, truth.velocities)
++        )
++        stats["steps_perceived_differs"] += int(differs)
++        stats["rows_position_differs"] += int(np.count_nonzero(errors > 0.0))
++        stats["abs_position_error_sum_m"] += float(errors.sum())
++        if errors.size:
++            stats["max_position_error_m"] = max(stats["max_position_error_m"], float(errors.max()))
++        if self.spec.record_trace:
++            self.trace.append(
++                {
++                    "step": truth.step,
++                    "robot_xy": [round(float(v), 4) for v in robot_pos],
++                    "true_xy": np.round(truth.positions, 4).tolist(),
++                    "true_vel": np.round(truth.velocities, 4).tolist(),
++                    "perceived_slots": snap.source_slots.tolist(),
++                    "perceived_xy": np.round(snap.positions, 4).tolist(),
++                    "perceived_vel": np.round(snap.velocities, 4).tolist(),
++                }
++            )
++
++    def consume(self, channel: str) -> PerceivedPedestrianSnapshot:
++        """Return the current snapshot and count each step a channel consumed it.
++
++        Returns:
++            Current snapshot.
++        """
++        if self.current is None:
++            raise RuntimeError("pedestrian perception consumed before the first snapshot")
++        if channel not in self._consumed:
++            raise ValueError(f"unknown perception consumer channel: {channel!r}")
++        if self._last_consumed_step[channel] != self.current.step:
++            self._last_consumed_step[channel] = self.current.step
++            self._consumed[channel] += 1
++        return self.current
++
++    def summary(self) -> dict[str, Any]:
++        """Return JSON-safe per-episode accounting.
++
++        Returns:
++            Spec, episode key and counters, including per-channel consumption counts.
++        """
++        stats = dict(self._stats)
++        rows = max(1, int(stats["perceived_rows"]))
++        stats["mean_abs_position_error_m"] = stats["abs_position_error_sum_m"] / rows
++        snapshots = int(stats["snapshots"])
++        return {
++            "interpretation": PERCEPTION_INTERPRETATION,
++            "condition": self.spec.condition,
++            "position_noise_std_m": self.spec.position_noise_std_m,
++            "delay_steps": self.spec.delay_steps,
++            "episode_key": str(self.episode_key),
++            "expected_channels": list(self.expected_channels),
++            "consumed_steps": dict(self._consumed),
++            "all_channels_consumed_every_snapshot": snapshots > 0
++            and all(self._consumed[channel] == snapshots for channel in self.expected_channels),
++            "stats": stats,
++        }
+diff --git a/robot_sf/sensor/socnav_observation.py b/robot_sf/sensor/socnav_observation.py
+index d99d2c7fb..0c1e5d6ab 100644
+--- a/robot_sf/sensor/socnav_observation.py
++++ b/robot_sf/sensor/socnav_observation.py
+@@ -330,0 +331,3 @@ class SocNavObservationFusion:
++    # Diagnostic perception stressor: when set, pedestrian rows come from its
++    # per-step perceived snapshot instead of simulator truth.
++    pedestrian_perception: Any = field(init=False, default=None, repr=False)
+@@ -892,5 +895,10 @@ class SocNavObservationFusion:
+-        ped_positions = np.asarray(self.simulator.ped_pos, dtype=np.float32)
+-        try:
+-            ped_velocities = np.asarray(self.simulator.ped_vel, dtype=np.float32)
+-        except (AttributeError, TypeError, ValueError):  # pragma: no cover - defensive fallback
+-            ped_velocities = np.zeros_like(ped_positions, dtype=np.float32)
++        if self.pedestrian_perception is not None:
++            snapshot = self.pedestrian_perception.consume("socnav_pedestrian_rows")
++            ped_positions = np.asarray(snapshot.positions, dtype=np.float32).reshape(-1, 2)
++            ped_velocities = np.asarray(snapshot.velocities, dtype=np.float32).reshape(-1, 2)
++        else:
++            ped_positions = np.asarray(self.simulator.ped_pos, dtype=np.float32)
++            try:
++                ped_velocities = np.asarray(self.simulator.ped_vel, dtype=np.float32)
++            except (AttributeError, TypeError, ValueError):  # pragma: no cover - defensive
++                ped_velocities = np.zeros_like(ped_positions, dtype=np.float32)
+diff --git a/tests/planner/test_guardesc_ablation.py b/tests/planner/test_guardesc_ablation.py
+new file mode 100644
+index 000000000..bd58eef51
+--- /dev/null
++++ b/tests/planner/test_guardesc_ablation.py
+@@ -0,0 +1,114 @@
++"""Pure candidate fixtures for the diagnostic guard ablation; no simulator stepping."""
++
++from types import SimpleNamespace
++
++import numpy as np
++import pytest
++
++from robot_sf.planner.hybrid_rule_local_planner import (
++    HybridRuleCandidate,
++    HybridRuleLocalPlannerAdapter,
++    build_hybrid_rule_local_planner_config,
++)
++
++
++def evaluate(disable, monkeypatch, static_reason=None, braking=False, physical=False):
++    """Use fixed geometry with a colliding pedestrian and known rollout distances."""
++    planner = HybridRuleLocalPlannerAdapter(
++        build_hybrid_rule_local_planner_config(
++            {
++                "planner_variant": "hybrid_rule_v4_clearance_braking",
++                "ablation_disable_hard_guard": disable,
++                "rollout_horizon": 0.4,
++                "rollout_dt": 0.2,
++                "v4_braking_check_enabled": braking,
++                "hard_collision_horizon": 0.0 if braking else 1.2,
++                "continuous_static_clearance_enabled": static_reason == "static_collision"
++                or physical,
++                "physical_static_exclusion_enabled": physical,
++            }
++        )
++    )
++    monkeypatch.setattr(
++        planner, "_min_obstacle_clearance", lambda *_: 0.2 if static_reason else 9.0
++    )
++    if static_reason == "static_collision" or physical:
++        planner._continuous_static_context = SimpleNamespace(
++            swept_geometry=SimpleNamespace(clearance=lambda *_: 0.0)
++        )
++        monkeypatch.setattr(planner, "_continuous_static_collision", lambda *_: True)
++    state = {
++        "robot_pos": np.array([0.0, 0.0]),
++        "heading": 0.0,
++        "current_speed": 0.0,
++        "goal": np.array([20.0, 0.0]),
++        "ped_pos": np.array([[1.15, 0.0]]),
++        "ped_vel": np.array([[0.0, 0.0]]),
++        "robot_radius": 1.0,
++        "ped_radius": 0.4,
++        "dt": 0.1,
++        "observation": {},
++    }
++    return planner._evaluate_candidate(
++        candidate=HybridRuleCandidate(0.2, 0.0, "dynamic_window"),
++        observation={},
++        state=state,
++        speed_cap=0.2,
++        nearest_ped=1.15,
++    )
++
++
++@pytest.mark.parametrize("reason", ["dynamic_collision", "static_collision", "static_clearance"])
++def test_guard_off_scores_colliding_candidate_without_losing_clearance(monkeypatch, reason):
++    """Guard-on vetoes; guard-off evaluates all rollout steps and retains soft clearance."""
++    static = None if reason == "dynamic_collision" else reason
++    guarded = evaluate(False, monkeypatch, static)
++    assert guarded["accepted"] is False
++    assert guarded["reason"] == reason
++    unguarded = evaluate(True, monkeypatch, static)
++    assert unguarded["accepted"] is True
++    # Two 0.2-second steps at 0.2 m/s: the final pedestrian distance is 1.15 - 0.08.
++    assert unguarded["min_dynamic_clearance"] == pytest.approx(1.07)
++    assert unguarded["terms"]["dynamic_clearance"] == 0.0
++    assert unguarded["min_static_clearance"] == (0.2 if static else 9.0)
++
++
++def test_guard_ablation_keeps_near_human_angular_speed_limit():
++    """The experimental rejection bypass cannot remove an action speed limit."""
++    planner = HybridRuleLocalPlannerAdapter(
++        build_hybrid_rule_local_planner_config(
++            {
++                "planner_variant": "hybrid_rule_v4_clearance_braking",
++                "ablation_disable_hard_guard": True,
++            }
++        )
++    )
++    rejection = planner._reject_excessive_angular_near_human(
++        HybridRuleCandidate(0.0, 1.0, "dynamic_window"), 0.1
++    )
++    assert rejection["reason"] == "excessive_angular_near_human"
++
++
++def test_guard_ablation_bypasses_actual_pedestrian_braking_veto(monkeypatch):
++    guarded = evaluate(False, monkeypatch, braking=True)
++    assert guarded["reason"] == "braking_infeasible"
++    unguarded = evaluate(True, monkeypatch, braking=True)
++    assert unguarded["accepted"] is True
++    assert unguarded["min_dynamic_clearance"] == pytest.approx(1.07)
++
++
++def test_guard_ablation_bypasses_swept_wall_veto_and_keeps_plant_rollout(monkeypatch):
++    guarded = evaluate(False, monkeypatch, physical=True)
++    assert guarded["reason"] == "static_collision"
++    assert guarded["swept_plant_interval"] is True
++    unguarded = evaluate(True, monkeypatch, physical=True)
++    assert unguarded["accepted"] is True
++    # Plant intervals use trapezoidal speed: 0.02 + 0.04 m, not Euler's 0.08 m.
++    assert unguarded["min_dynamic_clearance"] == pytest.approx(1.09)
++
++
++def test_guard_ablation_rejects_unscoped_legacy_variant():
++    with pytest.raises(ValueError, match="restricted to the v4"):
++        HybridRuleLocalPlannerAdapter(
++            build_hybrid_rule_local_planner_config({"ablation_disable_hard_guard": True})
++        )
+diff --git a/tests/sensor/test_pedestrian_perception.py b/tests/sensor/test_pedestrian_perception.py
+new file mode 100644
+index 000000000..0d75428ee
+--- /dev/null
++++ b/tests/sensor/test_pedestrian_perception.py
+@@ -0,0 +1,163 @@
++"""Every planner-facing pedestrian channel consumes one perceived snapshot."""
++
++from __future__ import annotations
++
++from types import SimpleNamespace
++
++import numpy as np
++import pytest
++from shapely.geometry import Polygon
++
++from robot_sf.gym_env.environment_factory import make_robot_env
++from robot_sf.nav.occupancy_grid import GridChannel, OccupancyGrid
++from robot_sf.sensor.pedestrian_perception import (
++    PedestrianPerception,
++    PedestrianPerceptionSpec,
++    position_noise_offsets,
++)
++from tests.metamorphic.planner_arms import SAMPLED_PED_DENSITY, robot_env_config, sampled_scene
++
++STEPS = 5
++
++
++def _env(seed: int = 7):
++    config = robot_env_config(sampled_scene(), max_steps=STEPS + 2, ped_density=SAMPLED_PED_DENSITY)
++    return make_robot_env(config=config, seed=seed)
++
++
++def _ped_layer(env, positions: np.ndarray) -> np.ndarray:
++    """Rasterize ``positions`` with the env's own grid config and static geometry."""
++    grid = OccupancyGrid(config=env.occupancy_grid.config)
++    obstacles, polygons = env._get_static_grid_obstacles()
++    radii = np.full(len(positions), 0.35)
++    if getattr(env.simulator, "ped_radii", None) is not None:
++        radii = np.asarray(env.simulator.ped_radii, dtype=float)[: len(positions)]
++    grid.generate(
++        obstacles=obstacles,
++        pedestrians=(np.asarray(positions, dtype=float).reshape(-1, 2), radii),
++        robot_pose=env.simulator.robot_poses[0],
++        ego_frame=False,
++        obstacle_polygons=polygons,
++    )
++    index = list(env.occupancy_grid.config.channels).index(GridChannel.PEDESTRIANS)
++    return grid.to_observation()[index]
++
++
++def _obs_ped_layer(env, obs) -> np.ndarray:
++    index = list(env.occupancy_grid.config.channels).index(GridChannel.PEDESTRIANS)
++    return np.asarray(obs["occupancy_grid"])[index]
++
++
++def test_occupancy_layer_is_not_truth_under_position_noise() -> None:
++    """Fails if the PPO grid layer is still rasterized from simulator truth."""
++    env = _env()
++    spec = PedestrianPerceptionSpec(condition="position_noise", position_noise_std_m=1.5)
++    perception = PedestrianPerception(spec=spec, scenario_id="unit", seed=7)
++    env.set_pedestrian_perception(perception)
++    obs, _ = env.reset(seed=7)
++    checked = 0
++    for _ in range(STEPS):
++        true_pos = np.asarray(env.simulator.ped_pos, dtype=float).reshape(-1, 2)
++        perceived = perception.current.positions
++        assert true_pos.shape[0] > 0
++        assert not np.allclose(perceived, true_pos)
++        layer = _obs_ped_layer(env, obs)
++        np.testing.assert_array_equal(layer, _ped_layer(env, perceived))
++        assert not np.array_equal(layer, _ped_layer(env, true_pos)), (
++            "occupancy pedestrian layer still shows true positions under noise"
++        )
++        count = int(np.asarray(obs["pedestrians_count"]).reshape(-1)[0])
++        rows = np.asarray(obs["pedestrians_positions"], dtype=float)[:count]
++        cap = np.array([env.map_def.width, env.map_def.height], dtype=float)
++        expected = np.clip(perceived, 0.0, None).astype(np.float32)
++        for row in rows:
++            assert np.min(np.linalg.norm(expected - row, axis=1)) < 1e-4 or np.any(
++                row >= cap - 1e-3
++            )
++        checked += 1
++        obs, *_ = env.step(np.zeros(2))
++    summary = perception.summary()
++    assert checked == STEPS
++    assert summary["all_channels_consumed_every_snapshot"]
++    assert set(summary["expected_channels"]) == {
++        "socnav_pedestrian_rows",
++        "occupancy_grid_pedestrians",
++    }
++
++
++def test_oracle_condition_matches_unperturbed_env_exactly() -> None:
++    """The control routes through the snapshot but must equal the release observation."""
++    plain, oracle = _env(), _env()
++    perception = PedestrianPerception(
++        spec=PedestrianPerceptionSpec(condition="oracle"), scenario_id="unit", seed=7
++    )
++    oracle.set_pedestrian_perception(perception)
++    obs_a, _ = plain.reset(seed=7)
++    obs_b, _ = oracle.reset(seed=7)
++    for _ in range(STEPS):
++        assert obs_a.keys() == obs_b.keys()
++        for key in obs_a:
++            np.testing.assert_array_equal(np.asarray(obs_a[key]), np.asarray(obs_b[key]), key)
++        action = np.array([0.5, 0.1])
++        obs_a, *_ = plain.step(action)
++        obs_b, *_ = oracle.step(action)
++    assert perception.summary()["stats"]["steps_perceived_differs"] == 0
++
++
++def _fake_sim(ped_pos, ped_vel=None, robot=(0.0, 0.0), obstacles=()):
++    ped_pos = np.asarray(ped_pos, dtype=float).reshape(-1, 2)
++    return SimpleNamespace(
++        ped_pos=ped_pos,
++        ped_vel=np.zeros_like(ped_pos) if ped_vel is None else np.asarray(ped_vel, dtype=float),
++        robots=[SimpleNamespace(pose=(np.asarray(robot, dtype=float), 0.0))],
++        map_def=SimpleNamespace(obstacles=[SimpleNamespace(geometry=g) for g in obstacles]),
++    )
++
++
++def test_delay_replays_truth_from_two_steps_earlier() -> None:
++    perception = PedestrianPerception(
++        spec=PedestrianPerceptionSpec(condition="delay", delay_steps=2), scenario_id="u", seed=1
++    )
++    seen = []
++    for step in range(6):
++        snap = perception.observe(_fake_sim([[float(step), 0.0]], [[float(step), 1.0]]))
++        seen.append((snap.positions[0, 0], snap.velocities[0, 0]))
++    assert seen == [(0, 0), (0, 0), (0, 0), (1, 1), (2, 2), (3, 3)]
++    assert perception.summary()["stats"]["delay_held_initial_steps"] == 2
++
++
++def test_static_occlusion_removes_pedestrians_behind_walls_only() -> None:
++    wall = Polygon([(2.0, -1.0), (3.0, -1.0), (3.0, 1.0), (2.0, 1.0)])
++    perception = PedestrianPerception(
++        spec=PedestrianPerceptionSpec(condition="static_occlusion"), scenario_id="u", seed=1
++    )
++    snap = perception.observe(_fake_sim([[5.0, 0.0], [0.0, 5.0]], obstacles=[wall]))
++    assert snap.source_slots.tolist() == [1]
++    np.testing.assert_array_equal(snap.positions, [[0.0, 5.0]])
++    assert perception.summary()["stats"]["rows_occluded"] == 1
++
++
++def test_noise_is_indexed_by_episode_step_and_pedestrian() -> None:
++    a = position_noise_offsets(123, 4, np.arange(5), 0.05)
++    b = position_noise_offsets(123, 4, np.array([3]), 0.05)
++    np.testing.assert_array_equal(a[3], b[0])
++    assert not np.array_equal(a, position_noise_offsets(123, 5, np.arange(5), 0.05))
++    assert not np.array_equal(a, position_noise_offsets(124, 4, np.arange(5), 0.05))
++    big = position_noise_offsets(9, 0, np.arange(20000), 0.05)
++    assert abs(big.std() - 0.05) < 0.002
++
++
++@pytest.mark.parametrize(
++    "raw",
++    [
++        {"condition": "oracle", "position_noise_std_m": 0.05},
++        {"condition": "position_noise"},
++        {"condition": "delay", "delay_steps": 0},
++        {"condition": "oracle", "delay_steps": 2},
++        {"condition": "occlusion"},
++        {"condition": "oracle", "extra": 1},
++    ],
++)
++def test_spec_rejects_mixed_or_missing_effects(raw) -> None:
++    with pytest.raises(ValueError):
++        PedestrianPerceptionSpec.from_mapping(raw)

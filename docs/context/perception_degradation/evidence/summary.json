@@ -1,0 +1,1577 @@
+{
+  "schema": "xperc-perception-degradation.summary.v1",
+  "episodes": 4800,
+  "seeds": 50,
+  "cells": [
+    "francis2023_blind_corner",
+    "classic_cross_trap_medium",
+    "classic_head_on_corridor_medium",
+    "classic_overtaking_medium",
+    "classic_doorway_medium",
+    "classic_bottleneck_high"
+  ],
+  "bootstrap": {
+    "draws": 10000,
+    "rng": "numpy default_rng(1001)",
+    "unit": "seed block"
+  },
+  "execution_validity_failures": [],
+  "execution_evidence_by_planner": {
+    "orca": {
+      "episodes": 1200,
+      "fallback_or_degraded": 0,
+      "fallback_count_recorded": 0,
+      "fallback_count_missing": 1200,
+      "fallback_count_zero": 0,
+      "status_not_ok": 0,
+      "effective_view_degraded": 0,
+      "channel_not_consumed_every_step": 0,
+      "checkpoint_not_loaded": null
+    },
+    "hybrid_v4_continuous_guard_on": {
+      "episodes": 1200,
+      "fallback_or_degraded": 0,
+      "fallback_count_recorded": 1200,
+      "fallback_count_missing": 0,
+      "fallback_count_zero": 1200,
+      "status_not_ok": 0,
+      "effective_view_degraded": 0,
+      "channel_not_consumed_every_step": 0,
+      "checkpoint_not_loaded": null
+    },
+    "hybrid_v4_continuous_guard_off": {
+      "episodes": 1200,
+      "fallback_or_degraded": 0,
+      "fallback_count_recorded": 1200,
+      "fallback_count_missing": 0,
+      "fallback_count_zero": 1200,
+      "status_not_ok": 0,
+      "effective_view_degraded": 0,
+      "channel_not_consumed_every_step": 0,
+      "checkpoint_not_loaded": null
+    },
+    "ppo": {
+      "episodes": 1200,
+      "fallback_or_degraded": 0,
+      "fallback_count_recorded": 0,
+      "fallback_count_missing": 1200,
+      "fallback_count_zero": 0,
+      "status_not_ok": 0,
+      "effective_view_degraded": 0,
+      "channel_not_consumed_every_step": 0,
+      "checkpoint_not_loaded": 0
+    }
+  },
+  "evidence_limitations": {
+    "fallback": "No fallback/degraded marker or positive counter was recorded; absent counters are missing evidence, not recorded zero counts.",
+    "pre_episode_push": "Not independently verified from available records. The execution commit's Git timestamp is 2026-10-28T16:09:11Z; the archived environment starts at 16:09:36Z and the earliest raw episode at 16:09:45.092746Z. The earliest local remote-tracking fetch observation found is 16:10:22Z. A Git timestamp does not establish the push time.",
+    "occlusion": "O5 marks the cross-trap and overtaking occlusion cell/conditions as failures, so pooled occlusion results including them are descriptive, not robustness evidence. The wall-free negative controls are separately labelled.",
+    "o2_populations": "The general six-cell pooling and occlusion-specific four-cell pooling clauses differ. O2 uses matched six-cell contrasts; the matched four-active-cell analysis is secondary and includes O5-failed cells."
+  },
+  "pooled_population_by_condition": {
+    "oracle": [
+      "francis2023_blind_corner",
+      "classic_cross_trap_medium",
+      "classic_head_on_corridor_medium",
+      "classic_overtaking_medium",
+      "classic_doorway_medium",
+      "classic_bottleneck_high"
+    ],
+    "position_noise": [
+      "francis2023_blind_corner",
+      "classic_cross_trap_medium",
+      "classic_head_on_corridor_medium",
+      "classic_overtaking_medium",
+      "classic_doorway_medium",
+      "classic_bottleneck_high"
+    ],
+    "delay": [
+      "francis2023_blind_corner",
+      "classic_cross_trap_medium",
+      "classic_head_on_corridor_medium",
+      "classic_overtaking_medium",
+      "classic_doorway_medium",
+      "classic_bottleneck_high"
+    ],
+    "static_occlusion": [
+      "francis2023_blind_corner",
+      "classic_cross_trap_medium",
+      "classic_overtaking_medium",
+      "classic_doorway_medium"
+    ]
+  },
+  "occlusion_ranking_populations": {
+    "six_cells": {
+      "cells": [
+        "francis2023_blind_corner",
+        "classic_cross_trap_medium",
+        "classic_head_on_corridor_medium",
+        "classic_overtaking_medium",
+        "classic_doorway_medium",
+        "classic_bottleneck_high"
+      ],
+      "comparisons": {
+        "orca-hybrid_v4_continuous_guard_on|success": {
+          "oracle": [
+            -0.053333,
+            -0.083417,
+            -0.023333
+          ],
+          "static_occlusion": [
+            -0.063333,
+            -0.096667,
+            -0.03
+          ],
+          "ranking_change": [
+            -0.01,
+            -0.023333,
+            0.0
+          ],
+          "o2": "not_triggered"
+        },
+        "orca-hybrid_v4_continuous_guard_on|collision": {
+          "oracle": [
+            0.07,
+            0.043333,
+            0.1
+          ],
+          "static_occlusion": [
+            0.08,
+            0.05,
+            0.113333
+          ],
+          "ranking_change": [
+            0.01,
+            0.0,
+            0.023333
+          ],
+          "o2": "not_triggered"
+        },
+        "orca-hybrid_v4_continuous_guard_off|success": {
+          "oracle": [
+            0.37,
+            0.326667,
+            0.413333
+          ],
+          "static_occlusion": [
+            0.36,
+            0.316667,
+            0.403333
+          ],
+          "ranking_change": [
+            -0.01,
+            -0.023333,
+            0.0
+          ],
+          "o2": "not_triggered"
+        },
+        "orca-hybrid_v4_continuous_guard_off|collision": {
+          "oracle": [
+            -0.37,
+            -0.413333,
+            -0.326667
+          ],
+          "static_occlusion": [
+            -0.36,
+            -0.403333,
+            -0.316667
+          ],
+          "ranking_change": [
+            0.01,
+            0.0,
+            0.023333
+          ],
+          "o2": "not_triggered"
+        },
+        "orca-ppo|success": {
+          "oracle": [
+            0.376667,
+            0.33,
+            0.42
+          ],
+          "static_occlusion": [
+            0.553333,
+            0.506667,
+            0.6
+          ],
+          "ranking_change": [
+            0.176667,
+            0.146667,
+            0.206667
+          ],
+          "o2": "not_triggered"
+        },
+        "orca-ppo|collision": {
+          "oracle": [
+            -0.376667,
+            -0.42,
+            -0.33
+          ],
+          "static_occlusion": [
+            -0.553333,
+            -0.6,
+            -0.506667
+          ],
+          "ranking_change": [
+            -0.176667,
+            -0.206667,
+            -0.146667
+          ],
+          "o2": "not_triggered"
+        },
+        "hybrid_v4_continuous_guard_on-hybrid_v4_continuous_guard_off|success": {
+          "oracle": [
+            0.423333,
+            0.386667,
+            0.46
+          ],
+          "static_occlusion": [
+            0.423333,
+            0.386667,
+            0.46
+          ],
+          "ranking_change": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "o2": "not_triggered"
+        },
+        "hybrid_v4_continuous_guard_on-hybrid_v4_continuous_guard_off|collision": {
+          "oracle": [
+            -0.44,
+            -0.473333,
+            -0.403333
+          ],
+          "static_occlusion": [
+            -0.44,
+            -0.473333,
+            -0.403333
+          ],
+          "ranking_change": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "o2": "not_triggered"
+        },
+        "hybrid_v4_continuous_guard_on-ppo|success": {
+          "oracle": [
+            0.43,
+            0.39,
+            0.47
+          ],
+          "static_occlusion": [
+            0.616667,
+            0.576667,
+            0.656667
+          ],
+          "ranking_change": [
+            0.186667,
+            0.156667,
+            0.213333
+          ],
+          "o2": "not_triggered"
+        },
+        "hybrid_v4_continuous_guard_on-ppo|collision": {
+          "oracle": [
+            -0.446667,
+            -0.483333,
+            -0.41
+          ],
+          "static_occlusion": [
+            -0.633333,
+            -0.67,
+            -0.596667
+          ],
+          "ranking_change": [
+            -0.186667,
+            -0.213333,
+            -0.156667
+          ],
+          "o2": "not_triggered"
+        },
+        "hybrid_v4_continuous_guard_off-ppo|success": {
+          "oracle": [
+            0.006667,
+            -0.04,
+            0.053333
+          ],
+          "static_occlusion": [
+            0.193333,
+            0.143333,
+            0.243333
+          ],
+          "ranking_change": [
+            0.186667,
+            0.156667,
+            0.213333
+          ],
+          "o2": "not_triggered"
+        },
+        "hybrid_v4_continuous_guard_off-ppo|collision": {
+          "oracle": [
+            -0.006667,
+            -0.053333,
+            0.04
+          ],
+          "static_occlusion": [
+            -0.193333,
+            -0.243333,
+            -0.143333
+          ],
+          "ranking_change": [
+            -0.186667,
+            -0.213333,
+            -0.156667
+          ],
+          "o2": "not_triggered"
+        }
+      }
+    },
+    "four_active_cells": {
+      "cells": [
+        "francis2023_blind_corner",
+        "classic_cross_trap_medium",
+        "classic_overtaking_medium",
+        "classic_doorway_medium"
+      ],
+      "comparisons": {
+        "orca-hybrid_v4_continuous_guard_on|success": {
+          "oracle": [
+            -0.03,
+            -0.065,
+            0.0
+          ],
+          "static_occlusion": [
+            -0.045,
+            -0.08,
+            -0.01
+          ],
+          "ranking_change": [
+            -0.015,
+            -0.035,
+            0.0
+          ],
+          "o2": "not_triggered"
+        },
+        "orca-hybrid_v4_continuous_guard_on|collision": {
+          "oracle": [
+            0.045,
+            0.02,
+            0.075
+          ],
+          "static_occlusion": [
+            0.06,
+            0.03,
+            0.095
+          ],
+          "ranking_change": [
+            0.015,
+            0.0,
+            0.035
+          ],
+          "o2": "not_triggered"
+        },
+        "orca-hybrid_v4_continuous_guard_off|success": {
+          "oracle": [
+            0.545,
+            0.5,
+            0.59
+          ],
+          "static_occlusion": [
+            0.53,
+            0.484875,
+            0.575
+          ],
+          "ranking_change": [
+            -0.015,
+            -0.035,
+            0.0
+          ],
+          "o2": "not_triggered"
+        },
+        "orca-hybrid_v4_continuous_guard_off|collision": {
+          "oracle": [
+            -0.545,
+            -0.59,
+            -0.5
+          ],
+          "static_occlusion": [
+            -0.53,
+            -0.575,
+            -0.484875
+          ],
+          "ranking_change": [
+            0.015,
+            0.0,
+            0.035
+          ],
+          "o2": "not_triggered"
+        },
+        "orca-ppo|success": {
+          "oracle": [
+            0.365,
+            0.305,
+            0.425
+          ],
+          "static_occlusion": [
+            0.63,
+            0.565,
+            0.69
+          ],
+          "ranking_change": [
+            0.265,
+            0.22,
+            0.31
+          ],
+          "o2": "not_triggered"
+        },
+        "orca-ppo|collision": {
+          "oracle": [
+            -0.365,
+            -0.425,
+            -0.305
+          ],
+          "static_occlusion": [
+            -0.63,
+            -0.69,
+            -0.565
+          ],
+          "ranking_change": [
+            -0.265,
+            -0.31,
+            -0.22
+          ],
+          "o2": "not_triggered"
+        },
+        "hybrid_v4_continuous_guard_on-hybrid_v4_continuous_guard_off|success": {
+          "oracle": [
+            0.575,
+            0.53,
+            0.62
+          ],
+          "static_occlusion": [
+            0.575,
+            0.53,
+            0.62
+          ],
+          "ranking_change": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "o2": "not_triggered"
+        },
+        "hybrid_v4_continuous_guard_on-hybrid_v4_continuous_guard_off|collision": {
+          "oracle": [
+            -0.59,
+            -0.635,
+            -0.545
+          ],
+          "static_occlusion": [
+            -0.59,
+            -0.635,
+            -0.545
+          ],
+          "ranking_change": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "o2": "not_triggered"
+        },
+        "hybrid_v4_continuous_guard_on-ppo|success": {
+          "oracle": [
+            0.395,
+            0.335,
+            0.455
+          ],
+          "static_occlusion": [
+            0.675,
+            0.615,
+            0.735
+          ],
+          "ranking_change": [
+            0.28,
+            0.235,
+            0.32
+          ],
+          "o2": "not_triggered"
+        },
+        "hybrid_v4_continuous_guard_on-ppo|collision": {
+          "oracle": [
+            -0.41,
+            -0.465,
+            -0.355
+          ],
+          "static_occlusion": [
+            -0.69,
+            -0.745,
+            -0.635
+          ],
+          "ranking_change": [
+            -0.28,
+            -0.32,
+            -0.235
+          ],
+          "o2": "not_triggered"
+        },
+        "hybrid_v4_continuous_guard_off-ppo|success": {
+          "oracle": [
+            -0.18,
+            -0.245,
+            -0.115
+          ],
+          "static_occlusion": [
+            0.1,
+            0.03,
+            0.17
+          ],
+          "ranking_change": [
+            0.28,
+            0.235,
+            0.32
+          ],
+          "o2": "reversal"
+        },
+        "hybrid_v4_continuous_guard_off-ppo|collision": {
+          "oracle": [
+            0.18,
+            0.115,
+            0.245
+          ],
+          "static_occlusion": [
+            -0.1,
+            -0.17,
+            -0.03
+          ],
+          "ranking_change": [
+            -0.28,
+            -0.32,
+            -0.235
+          ],
+          "o2": "reversal"
+        }
+      }
+    }
+  },
+  "secondary_occlusion_cell_exercise_only": {
+    "description": "Post-hoc geometry-exercise description only; ignoring per-episode differences does not satisfy the preregistered O5 rule.",
+    "active_cells_exercised": {
+      "francis2023_blind_corner": true,
+      "classic_cross_trap_medium": true,
+      "classic_overtaking_medium": true,
+      "classic_doorway_medium": true
+    }
+  },
+  "pooled_equal_cell": {
+    "condition_effect|orca|position_noise|success": [
+      0.026667,
+      -0.003333,
+      0.06
+    ],
+    "condition_effect|orca|position_noise|collision": [
+      -0.026667,
+      -0.06,
+      0.003333
+    ],
+    "condition_effect|orca|position_noise|timeout": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "condition_effect|orca|delay|success": [
+      0.05,
+      0.02,
+      0.08
+    ],
+    "condition_effect|orca|delay|collision": [
+      -0.05,
+      -0.08,
+      -0.02
+    ],
+    "condition_effect|orca|delay|timeout": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "condition_effect|orca|static_occlusion|success": [
+      -0.015,
+      -0.035,
+      0.0
+    ],
+    "condition_effect|orca|static_occlusion|collision": [
+      0.015,
+      0.0,
+      0.035
+    ],
+    "condition_effect|orca|static_occlusion|timeout": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "condition_effect|hybrid_v4_continuous_guard_on|position_noise|success": [
+      -0.006667,
+      -0.026667,
+      0.01
+    ],
+    "condition_effect|hybrid_v4_continuous_guard_on|position_noise|collision": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "condition_effect|hybrid_v4_continuous_guard_on|position_noise|timeout": [
+      0.006667,
+      -0.01,
+      0.026667
+    ],
+    "condition_effect|hybrid_v4_continuous_guard_on|delay|success": [
+      -0.003333,
+      -0.02,
+      0.013333
+    ],
+    "condition_effect|hybrid_v4_continuous_guard_on|delay|collision": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "condition_effect|hybrid_v4_continuous_guard_on|delay|timeout": [
+      0.003333,
+      -0.013333,
+      0.02
+    ],
+    "condition_effect|hybrid_v4_continuous_guard_on|static_occlusion|success": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "condition_effect|hybrid_v4_continuous_guard_on|static_occlusion|collision": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "condition_effect|hybrid_v4_continuous_guard_on|static_occlusion|timeout": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "condition_effect|hybrid_v4_continuous_guard_off|position_noise|success": [
+      -0.013333,
+      -0.046667,
+      0.02
+    ],
+    "condition_effect|hybrid_v4_continuous_guard_off|position_noise|collision": [
+      0.013333,
+      -0.02,
+      0.046667
+    ],
+    "condition_effect|hybrid_v4_continuous_guard_off|position_noise|timeout": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "condition_effect|hybrid_v4_continuous_guard_off|delay|success": [
+      -0.013333,
+      -0.043333,
+      0.016667
+    ],
+    "condition_effect|hybrid_v4_continuous_guard_off|delay|collision": [
+      0.013333,
+      -0.016667,
+      0.043333
+    ],
+    "condition_effect|hybrid_v4_continuous_guard_off|delay|timeout": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "condition_effect|hybrid_v4_continuous_guard_off|static_occlusion|success": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "condition_effect|hybrid_v4_continuous_guard_off|static_occlusion|collision": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "condition_effect|hybrid_v4_continuous_guard_off|static_occlusion|timeout": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "condition_effect|ppo|position_noise|success": [
+      -0.013333,
+      -0.036667,
+      0.01
+    ],
+    "condition_effect|ppo|position_noise|collision": [
+      0.013333,
+      -0.01,
+      0.036667
+    ],
+    "condition_effect|ppo|position_noise|timeout": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "condition_effect|ppo|delay|success": [
+      -0.043333,
+      -0.07,
+      -0.016667
+    ],
+    "condition_effect|ppo|delay|collision": [
+      0.04,
+      0.013333,
+      0.07
+    ],
+    "condition_effect|ppo|delay|timeout": [
+      0.003333,
+      0.0,
+      0.01
+    ],
+    "condition_effect|ppo|static_occlusion|success": [
+      -0.28,
+      -0.32,
+      -0.235
+    ],
+    "condition_effect|ppo|static_occlusion|collision": [
+      0.28,
+      0.235,
+      0.32
+    ],
+    "condition_effect|ppo|static_occlusion|timeout": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "planner_difference|orca-hybrid_v4_continuous_guard_on|oracle|success": [
+      -0.053333,
+      -0.083417,
+      -0.023333
+    ],
+    "planner_difference|orca-hybrid_v4_continuous_guard_on|oracle|collision": [
+      0.07,
+      0.043333,
+      0.1
+    ],
+    "planner_difference|orca-hybrid_v4_continuous_guard_on|oracle|timeout": [
+      -0.016667,
+      -0.03,
+      -0.003333
+    ],
+    "planner_difference|orca-hybrid_v4_continuous_guard_on|position_noise|success": [
+      -0.02,
+      -0.05,
+      0.01
+    ],
+    "planner_difference|orca-hybrid_v4_continuous_guard_on|position_noise|collision": [
+      0.043333,
+      0.023333,
+      0.066667
+    ],
+    "planner_difference|orca-hybrid_v4_continuous_guard_on|position_noise|timeout": [
+      -0.023333,
+      -0.04,
+      -0.01
+    ],
+    "planner_difference|orca-hybrid_v4_continuous_guard_on|delay|success": [
+      -0.0,
+      -0.023333,
+      0.023333
+    ],
+    "planner_difference|orca-hybrid_v4_continuous_guard_on|delay|collision": [
+      0.02,
+      0.006667,
+      0.036667
+    ],
+    "planner_difference|orca-hybrid_v4_continuous_guard_on|delay|timeout": [
+      -0.02,
+      -0.04,
+      -0.006667
+    ],
+    "planner_difference|orca-hybrid_v4_continuous_guard_on|static_occlusion|success": [
+      -0.045,
+      -0.08,
+      -0.01
+    ],
+    "planner_difference|orca-hybrid_v4_continuous_guard_on|static_occlusion|collision": [
+      0.06,
+      0.03,
+      0.095
+    ],
+    "planner_difference|orca-hybrid_v4_continuous_guard_on|static_occlusion|timeout": [
+      -0.015,
+      -0.035,
+      0.0
+    ],
+    "planner_difference|orca-hybrid_v4_continuous_guard_off|oracle|success": [
+      0.37,
+      0.326667,
+      0.413333
+    ],
+    "planner_difference|orca-hybrid_v4_continuous_guard_off|oracle|collision": [
+      -0.37,
+      -0.413333,
+      -0.326667
+    ],
+    "planner_difference|orca-hybrid_v4_continuous_guard_off|oracle|timeout": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "planner_difference|orca-hybrid_v4_continuous_guard_off|position_noise|success": [
+      0.41,
+      0.37,
+      0.450083
+    ],
+    "planner_difference|orca-hybrid_v4_continuous_guard_off|position_noise|collision": [
+      -0.41,
+      -0.450083,
+      -0.37
+    ],
+    "planner_difference|orca-hybrid_v4_continuous_guard_off|position_noise|timeout": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "planner_difference|orca-hybrid_v4_continuous_guard_off|delay|success": [
+      0.433333,
+      0.393333,
+      0.473333
+    ],
+    "planner_difference|orca-hybrid_v4_continuous_guard_off|delay|collision": [
+      -0.433333,
+      -0.473333,
+      -0.393333
+    ],
+    "planner_difference|orca-hybrid_v4_continuous_guard_off|delay|timeout": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "planner_difference|orca-hybrid_v4_continuous_guard_off|static_occlusion|success": [
+      0.53,
+      0.484875,
+      0.575
+    ],
+    "planner_difference|orca-hybrid_v4_continuous_guard_off|static_occlusion|collision": [
+      -0.53,
+      -0.575,
+      -0.484875
+    ],
+    "planner_difference|orca-hybrid_v4_continuous_guard_off|static_occlusion|timeout": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "planner_difference|orca-ppo|oracle|success": [
+      0.376667,
+      0.33,
+      0.42
+    ],
+    "planner_difference|orca-ppo|oracle|collision": [
+      -0.376667,
+      -0.42,
+      -0.33
+    ],
+    "planner_difference|orca-ppo|oracle|timeout": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "planner_difference|orca-ppo|position_noise|success": [
+      0.416667,
+      0.376667,
+      0.46
+    ],
+    "planner_difference|orca-ppo|position_noise|collision": [
+      -0.416667,
+      -0.46,
+      -0.376667
+    ],
+    "planner_difference|orca-ppo|position_noise|timeout": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "planner_difference|orca-ppo|delay|success": [
+      0.47,
+      0.426667,
+      0.513333
+    ],
+    "planner_difference|orca-ppo|delay|collision": [
+      -0.466667,
+      -0.51,
+      -0.42
+    ],
+    "planner_difference|orca-ppo|delay|timeout": [
+      -0.003333,
+      -0.01,
+      0.0
+    ],
+    "planner_difference|orca-ppo|static_occlusion|success": [
+      0.63,
+      0.565,
+      0.69
+    ],
+    "planner_difference|orca-ppo|static_occlusion|collision": [
+      -0.63,
+      -0.69,
+      -0.565
+    ],
+    "planner_difference|orca-ppo|static_occlusion|timeout": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "planner_difference|hybrid_v4_continuous_guard_on-hybrid_v4_continuous_guard_off|oracle|success": [
+      0.423333,
+      0.386667,
+      0.46
+    ],
+    "planner_difference|hybrid_v4_continuous_guard_on-hybrid_v4_continuous_guard_off|oracle|collision": [
+      -0.44,
+      -0.473333,
+      -0.403333
+    ],
+    "planner_difference|hybrid_v4_continuous_guard_on-hybrid_v4_continuous_guard_off|oracle|timeout": [
+      0.016667,
+      0.003333,
+      0.03
+    ],
+    "planner_difference|hybrid_v4_continuous_guard_on-hybrid_v4_continuous_guard_off|position_noise|success": [
+      0.43,
+      0.39,
+      0.466667
+    ],
+    "planner_difference|hybrid_v4_continuous_guard_on-hybrid_v4_continuous_guard_off|position_noise|collision": [
+      -0.453333,
+      -0.49,
+      -0.416667
+    ],
+    "planner_difference|hybrid_v4_continuous_guard_on-hybrid_v4_continuous_guard_off|position_noise|timeout": [
+      0.023333,
+      0.01,
+      0.04
+    ],
+    "planner_difference|hybrid_v4_continuous_guard_on-hybrid_v4_continuous_guard_off|delay|success": [
+      0.433333,
+      0.39,
+      0.476667
+    ],
+    "planner_difference|hybrid_v4_continuous_guard_on-hybrid_v4_continuous_guard_off|delay|collision": [
+      -0.453333,
+      -0.49,
+      -0.416667
+    ],
+    "planner_difference|hybrid_v4_continuous_guard_on-hybrid_v4_continuous_guard_off|delay|timeout": [
+      0.02,
+      0.006667,
+      0.04
+    ],
+    "planner_difference|hybrid_v4_continuous_guard_on-hybrid_v4_continuous_guard_off|static_occlusion|success": [
+      0.575,
+      0.53,
+      0.62
+    ],
+    "planner_difference|hybrid_v4_continuous_guard_on-hybrid_v4_continuous_guard_off|static_occlusion|collision": [
+      -0.59,
+      -0.635,
+      -0.545
+    ],
+    "planner_difference|hybrid_v4_continuous_guard_on-hybrid_v4_continuous_guard_off|static_occlusion|timeout": [
+      0.015,
+      0.0,
+      0.035
+    ],
+    "planner_difference|hybrid_v4_continuous_guard_on-ppo|oracle|success": [
+      0.43,
+      0.39,
+      0.47
+    ],
+    "planner_difference|hybrid_v4_continuous_guard_on-ppo|oracle|collision": [
+      -0.446667,
+      -0.483333,
+      -0.41
+    ],
+    "planner_difference|hybrid_v4_continuous_guard_on-ppo|oracle|timeout": [
+      0.016667,
+      0.003333,
+      0.03
+    ],
+    "planner_difference|hybrid_v4_continuous_guard_on-ppo|position_noise|success": [
+      0.436667,
+      0.4,
+      0.476667
+    ],
+    "planner_difference|hybrid_v4_continuous_guard_on-ppo|position_noise|collision": [
+      -0.46,
+      -0.5,
+      -0.42
+    ],
+    "planner_difference|hybrid_v4_continuous_guard_on-ppo|position_noise|timeout": [
+      0.023333,
+      0.01,
+      0.04
+    ],
+    "planner_difference|hybrid_v4_continuous_guard_on-ppo|delay|success": [
+      0.47,
+      0.426667,
+      0.513333
+    ],
+    "planner_difference|hybrid_v4_continuous_guard_on-ppo|delay|collision": [
+      -0.486667,
+      -0.526667,
+      -0.446667
+    ],
+    "planner_difference|hybrid_v4_continuous_guard_on-ppo|delay|timeout": [
+      0.016667,
+      0.0,
+      0.036667
+    ],
+    "planner_difference|hybrid_v4_continuous_guard_on-ppo|static_occlusion|success": [
+      0.675,
+      0.615,
+      0.735
+    ],
+    "planner_difference|hybrid_v4_continuous_guard_on-ppo|static_occlusion|collision": [
+      -0.69,
+      -0.745,
+      -0.635
+    ],
+    "planner_difference|hybrid_v4_continuous_guard_on-ppo|static_occlusion|timeout": [
+      0.015,
+      0.0,
+      0.035
+    ],
+    "planner_difference|hybrid_v4_continuous_guard_off-ppo|oracle|success": [
+      0.006667,
+      -0.04,
+      0.053333
+    ],
+    "planner_difference|hybrid_v4_continuous_guard_off-ppo|oracle|collision": [
+      -0.006667,
+      -0.053333,
+      0.04
+    ],
+    "planner_difference|hybrid_v4_continuous_guard_off-ppo|oracle|timeout": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "planner_difference|hybrid_v4_continuous_guard_off-ppo|position_noise|success": [
+      0.006667,
+      -0.046667,
+      0.06
+    ],
+    "planner_difference|hybrid_v4_continuous_guard_off-ppo|position_noise|collision": [
+      -0.006667,
+      -0.06,
+      0.046667
+    ],
+    "planner_difference|hybrid_v4_continuous_guard_off-ppo|position_noise|timeout": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "planner_difference|hybrid_v4_continuous_guard_off-ppo|delay|success": [
+      0.036667,
+      -0.013333,
+      0.086667
+    ],
+    "planner_difference|hybrid_v4_continuous_guard_off-ppo|delay|collision": [
+      -0.033333,
+      -0.083333,
+      0.016667
+    ],
+    "planner_difference|hybrid_v4_continuous_guard_off-ppo|delay|timeout": [
+      -0.003333,
+      -0.01,
+      0.0
+    ],
+    "planner_difference|hybrid_v4_continuous_guard_off-ppo|static_occlusion|success": [
+      0.1,
+      0.03,
+      0.17
+    ],
+    "planner_difference|hybrid_v4_continuous_guard_off-ppo|static_occlusion|collision": [
+      -0.1,
+      -0.17,
+      -0.03
+    ],
+    "planner_difference|hybrid_v4_continuous_guard_off-ppo|static_occlusion|timeout": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "ranking_change|orca-hybrid_v4_continuous_guard_on|position_noise|success": [
+      0.033333,
+      -0.003333,
+      0.07
+    ],
+    "ranking_change|orca-hybrid_v4_continuous_guard_on|position_noise|collision": [
+      -0.026667,
+      -0.06,
+      0.003333
+    ],
+    "ranking_change|orca-hybrid_v4_continuous_guard_on|position_noise|timeout": [
+      -0.006667,
+      -0.026667,
+      0.01
+    ],
+    "ranking_change|orca-hybrid_v4_continuous_guard_on|delay|success": [
+      0.053333,
+      0.02,
+      0.086667
+    ],
+    "ranking_change|orca-hybrid_v4_continuous_guard_on|delay|collision": [
+      -0.05,
+      -0.08,
+      -0.02
+    ],
+    "ranking_change|orca-hybrid_v4_continuous_guard_on|delay|timeout": [
+      -0.003333,
+      -0.02,
+      0.013333
+    ],
+    "ranking_change|orca-hybrid_v4_continuous_guard_on|static_occlusion|success": [
+      -0.015,
+      -0.035,
+      0.0
+    ],
+    "ranking_change|orca-hybrid_v4_continuous_guard_on|static_occlusion|collision": [
+      0.015,
+      0.0,
+      0.035
+    ],
+    "ranking_change|orca-hybrid_v4_continuous_guard_on|static_occlusion|timeout": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "ranking_change|orca-hybrid_v4_continuous_guard_off|position_noise|success": [
+      0.04,
+      -0.006667,
+      0.086667
+    ],
+    "ranking_change|orca-hybrid_v4_continuous_guard_off|position_noise|collision": [
+      -0.04,
+      -0.086667,
+      0.006667
+    ],
+    "ranking_change|orca-hybrid_v4_continuous_guard_off|position_noise|timeout": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "ranking_change|orca-hybrid_v4_continuous_guard_off|delay|success": [
+      0.063333,
+      0.016667,
+      0.11
+    ],
+    "ranking_change|orca-hybrid_v4_continuous_guard_off|delay|collision": [
+      -0.063333,
+      -0.11,
+      -0.016667
+    ],
+    "ranking_change|orca-hybrid_v4_continuous_guard_off|delay|timeout": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "ranking_change|orca-hybrid_v4_continuous_guard_off|static_occlusion|success": [
+      -0.015,
+      -0.035,
+      0.0
+    ],
+    "ranking_change|orca-hybrid_v4_continuous_guard_off|static_occlusion|collision": [
+      0.015,
+      0.0,
+      0.035
+    ],
+    "ranking_change|orca-hybrid_v4_continuous_guard_off|static_occlusion|timeout": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "ranking_change|orca-ppo|position_noise|success": [
+      0.04,
+      -0.003333,
+      0.083333
+    ],
+    "ranking_change|orca-ppo|position_noise|collision": [
+      -0.04,
+      -0.083333,
+      0.003333
+    ],
+    "ranking_change|orca-ppo|position_noise|timeout": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "ranking_change|orca-ppo|delay|success": [
+      0.093333,
+      0.046667,
+      0.143333
+    ],
+    "ranking_change|orca-ppo|delay|collision": [
+      -0.09,
+      -0.14,
+      -0.043333
+    ],
+    "ranking_change|orca-ppo|delay|timeout": [
+      -0.003333,
+      -0.01,
+      0.0
+    ],
+    "ranking_change|orca-ppo|static_occlusion|success": [
+      0.265,
+      0.22,
+      0.31
+    ],
+    "ranking_change|orca-ppo|static_occlusion|collision": [
+      -0.265,
+      -0.31,
+      -0.22
+    ],
+    "ranking_change|orca-ppo|static_occlusion|timeout": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "ranking_change|hybrid_v4_continuous_guard_on-hybrid_v4_continuous_guard_off|position_noise|success": [
+      0.006667,
+      -0.03,
+      0.043333
+    ],
+    "ranking_change|hybrid_v4_continuous_guard_on-hybrid_v4_continuous_guard_off|position_noise|collision": [
+      -0.013333,
+      -0.046667,
+      0.02
+    ],
+    "ranking_change|hybrid_v4_continuous_guard_on-hybrid_v4_continuous_guard_off|position_noise|timeout": [
+      0.006667,
+      -0.01,
+      0.026667
+    ],
+    "ranking_change|hybrid_v4_continuous_guard_on-hybrid_v4_continuous_guard_off|delay|success": [
+      0.01,
+      -0.023333,
+      0.043333
+    ],
+    "ranking_change|hybrid_v4_continuous_guard_on-hybrid_v4_continuous_guard_off|delay|collision": [
+      -0.013333,
+      -0.043333,
+      0.016667
+    ],
+    "ranking_change|hybrid_v4_continuous_guard_on-hybrid_v4_continuous_guard_off|delay|timeout": [
+      0.003333,
+      -0.013333,
+      0.02
+    ],
+    "ranking_change|hybrid_v4_continuous_guard_on-hybrid_v4_continuous_guard_off|static_occlusion|success": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "ranking_change|hybrid_v4_continuous_guard_on-hybrid_v4_continuous_guard_off|static_occlusion|collision": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "ranking_change|hybrid_v4_continuous_guard_on-hybrid_v4_continuous_guard_off|static_occlusion|timeout": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "ranking_change|hybrid_v4_continuous_guard_on-ppo|position_noise|success": [
+      0.006667,
+      -0.023333,
+      0.036667
+    ],
+    "ranking_change|hybrid_v4_continuous_guard_on-ppo|position_noise|collision": [
+      -0.013333,
+      -0.036667,
+      0.01
+    ],
+    "ranking_change|hybrid_v4_continuous_guard_on-ppo|position_noise|timeout": [
+      0.006667,
+      -0.01,
+      0.026667
+    ],
+    "ranking_change|hybrid_v4_continuous_guard_on-ppo|delay|success": [
+      0.04,
+      0.006667,
+      0.073333
+    ],
+    "ranking_change|hybrid_v4_continuous_guard_on-ppo|delay|collision": [
+      -0.04,
+      -0.07,
+      -0.013333
+    ],
+    "ranking_change|hybrid_v4_continuous_guard_on-ppo|delay|timeout": [
+      0.0,
+      -0.02,
+      0.016667
+    ],
+    "ranking_change|hybrid_v4_continuous_guard_on-ppo|static_occlusion|success": [
+      0.28,
+      0.235,
+      0.32
+    ],
+    "ranking_change|hybrid_v4_continuous_guard_on-ppo|static_occlusion|collision": [
+      -0.28,
+      -0.32,
+      -0.235
+    ],
+    "ranking_change|hybrid_v4_continuous_guard_on-ppo|static_occlusion|timeout": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "ranking_change|hybrid_v4_continuous_guard_off-ppo|position_noise|success": [
+      0.0,
+      -0.043333,
+      0.043333
+    ],
+    "ranking_change|hybrid_v4_continuous_guard_off-ppo|position_noise|collision": [
+      0.0,
+      -0.043333,
+      0.043333
+    ],
+    "ranking_change|hybrid_v4_continuous_guard_off-ppo|position_noise|timeout": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "ranking_change|hybrid_v4_continuous_guard_off-ppo|delay|success": [
+      0.03,
+      -0.003333,
+      0.063333
+    ],
+    "ranking_change|hybrid_v4_continuous_guard_off-ppo|delay|collision": [
+      -0.026667,
+      -0.06,
+      0.006667
+    ],
+    "ranking_change|hybrid_v4_continuous_guard_off-ppo|delay|timeout": [
+      -0.003333,
+      -0.01,
+      0.0
+    ],
+    "ranking_change|hybrid_v4_continuous_guard_off-ppo|static_occlusion|success": [
+      0.28,
+      0.235,
+      0.32
+    ],
+    "ranking_change|hybrid_v4_continuous_guard_off-ppo|static_occlusion|collision": [
+      -0.28,
+      -0.32,
+      -0.235
+    ],
+    "ranking_change|hybrid_v4_continuous_guard_off-ppo|static_occlusion|timeout": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "guard_benefit|guard_on-guard_off|oracle|success": [
+      0.423333,
+      0.386667,
+      0.46
+    ],
+    "guard_benefit|guard_on-guard_off|oracle|collision": [
+      -0.44,
+      -0.473333,
+      -0.403333
+    ],
+    "guard_benefit|guard_on-guard_off|oracle|timeout": [
+      0.016667,
+      0.003333,
+      0.03
+    ],
+    "guard_benefit|guard_on-guard_off|position_noise|success": [
+      0.43,
+      0.39,
+      0.466667
+    ],
+    "guard_benefit|guard_on-guard_off|position_noise|collision": [
+      -0.453333,
+      -0.49,
+      -0.416667
+    ],
+    "guard_benefit|guard_on-guard_off|position_noise|timeout": [
+      0.023333,
+      0.01,
+      0.04
+    ],
+    "guard_benefit|guard_on-guard_off|delay|success": [
+      0.433333,
+      0.39,
+      0.476667
+    ],
+    "guard_benefit|guard_on-guard_off|delay|collision": [
+      -0.453333,
+      -0.49,
+      -0.416667
+    ],
+    "guard_benefit|guard_on-guard_off|delay|timeout": [
+      0.02,
+      0.006667,
+      0.04
+    ],
+    "guard_benefit|guard_on-guard_off|static_occlusion|success": [
+      0.575,
+      0.53,
+      0.62
+    ],
+    "guard_benefit|guard_on-guard_off|static_occlusion|collision": [
+      -0.59,
+      -0.635,
+      -0.545
+    ],
+    "guard_benefit|guard_on-guard_off|static_occlusion|timeout": [
+      0.015,
+      0.0,
+      0.035
+    ],
+    "guard_dependence|guard_on-guard_off|position_noise|success": [
+      0.006667,
+      -0.03,
+      0.043333
+    ],
+    "guard_dependence|guard_on-guard_off|position_noise|collision": [
+      -0.013333,
+      -0.046667,
+      0.02
+    ],
+    "guard_dependence|guard_on-guard_off|position_noise|timeout": [
+      0.006667,
+      -0.01,
+      0.026667
+    ],
+    "guard_dependence|guard_on-guard_off|delay|success": [
+      0.01,
+      -0.023333,
+      0.043333
+    ],
+    "guard_dependence|guard_on-guard_off|delay|collision": [
+      -0.013333,
+      -0.043333,
+      0.016667
+    ],
+    "guard_dependence|guard_on-guard_off|delay|timeout": [
+      0.003333,
+      -0.013333,
+      0.02
+    ],
+    "guard_dependence|guard_on-guard_off|static_occlusion|success": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "guard_dependence|guard_on-guard_off|static_occlusion|collision": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "guard_dependence|guard_on-guard_off|static_occlusion|timeout": [
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  "decision_rule": {
+    "O1_relevant_and_narrow": [
+      "orca|delay|success",
+      "orca|delay|collision",
+      "ppo|static_occlusion|success",
+      "ppo|static_occlusion|collision"
+    ],
+    "O2_ranking_compresses_or_reverses": [
+      "compression orca-hybrid_v4_continuous_guard_on|delay|success",
+      "compression orca-hybrid_v4_continuous_guard_on|delay|collision"
+    ],
+    "O3_guard": [],
+    "O4_uniform_deterioration": {
+      "position_noise|success": false,
+      "position_noise|collision": false,
+      "delay|success": false,
+      "delay|collision": false,
+      "static_occlusion|success": false,
+      "static_occlusion|collision": false
+    },
+    "O4_secondary_directional_deterioration": {
+      "position_noise|success": false,
+      "position_noise|collision": false,
+      "delay|success": false,
+      "delay|collision": false,
+      "static_occlusion|success": false,
+      "static_occlusion|collision": false
+    },
+    "O5_intervention_failed": [
+      {
+        "cell": "classic_cross_trap_medium",
+        "condition": "static_occlusion",
+        "negative_control": false,
+        "treatment_never_differs_from_truth": 2,
+        "undisturbed_by_planner": {
+          "hybrid_v4_continuous_guard_off": 2
+        },
+        "channel_not_consumed_every_step": 0,
+        "occlusion_not_exercised": false
+      },
+      {
+        "cell": "classic_head_on_corridor_medium",
+        "condition": "static_occlusion",
+        "negative_control": true,
+        "treatment_never_differs_from_truth": 200,
+        "undisturbed_by_planner": {
+          "orca": 50,
+          "hybrid_v4_continuous_guard_on": 50,
+          "hybrid_v4_continuous_guard_off": 50,
+          "ppo": 50
+        },
+        "channel_not_consumed_every_step": 0,
+        "occlusion_not_exercised": true
+      },
+      {
+        "cell": "classic_overtaking_medium",
+        "condition": "static_occlusion",
+        "negative_control": false,
+        "treatment_never_differs_from_truth": 1,
+        "undisturbed_by_planner": {
+          "ppo": 1
+        },
+        "channel_not_consumed_every_step": 0,
+        "occlusion_not_exercised": false
+      },
+      {
+        "cell": "classic_bottleneck_high",
+        "condition": "static_occlusion",
+        "negative_control": true,
+        "treatment_never_differs_from_truth": 200,
+        "undisturbed_by_planner": {
+          "orca": 50,
+          "hybrid_v4_continuous_guard_on": 50,
+          "hybrid_v4_continuous_guard_off": 50,
+          "ppo": 50
+        },
+        "channel_not_consumed_every_step": 0,
+        "occlusion_not_exercised": true
+      }
+    ],
+    "O6_null_wide": [],
+    "occlusion_negative_control": {
+      "classic_head_on_corridor_medium": {
+        "pairs": 200,
+        "differ": 0
+      },
+      "classic_bottleneck_high": {
+        "pairs": 200,
+        "differ": 0
+      }
+    }
+  }
+}

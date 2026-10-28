@@ -1,0 +1,145 @@
+schema: xperc-perception-degradation.contract.v1
+status: frozen_before_main_runs
+evidence_tier: >-
+  Development-seed diagnostic on the 0.0.8 release code plus a minimal diagnostic
+  perception hook and the guard-escape ablation switch. New current-version execution,
+  never release evidence. Admits nothing into the thesis.
+question: >-
+  When the pedestrian information that every planner actually consumes is degraded in
+  a matched way (one synthetic stressor at a time), do success, collision and timeout
+  rates of ORCA, hybrid v4 continuous (guard on / guard off) and the frozen release
+  PPO checkpoint change, and does the local planner ordering or the guard's benefit
+  depend on exact pedestrian information?
+limitation_addressed: >-
+  Thesis section 9.3, Threat 2: every planner received exact pedestrian state, with
+  occlusion off and without detection noise, tracking latency or sensing delay.
+
+source:
+  release_commit: 373dbfde4f39667cf9e8732dabe7df5118bdeab1
+  guard_switch_commit: 0035fba05c9b679e39f58ec286f5d57b96bb9a0a
+  guard_switch_note: >-
+    Release plus the guard-escape ablation's ablation_disable_hard_guard switch
+    (docs/context/guard_escape_ablation at acd878b4028341846e1fc1c8b0bf0c3ef9923dad).
+  execution_commit: the commit that sets status frozen_before_main_runs (recorded in README and every row's git_hash); all arms and conditions of the main run use it
+  diagnostic_change: >-
+    robot_sf/sensor/pedestrian_perception.py plus hooks in robot_env.py,
+    socnav_observation.py and map_runner_episode.py. Without an
+    observation_noise.pedestrian_perception block the release path is unchanged.
+    Unavoidable because the release occupancy grid is rasterized from simulator truth
+    independently of the observation-noise wrapper, so no existing switch degrades
+    every consumed channel.
+
+planners:
+  orca: {config: configs/algos/orca_release_v0_0_8.yaml}
+  hybrid_v4_continuous_guard_on:
+    config: configs/policy_search/candidates/hybrid_rule_v4_fast_progress_static_escape_continuous_s30_h600_release_0_0_8_frozen.yaml
+  hybrid_v4_continuous_guard_off:
+    config: docs/context/perception_degradation/inputs/hybrid_v4_continuous_guard_off.yaml
+    differs_from_guard_on_only_in: ablation_disable_hard_guard=true (collision, clearance and braking rejection bundle)
+  ppo:
+    config: configs/baselines/ppo_release_robot_0_0_8_cpu.yaml
+    model_id: ppo_release_robot_b1002_last_20261001
+    checkpoint_sha256: 764a7d88f5b608237641d973634899e05a67b25e65f8b1607cfca025459824bc
+
+cells:  # release scenario matrix configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml
+  - francis2023_blind_corner          # blind corner
+  - classic_cross_trap_medium         # medium-density crossing (classic crossing map, density 0.05); replaced classic_urban_crossing_medium after pilot qualification
+  - classic_head_on_corridor_medium   # medium-density head-on corridor
+  - classic_overtaking_medium         # medium-density overtaking
+  - classic_doorway_medium            # ordinary doorway, medium density
+  - classic_bottleneck_high           # high-density bottleneck
+occlusion_analysis_cells:  # pooled occlusion effects use only cells where the pilot showed occlusion
+  - francis2023_blind_corner
+  - classic_cross_trap_medium
+  - classic_overtaking_medium
+  - classic_doorway_medium
+occlusion_negative_control_cells:  # no static wall between robot and pedestrians: inputs equal oracle, outcomes must equal oracle exactly
+  - classic_head_on_corridor_medium
+  - classic_bottleneck_high
+horizon: release authored horizons configs/benchmarks/horizon_schedules/release_0_0_8_authored_v1.yaml (sha256 032bbf8a...675e), dt 0.1 s
+
+conditions:  # one effect at a time; oracle is the control
+  oracle: {condition: oracle}
+  noise: {condition: position_noise, position_noise_std_m: 0.05}
+  delay: {condition: delay, delay_steps: 2}   # 0.2 s at dt 0.1
+  occlusion: {condition: static_occlusion}
+perception_semantics:
+  - One perceived pedestrian snapshot per step; SocNav pedestrian rows (positions, ego-frame velocities, count) and the occupancy-grid pedestrian layer both consume it.
+  - Noise is Gaussian per position axis, indexed by (cell, seed, condition) episode key, step and simulator slot; velocities stay exact.
+  - Delay replays positions and world-frame velocities from two steps earlier (initial snapshot held for the first two steps); robot state is current.
+  - Static occlusion removes pedestrians whose robot-to-pedestrian segment crosses a static obstacle interior; no memory; FOV 360 degrees, unlimited range.
+  - Static map knowledge, robot state and goals stay exact. Metrics use simulator truth.
+  - Declared synthetic stressors, not a detector or tracker model.
+
+seeds:
+  smoke: [1001]
+  pilot_qualification: 1001-1010 (never pooled with main)
+  main: 1121-1130 and 1161-1200 (50 development seeds)
+pilot_qualification:  # seeds 1001-1010, 7 cells, 1120 episodes; never pooled with main
+  trace_violations: 0 of 231917 traced steps (perceived state equals the declared transform of truth)
+  channels_consumed_every_step: 1120 of 1120 episodes
+  position_noise_axis_sd_m: 0.04995 (n=526164 axis draws)
+  delay: exact two-step replay, initial snapshot held two steps
+  occlusion_share_of_steps: {blind_corner: 0.527, cross_trap_medium: 0.895, overtaking_medium: 0.431, doorway_medium: 0.687, urban_crossing_medium: 0.733, head_on_corridor_medium: 0.0, bottleneck_high: 0.0}
+  encounter_check: oracle episodes within 2.5 m of a pedestrian (contact at 1.4 m centre distance) -> urban_crossing 53%, cross_trap 93%, other main cells 88-100%
+  guard_switch: arms differ only in ablation_disable_hard_guard; scenario overrides applied to both
+  seconds_per_episode_mean_8_workers: {orca: 3.1, ppo: 3.8, guard_on: 26.8, guard_off: 18.9}
+  ppo_checkpoint: loaded in every episode, no fallback; the canonical marker parser misreads config.fallback_to_goal=false as an invalid counter, so that flag is checked explicitly instead
+  provenance_note: pilot oracle rows carry two commit hashes (docs-only commits during the run); pilot is qualification only
+design_size: 4 planners x 6 cells x 4 conditions x 50 seeds = 4800 main episodes
+
+outcomes:
+  primary:
+    success: route complete without collision
+    collision: any collision (pedestrian or obstacle)
+  secondary:
+    pedestrian_collision: ped_collision_count > 0
+    wall_collision: obstacle_collision_count > 0
+    timeout: max_steps termination without success or collision (conservatism)
+    min_distance_m: minimum robot-pedestrian distance (truth)
+  validity:
+    - mode column per row (planner execution mode); fallback/degraded markers counted, zero verified
+    - perception summary per row: all_channels_consumed_every_snapshot must be true
+    - treatment rows with pedestrians present must have steps_perceived_differs > 0 (else intervention failed)
+    - occlusion exercise per cell: share of steps with at least one occluded pedestrian
+
+analysis:
+  script: docs/context/perception_degradation/analyze.py
+  effects:
+    - condition_effect[planner, condition] = rate(condition) - rate(oracle), paired by cell and seed
+    - ranking_change[planner A, B, condition] = (A - B)(condition) - (A - B)(oracle)
+    - guard_benefit[condition] = (guard_on - guard_off)(condition); guard_dependence = guard_benefit(condition) - guard_benefit(oracle)
+  pooling: equal-cell mean over the six cells; every cell also reported separately
+  uncertainty: seed-block bootstrap, 10000 draws resampling the 50 seeds with all cells, planners and conditions kept together; numpy default_rng(1001); percentile 95% intervals; pointwise, not simultaneous
+  no_p_values: true
+
+decision_rule:  # predeclared mapping from outcome to thesis consequence; 5 pp is the relevance threshold
+  relevant_effect: pooled |effect| >= 5 pp on success or collision with the 95% interval excluding 0
+  narrow: 95% interval half-width <= 5 pp
+  outcomes:
+    O1_relevant_and_narrow: >-
+      Relevant differences persist with narrow intervals: replace "untested" in Threat 2 with
+      sensitivity bounds for these specific disturbances (per planner, per condition).
+    O2_ranking_compresses_or_reverses: >-
+      For a planner pair whose oracle difference interval excludes 0, ranking_change interval
+      excludes 0 toward zero (compression) or the condition difference interval excludes 0
+      with opposite sign (reversal): keep the release ordering as an oracle-condition finding
+      and name the affected comparisons.
+    O3_guard_collision_prone_or_conservative: >-
+      Guard-on collision effect >= 5 pp (interval excludes 0), or timeout effect >= 5 pp
+      (interval excludes 0), or guard_dependence on collision/success relevant: narrow RQ3 to
+      its observation assumptions.
+    O4_uniform_deterioration: >-
+      All four planners show relevant effects of the same sign and no ranking_change interval
+      excludes 0: relative differences may persist locally while absolute reliability falls.
+    O5_intervention_failed: >-
+      Any treatment row with pedestrians present that never differs from truth, any channel not
+      consumed every step, or (occlusion) a cell where no step is occluded: that cell/condition
+      is an intervention failure, not robustness evidence.
+    O6_null_wide: >-
+      Effects not relevant and intervals wider than 5 pp half-width: "the limitation stays open";
+      no new results subsection.
+  separability: >-
+    The design separates each stressor's marginal effect at these magnitudes on these six
+    authored cells; it cannot separate stressor interactions, other magnitudes, real sensor
+    error structure, or generalization beyond the cells.

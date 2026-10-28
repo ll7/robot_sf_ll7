@@ -1,0 +1,119 @@
+schema: bicycle-bounded-comparison-contract.v1
+status: FROZEN  # committed before the first main episode (preregistration); 2026-10-28
+evidence_tier: >-
+  Development-seed diagnostic on the 0.0.8 release code, labelled "new current-version
+  execution". Never release evidence; admits nothing into the thesis.
+question: >-
+  With the three supported compact planners (goal, social force, ORCA) in their 0.0.8
+  release configurations, does replacing the release differential-drive plant by a
+  bicycle-model plant with the same collision radius, forward-speed cap,
+  acceleration/braking and no reverse change success, collisions or planner ordering
+  in six turning/encounter cells, and can the planners turn a bicycle toward a goal in
+  an empty world?
+source:
+  repository: ll7/robot_sf_ll7
+  commit: 373dbfde4f39667cf9e8732dabe7df5118bdeab1  # 0.0.8 release commit; production bytes unchanged
+  diagnostic_change: none in production code; only this directory is added (harness + analysis)
+planner_source: configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml
+planners: [goal, social_force, orca]  # release algo_config entries from planner_source, unmodified
+plants:
+  DD:  # the release plant made explicit (release scenarios use robot_config: {} -> these defaults)
+    type: differential_drive
+    radius: 1.0
+    max_linear_speed: 2.0
+    max_angular_speed: 1.0
+    max_linear_accel: 1.0
+    max_linear_decel: 1.0
+    allow_backwards: false
+  BI:  # same radius, forward cap, accel/braking and reverse policy; only the kinematic constraint changes
+    type: bicycle_drive
+    radius: 1.0
+    max_velocity: 2.0
+    max_accel: 1.0
+    max_decel: 1.0
+    allow_backwards: false
+    limited_reverse: false
+    creep_speed: 0.0
+    wheelbase: 0.90   # T60-proxy estimate from configs/robots/t60_bicycle_45deg_v1.yaml (geometry only)
+    max_steer: 0.79   # rad, ~45 deg; min centre-path turning radius 0.90/tan(0.79) = 0.89 m
+plant_notes:
+  - "The whole T60 profile is NOT loaded: its 0.64 m disc and 1.34 m/s cap would confound the comparison."
+  - >-
+    Interface asymmetry kept as shipped: the DD plant caps yaw rate at 1.0 rad/s; the bicycle path caps
+    yaw by curvature |v| tan(max_steer)/wheelbase (2.25 rad/s at 2 m/s) and, for ORCA world-velocity
+    commands, uses max_velocity*tan(max_steer)/wheelbase as the conversion yaw cap. Realized peak yaw
+    rate is recorded per episode.
+cells:
+  - {id: widened_doorway, scenario: francis2023_narrow_doorway_width_3p60, manifest: configs/scenarios/francis2023_narrow_doorway_three_width_release_0_0_8_v1.yaml}
+  - {id: ordinary_doorway, scenario: classic_doorway_medium, manifest: configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml}
+  - {id: bottleneck, scenario: classic_bottleneck_medium, manifest: configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml}
+  - {id: head_on_corridor, scenario: classic_head_on_corridor_medium, manifest: configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml}
+  - {id: cross_trap, scenario: classic_cross_trap_medium, manifest: configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml}
+  - {id: blind_corner, scenario: francis2023_blind_corner, manifest: configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml}
+empty_probe:
+  bearings: [0, 45, 90, 135, 180]  # goal 6 m away, start heading 0, 400 m open map, no pedestrians
+  horizon_steps: 600
+horizon: 600   # requested; authored per-scenario max_episode_steps remain authoritative
+dt: 0.1
+safety_wrapper: off
+cbf_safety_filter: off
+seeds:
+  allowlist: [[1001, 1010], [1121, 1130], [1161, 1200]]
+  smoke: {scenario: [1001, 1001], empty: [1001, 1001]}
+  pilot: {scenario: [1002, 1006], empty: [1007, 1008]}   # never pooled with main
+  main: {scenario: [1161, 1190], empty: [1121, 1125]}
+hashed_source_files:
+  - robot_sf/planner/kinematics_model.py
+  - robot_sf/planner/classic_planner_adapter.py
+  - robot_sf/benchmark/map_runner_policies/map_runner_actions.py
+  - robot_sf/benchmark/map_runner/map_runner_episode.py
+  - robot_sf/robot/bicycle_drive.py
+  - robot_sf/robot/differential_drive.py
+analysis:
+  script: docs/context/bicycle_bounded_comparison/analyze.py
+  pairing: (planner, cell, seed); effect = BI minus DD, percentage points
+  endpoints: [success, collision, timeout]   # primary: success and collision; secondary: timeout, time to goal on paired successes
+  pooled: equal-cell mean over the six cells per planner
+  uncertainty: 10000 seed-block bootstrap draws, numpy default_rng(1001), 2.5/97.5 percentiles, pointwise
+  ordering: pairwise planner success differences under each plant, same bootstrap
+  no_hypothesis_tests: true
+outcome_rule:  # predeclared; applied per planner by analyze.py; several outcomes may co-occur
+  success_margin_pp: 10
+  collision_margin_pp: 5
+  cell_deficit_pp: 20
+  probe_dd_min: 4      # of 5 seeds
+  probe_bi_max: 1      # of 5 seeds
+  feasibility_dd_min: 0.5
+  O1_comparable: >-
+    Pooled BI-DD success interval inside [-10, +10] pp AND pooled collision interval inside [-5, +5] pp
+    AND no cell whose success interval lies wholly below -20 pp. Thesis consequence: the sentence may be
+    replaced by a bounded statement naming exactly these planners, the six cells, this plant
+    (r = 1.0 m, 2.0 m/s, 1 m/s^2, no reverse, wheelbase 0.90 m, steering 0.79 rad) and the
+    development-seed diagnostic tier; untested planners, learned policies and other geometries stay open.
+  O2_no_transfer: >-
+    Pooled success interval wholly below -10 pp, OR pooled collision interval wholly above +5 pp, OR a
+    planner-pair ordering reversal (DD and BI difference intervals both exclude zero with opposite
+    signs). Thesis consequence: state that the differential-drive conclusions for the named planners do
+    not transfer through the tested bicycle interface; cells with a wholly-below -20 pp deficit are named.
+  O3_controller_interface_incompatibility: >-
+    Empty world (a Dubins path exists for every bearing: goal 6 m away, 2 m completion radius, minimum
+    turning radius 0.89 m): a planner x bearing with DD success >= 4/5 and BI success <= 1/5.
+    Thesis consequence: name a controller/interface incompatibility for that planner, not a scenario or
+    planner-quality failure.
+  O4_scenario_embodiment_feasibility: >-
+    A cell where some planner reaches DD success >= 0.5 but no planner succeeds with BI on any seed.
+    Thesis consequence: a candidate scenario-embodiment feasibility problem; it stays unresolved because
+    no planner-free bicycle reachability witness is computed in this study. A BI success on a seed
+    certifies initial reachability on that seed.
+  O5_open: >-
+    Neither O1 nor O2 for a planner (intervals too wide or straddling the margins). Thesis consequence:
+    the limitation stays open for that planner; no new results subsection.
+qualification:  # pilot seeds 1002-1008, never pooled with main
+  smoke: 6 episodes, seed 1001, repeated twice with identical outcomes
+  pilot: >-
+    240 episodes run twice (harness before/after the mode/timeout-field fix): 0 outcome mismatches,
+    240/240 mode native, 0 fallback, 0 creep steps, identical paired reset hashes across plants and
+    planners, mean 1.3 s wall per episode (full main run about 20 min on 8 local workers; no SLURM).
+  ending_classes: success, collision, timeout (runner outcome flags); 'other' is counted and expected 0
+  command_path: goal native; ORCA and social force through the documented adapter on both plants
+expected_main_episodes: 1230  # 3 x 6 x 2 x 30 = 1080 scenario + 3 x 5 x 2 x 5 = 150 probe

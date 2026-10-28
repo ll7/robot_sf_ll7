@@ -1,0 +1,342 @@
+{
+ "counts": {
+  "episodes_expected": 1600,
+  "episodes_native": 1600,
+  "episodes_non_native": 0,
+  "episodes_present": 1600,
+  "seeds": 50
+ },
+ "order": {
+  "collision": {
+   "mixed": [
+    "ppo_release",
+    "orca",
+    "social_force",
+    "hybrid_v4_continuous"
+   ],
+   "mixed_levels_pp": {
+    "hybrid_v4_continuous": 0.0,
+    "orca": 28.5,
+    "ppo_release": 66.5,
+    "social_force": 1.0
+   },
+   "uniform": [
+    "ppo_release",
+    "orca",
+    "social_force",
+    "hybrid_v4_continuous"
+   ],
+   "uniform_levels_pp": {
+    "hybrid_v4_continuous": 0.0,
+    "orca": 17.0,
+    "ppo_release": 65.0,
+    "social_force": 0.5
+   }
+  },
+  "success": {
+   "mixed": [
+    "hybrid_v4_continuous",
+    "orca",
+    "ppo_release",
+    "social_force"
+   ],
+   "mixed_levels_pp": {
+    "hybrid_v4_continuous": 96.5,
+    "orca": 70.5,
+    "ppo_release": 33.0,
+    "social_force": 31.0
+   },
+   "uniform": [
+    "hybrid_v4_continuous",
+    "orca",
+    "social_force",
+    "ppo_release"
+   ],
+   "uniform_levels_pp": {
+    "hybrid_v4_continuous": 96.0,
+    "orca": 82.5,
+    "ppo_release": 34.0,
+    "social_force": 37.5
+   }
+  }
+ },
+ "pooled_effects": {
+  "collision|hybrid_v4_continuous": [
+   0.0,
+   0.0,
+   0.0
+  ],
+  "collision|orca": [
+   11.5,
+   4.5,
+   18.5
+  ],
+  "collision|ppo_release": [
+   1.5,
+   -4.5,
+   7.5
+  ],
+  "collision|social_force": [
+   0.5,
+   -1.0,
+   2.0
+  ],
+  "min_distance_m|hybrid_v4_continuous": [
+   -0.04221669703494467,
+   -0.06194421317454972,
+   -0.02268899628681996
+  ],
+  "min_distance_m|orca": [
+   -0.024876718220176976,
+   -0.05157161321189024,
+   -0.00014635500139028362
+  ],
+  "min_distance_m|ppo_release": [
+   -0.07570682227173427,
+   -0.14530400472269184,
+   -0.00732494925261305
+  ],
+  "min_distance_m|social_force": [
+   -0.08286488943619283,
+   -0.11204770773144347,
+   -0.052217099244149016
+  ],
+  "obstacle_contact|hybrid_v4_continuous": [
+   0.0,
+   0.0,
+   0.0
+  ],
+  "obstacle_contact|orca": [
+   -0.5,
+   -1.5,
+   0.0
+  ],
+  "obstacle_contact|ppo_release": [
+   -6.0,
+   -12.5,
+   0.5
+  ],
+  "obstacle_contact|social_force": [
+   0.0,
+   -1.5,
+   1.5
+  ],
+  "ped_contact|hybrid_v4_continuous": [
+   0.0,
+   0.0,
+   0.0
+  ],
+  "ped_contact|orca": [
+   12.0,
+   5.5,
+   19.0
+  ],
+  "ped_contact|ppo_release": [
+   7.5,
+   1.0,
+   14.5
+  ],
+  "ped_contact|social_force": [
+   0.5,
+   0.0,
+   1.5
+  ],
+  "ped_delay_rate_all|hybrid_v4_continuous": [
+   0.061302971951663496,
+   0.05249677740689367,
+   0.07001702803280205
+  ],
+  "ped_delay_rate_all|orca": [
+   0.05342536482959985,
+   0.045721284835133706,
+   0.06132833347190171
+  ],
+  "ped_delay_rate_all|ppo_release": [
+   0.04134757790714502,
+   0.03496824826486409,
+   0.047758817099500445
+  ],
+  "ped_delay_rate_all|social_force": [
+   0.058395879082381724,
+   0.05128643104154616,
+   0.0653819467872381
+  ],
+  "ped_delay_rate_fast|hybrid_v4_continuous": [
+   0.0762375399377197,
+   0.05069068566034548,
+   0.10261031850427388
+  ],
+  "ped_delay_rate_fast|orca": [
+   0.0678930996451527,
+   0.04233738248166628,
+   0.09343965578009374
+  ],
+  "ped_delay_rate_fast|ppo_release": [
+   0.06044918662402779,
+   0.03986078395647928,
+   0.08112190030526834
+  ],
+  "ped_delay_rate_fast|social_force": [
+   0.06899088814854622,
+   0.041647849478758873,
+   0.09636196132330224
+  ],
+  "ped_delay_rate_slow|hybrid_v4_continuous": [
+   0.08124756922014058,
+   0.05496588111529127,
+   0.10828381609660574
+  ],
+  "ped_delay_rate_slow|orca": [
+   0.05223896978422999,
+   0.028938862214330584,
+   0.07575915931304915
+  ],
+  "ped_delay_rate_slow|ppo_release": [
+   0.03834950136370026,
+   0.02036946717696264,
+   0.05631567514975904
+  ],
+  "ped_delay_rate_slow|social_force": [
+   0.07049267554655672,
+   0.04175843564560637,
+   0.09943273777887227
+  ],
+  "ped_near_delay_rate_all|hybrid_v4_continuous": [
+   0.01541852003079839,
+   0.0063753027563798245,
+   0.023944469685404327
+  ],
+  "ped_near_delay_rate_all|orca": [
+   0.01046108629903756,
+   0.0055154890024859925,
+   0.015567731207091127
+  ],
+  "ped_near_delay_rate_all|ppo_release": [
+   0.0017573177751410184,
+   0.00042354212132056536,
+   0.003056598727192522
+  ],
+  "ped_near_delay_rate_all|social_force": [
+   0.00808079534921035,
+   0.001886872802590687,
+   0.013954593434546612
+  ],
+  "ped_near_delay_rate_fast|hybrid_v4_continuous": [
+   0.013033469692491053,
+   0.0024043878987286007,
+   0.023876862155528207
+  ],
+  "ped_near_delay_rate_fast|orca": [
+   0.010073879870551536,
+   0.0014642175511564806,
+   0.018449466286285313
+  ],
+  "ped_near_delay_rate_fast|ppo_release": [
+   0.0015229094667517985,
+   -0.0014168984632022725,
+   0.004261058128384859
+  ],
+  "ped_near_delay_rate_fast|social_force": [
+   -0.003135112525242222,
+   -0.015136320863197737,
+   0.0077608762228838935
+  ],
+  "ped_near_delay_rate_slow|hybrid_v4_continuous": [
+   0.040571434544362996,
+   0.02303008971827512,
+   0.05762923550722098
+  ],
+  "ped_near_delay_rate_slow|orca": [
+   0.018211812732042743,
+   0.008044117817233201,
+   0.028698908206541092
+  ],
+  "ped_near_delay_rate_slow|ppo_release": [
+   0.001040118442035691,
+   -0.0029554828324038452,
+   0.0054385851986506265
+  ],
+  "ped_near_delay_rate_slow|social_force": [
+   0.021420852187438867,
+   0.00801439160796872,
+   0.0346843210734587
+  ],
+  "success|hybrid_v4_continuous": [
+   0.5,
+   -2.5124999999999886,
+   3.5
+  ],
+  "success|orca": [
+   -12.0,
+   -19.0,
+   -5.0
+  ],
+  "success|ppo_release": [
+   -1.0,
+   -7.0,
+   5.0
+  ],
+  "success|social_force": [
+   -6.5,
+   -14.0,
+   1.5
+  ],
+  "time_to_goal_s|hybrid_v4_continuous": [
+   1.4351423046952574,
+   0.4531025004369333,
+   2.419352562272963
+  ],
+  "time_to_goal_s|orca": [
+   1.1639736070381228,
+   -0.48755057933607043,
+   2.833144754662272
+  ],
+  "time_to_goal_s|ppo_release": [
+   0.5931547619047617,
+   -0.8751335227272729,
+   3.2022463942307664
+  ],
+  "time_to_goal_s|social_force": [
+   0.012222222222221765,
+   -0.9284346846846843,
+   1.2769465090090084
+  ],
+  "timeout|hybrid_v4_continuous": [
+   -0.5,
+   -3.5,
+   2.512499999999818
+  ],
+  "timeout|orca": [
+   0.5,
+   -1.0,
+   2.5
+  ],
+  "timeout|ppo_release": [
+   -0.5,
+   -1.5,
+   0.0
+  ],
+  "timeout|social_force": [
+   6.0,
+   -2.0,
+   14.0
+  ]
+ },
+ "verdict": {
+  "outcome": "B_ORDER_CHANGE_OR_SELECTIVE_DETERIORATION",
+  "qualifier": "C_SLOW_PED_DELAY_QUALIFIER",
+  "slow_ped_near_delay_increase_planners": [
+   "hybrid_v4_continuous",
+   "orca",
+   "social_force"
+  ],
+  "too_wide": [],
+  "triggers": [
+   "selective_interaction:hybrid_v4_continuous-orca",
+   "selective_interaction:orca-ppo_release",
+   "selective_deterioration:success:orca",
+   "selective_deterioration:collision:orca"
+  ],
+  "within_persist_bound": false
+ }
+}

@@ -24,7 +24,7 @@ from typing import Any
 import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import exsel  # noqa: E402
+import exsel
 
 RUN_ONE = Path(__file__).resolve().parent / "run_one.sh"
 
@@ -37,9 +37,13 @@ def arm_rows(run_dir: Path, arms: list[str]) -> dict[str, tuple[str, dict[str, A
     """
     out = {}
     for arm in arms:
-        files = sorted(glob.glob(str(run_dir / "out" / "*" / "runs" / f"{arm}__*" / "episodes.jsonl")))
+        files = sorted(
+            glob.glob(str(run_dir / "out" / "*" / "runs" / f"{arm}__*" / "episodes.jsonl"))
+        )
         if len(files) != 1:
-            raise RuntimeError(f"{run_dir}: expected one episodes.jsonl for {arm}, found {len(files)}")
+            raise RuntimeError(
+                f"{run_dir}: expected one episodes.jsonl for {arm}, found {len(files)}"
+            )
         rows = exsel.read_rows(files[0])
         if len(rows) != 1:
             raise RuntimeError(f"{files[0]}: expected one row, found {len(rows)}")
@@ -47,8 +51,9 @@ def arm_rows(run_dir: Path, arms: list[str]) -> dict[str, tuple[str, dict[str, A
     return out
 
 
-def run(wt: Path, out_root: Path, cid: str, cell: str, seed: int, arms: list[str],
-        trace: bool) -> int:
+def run(
+    wt: Path, out_root: Path, cid: str, cell: str, seed: int, arms: list[str], trace: bool
+) -> int:
     """Run one campaign for (cell, seed, arms) unless a successful receipt exists.
 
     Returns:
@@ -64,7 +69,7 @@ def run(wt: Path, out_root: Path, cid: str, cell: str, seed: int, arms: list[str
     return subprocess.call(cmd)
 
 
-def main() -> int:  # noqa: C901
+def main() -> int:  # noqa: C901, PLR0915
     """Screen or trace-rerun one claim.
 
     Returns:
@@ -113,14 +118,17 @@ def main() -> int:  # noqa: C901
             diff = {f: [p0[f], p1[f]] for f in fields if p0[f] != p1[f]}
             ok &= not diff
             result["arms"][arm] = {
-                "match": not diff, "mismatches": diff,
+                "match": not diff,
+                "mismatches": diff,
                 "step_trace_recorded": bool(
-                    (rerun[arm][1].get("scenario_params") or {}).get("record_simulation_step_trace")),
+                    (rerun[arm][1].get("scenario_params") or {}).get("record_simulation_step_trace")
+                ),
                 "rerun_row_sha256": exsel.row_sha256(rerun[arm][0]),
             }
         result["trace_accepted"] = ok
         (a.runs / "trace_rerun_result.json").write_text(
-            json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
         print(json.dumps(result, sort_keys=True))
         return 0 if ok else 1
 
@@ -143,12 +151,19 @@ def main() -> int:  # noqa: C901
         rows = arm_rows(a.runs / cid, arms)
         ev = exsel.evaluate({arm: rows[arm][1] for arm in arms}, claim)
         rec = {
-            "screening_index": idx, "seed": seed, "campaign_id": cid,
+            "screening_index": idx,
+            "seed": seed,
+            "campaign_id": cid,
             "accepted": ev["accepted"],
-            "arms": {arm: {"outcome": ev["per_arm"][arm]["record"]["outcome"],
-                           "class": ev["per_arm"][arm]["class"],
-                           "bands": ev["per_arm"][arm]["bands"],
-                           "mode": ev["per_arm"][arm]["mode"]} for arm in arms},
+            "arms": {
+                arm: {
+                    "outcome": ev["per_arm"][arm]["record"]["outcome"],
+                    "class": ev["per_arm"][arm]["class"],
+                    "bands": ev["per_arm"][arm]["bands"],
+                    "mode": ev["per_arm"][arm]["mode"],
+                }
+                for arm in arms
+            },
         }
         with state.open("a", encoding="utf-8") as fh:
             fh.write(json.dumps(rec, sort_keys=True) + "\n")

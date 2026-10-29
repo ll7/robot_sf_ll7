@@ -14,7 +14,7 @@ from pathlib import Path
 import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import exsel  # noqa: E402
+import exsel
 
 EXEC_COMMIT = "373dbfde4f39667cf9e8732dabe7df5118bdeab1"
 
@@ -134,8 +134,10 @@ def main() -> int:
                 "record_simulation_step_trace": "true in the trace-capable rerun only",
             },
             "dt_s": 0.1,
-            "environment": {"python": "3.13.14", "uv_lock_sha256":
-                            "def82098b23281e7c49f1f05e052e412c2de54ae2da53f1708bc0ddc2a30d023"},
+            "environment": {
+                "python": "3.13.14",
+                "uv_lock_sha256": "def82098b23281e7c49f1f05e052e412c2de54ae2da53f1708bc0ddc2a30d023",
+            },
         },
         "screening": {
             "seed_band": scr["seed_band"],
@@ -155,36 +157,42 @@ def main() -> int:
         },
         "measures": {
             "outcome": "S if metrics.success; else C if outcome.collision_event; else T if "
-                       "outcome.timeout_event; else ?",
+            "outcome.timeout_event; else ?",
             "collision_kind": "pedestrian if C and metrics.ped_collision_count > 0; obstacle if C, "
-                              "no pedestrian collision and (metrics.obstacle_collision_count > 0 "
-                              "or metrics.wall_collisions > 0)",
+            "no pedestrian collision and (metrics.obstacle_collision_count > 0 "
+            "or metrics.wall_collisions > 0)",
             "min_surface_clearance_m": "safety_predicates.occlusion_near_miss_predicate.fields."
-                                       "actual_minimum_separation_m - 1.4; absent when missing "
-                                       "or >= 1e6",
+            "actual_minimum_separation_m - 1.4; absent when missing "
+            "or >= 1e6",
             "exposure_steps": "metrics.near_misses",
             "time_to_goal_s": "round(steps * scenario_params.run_dt, 6) for outcome S only",
             "band_check": "inclusive; unrounded value against the frozen (3-decimal) bounds; an "
-                          "absent value lies outside; a null band is not checked",
+            "absent value lies outside; a null band is not checked",
         },
         "trace_rerun": {
             "match_fields": [
-                "outcome", "collision_kind", "termination_reason", "steps",
-                "ped_collision_count", "obstacle_collision_count", "wall_collisions",
-                "near_misses", "min_ped_separation_m",
+                "outcome",
+                "collision_kind",
+                "termination_reason",
+                "steps",
+                "ped_collision_count",
+                "obstacle_collision_count",
+                "wall_collisions",
+                "near_misses",
+                "min_ped_separation_m",
             ],
             "rule": "accept the trace only if every arm's rerun row equals its screening row on "
-                    "every match field (exact equality); otherwise report the rerun as it is "
-                    "(rules.never_replace)",
+            "every match field (exact equality); otherwise report the rerun as it is "
+            "(rules.never_replace)",
         },
         "mode": {
             "column": "mode in the screening ledger, per (seed, arm), from the raw row",
             "rule": "fallback if algorithm_metadata.status or pedestrian_model."
-                    "fallback_degraded_status reports fallback or any numeric algorithm_metadata "
-                    "counter whose key contains 'fallback' is > 0; degraded if integrity."
-                    "effective_view.degraded or the pedestrian model is not native; else native",
+            "fallback_degraded_status reports fallback or any numeric algorithm_metadata "
+            "counter whose key contains 'fallback' is > 0; degraded if integrity."
+            "effective_view.degraded or the pedestrian model is not native; else native",
             "use": "a non-native row is reported and counted; it is not silently screened as a "
-                   "rejection or acceptance (the verdict is still recorded as the rule gives it)",
+            "rejection or acceptance (the verdict is still recorded as the rule gives it)",
         },
         "outcome_rule": {
             "accepted": (
@@ -211,7 +219,7 @@ def main() -> int:
     back = yaml.safe_load(a.out.read_text(encoding="utf-8"))
     assert back["protocol_claim_verbatim"] == claim_text
     full = yaml.safe_load(raw)
-    assert [c for c in full["claims"] if c["id"] == a.claim_id][0] == exsel.load_claim(back)
+    assert next(c for c in full["claims"] if c["id"] == a.claim_id) == exsel.load_claim(back)
     return 0
 
 

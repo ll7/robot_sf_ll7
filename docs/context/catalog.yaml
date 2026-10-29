@@ -20,6 +20,30 @@ freshness_values:
   policy: Durable policy boundary; update only when the policy changes.
   evidence: Evidence pointer or manifest; preserve provenance and checksums when applicable.
 entries:
+- path: docs/context/trace_example_selection/README.md
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/trace_example_selection/SHA256SUMS
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/trace_example_selection/exsel-6.4-measure-walkthrough/README.md
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/trace_example_selection/exsel-6.4-measure-walkthrough/SHA256SUMS
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/trace_example_selection/exsel-7.2-narrow-doorway/README.md
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/trace_example_selection/exsel-7.2-narrow-doorway/SHA256SUMS
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
 - path: docs/context/perception_degradation/README.md
   status: evidence
   freshness: evidence

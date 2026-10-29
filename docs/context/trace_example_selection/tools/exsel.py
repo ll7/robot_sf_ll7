@@ -88,8 +88,13 @@ def project(raw: dict[str, Any]) -> dict[str, Any]:
     m = raw.get("metrics") or {}
     out = raw.get("outcome") or {}
     scp = raw.get("scenario_params") or {}
-    sep = _get(raw, "safety_predicates", "occlusion_near_miss_predicate", "fields",
-               "actual_minimum_separation_m")
+    sep = _get(
+        raw,
+        "safety_predicates",
+        "occlusion_near_miss_predicate",
+        "fields",
+        "actual_minimum_separation_m",
+    )
     if not isinstance(sep, (int, float)) or sep >= NO_PEDESTRIAN_SENTINEL:
         sep = None
     success = bool(m.get("success"))
@@ -147,8 +152,11 @@ def mode_of(raw: dict[str, Any]) -> str:
     meta = raw.get("algorithm_metadata") or {}
     status = str(meta.get("status", "")).lower()
     ped_status = str(_get(raw, "pedestrian_model", "fallback_degraded_status") or "").lower()
-    counters = [v for k, v in _flat(meta) if "fallback" in k.lower() and isinstance(v, (int, float))
-                and not isinstance(v, bool)]
+    counters = [
+        v
+        for k, v in _flat(meta)
+        if "fallback" in k.lower() and isinstance(v, (int, float)) and not isinstance(v, bool)
+    ]
     if "fallback" in status or ped_status == "fallback" or any(c > 0 for c in counters):
         return "fallback"
     if _get(raw, "integrity", "effective_view", "degraded") or ped_status not in ("native", ""):
@@ -164,8 +172,9 @@ def mode_evidence(raw: dict[str, Any]) -> dict[str, Any]:
     """
     meta = raw.get("algorithm_metadata") or {}
     counters = sorted(
-        (k, v) for k, v in _flat(meta) if "fallback" in k.lower() and isinstance(v, (int, float))
-        and not isinstance(v, bool)
+        (k, v)
+        for k, v in _flat(meta)
+        if "fallback" in k.lower() and isinstance(v, (int, float)) and not isinstance(v, bool)
     )
     return {
         "algorithm_status": meta.get("status"),

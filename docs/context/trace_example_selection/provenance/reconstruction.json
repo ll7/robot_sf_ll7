@@ -1,0 +1,52 @@
+{
+  "allowed_differences": [
+    "timestamps.start",
+    "timestamps.end",
+    "timing.steps_per_second",
+    "wall_time_sec"
+  ],
+  "results": [
+    {
+      "arm": "social_force",
+      "claim": "EXSEL-6.4-MEASURE-WALKTHROUGH",
+      "differing": [
+        "timestamps.end",
+        "timestamps.start",
+        "timing.steps_per_second",
+        "wall_time_sec"
+      ],
+      "flattened_fields": 813,
+      "outside_allowed": [],
+      "seed": 1197
+    },
+    {
+      "arm": "orca",
+      "claim": "EXSEL-7.2-NARROW-DOORWAY",
+      "differing": [
+        "timestamps.end",
+        "timestamps.start",
+        "timing.steps_per_second",
+        "wall_time_sec"
+      ],
+      "flattened_fields": 725,
+      "outside_allowed": [],
+      "seed": 1178
+    },
+    {
+      "arm": "goal",
+      "claim": "EXSEL-7.2-NARROW-DOORWAY",
+      "differing": [
+        "timestamps.end",
+        "timestamps.start",
+        "timing.steps_per_second",
+        "wall_time_sec"
+      ],
+      "flattened_fields": 720,
+      "outside_allowed": [],
+      "seed": 1178
+    }
+  ],
+  "schema": "exsel.reconstruction.v1",
+  "trace_reruns": "the accepted seeds' trace-capable reruns match their screening rows on every contract match field (see each claim's trace/trace_check.json)",
+  "what": "fresh rerun of the first screening seed of each claim at the execution commit through tools/run_one.sh with PYTHONHASHSEED=1, compared with the screening row by tools/compare_rows.py"
+}

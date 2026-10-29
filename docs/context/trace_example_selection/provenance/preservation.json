@@ -1,0 +1,23 @@
+{
+  "contents": "all raw campaign outputs (smoke, qualification, screening, trace reruns, reconstruction reruns), the claim-keyed report output and the pre-screening push receipt",
+  "execution_commit": "373dbfde4f39667cf9e8732dabe7df5118bdeab1",
+  "files_excluding_manifest": 762,
+  "locations": [
+    {
+      "artifact_digest": "cc2828ac799fee5aeabaebc7afc06844",
+      "kind": "wandb_artifact",
+      "state": "COMMITTED",
+      "uploads": 1,
+      "uri": "wandb://ll7/robot_sf/campaign-exsel_trace_example_screening_373dbfde4:v0",
+      "verification": "remote manifest read back: 763 paths (762 files plus MANIFEST.sha256) equal the local set; sizes and MD5 digests all match; no full remote download"
+    },
+    {
+      "kind": "lab_host_archive",
+      "verification": "sha256sum -c of MANIFEST.sha256 passes for all 762 listed files"
+    }
+  ],
+  "manifest": "MANIFEST.sha256",
+  "manifest_sha256": "4eaf89f50887290a5fe8545b91f95c33f00f457b648ab01d1528eb347e2a613f",
+  "schema": "exsel.preservation.v1",
+  "size_bytes_approx": "11 MB"
+}

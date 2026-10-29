@@ -10,6 +10,7 @@ from collections.abc import Iterable, Mapping
 from typing import Any
 
 from robot_sf.benchmark import constants
+from robot_sf.benchmark.footprint_metrics import FOOTPRINT_SCHEMA
 from robot_sf.benchmark.robot_force_contract import declared_force_source_contract
 
 LEGACY_METRIC_SCHEMA_VERSION = "robot-sf-metrics.v1"
@@ -74,6 +75,16 @@ def require_uniform_metric_schema(records: Iterable[Mapping[str, Any]]) -> str:
         Common schema version, or the legacy default for an empty collection."""
     records = list(records)
     require_uniform_trace_schema(records)
+    footprint_versions = set()
+    for record in records:
+        metrics = record.get("metrics", record)
+        block = metrics.get("footprint_metrics") if isinstance(metrics, Mapping) else None
+        version = block.get("schema_version") if isinstance(block, Mapping) else None
+        if block is not None and version != FOOTPRINT_SCHEMA:
+            raise ValueError("unsupported footprint metric definitions")
+        footprint_versions.add(version)
+    if len(footprint_versions) > 1:
+        raise ValueError("incompatible footprint metric definitions: mixed opt-in and legacy rows")
     versions = {metric_schema_version(record) for record in records}
     if len(versions) > 1:
         raise ValueError(

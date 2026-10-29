@@ -1,5 +1,6 @@
 """Step 3: compare the trace-capable rerun rows with the screening rows (exact fields)."""
 import csv, json, sys
+from typing import Any
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 import exsel_screen as ex
@@ -15,12 +16,13 @@ with ledger_csv.open() as fh:
 rerun = ex.load_run(rerun_root)
 def norm(v):
     return "" if v is None else str(v)
-res, ok = {"seed": seed, "fields": FIELDS, "arms": {}}, True
+arms: dict[str, Any] = {}
+res: dict[str, Any] = {"seed": seed, "fields": FIELDS, "arms": arms}
+ok = True
 for arm in ex.ARMS:
     s, t = screen[arm], rerun[(arm, seed)]
     diffs = {f: {"screening": s[f], "rerun": norm(t[f])} for f in FIELDS if s[f] != norm(t[f])}
-    has_trace = None
-    res["arms"][arm] = {"match": not diffs, "diffs": diffs, "rerun_row_sha256": t["episode_row_sha256"],
+    arms[arm] = {"match": not diffs, "diffs": diffs, "rerun_row_sha256": t["episode_row_sha256"],
                         "screening_row_sha256": s["episode_row_sha256"],
                         "full_row_identical": t["episode_row_sha256"] == s["episode_row_sha256"],
                         "mode": t["mode"], "fallback_count": t["fallback_count"],

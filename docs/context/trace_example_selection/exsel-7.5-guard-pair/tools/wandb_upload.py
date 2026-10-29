@@ -5,13 +5,14 @@ usage: wandb_upload.py <run_dir> <artifact_name> <metadata_json>
 """
 
 import base64
+import importlib
 import hashlib
 import json
 import os
 import sys
 from pathlib import Path
 
-import wandb
+wandb = importlib.import_module("wandb")  # optional dependency; resolved at run time
 
 run_dir = Path(sys.argv[1]).resolve()
 name = sys.argv[2]

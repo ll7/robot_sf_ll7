@@ -984,6 +984,39 @@ def test_imported_runner_alias_binding(tmp_path, import_line, consumer):
 
 
 # seed-holdout: synthetic-fixture begin
+POLICY_LINES = {
+    "robot_sf/training/seed_policy.py": (
+        "min(seed_bands.EVAL_SEEDS_0_0_8) <= seed <= max(seed_bands.EVAL_SEEDS_0_0_8)",
+        "or seed in seed_bands.RETIRED_EVAL_SEEDS_0_0_7",
+        "(min(seed_bands.EVAL_SEEDS_0_0_8), max(seed_bands.EVAL_SEEDS_0_0_8)),",
+        "min(seed_bands.RETIRED_EVAL_SEEDS_0_0_7),",
+        "max(seed_bands.RETIRED_EVAL_SEEDS_0_0_7),",
+    ),
+    "tests/training/test_training_seed_policy.py": (
+        'monkeypatch.setattr(seed_bands, "EVAL_SEEDS_0_0_8", (100050, 100060))',
+        'monkeypatch.setattr(seed_bands, "RETIRED_EVAL_SEEDS_0_0_7", frozenset({100070, 100071}))',
+    ),
+}
+# seed-holdout: synthetic-fixture end
+
+
+def _training_policy_diff(path: str, line: str) -> str:
+    return f"diff --git a/{path} b/{path}\n+++ b/{path}\n@@ -0,0 +1 @@\n+{line}\n"
+
+
+@pytest.mark.parametrize("path,line", [(p, s) for p, lines in POLICY_LINES.items() for s in lines])
+def test_training_refusal_metadata_is_accepted(tmp_path: Path, path: str, line: str) -> None:
+    """Exact guard comparisons and synthetic policy doubles are metadata consumers."""
+    assert check_diff(_training_policy_diff(path, line), tmp_path) == []
+
+
+@pytest.mark.parametrize("path", POLICY_LINES)
+def test_training_guard_exemption_does_not_admit_rollouts(tmp_path: Path, path: str) -> None:
+    """Other named consumers in the same files still require explicit admission."""
+    # seed-holdout: synthetic-fixture begin
+    line = "env.reset(seed=min(seed_bands.EVAL_SEEDS_0_0_8))"
+    # seed-holdout: synthetic-fixture end
+    assert check_diff(_training_policy_diff(path, line), tmp_path)
 
 
 def versions(mode, lo, hi):

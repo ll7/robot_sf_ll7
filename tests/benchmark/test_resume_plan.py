@@ -555,7 +555,7 @@ def test_map_resume_rejects_ambiguous_plan_or_stale_denominator(tmp_path, bad_pl
         scenarios += [{"name": "a", "map_file": "a.svg", "seeds": [1002]}]
     else:
         kwargs["expected_jobs"] = 1
-    with pytest.raises(ValueError, match="duplicate job identities|expected_jobs disagrees"):
+    with pytest.raises(ValueError, match="duplicate scenario name|expected_jobs disagrees"):
         build_resume_plan(
             tmp_path,
             planners=[{"key": "sf"}],

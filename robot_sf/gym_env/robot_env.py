@@ -36,6 +36,7 @@ from robot_sf.gym_env.env_util import (
     prepare_pedestrian_actions,
     reset_episode_counter_for_seed,
 )
+from robot_sf.gym_env.goal_progress import GoalProgressWindow
 from robot_sf.gym_env.observation_mode import ObservationMode
 from robot_sf.gym_env.reset_metadata import build_reset_metadata
 from robot_sf.gym_env.reward import route_completion_v2_reward
@@ -727,6 +728,7 @@ class RobotEnv(BaseEnv):
     def _prime_snqi_proxy_state(self) -> None:
         """Reset and prime step-level SNQI proxy state for a fresh episode."""
         self._snqi_proxy.prime(self.simulator)
+        self._goal_progress_window = GoalProgressWindow(float(self.state.distance_to_goal))
 
     def _build_occupancy_grid(self, env_config: EnvSettings) -> OccupancyGrid | None:
         """Initialize occupancy grid if configured and return the instance.
@@ -1202,6 +1204,7 @@ class RobotEnv(BaseEnv):
 
         # Fetch metadata about the current state
         reward_dict = self.state.meta_dict()
+        reward_dict.update(self._goal_progress_window.update(float(self.state.distance_to_goal)))
         reward_dict.update(
             self._snqi_proxy.compute_step_metrics(
                 self.simulator,

@@ -44,6 +44,14 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/trace_example_selection/exsel-7.5-guard-pair/README.md
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/trace_example_selection/exsel-7.5-guard-pair/SHA256SUMS
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
 - path: docs/context/heterogeneous_speed_mean_matched/README.md
   status: evidence
   freshness: evidence

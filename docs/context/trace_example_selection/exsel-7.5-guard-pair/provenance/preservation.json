@@ -1,0 +1,24 @@
+{
+  "schema": "exsel.preservation.v1",
+  "raw_bundle": "exscr2_exsel75_guard_pair_20261029 (parity, screening, trace rerun, reconstruction rerun, logs, ledger, checks, inputs, tools, environment.json)",
+  "files": 313,
+  "manifest": "MANIFEST.sha256 (sha256 of every other file)",
+  "manifest_sha256": "c178b903ef7afb2ebb26f03f94f512426dd29ebba6fb1e1389991ea6663d283c",
+  "size": "7.6 MB (logs gzip -9 compressed, lossless)",
+  "locations": [
+    {
+      "kind": "wandb_artifact",
+      "uri": "wandb://ll7/robot_sf/campaign-exscr2_exsel75_guard_pair_20261029:v0",
+      "artifact_digest": "0c308f63d3afea599d66572f09c6ef12",
+      "verification": "remote entry table re-fetched; 314/314 paths, sizes and MD5 match (313 files + manifest); no full remote download",
+      "uploads": 1
+    },
+    {
+      "kind": "private_host_archive",
+      "locator": "<host-archive>/experiments/exscr2/exscr2_exsel75_guard_pair_20261029/",
+      "verification": "sha256sum -c MANIFEST.sha256 passed on the copy (313 files)"
+    }
+  ],
+  "credential_handling": "in-process netrc via the wandb client; nothing printed",
+  "not_in_git": "raw episode JSONL (including the full simulation_step_trace payloads), run reports and logs; this packet holds the ledger, compact trace CSVs and checks"
+}

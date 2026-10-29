@@ -1,0 +1,31 @@
+## EXSEL-7.5-GUARD-PAIR (typical) -- Section 7.5 (sec:rq3_guard_escape_ablation)
+
+Claim: Within hybrid v4 (continuous) with the escape bundle on, switching the hard guard off and on turns a wall collision into a completion on the same seed.
+Source: guard_replication; arms: G0E1 (guard off, escape on) {"collision_kind": "obstacle", "outcome": "C"}; G1E1 (guard on, escape on) {"outcome": "S"}
+Group frequency: 93/240
+Cells (matching pairs / complete pairs):
+  classic_bottleneck_high: 3/30
+  classic_bottleneck_low: 1/30
+  classic_bottleneck_medium: 4/30
+  classic_cross_trap_high: 27/30 eligible CHOSEN
+  classic_cross_trap_low: 27/30 eligible
+  classic_cross_trap_medium: 27/30 eligible
+  classic_realworld_double_bottleneck_high: 0/30
+  francis2023_narrow_hallway: 4/30
+Chosen cell: classic_cross_trap_high
+Base rates in the chosen cell (for captions):
+  unconditional G0E1: 30/30
+  unconditional G1E1: 27/30
+  joint pattern: 27/30
+  conditional G0E1|G1E1: 27/27
+  conditional G1E1|G0E1: 27/30
+Frozen bands:
+  G0E1 min_surface_clearance_m: not recorded
+  G0E1 exposure_steps: not recorded
+  G0E1 time_to_goal_s: not recorded
+  G1E1 min_surface_clearance_m: not recorded
+  G1E1 exposure_steps: not recorded
+  G1E1 time_to_goal_s: 33.200 to 41.600 (n=27)
+Source seeds meeting the screening rule: 13/30
+Screening: band 1161-1200, budget 40, selection RNG seed 'exsel-7.5-guard-pair-2026-10-28'; order: 1188, 1196, 1170, 1168, 1199, 1175, 1162, 1183, 1164, 1161, 1174, 1180, 1167, 1200, 1173, 1177, 1171, 1182, 1184, 1178, 1187, 1163, 1166, 1186, 1194, 1169, 1165, 1181, 1193, 1195, 1198, 1172, 1176, 1185, 1179, 1190, 1189, 1192, 1197, 1191
+Frozen record: MATCH

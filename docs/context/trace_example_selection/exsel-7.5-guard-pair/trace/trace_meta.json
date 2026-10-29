@@ -1,0 +1,70 @@
+{
+  "arms": {
+    "G0E1": {
+      "derived_sign_vs_recorded_obstacle_flag_disagreements": 0,
+      "dt": 0.1,
+      "first_obstacle_collision_step": 154,
+      "guard_rejected_commands": "not recorded (record_planner_decision_trace stayed false)",
+      "min_obstacle_envelope_distance_m_derived": -0.016584,
+      "min_ped_surface_clearance_m_trace": 0.573614,
+      "n_steps": 155,
+      "raw_row_sha256": "0faa052a2c1caefdf29087f76e4dfc9b528d773fa5d81c74ed4231ef379aa5a7",
+      "row_min_surface_clearance_m": 0.573614,
+      "row_steps": 155,
+      "steps_compared": 155,
+      "terminal_step": {
+        "collision": {
+          "obstacle": true,
+          "pedestrian": false,
+          "robot": false
+        },
+        "rl": {
+          "reward": -4.93925613891904,
+          "terminated": true,
+          "truncated": false
+        },
+        "step": 154,
+        "time_s": 15.5
+      },
+      "termination_reason": "collision",
+      "trace_csv": "trace_G0E1.csv",
+      "trace_schema": "simulation-step-trace.v2"
+    },
+    "G1E1": {
+      "derived_sign_vs_recorded_obstacle_flag_disagreements": 0,
+      "dt": 0.1,
+      "first_obstacle_collision_step": null,
+      "guard_rejected_commands": "not recorded (record_planner_decision_trace stayed false)",
+      "min_obstacle_envelope_distance_m_derived": 0.198329,
+      "min_ped_surface_clearance_m_trace": 0.460876,
+      "n_steps": 347,
+      "raw_row_sha256": "641a6417afe09c73926c302a85f08aead8e63a6a272216605fb79ba0545ce360",
+      "row_min_surface_clearance_m": 0.460876,
+      "row_steps": 347,
+      "steps_compared": 347,
+      "terminal_step": {
+        "collision": {
+          "obstacle": false,
+          "pedestrian": false,
+          "robot": false
+        },
+        "rl": {
+          "reward": 2.230413906546052,
+          "terminated": true,
+          "truncated": false
+        },
+        "step": 346,
+        "time_s": 34.7
+      },
+      "termination_reason": "success",
+      "trace_csv": "trace_G1E1.csv",
+      "trace_schema": "simulation-step-trace.v2"
+    }
+  },
+  "cell": "classic_cross_trap_high",
+  "map_file": "maps/successor_svg_maps/issue_9762_classic_crossing_goal_zone_entry_v2.svg",
+  "map_sha256": "d3bc9ad6205108a480469338282611730410787cc897abd4d71f3f0fbd47d6a8",
+  "n_obstacle_and_bound_segments": 28,
+  "robot_radius_m": 1.0,
+  "seed": 1188
+}

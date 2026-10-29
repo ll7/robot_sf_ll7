@@ -1,0 +1,1 @@
+{"python": "3.13.14", "numpy": "2.4.6", "pyyaml": "6.0.3", "uv": "0.13.4", "uv_lock_sha256": "def82098b23281e7c49f1f05e052e412c2de54ae2da53f1708bc0ddc2a30d023", "execution_commit": "011c24045d6703a4a1e8b4428d6a9e931d220310", "os": "Linux 6.8.0-87-generic", "cpu": "AMD Ryzen 9 3950X 16-Core Processor", "nproc": 32, "workers": 2, "numerical_threads": 1, "cpu_only": true}

@@ -58,6 +58,8 @@ class ExpertTrainingConfig:
     snqi_weights_path: Path | None = None
     snqi_baseline_path: Path | None = None
     randomize_seeds: bool = False
+    ppo_initialization_seed: int | None = None
+    training_seed_telemetry: bool = False
     scenario_id: str | None = None
     feature_extractor: str = "default"
     feature_extractor_kwargs: dict[str, object] = field(default_factory=dict)
@@ -85,6 +87,8 @@ class ExpertTrainingConfig:
         scenario_config: Path,
         seeds: tuple[int, ...] | list[int],
         randomize_seeds: bool = False,
+        ppo_initialization_seed: int | None = None,
+        training_seed_telemetry: bool = False,
         total_timesteps: int,
         policy_id: str,
         convergence: ConvergenceCriteria,
@@ -126,10 +130,22 @@ class ExpertTrainingConfig:
         ):
             resolved_env_factory_kwargs["reward_name"] = "route_completion_v2"
 
+        if ppo_initialization_seed is not None and (
+            isinstance(ppo_initialization_seed, bool)
+            or not isinstance(ppo_initialization_seed, int)
+            or not 0 <= ppo_initialization_seed < 2**31
+        ):
+            raise ValueError(
+                "ppo_initialization_seed must be a non-negative integer below the RNG limit"
+            )
+        if not isinstance(training_seed_telemetry, bool):
+            raise ValueError("training_seed_telemetry must be boolean")
         return cls(
             scenario_config=scenario_config,
             seeds=ensure_seed_tuple(seeds),
             randomize_seeds=bool(randomize_seeds),
+            ppo_initialization_seed=ppo_initialization_seed,
+            training_seed_telemetry=training_seed_telemetry,
             total_timesteps=total_timesteps,
             policy_id=policy_id,
             convergence=convergence,

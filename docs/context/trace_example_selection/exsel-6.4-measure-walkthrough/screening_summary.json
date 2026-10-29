@@ -1,0 +1,15 @@
+{
+  "accepted_screening_index": 4,
+  "accepted_seed": 1181,
+  "budget": 40,
+  "claim_id": "EXSEL-6.4-MEASURE-WALKTHROUGH",
+  "frozen_cell": "classic_doorway_high",
+  "frozen_pattern": "15/30",
+  "mode_counts": {
+    "social_force": {
+      "native": 4
+    }
+  },
+  "result": "ACCEPTED seed 1181 at screening index 4 of 40",
+  "seeds_screened": 4
+}

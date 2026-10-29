@@ -1,0 +1,40 @@
+{
+  "arms": {
+    "social_force": {
+      "consistent": true,
+      "file": "social_force_seed1181_step_trace.json.gz",
+      "near_miss_distance_m": 0.5,
+      "row_collision_kind": null,
+      "row_min_surface_clearance_m": 0.4306486316900029,
+      "row_near_misses": 8,
+      "row_outcome": "S",
+      "row_steps": 347,
+      "trace_dt_s": 0.1,
+      "trace_last_step_collision": {
+        "obstacle": false,
+        "pedestrian": false,
+        "robot": false
+      },
+      "trace_min_surface_clearance_m": 0.4306486316900028,
+      "trace_schema": "simulation-step-trace.v2",
+      "trace_steps": 347,
+      "trace_steps_with_clearance_below_near_miss_distance": 8
+    }
+  },
+  "claim_id": "EXSEL-6.4-MEASURE-WALKTHROUGH",
+  "screening_index": 4,
+  "seed": 1181,
+  "trace_rerun": {
+    "arms": {
+      "social_force": {
+        "match": true,
+        "mismatches": {},
+        "rerun_row_sha256": "5c018c0e83e2fb999532d552f7b5764dde0431d2e283bafe8cf95081e93b744e",
+        "step_trace_recorded": true
+      }
+    },
+    "screening_index": 4,
+    "seed": 1181,
+    "trace_accepted": true
+  }
+}

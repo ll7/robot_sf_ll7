@@ -1,4 +1,4 @@
-"""Build contract.yaml: protocol sections copied verbatim (line ranges) + lane execution block."""
+"""Build contract.yaml.txt: protocol sections copied verbatim (line ranges) + lane execution block."""
 import hashlib, sys
 from pathlib import Path
 import yaml

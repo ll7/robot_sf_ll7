@@ -15,11 +15,13 @@ guard off and on turn a wall collision into a completion on the same seed?
 Which development seed, taken in the committed screening order, is the first to show
 that pattern in the frozen cell `classic_cross_trap_high`, inside the frozen band?
 
-The protocol is the preregistration. [contract.yaml](contract.yaml) copies its
+The protocol is the preregistration. [contract.yaml.txt](contract.yaml.txt) copies its
 identity, rules, outcome predicates, sources, the claim entry and the acquisition
 spec byte for byte, and adds an `execution:` block that records how this lane ran
 it. The contract was committed as `689959b7a412` at 07:48:43 UTC and pushed at
 07:48:46 UTC, before the first screening episode started at 07:48:52 UTC.
+The suffix preserves the YAML bytes while separating the copied dissertation
+references from repo-local path checks; the original filename was `contract.yaml`.
 
 ## Result
 
@@ -146,6 +148,8 @@ reconstruction rerun of seed 1188: both raw rows differ in exactly those four fi
 host, commit of the packet branch and wall times legitimately differ. The ledger and
 the trace CSV/JSON regenerate byte-identically from the raw rows under
 `PYTHONHASHSEED` 1 and 999 (ledger) and default/7 (trace export).
+
+`SHA256SUMS` covers every tracked packet file except `SHA256SUMS` itself.
 
 Reproduce (from a worktree of `exscr2-guardpair-exec` with `uv sync --frozen` on
 Python 3.13.14, this packet's `inputs/` copied to the same path in that worktree):

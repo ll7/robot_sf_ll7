@@ -53,6 +53,8 @@ from typing import TYPE_CHECKING
 
 from loguru import logger
 
+from robot_sf.benchmark.metric_definitions import require_uniform_metric_schema
+
 # Map legacy/alias metric names to the canonical ones used in aggregation.
 _METRIC_ALIASES = {"average_speed": "avg_speed"}
 
@@ -303,7 +305,12 @@ def aggregate_metrics(records: Iterable[dict], cfg) -> list[AggregateMetricsGrou
 
     Returns:
         List of AggregateMetricsGroup entries.
+
+    Raises:
+        ValueError: Episode metric definitions are incompatible or malformed.
     """
+    records = list(records)
+    require_uniform_metric_schema(records)
     groups_raw = _group_records(records)
     if not groups_raw:
         return []

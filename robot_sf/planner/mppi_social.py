@@ -505,6 +505,14 @@ class MPPISocialPlannerAdapter(OccupancyAwarePlannerMixin):
         )
         return -reward
 
+    def _initial_sequence(self, mean: np.ndarray) -> np.ndarray:
+        """Return the nominal sequence; experimental subclasses may seed the search."""
+        return mean
+
+    def _prepare_candidates(self, batch: np.ndarray) -> np.ndarray:
+        """Return sampled candidates unchanged for the historical optimizer."""
+        return batch
+
     def plan(self, observation: dict[str, Any]) -> tuple[float, float]:
         """Return MPPI/CEM optimized `(v, omega)` command."""
         robot_pos, heading, speed, goal, ped_pos, ped_vel = self._extract_state(observation)
@@ -529,6 +537,7 @@ class MPPISocialPlannerAdapter(OccupancyAwarePlannerMixin):
             -self.config.max_angular_speed,
             self.config.max_angular_speed,
         )
+        mean = self._initial_sequence(mean)
 
         std = np.zeros_like(mean)
         std[:, 0] = float(self.config.init_linear_std)
@@ -547,6 +556,7 @@ class MPPISocialPlannerAdapter(OccupancyAwarePlannerMixin):
                 float(self.config.max_angular_speed),
             )
 
+            batch = self._prepare_candidates(batch)
             costs = self._batch_sequence_cost(
                 batch=batch,
                 robot_pos=robot_pos,

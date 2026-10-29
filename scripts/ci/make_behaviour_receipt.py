@@ -818,12 +818,22 @@ def _sweep_command(
     scenarios: list[str] | None,
     workers: int,
     check_only: bool,
+    harness_sha256: str,
 ) -> list[str]:
     cmd = [
         "uv",
         "run",
         "python",
+        "-c",
+        "import hashlib, sys; from pathlib import Path; "
+        "path = Path(sys.argv.pop(1)).resolve(); expected = sys.argv.pop(1); "
+        "source = path.read_bytes(); digest = hashlib.sha256(source).hexdigest(); "
+        "digest == expected or sys.exit('sweep harness differs from selected committed source'); "
+        "sys.argv[0] = str(path); sys.path.insert(0, str(path.parents[2])); "
+        "exec(compile(source, str(path), 'exec'), "
+        "{'__name__': '__main__', '__file__': str(path), '_SWEEP_SOURCE_BYTES': source})",
         "scripts/validation/run_empty_world_sweep.py",
+        harness_sha256,
         "--head-sha",
         source_sha,
         "--suite",
@@ -857,6 +867,51 @@ def _ensure_worktree(repo_root: Path, work_dir: Path, label: str, source_sha: st
     return checkout
 
 
+def _install_sweep_harness(
+    repo_root: Path,
+    checkout: Path,
+    output_dir: Path,
+    runtime_source_sha: str,
+    harness_source_sha: str,
+) -> None:
+    """Pin acquisition tooling without substituting the tested runtime tree.
+
+    The sweep permits this script to differ from its runtime source. Preserve
+    both script digests in the artifact: this is a development reconstruction,
+    never archived release data.
+    """
+    relative = "scripts/validation/run_empty_world_sweep.py"
+    source = _full_sha(repo_root, harness_source_sha)
+    if _full_sha(checkout, "HEAD") != runtime_source_sha:
+        raise ValueError("sweep checkout differs from requested runtime source")
+    harness = subprocess.check_output(["git", "show", f"{source}:{relative}"], cwd=repo_root)
+    original = subprocess.check_output(
+        ["git", "show", f"{runtime_source_sha}:{relative}"], cwd=repo_root
+    )
+    target = checkout / relative
+    if target.is_symlink() or not target.is_file():
+        raise ValueError("sweep harness must be a regular source file")
+    if target.read_bytes() not in (original, harness):
+        raise ValueError("refusing to overwrite uncommitted sweep harness")
+    output_dir.mkdir(parents=True, exist_ok=True)
+    manifest = output_dir / "harness.json"
+    record = _json_bytes(
+        {
+            "schema_version": "behaviour-sweep-harness.v1",
+            "runtime_source_sha": runtime_source_sha,
+            "harness_source_sha": source,
+            "harness_path": relative,
+            "harness_sha256": hashlib.sha256(harness).hexdigest(),
+            "original_harness_sha256": hashlib.sha256(original).hexdigest(),
+            "comparison": "development_reconstruction",
+        }
+    )
+    if manifest.exists() and manifest.read_bytes() != record:
+        raise ValueError("existing sweep harness provenance differs; use a fresh work directory")
+    target.write_bytes(harness)
+    manifest.write_bytes(record)
+
+
 def _run_local_sweep(  # noqa: PLR0913
     repo_root: Path,
     work_dir: Path,
@@ -868,9 +923,14 @@ def _run_local_sweep(  # noqa: PLR0913
     scenarios: list[str] | None,
     workers: int,
     check_only: bool,
+    sweep_harness_source_sha: str | None = None,
 ) -> SweepRun:
     checkout = _ensure_worktree(repo_root, work_dir, label, source_sha)
     output_dir = work_dir / "sweeps" / label
+    if sweep_harness_source_sha:
+        _install_sweep_harness(
+            repo_root, checkout, output_dir, source_sha, sweep_harness_source_sha
+        )
     cmd = _sweep_command(
         source_sha,
         output_dir,
@@ -879,6 +939,16 @@ def _run_local_sweep(  # noqa: PLR0913
         scenarios=scenarios,
         workers=workers,
         check_only=check_only,
+        harness_sha256=hashlib.sha256(
+            subprocess.check_output(
+                [
+                    "git",
+                    "show",
+                    f"{sweep_harness_source_sha or source_sha}:scripts/validation/run_empty_world_sweep.py",
+                ],
+                cwd=repo_root,
+            )
+        ).hexdigest(),
     )
     subprocess.run(cmd, cwd=checkout, check=True)
     manifest = output_dir / "README.md"
@@ -892,7 +962,7 @@ def _run_local_sweep(  # noqa: PLR0913
     )
 
 
-def _submit_sbatch_sweep(
+def _submit_sbatch_sweep(  # noqa: PLR0913
     repo_root: Path,
     work_dir: Path,
     label: str,
@@ -902,10 +972,15 @@ def _submit_sbatch_sweep(
     arms: list[str] | None,
     scenarios: list[str] | None,
     workers: int,
+    sweep_harness_source_sha: str | None = None,
 ) -> SweepRun:
     checkout = _ensure_worktree(repo_root, work_dir, label, source_sha)
     output_dir = work_dir / "sweeps" / label
     output_dir.mkdir(parents=True, exist_ok=True)
+    if sweep_harness_source_sha:
+        _install_sweep_harness(
+            repo_root, checkout, output_dir, source_sha, sweep_harness_source_sha
+        )
     cmd = _sweep_command(
         source_sha,
         output_dir,
@@ -914,6 +989,16 @@ def _submit_sbatch_sweep(
         scenarios=scenarios,
         workers=workers,
         check_only=False,
+        harness_sha256=hashlib.sha256(
+            subprocess.check_output(
+                [
+                    "git",
+                    "show",
+                    f"{sweep_harness_source_sha or source_sha}:scripts/validation/run_empty_world_sweep.py",
+                ],
+                cwd=repo_root,
+            )
+        ).hexdigest(),
     )
     script = work_dir / f"behaviour_receipt_{label}.sbatch"
     script.write_text(
@@ -924,7 +1009,7 @@ def _submit_sbatch_sweep(
                 f"#SBATCH --output={output_dir / 'slurm-%j.out'}",
                 "#SBATCH --time=24:00:00",
                 "set -euo pipefail",
-                f"cd {checkout}",
+                f"cd {shlex.quote(str(checkout))}",
                 shlex.join(cmd),
                 "",
             ]
@@ -974,7 +1059,17 @@ def _existing_sweep(
     return SweepRun(source_sha, output_dir, artifact_uri, digest, job_id)
 
 
+def _sweep_harness_manifest(output_dir: Path, source_sha: str) -> dict[str, Any] | None:
+    """Read optional acquisition provenance and bind it to the runtime source."""
+    harness_path = output_dir / "harness.json"
+    harness = json.loads(harness_path.read_text()) if harness_path.is_file() else None
+    if harness is not None and harness.get("runtime_source_sha") != source_sha:
+        raise ValueError("sweep harness runtime source differs")
+    return harness
+
+
 def _verify_sweep_metadata(output_dir: Path, source_sha: str) -> None:
+    harness = _sweep_harness_manifest(output_dir, source_sha)
     summaries = sorted(output_dir.glob("episodes_*.jsonl"))
     if not summaries:
         raise ValueError("sweep has no episode suites")
@@ -984,6 +1079,7 @@ def _verify_sweep_metadata(output_dir: Path, source_sha: str) -> None:
         if not metadata_path.is_file():
             raise ValueError(f"missing authoritative execution metadata for {suite}")
         meta = json.loads(metadata_path.read_text(encoding="utf-8"))
+        _verify_executed_harness(harness, meta, suite)
         if meta.get("head_sha") != source_sha:
             raise ValueError(f"{suite} recorded SHA differs from claimed source SHA")
         if meta.get("suite") != suite:
@@ -1018,6 +1114,14 @@ def _verify_sweep_metadata(output_dir: Path, source_sha: str) -> None:
             raise ValueError(f"{suite} execution seed identity differs")
         if any(row.get("execution_status") != "written" for row in records):
             raise ValueError(f"{suite} has unsuccessful row execution")
+
+
+def _verify_executed_harness(harness: dict | None, metadata: dict, suite: str) -> None:
+    """Require an execution digest when an explicit acquisition harness was pinned."""
+    if harness is not None and metadata.get("sweep_harness_sha256") != harness.get(
+        "harness_sha256"
+    ):
+        raise ValueError(f"{suite} executed sweep harness differs from pinned provenance")
 
 
 def _index_raw_episodes(
@@ -1698,6 +1802,10 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         "--head-source-sha", help="Recorded execution source before receipt-only commits"
     )
     parser.add_argument("--baseline", default="latest")
+    parser.add_argument(
+        "--sweep-harness-source-sha",
+        help="Explicit committed acquisition script for both sources; records reconstruction provenance",
+    )
     parser.add_argument("--repo", default="ll7/robot_sf_ll7")
     parser.add_argument("--receipt-id", required=True)
     parser.add_argument("--mode", choices=("existing", "local", "sbatch"), default="existing")
@@ -1751,6 +1859,8 @@ def _prepare_sweeps(
     if args.mode == "existing":
         if args.head_sweep_dir is None or args.baseline_sweep_dir is None:
             raise ValueError("--mode existing requires --head-sweep-dir and --baseline-sweep-dir")
+        if args.sweep_harness_source_sha:
+            _verify_requested_harness(args, repo_root, baseline_source)
         return (
             _existing_sweep(
                 args.head_source_sha or args.head_sha,
@@ -1779,6 +1889,7 @@ def _prepare_sweeps(
                 scenarios=args.scenarios,
                 workers=args.workers,
                 check_only=args.check_only,
+                sweep_harness_source_sha=args.sweep_harness_source_sha,
             ),
             _run_local_sweep(
                 repo_root,
@@ -1790,6 +1901,7 @@ def _prepare_sweeps(
                 scenarios=args.scenarios,
                 workers=args.workers,
                 check_only=args.check_only,
+                sweep_harness_source_sha=args.sweep_harness_source_sha,
             ),
         )
     return (
@@ -1802,6 +1914,7 @@ def _prepare_sweeps(
             arms=args.arms,
             scenarios=args.scenarios,
             workers=args.workers,
+            sweep_harness_source_sha=args.sweep_harness_source_sha,
         ),
         _submit_sbatch_sweep(
             repo_root,
@@ -1812,8 +1925,31 @@ def _prepare_sweeps(
             arms=args.arms,
             scenarios=args.scenarios,
             workers=args.workers,
+            sweep_harness_source_sha=args.sweep_harness_source_sha,
         ),
     )
+
+
+def _verify_requested_harness(
+    args: argparse.Namespace, repo_root: Path, baseline_source: str
+) -> None:
+    """Collection must honor an explicitly requested paired acquisition revision."""
+    source = _full_sha(repo_root, args.sweep_harness_source_sha)
+    script = subprocess.check_output(
+        ["git", "show", f"{source}:scripts/validation/run_empty_world_sweep.py"], cwd=repo_root
+    )
+    expected_digest = hashlib.sha256(script).hexdigest()
+    for output_dir, runtime in (
+        (args.head_sweep_dir, args.head_source_sha or args.head_sha),
+        (args.baseline_sweep_dir, baseline_source),
+    ):
+        manifest = _sweep_harness_manifest(output_dir.resolve(), runtime)
+        if (
+            manifest is None
+            or manifest.get("harness_source_sha") != source
+            or manifest.get("harness_sha256") != expected_digest
+        ):
+            raise ValueError("existing sweep does not use the requested committed harness")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -1863,6 +1999,16 @@ def main(argv: list[str] | None = None) -> int:
     differences = args.baseline_differences or [
         "development reconstruction against the published baseline; reviewer must confirm body/config/source provenance"
     ]
+    for label, run in (("head", scheduler), ("baseline", baseline)):
+        harness_path = run.output_dir / "harness.json"
+        if harness_path.is_file():
+            harness = json.loads(harness_path.read_text())
+            differences.append(
+                f"{label} acquisition harness {harness['harness_source_sha']} "
+                f"sha256={harness['harness_sha256']}; runtime source {run.source_sha}; "
+                "generated width predictive bindings use this runtime source's published main profiles; "
+                "development reconstruction, not archived release outcomes"
+            )
     receipt_path, header = write_receipt_and_header(
         repo_root=repo_root,
         receipt_id=args.receipt_id,

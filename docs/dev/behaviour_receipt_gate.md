@@ -395,3 +395,45 @@ be internally consistent: independent review must verify its linked job,
 execution artifacts, body/config/source provenance and classifications. Review
 plus the digest/binding checks remain the safeguards against receipt forgery.
 Synthetic test rows prove validator behaviour only.
+
+## Reconstructing a baseline with repaired acquisition tooling
+
+The historical width template requests twelve MPPI steps from an eight-output
+predictor. Receipt acquisition derives the two predictive width bindings from
+the same source checkout's main release template, which uses the published
+eight-step, 0.1-second profiles. Historical templates and released algorithm
+configs remain unchanged. Both suites check actual checkpoint output before
+any episode collection; unsupported requests are rejected rather than capped.
+
+When the published baseline predates this acquisition repair, pass
+`--sweep-harness-source-sha <full-commit-sha>` to the producer in `local` or
+`sbatch` mode. It installs that commit's sweep script in **both** isolated
+source checkouts, using the sweep's existing tooling-only source exception.
+Runtime HEAD stays at the requested source, including the immutable release
+source for the baseline. Existing unrelated script edits and conflicting
+provenance refuse instead of being overwritten. Use a fresh work directory
+for each source/harness pair.
+
+Each sweep artifact retains `harness.json` with runtime source, harness source,
+and original/replacement script digests. The launcher verifies the selected
+committed digest, then compiles and executes that same captured byte buffer
+with the source path retained as `__file__`. The direct CLI dispatches through
+the same captured-buffer contract. An imported `main()` refuses collection and
+reanalysis unless `_SWEEP_SOURCE_BYTES` was supplied by that dispatcher; a
+separate pathname read cannot establish imported execution identity.
+Execution metadata uses its loaded digest for both suites; a later source-file
+replacement refuses completion
+instead of certifying the replacement. Collection rejects disagreement and
+includes the reconstruction in the receipt's declared baseline differences.
+`--summarize-only` requires authoritative original execution metadata with
+matching source, suite, development-seed selection and loaded harness identity;
+it preserves that provenance and refuses missing or conflicting identity before
+rewriting outputs. A campaign summary alone cannot reconstruct execution identity. Preserve these manifests with the raw
+rows and derived campaign configs. The repaired width binding differs from the
+historical width controller beyond its horizon: it uses the published profile
+as a whole. These are new development reconstructions, not unchanged historical
+outcomes. Both sides must be rerun with the repaired harness; old width rows
+cannot be substituted. Use all seeds 1001–1030, all arms and slots, the required
+Slurm environment, raw-row audit and independent final-head refute review.
+A check-only preflight is not a behaviour receipt, and this option changes no
+trusted admission rule or review requirement.

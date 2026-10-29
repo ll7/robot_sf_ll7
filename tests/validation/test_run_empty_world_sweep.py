@@ -109,3 +109,94 @@ def test_width_diagnostic_does_not_inherit_historical_snqi_anchors(tmp_path):
     source = yaml.safe_load((REPO_ROOT / sweep.SUITES["width"]).read_text())
     assert source["snqi_weights"] is not None
     assert source["snqi_baseline"] is not None
+
+
+def test_execution_failure_result_keeps_preflight_detail() -> None:
+    """A horizon refusal must name the planner and both horizons in the execution receipt."""
+    from robot_sf.benchmark.campaign.predictive_horizon_preflight import (
+        PredictiveHorizonPreflightError,
+    )
+
+    binding = {
+        "planner_key": "predictive_mppi",
+        "algo": "predictive_mppi",
+        "checkpoint": "predictive_proxy_selected_v1",
+        "status": "incompatible",
+        "required_horizon_steps": 12,
+        "forecast_steps": 8,
+    }
+    result = sweep.execution_failure_result(
+        PredictiveHorizonPreflightError(
+            "required_horizon_steps=12, forecast_steps=8", binding=binding
+        )
+    )
+    assert result["execution_error"] == "PredictiveHorizonPreflightError during campaign execution"
+    assert "forecast_steps=8" in result["execution_error_detail"]
+    assert result["preflight_binding"]["planner_key"] == "predictive_mppi"
+    assert result["preflight_binding"]["required_horizon_steps"] == 12
+    assert result["preflight_binding"]["forecast_steps"] == 8
+
+
+def test_sweep_stages_unstaged_predictive_checkpoint_before_campaign(tmp_path, monkeypatch) -> None:
+    """An empty model cache refuses MPPI at campaign preflight; staging first makes it pass."""
+    import hashlib
+    from dataclasses import replace
+
+    import yaml
+
+    from robot_sf.benchmark.camera_ready_campaign import load_campaign_config
+    from robot_sf.benchmark.campaign.campaign_checkpoint_preflight import (
+        CampaignCheckpointPreflightError,
+        check_campaign_arm_checkpoints_preflight,
+    )
+    from robot_sf.models import registry as model_registry
+    from robot_sf.planner.predictive_model import (
+        PredictiveModelConfig,
+        PredictiveTrajectoryModel,
+        save_predictive_checkpoint,
+    )
+
+    monkeypatch.delenv("ROBOT_SF_DISABLE_MODEL_DOWNLOADS", raising=False)
+    source = tmp_path / "source.pt"
+    save_predictive_checkpoint(
+        source,
+        model=PredictiveTrajectoryModel(PredictiveModelConfig(horizon_steps=8)),
+        optimizer=None,
+        epoch=0,
+    )
+    sha = hashlib.sha256(source.read_bytes()).hexdigest()
+    asset = "predictive_proxy_selected_v1-predictive_model.pt"
+    registry = tmp_path / "registry.yaml"
+    registry.write_text(
+        yaml.safe_dump(
+            {
+                "version": 1,
+                "models": [
+                    {
+                        "model_id": "predictive_proxy_selected_v1",
+                        "github_release": {
+                            "tag": "artifact/models-2026-05-registry-v1",
+                            "asset_name": asset,
+                            "url": "https://github.com/ll7/robot_sf_ll7/releases/download/"
+                            f"artifact/models-2026-05-registry-v1/{asset}",
+                            "sha256": sha,
+                        },
+                    }
+                ],
+            }
+        )
+    )
+    monkeypatch.setattr(
+        model_registry,
+        "_stream_download_url",
+        lambda url, dest, expected_sha256=None: dest.write_bytes(source.read_bytes()),
+    )
+    cfg = load_campaign_config(REPO_ROOT / sweep.SUITES["main"])
+    arm = next(a for a in cfg.planners if a.algo == "predictive_mppi")
+    cfg = replace(cfg, planners=(arm,))
+    cache = tmp_path / "cache"
+    with pytest.raises(CampaignCheckpointPreflightError):
+        check_campaign_arm_checkpoints_preflight(cfg, registry_path=registry, cache_dir=cache)
+    sweep.stage_campaign_checkpoints(cfg, registry_path=registry, cache_dir=cache)
+    assert (cache / "predictive_proxy_selected_v1" / asset).is_file()
+    check_campaign_arm_checkpoints_preflight(cfg, registry_path=registry, cache_dir=cache)

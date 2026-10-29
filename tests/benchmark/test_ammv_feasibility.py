@@ -272,3 +272,21 @@ def test_layout_neutral_params_reject_unknown_aliases() -> None:
     """Unexpected constructor aliases must fail instead of being silently ignored."""
     with pytest.raises(TypeError, match="unexpected keyword"):
         AmmvFeasibilityParams(rear_axle_to_cog_m=0.4)
+
+
+def test_conflicting_alias_and_neutral_names_raise() -> None:
+    """An alias and its replacement with different values must fail (issue #10279)."""
+    with (
+        pytest.raises(TypeError, match="Conflicting values"),
+        pytest.warns(DeprecationWarning, match="track_width_m"),
+    ):
+        AmmvFeasibilityParams(two_wheel_axle_track_m=0.9, track_width_m=0.8)
+    with (
+        pytest.raises(TypeError, match="Conflicting values"),
+        pytest.warns(DeprecationWarning, match="front_axle_to_cog_m"),
+    ):
+        AmmvFeasibilityParams(single_wheel_axle_to_cog_m=0.4, front_axle_to_cog_m=0.5)
+    # The same value on both spellings stays accepted for the one-release transition.
+    with pytest.warns(DeprecationWarning, match="track_width_m"):
+        agreed = AmmvFeasibilityParams(two_wheel_axle_track_m=0.9, track_width_m=0.9)
+    assert agreed.two_wheel_axle_track_m == pytest.approx(0.9)

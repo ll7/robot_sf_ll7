@@ -444,6 +444,8 @@ _LEGACY_FAST_FILE_PREFIXES = (
     "test_types",
 )
 _LEGACY_FAST_FILES = {
+    # Exact finite-distribution tail checks use fixed arrays and arithmetic.
+    "test_multimodal_tail_metrics.py",
     "tests/dev/test_common_setup_venv_profile.py",
     # Force validity reduction checks use small fixed NumPy arrays.
     "test_robot_force_presence.py",

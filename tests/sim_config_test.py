@@ -66,6 +66,10 @@ def test_kernel_selector_preserves_legacy_simulation_and_environment_hashes():
 
     legacy_env = EnvSettings(sim_config=legacy)
     legacy_env_payload = _hash_payload_without_default_goal_policy(asdict(legacy_env))
+    # Historical rollover geometry uses these names in the compatibility hash.
+    legacy_rollover = legacy_env_payload["rollover_proxy_params"]
+    legacy_rollover["track_width_m"] = legacy_rollover.pop("two_wheel_axle_track_m")
+    legacy_rollover["front_axle_to_cog_m"] = legacy_rollover.pop("single_wheel_axle_to_cog_m")
     legacy_env_json = json.dumps(legacy_env_payload, sort_keys=True, default=str)
     expected_legacy_env_hash = hashlib.blake2b(legacy_env_json.encode(), digest_size=8).hexdigest()
     assert _stable_config_hash(legacy_env) == expected_legacy_env_hash
@@ -78,6 +82,9 @@ def test_kernel_selector_preserves_legacy_simulation_and_environment_hashes():
     assert wrapped.social_force_kernel_version == SOCIAL_FORCE_KERNEL_WRAPPED_V2
     wrapped_env = EnvSettings(sim_config=wrapped)
     wrapped_env_payload = _hash_payload_without_default_goal_policy(asdict(wrapped_env))
+    wrapped_rollover = wrapped_env_payload["rollover_proxy_params"]
+    wrapped_rollover["track_width_m"] = wrapped_rollover.pop("two_wheel_axle_track_m")
+    wrapped_rollover["front_axle_to_cog_m"] = wrapped_rollover.pop("single_wheel_axle_to_cog_m")
     wrapped_env_payload["sim_config"]["social_force_kernel_version"] = (
         SOCIAL_FORCE_KERNEL_WRAPPED_V2
     )

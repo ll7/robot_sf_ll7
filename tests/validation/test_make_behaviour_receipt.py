@@ -83,7 +83,11 @@ def _raw_row(seed, *, failing=False):
         "scenario_id": "open",
         "seed": seed,
         "steps": 1,
-        "metrics": {"success": not (failing and seed == 1001), "total_collision_count": 0},
+        "metrics": {
+            "metric_schema_version": "robot-sf-metrics.v2",
+            "success": not (failing and seed == 1001),
+            "total_collision_count": 0,
+        },
         "algorithm_metadata": {
             "status": "ok",
             "planner_kinematics": {"execution_mode": "native"},
@@ -145,6 +149,17 @@ def _sweep_rows(root, label, *, source_sha="a" * 40, failing=False):
         "incomplete_trace_slots": [],
     }
     (out / "execution_main.json").write_text(json.dumps(meta))
+    (out / "contract.json").write_text(
+        json.dumps(
+            {
+                "source_sha": source_sha,
+                "full_roster": True,
+                "row_schema_sha256": "c" * 64,
+                "metric_schema_version": "robot-sf-metrics.v2",
+                "execution": {"metric_semantics_sha256": "d" * 64},
+            }
+        )
+    )
     (out / "README.md").write_text(label + "\n")
     return out
 
@@ -551,7 +566,8 @@ def test_real_row_executed_uncertainty_guard_decisions_are_runtime_counters(
     guard = GuardedPPOAdapter(
         config=GuardedPPOConfig(uncertainty_fallback_mode=mode), fallback_adapter=fallback
     )
-    command, decision, _ = guard._uncertainty_fallback_command({}, (0.8, 0.2))
+    command, decision, _, diagnostics = guard._uncertainty_fallback_command({}, (0.8, 0.2))
+    assert diagnostics is None
     assert decision == label
     assert fallback.calls == (1 if mode == "fallback" else 0)
     assert command == (
@@ -973,6 +989,37 @@ def test_planner_adapter_guard_emitted_fault_keys_are_classified():
     assert any(key == "fallback_stop_count" for _, _, key in inventory)
     assert any(key == "fallback_count" for _, _, key in inventory)
     assert not _unclassified_emitter_keys(inventory), sorted(_unclassified_emitter_keys(inventory))
+
+
+def test_risk_dwa_candidate_score_emission_is_an_exact_diagnostic_exception():
+    site = ("robot_sf/planner/risk_dwa.py", "plan_with_diagnostics", "candidate_score_status")
+    root = Path(__file__).resolve().parents[2]
+    assert (site[1], site[2]) in _emitted_fault_keys((root / site[0]).read_text())
+    assert not _unclassified_emitter_keys({site})
+    other_sites = {
+        ("robot_sf/planner/future_planner.py", site[1], site[2]),
+        (site[0], "future_controller_report", site[2]),
+        (site[0], site[1], "new_candidate_score_status"),
+    }
+    assert _unclassified_emitter_keys(other_sites) == other_sites
+    reason = producer.EXECUTION_EVIDENCE_LOCATIONS["non_runtime_emissions"][site]
+    assert reason.startswith("robot_sf/planner/risk_dwa.py:666 ")
+    assert (
+        'progress_escape["candidate_score_status"]'
+        in (root / site[0]).read_text().splitlines()[665]
+    )
+
+
+@pytest.mark.parametrize("status", ["finite", "infeasible", "non_finite", "failed"])
+def test_candidate_score_emission_exception_does_not_admit_unknown_runtime_transports(status):
+    row = _executed_orca_row()
+    assert producer._audit_status([producer._execution_evidence(row)]) == "pass"
+    row["algorithm_metadata"]["new_controller_report"] = {"candidate_score_status": status}
+    assert producer._controller_runtime_marker(row, row["algorithm_metadata"], row["algo"]) == (
+        "algorithm_metadata.new_controller_report.candidate_score_status",
+        "unclassified_degraded",
+    )
+    assert producer._audit_status([producer._execution_evidence(row)]) == "degraded"
 
 
 def test_emitter_catcher_distinguishes_writes_from_reads_and_detects_new_keys():
@@ -1738,3 +1785,488 @@ def test_raw_index_preserves_planted_regression_detection(tmp_path, fault, reaso
     summary_path.write_text("".join(json.dumps(row) + "\n" for row in summary))
     with pytest.raises(ValueError, match=reason):
         producer._load_sweep_rows(out)
+
+
+def test_local_sweep_uses_pinned_harness_without_changing_runtime_source(tmp_path, monkeypatch):
+    """A reconstructed baseline must run the same repaired harness as its head."""
+    repo = tmp_path / "repo"
+    git = _git_repo(repo)
+    script = repo / "scripts/validation/run_empty_world_sweep.py"
+    script.parent.mkdir(parents=True)
+    script.write_text("# historical width request: 12 steps\n")
+    (repo / "runtime.py").write_text("# baseline runtime\n")
+    git("add", ".")
+    git("commit", "-m", "baseline")
+    baseline = git("rev-parse", "HEAD")
+    script.write_text("# repaired width binding: published eight-step profile\n")
+    git("add", ".")
+    git("commit", "-m", "repaired acquisition harness")
+    harness = git("rev-parse", "HEAD")
+    work = tmp_path / "work"
+    checkout = producer._ensure_worktree(repo, work, "baseline", baseline)
+    calls = []
+
+    original_run = subprocess.run
+
+    def run(command, *, cwd, check, **kwargs):
+        if command[0] != "uv":
+            return original_run(command, cwd=cwd, check=check, **kwargs)
+        calls.append(command)
+        assert cwd == checkout
+        assert (cwd / script.relative_to(repo)).read_text() == script.read_text()
+        assert (
+            subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=cwd, text=True).strip()
+            == baseline
+        )
+        assert (cwd / "runtime.py").read_text() == "# baseline runtime\n"
+
+    monkeypatch.setattr(producer.subprocess, "run", run)
+    result = producer._run_local_sweep(
+        repo,
+        work,
+        "baseline",
+        baseline,
+        [1001, 1030],
+        arms=None,
+        scenarios=None,
+        workers=1,
+        check_only=True,
+        sweep_harness_source_sha=harness,
+    )
+    assert result.source_sha == baseline
+    manifest = json.loads((result.output_dir / "harness.json").read_text())
+    assert manifest["runtime_source_sha"] == baseline
+    assert manifest["harness_source_sha"] == harness
+    assert manifest["harness_sha256"] == hashlib.sha256(script.read_bytes()).hexdigest()
+    assert "--check-only" in calls[0]
+
+
+def test_pinned_harness_refuses_to_overwrite_local_changes(tmp_path):
+    """Installing an acquisition harness cannot discard a previous local repair."""
+    repo = tmp_path / "repo"
+    git = _git_repo(repo)
+    script = repo / "scripts/validation/run_empty_world_sweep.py"
+    script.parent.mkdir(parents=True)
+    script.write_text("# committed\n")
+    git("add", ".")
+    git("commit", "-m", "source")
+    source = git("rev-parse", "HEAD")
+    script.write_text("# someone else's local repair\n")
+    with pytest.raises(ValueError, match="uncommitted sweep harness"):
+        producer._install_sweep_harness(repo, repo, tmp_path / "out", source, source)
+    assert script.read_text() == "# someone else's local repair\n"
+
+
+def test_existing_sweep_rejects_different_executed_harness(tmp_path):
+    """A provenance file alone cannot certify which acquisition code executed."""
+    out = _sweep_rows(tmp_path, "baseline")
+    (out / "harness.json").write_text(
+        json.dumps(
+            {
+                "runtime_source_sha": "a" * 40,
+                "harness_sha256": "b" * 64,
+            }
+        )
+    )
+    with pytest.raises(ValueError, match="executed sweep harness differs"):
+        producer._verify_sweep_metadata(out, "a" * 40)
+    meta_path = out / "execution_main.json"
+    meta = json.loads(meta_path.read_text())
+    meta["sweep_harness_sha256"] = "b" * 64
+    meta_path.write_text(json.dumps(meta))
+    producer._verify_sweep_metadata(out, "a" * 40)
+
+
+def test_sbatch_sweep_pins_harness_before_submission(tmp_path, monkeypatch):
+    """Scheduler acquisition retains separate runtime and harness identities."""
+    repo = tmp_path / "repo"
+    git = _git_repo(repo)
+    script = repo / "scripts/validation/run_empty_world_sweep.py"
+    script.parent.mkdir(parents=True)
+    script.write_text("# original\n")
+    git("add", ".")
+    git("commit", "-m", "baseline")
+    baseline = git("rev-parse", "HEAD")
+    script.write_text("# repaired\n")
+    git("add", ".")
+    git("commit", "-m", "harness")
+    harness = git("rev-parse", "HEAD")
+    work = tmp_path / "work"
+    checkout = producer._ensure_worktree(repo, work, "baseline", baseline)
+    original_output = subprocess.check_output
+
+    def output(command, **kwargs):
+        if command[0] != "sbatch":
+            return original_output(command, **kwargs)
+        assert (checkout / script.relative_to(repo)).read_text() == "# repaired\n"
+        assert (work / "sweeps/baseline/harness.json").is_file()
+        submission_script = Path(command[-1]).read_text()
+        assert baseline in submission_script
+        assert "--seeds 1001 1030" in submission_script
+        return "12345\n"
+
+    monkeypatch.setattr(producer.subprocess, "check_output", output)
+    result = producer._submit_sbatch_sweep(
+        repo,
+        work,
+        "baseline",
+        baseline,
+        [1001, 1030],
+        arms=None,
+        scenarios=None,
+        workers=1,
+        sweep_harness_source_sha=harness,
+    )
+    assert result.source_sha == baseline
+    assert result.job_id == "12345"
+    assert (
+        json.loads((result.output_dir / "harness.json").read_text())["harness_source_sha"]
+        == harness
+    )
+
+
+@pytest.mark.parametrize("bad_manifest", [None, "source", "digest"])
+def test_existing_mode_honors_explicit_paired_harness(tmp_path, bad_manifest):
+    """Collection cannot ignore a requested harness or reuse older width rows."""
+    repo = tmp_path / "repo"
+    git = _git_repo(repo)
+    script = repo / "scripts/validation/run_empty_world_sweep.py"
+    script.parent.mkdir(parents=True)
+    script.write_text("# repaired acquisition\n")
+    git("add", ".")
+    git("commit", "-m", "harness")
+    source = git("rev-parse", "HEAD")
+    head = _sweep_rows(tmp_path, "head", source_sha=source)
+    baseline = _sweep_rows(tmp_path, "baseline", source_sha=source)
+    for output in (head, baseline):
+        manifest = {
+            "runtime_source_sha": source,
+            "harness_source_sha": source,
+            "harness_sha256": hashlib.sha256(script.read_bytes()).hexdigest(),
+        }
+        (output / "harness.json").write_text(json.dumps(manifest))
+        meta_path = output / "execution_main.json"
+        meta = json.loads(meta_path.read_text())
+        meta["sweep_harness_sha256"] = manifest["harness_sha256"]
+        meta_path.write_text(json.dumps(meta))
+    args = producer._parse_args(
+        [
+            "--head-sha",
+            source,
+            "--receipt-id",
+            "fixture",
+            "--mode",
+            "existing",
+            "--head-sweep-dir",
+            str(head),
+            "--baseline-sweep-dir",
+            str(baseline),
+            "--sweep-harness-source-sha",
+            source,
+        ]
+    )
+    producer._prepare_sweeps(args, repo, source)
+    path = baseline / "harness.json"
+    if bad_manifest is None:
+        path.unlink()
+    else:
+        manifest = json.loads(path.read_text())
+        manifest["harness_source_sha" if bad_manifest == "source" else "harness_sha256"] = "0" * 40
+        path.write_text(json.dumps(manifest))
+    with pytest.raises(ValueError, match="requested committed harness"):
+        producer._prepare_sweeps(args, repo, source)
+
+
+@pytest.mark.parametrize("replace_before_launch", [False, True])
+def test_sweep_launcher_executes_only_the_verified_buffer(tmp_path, replace_before_launch):
+    """A selected digest binds compiled bytes even if their pathname is replaced."""
+    script = tmp_path / "scripts/validation/run_empty_world_sweep.py"
+    script.parent.mkdir(parents=True)
+    source = (
+        b"import hashlib, json; from pathlib import Path\n"
+        b"path = Path(__file__)\n"
+        b"path.write_text('# replacement on disk\\n')\n"
+        b"print(json.dumps({'loaded': hashlib.sha256(_SWEEP_SOURCE_BYTES).hexdigest(), "
+        b"'file': __file__}))\n"
+    )
+    script.write_bytes(source)
+    digest = hashlib.sha256(source).hexdigest()
+    command = producer._sweep_command(
+        "a" * 40,
+        tmp_path / "out",
+        list(producer.DEFAULT_SEEDS),
+        arms=None,
+        scenarios=None,
+        workers=1,
+        check_only=False,
+        harness_sha256=digest,
+    )
+    if replace_before_launch:
+        script.write_text("print('UNAPPROVED EXECUTION')\n")
+    result = subprocess.run(
+        [sys.executable, *command[3:]], cwd=tmp_path, capture_output=True, text=True, check=False
+    )
+    if replace_before_launch:
+        assert result.returncode != 0
+        assert "differs from selected committed source" in result.stderr
+        assert not result.stdout
+    else:
+        assert result.returncode == 0, result.stderr
+        assert json.loads(result.stdout) == {"loaded": digest, "file": str(script)}
+        assert hashlib.sha256(script.read_bytes()).hexdigest() != digest
+
+
+@pytest.mark.parametrize("configured", [False, True])
+def test_sbatch_canary_syncs_extras_without_uv_on_batch_path(tmp_path, monkeypatch, configured):
+    """Fresh batch environments sync optional runtime imports before acquisition."""
+    repo = tmp_path / "repo"
+    git = _git_repo(repo)
+    harness = repo / "scripts/validation/run_empty_world_sweep.py"
+    harness.parent.mkdir(parents=True)
+    harness.write_text("# canary fixture\n")
+    git("add", ".")
+    git("commit", "-m", "source")
+    source = git("rev-parse", "HEAD")
+    uv = tmp_path / "tools with spaces" / "uv"
+    uv.parent.mkdir()
+    uv.write_text('#!/bin/sh\nprintf "%s\\n" "$*" >> "$UV_CALL_LOG"\n')
+    uv.chmod(0o755)
+    if configured:
+        monkeypatch.setenv("UV_BIN", str(uv))
+    else:
+        monkeypatch.delenv("UV_BIN", raising=False)
+    monkeypatch.setattr(shutil, "which", lambda name: str(uv) if name == "uv" else None)
+    original_output = subprocess.check_output
+
+    def output(command, **kwargs):
+        if command[0] == "sbatch":
+            return "12345\n"
+        return original_output(command, **kwargs)
+
+    monkeypatch.setattr(producer.subprocess, "check_output", output)
+    work = tmp_path / "work"
+    producer._submit_sbatch_sweep(
+        repo, work, "canary", source, [1001], arms=None, scenarios=None, workers=1, canary=True
+    )
+    script = work / "behaviour_receipt_canary.sbatch"
+    rendered = script.read_text()
+    assert "sync --frozen --all-extras" in rendered
+    assert "run --frozen --all-extras python" in rendered
+    assert "uv run python" not in rendered
+    log = tmp_path / "uv-calls"
+    env = {**os.environ, "PATH": "", "UV_CALL_LOG": str(log)}
+    subprocess.run(["/bin/bash", str(script)], env=env, check=True)
+    calls = log.read_text().splitlines()
+    assert calls[0] == "sync --frozen --all-extras"
+    assert calls[1].startswith("run --frozen --all-extras python ")
+    uv.unlink()
+    failed = subprocess.run(
+        ["/bin/bash", str(script)], env=env, capture_output=True, text=True, check=False
+    )
+    assert failed.returncode != 0
+    assert "uv executable is missing or not executable" in failed.stderr
+
+
+@pytest.mark.parametrize("uv_setting", [None, "relative/uv", "missing", "directory"])
+def test_sbatch_refuses_unavailable_uv_before_submission(tmp_path, monkeypatch, uv_setting):
+    """Invalid uv configuration refuses before creating worktrees or scheduler jobs."""
+    monkeypatch.setattr(shutil, "which", lambda name: None)
+    if uv_setting is None:
+        monkeypatch.delenv("UV_BIN", raising=False)
+    else:
+        value = {"missing": str(tmp_path / "missing"), "directory": str(tmp_path)}.get(
+            uv_setting, uv_setting
+        )
+        monkeypatch.setenv("UV_BIN", value)
+    with pytest.raises(ValueError, match="uv executable is missing or not executable"):
+        producer._submit_sbatch_sweep(
+            tmp_path,
+            tmp_path / "work",
+            "canary",
+            "a" * 40,
+            [1001],
+            arms=None,
+            scenarios=None,
+            workers=1,
+            canary=True,
+        )
+    assert not (tmp_path / "work").exists()
+
+
+@pytest.mark.parametrize("mode", ["existing", "local", "sbatch"])
+@pytest.mark.parametrize("fault", ["missing", "source", "roster", "schema", "metric", "semantics"])
+def test_all_modes_reject_incompatible_producing_contracts(  # noqa: C901 - explicit producing-contract fault matrix.
+    tmp_path, monkeypatch, mode, fault
+):
+    """Collection and launch reject the same producing-contract defects before touching rows."""
+    head = _sweep_rows(tmp_path, "head", source_sha="a" * 40)
+    baseline = _sweep_rows(tmp_path, "baseline", source_sha="b" * 40)
+    for output, source in ((head, "a" * 40), (baseline, "b" * 40)):
+        contract = {
+            "source_sha": source,
+            "full_roster": True,
+            "row_schema_sha256": "c" * 64,
+            "metric_schema_version": "robot-sf-metrics.v2",
+            "execution": {"metric_semantics_sha256": "d" * 64},
+        }
+        if output == baseline:
+            if fault == "source":
+                contract["source_sha"] = "f" * 40
+            elif fault == "roster":
+                contract["full_roster"] = False
+            elif fault == "schema":
+                contract["row_schema_sha256"] = "e" * 64
+            elif fault == "metric":
+                contract["metric_schema_version"] = "robot-sf-metrics.v1"
+            elif fault == "semantics":
+                contract["execution"]["metric_semantics_sha256"] = "e" * 64
+        if fault != "missing" or output != baseline:
+            (output / "contract.json").write_text(json.dumps(contract))
+    if fault == "missing":
+        (baseline / "contract.json").unlink()
+    work = tmp_path / "work"
+    (work / "sweeps").mkdir(parents=True)
+    for label, output in (("head", head), ("baseline", baseline)):
+        (work / "sweeps" / label).symlink_to(output, target_is_directory=True)
+    args = producer._parse_args(
+        [
+            "--head-sha",
+            "a" * 40,
+            "--receipt-id",
+            "fixture",
+            "--mode",
+            mode,
+            "--work-dir",
+            str(work),
+            "--head-sweep-dir",
+            str(head),
+            "--baseline-sweep-dir",
+            str(baseline),
+        ]
+    )
+    touched = []
+    for name in ("_existing_sweep", "_run_local_sweep", "_submit_sbatch_sweep"):
+        monkeypatch.setattr(producer, name, lambda *a, **k: touched.append(True))
+    reason = {
+        "missing": "both preflight contracts",
+        "source": "source/full-roster",
+        "roster": "source/full-roster",
+        "schema": "row/metric schema mismatch",
+        "metric": "row/metric schema mismatch",
+        "semantics": "metric semantics mismatch",
+    }[fault]
+    with pytest.raises(ValueError, match=reason):
+        producer._prepare_sweeps(args, tmp_path, "b" * 40)
+    assert touched == []
+
+
+def _guarded_ppo_risk_dwa_row():
+    """Use the real fallback adapter and ShieldDecision serializer from the review probe."""
+    from robot_sf.planner.guarded_ppo import GuardedPPOAdapter, build_guarded_ppo_config
+    from robot_sf.planner.risk_dwa import RiskDWAPlannerAdapter, RiskDWAPlannerConfig
+    from tests.planner.test_guarded_ppo import _obs
+
+    guard = GuardedPPOAdapter(
+        config=build_guarded_ppo_config(
+            {
+                "guard_near_field_distance": 2.5,
+                "guard_hard_ped_clearance": 0.45,
+                "guard_first_step_ped_clearance": 0.55,
+            }
+        ),
+        fallback_adapter=RiskDWAPlannerAdapter(
+            RiskDWAPlannerConfig(
+                linear_candidates=(0.0,),
+                angular_candidates=(0.0,),
+                progress_escape_enabled=False,
+            )
+        ),
+    )
+    decision = guard.choose_command_decision(
+        _obs(ped_positions=[(0.8, 0.0)], ped_velocities=[(0.0, 0.0)]), (0.6, 0.0)
+    ).to_metadata()
+    assert decision["decision_label"] == "fallback_safe"
+    assert decision["fallback_controller_state"]["planner_diagnostics"]["status"] == "disabled"
+    row = _guarded_ppo_calibration_row()
+    row["algorithm_metadata"]["planner_runtime"]["last_decision"] = decision
+    return row
+
+
+@pytest.mark.parametrize(
+    "status", ["disabled", "not_evaluated", "evaluated_but_not_selected", "selected"]
+)
+@pytest.mark.parametrize("score_status", [None, "finite", "infeasible", "non_finite"])
+def test_guarded_ppo_risk_dwa_diagnostic_is_non_runtime(status, score_status):
+    """Only the declared diagnostic values at the verified serializer path are exempt."""
+    row = _guarded_ppo_risk_dwa_row()
+    report = row["algorithm_metadata"]["planner_runtime"]["last_decision"][
+        "fallback_controller_state"
+    ]["planner_diagnostics"]
+    report["status"] = status
+    if score_status is not None:
+        report["candidate_score_status"] = score_status
+    original = copy.deepcopy(row)
+    assert producer._controller_runtime_marker(row, row["algorithm_metadata"], row["algo"]) is None
+    assert producer._audit_status([producer._execution_evidence(row)]) == "pass"
+    assert row == original
+
+
+@pytest.mark.parametrize(
+    "fault",
+    [
+        "algorithm",
+        "canonical",
+        "planner_id",
+        "decision_schema",
+        "diagnostic_schema",
+        "missing_status",
+        "invalid_status",
+        "status_type",
+        "score_status",
+        "score_type",
+        "unknown_path",
+        "sibling_status",
+        "fallback",
+        "degraded",
+        "controller_failure",
+    ],
+)
+def test_guarded_ppo_risk_dwa_diagnostic_does_not_hide_faults(  # noqa: C901 - explicit transported fault matrix.
+    fault,
+):
+    row = _guarded_ppo_risk_dwa_row()
+    metadata = row["algorithm_metadata"]
+    decision = metadata["planner_runtime"]["last_decision"]
+    report = decision["fallback_controller_state"]["planner_diagnostics"]
+    if fault == "algorithm":
+        row["algo"] = "goal"
+    elif fault == "canonical":
+        metadata["canonical_algorithm"] = "goal"
+    elif fault == "planner_id":
+        metadata["planner_contract"]["planner_id"] = "goal"
+    elif fault == "decision_schema":
+        decision["schema_version"] = "unknown"
+    elif fault == "diagnostic_schema":
+        report["schema_version"] = "unknown"
+    elif fault == "missing_status":
+        report.pop("status")
+    elif fault == "invalid_status":
+        report["status"] = "controller_failed"
+    elif fault == "status_type":
+        report["status"] = []
+    elif fault == "score_status":
+        report["candidate_score_status"] = "degraded"
+    elif fault == "score_type":
+        report["candidate_score_status"] = []
+    elif fault == "unknown_path":
+        metadata["other_diagnostic"] = report
+    elif fault == "sibling_status":
+        report["sibling_status"] = "disabled"
+    elif fault == "fallback":
+        metadata["planner_runtime"]["fallback_used"] = True
+    elif fault == "degraded":
+        decision["fallback_controller_state"]["degraded"] = True
+    else:
+        metadata["planner_runtime"]["status"] = "failed"
+    assert producer._controller_runtime_marker(row, metadata, row["algo"]) is not None
+    assert producer._audit_status([producer._execution_evidence(row)]) != "pass"

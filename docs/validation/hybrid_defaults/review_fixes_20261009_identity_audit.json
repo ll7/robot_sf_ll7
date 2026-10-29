@@ -1,0 +1,13 @@
+{
+  "base": "0ca61efee4bd92d3cb9a408fbffb4e90b76d7796",
+  "arms": 183,
+  "matrices": 7,
+  "seeds": "1001-1030",
+  "payloads_compared": 117990,
+  "episode_ids_compared": 117990,
+  "base_sha256": "e6c85a081b09250f4714ea2c84555e0d36922bf51225accba516c168b1f66a41",
+  "current_sha256": "e6c85a081b09250f4714ea2c84555e0d36922bf51225accba516c168b1f66a41",
+  "registry_unchanged": true,
+  "scope": "Identity-only comparison with identical explicit empty mappings; full mapping and constructor parity is independently tested by the released-arm regression.",
+  "registered_source_and_dependency_files_unchanged": 62
+}

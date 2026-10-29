@@ -15,7 +15,10 @@ import exsel  # noqa: E402
 
 CLAIMS = {
     p.parent.name: exsel.load_claim(yaml.safe_load(p.read_text(encoding="utf-8")))
-    for p in sorted(HERE.parent.glob("exsel-*/contract.yaml.txt"))
+    for p in (
+        HERE.parent / "exsel-6.4-measure-walkthrough" / "contract.yaml.txt",
+        HERE.parent / "exsel-7.2-narrow-doorway" / "contract.yaml.txt",
+    )
 }
 WALK = CLAIMS["exsel-6.4-measure-walkthrough"]
 DOOR = CLAIMS["exsel-7.2-narrow-doorway"]

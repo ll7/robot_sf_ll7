@@ -66,8 +66,9 @@ A 1-seed rerun per claim, under a different Python hash seed, met this contract
 contracts) regenerate byte-identically under PYTHONHASHSEED 0 and 1. The trace-rerun
 match fields are listed in each contract (`trace_rerun.match_fields`).
 
-The root `SHA256SUMS` covers this packet’s tracked claim and shared files except
-itself. Each claim’s manifest covers its tracked files except itself.
+The root `SHA256SUMS` covers every tracked file of this packet—its two claim
+directories, root files, `tools/` and `provenance/`—except itself. Each claim
+manifest covers every tracked file in its claim directory except itself.
 
 ## Rerun everything
 

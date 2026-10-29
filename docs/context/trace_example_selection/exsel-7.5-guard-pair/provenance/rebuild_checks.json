@@ -1,0 +1,93 @@
+{
+  "a_patch_digest": {
+    "expected_sha256": "1314f3c896c2cb6f45180ba5ffa0c062ab597e329a1b4d6cd58148989a1dfca2",
+    "file": "docs/context/guard_escape_ablation/provenance/acquisition-source.patch.gz",
+    "observed_sha256": "1314f3c896c2cb6f45180ba5ffa0c062ab597e329a1b4d6cd58148989a1dfca2",
+    "packet_SHA256SUMS_check": "pass (sha256sum -c over the whole packet at acd878b4)",
+    "packet_commit": "acd878b4028341846e1fc1c8b0bf0c3ef9923dad",
+    "uncompressed_patch_sha256": "c52337603e7905a866b6236adfa5a3caca9efed5eb14221918f1bc6ae699be00"
+  },
+  "all_pass": true,
+  "b_apply_check": {
+    "base_commit": "373dbfde4f39667cf9e8732dabe7df5118bdeab1",
+    "git_apply_check_exit": 0,
+    "numstat": {
+      "robot_sf/planner/hybrid_rule_local_planner.py": [
+        15,
+        5
+      ],
+      "tests/planner/test_guardesc_ablation.py": [
+        114,
+        0
+      ]
+    },
+    "original_execution_commit": "0035fba05c9b679e39f58ec286f5d57b96bb9a0a",
+    "original_execution_tree": "7fa66da1a99db35c194dc99a2ab63ee68ecdf915",
+    "rebuilt_commit": "011c24045d6703a4a1e8b4428d6a9e931d220310",
+    "rebuilt_tree": "7fa66da1a99db35c194dc99a2ab63ee68ecdf915",
+    "touched_files": [
+      "robot_sf/planner/hybrid_rule_local_planner.py",
+      "tests/planner/test_guardesc_ablation.py"
+    ],
+    "tree_identical": true
+  },
+  "c_controller_digest": {
+    "arm_configs_byte_identical_to_replication_inputs": {
+      "G0E1": "4c2de4927a7181b71a6d0f1327b125e651973dd1e2775ddf53b4760fe1202002",
+      "G1E1": "7de5ff05990548382592d4276256ef11519e924cadbc4aeb32d872a855ae719f"
+    },
+    "expected_sha256": "044931a38f31a7b7c01ba8a750a1d34a79a58200309806e538761a94eff94888",
+    "observed_sha256": "044931a38f31a7b7c01ba8a750a1d34a79a58200309806e538761a94eff94888",
+    "path": "configs/policy_search/candidates/hybrid_rule_v4_fast_progress_static_escape_continuous_s30_h600_release_0_0_8_frozen.yaml"
+  },
+  "claim_id": "EXSEL-7.5-GUARD-PAIR",
+  "d_environment": {
+    "all_match_fields_equal": true,
+    "differs_legitimately": [
+      "workers (4 vs 2; per-episode seeding)",
+      "host",
+      "load_average",
+      "available_logical_cores"
+    ],
+    "match_fields": [
+      "python",
+      "numpy",
+      "pyyaml",
+      "uv_lock_sha256",
+      "cpu_only",
+      "numerical_threads"
+    ],
+    "rebuild": {
+      "PYTHONPATH": "<execution-worktree>:<execution-worktree>/fast-pysf",
+      "cpu_only": true,
+      "numerical_threads": 1,
+      "numpy": "2.4.6",
+      "pysocialforce": "installed copy byte-identical to the worktree fast-pysf/pysocialforce (diff -rq)",
+      "python": "3.13.14",
+      "pyyaml": "6.0.3",
+      "uv_lock_sha256": "def82098b23281e7c49f1f05e052e412c2de54ae2da53f1708bc0ddc2a30d023",
+      "workers": 2
+    },
+    "replication": {
+      "available_logical_cores": 20,
+      "command": "PYTHONPATH=<execution-worktree>:<execution-worktree>/fast-pysf <original-python-3.13.14> scripts/tools/run_camera_ready_benchmark.py --config <registered-packet>/inputs/full.yaml --output-root <lane>/full --label exp_guardesc_replication --log-level INFO",
+      "cpu_only": true,
+      "execution_commit": "0035fba05c9b679e39f58ec286f5d57b96bb9a0a",
+      "load_average": [
+        1.36767578125,
+        1.259765625,
+        1.48828125
+      ],
+      "numerical_threads": 1,
+      "numpy": "2.4.6",
+      "original_environment_reused": true,
+      "python": "3.13.14",
+      "pyyaml": "6.0.3",
+      "uv_lock_sha256": "def82098b23281e7c49f1f05e052e412c2de54ae2da53f1708bc0ddc2a30d023",
+      "workers": 4
+    }
+  },
+  "e_parity": true,
+  "e_parity_detail": "parity_e.json",
+  "schema": "exsel.rebuild_checks.v1"
+}

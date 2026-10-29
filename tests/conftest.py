@@ -1072,6 +1072,8 @@ _LEGACY_FAST_FILES = {
     # the source-freeze implementation; keep them in the changed-coverage lane.
     "test_release_resolved_identity.py",
     "test_release_resume_admission.py",
+    # Saved-seed type admission is a pure JSON/provenance contract.
+    "test_campaign_seed_domain.py",
     "test_runtime_smoke_admission.py",
     "test_predictive_mppi_planner.py",
     "test_s30_h600_runtime_smoke_contract.py",

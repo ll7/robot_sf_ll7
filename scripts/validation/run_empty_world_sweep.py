@@ -32,7 +32,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 import yaml
 
@@ -470,6 +470,65 @@ def _kinematics(row: dict[str, Any]) -> str:
     )
 
 
+class EpisodeSlot(NamedTuple):
+    """The native sweep's distinct execution slot, shared with evidence readers."""
+
+    arm: str | None
+    kinematics: str
+    scenario: str
+    seed: int
+
+
+def episode_slot(row: dict[str, Any]) -> EpisodeSlot:
+    """Extract all slot axes from the actual runtime row, retaining precedence.
+
+    Returns:
+        The complete native slot; consumers must not project away any fields.
+    """
+    return EpisodeSlot(_arm_key(row), _kinematics(row), str(row.get("scenario_id")), row["seed"])
+
+
+def episode_slot_row(slot: EpisodeSlot) -> dict[str, Any]:
+    """Encode a native slot as a runtime row (also used for missing slots).
+
+    Returns:
+        Native declarations consumed by episode_slot, without a directory claim.
+    """
+    return {
+        "_sweep_arm": slot.arm,
+        "_sweep_kinematics": slot.kinematics,
+        "scenario_id": slot.scenario,
+        "seed": slot.seed,
+    }
+
+
+def directory_episode_identity(source: str) -> dict[str, Any]:
+    """Read the directory's independent native identity declarations.
+
+    Returns:
+        The native directory axes; the remaining axes are episode row fields.
+    """
+    context = {"_source_file": source}
+    return {"arm": _arm_key(context), "kinematics": _kinematics(context)}
+
+
+def expected_episode_slots(cfg: Any, scenarios: list[dict[str, Any]]) -> set[EpisodeSlot]:
+    """Expand the runtime's reviewed campaign scope into complete slot identities.
+
+    Returns:
+        Every expected native slot, including every configured kinematics type.
+    """
+    return {
+        EpisodeSlot(
+            planner.key, kin, str(sc.get("id") or sc.get("scenario_id") or sc["name"]), seed
+        )
+        for planner in cfg.planners
+        for kin in cfg.kinematics_matrix
+        for sc in scenarios
+        for seed in sc["seeds"]
+    }
+
+
 def _trace_complete(row: dict[str, Any]) -> bool:
     """Check that requested geometry covers reset and every recorded step.
 
@@ -523,32 +582,33 @@ def reconcile_execution(
         Rows for all expected slots (plus duplicates/extras), and execution axes.
         Episode outcomes such as timeout are diagnostic results, not execution failures.
     """
-    expected = {
-        (planner.key, kin, str(sc.get("id") or sc.get("scenario_id") or sc["name"]), seed)
-        for planner in cfg.planners
-        for kin in cfg.kinematics_matrix
-        for sc in scenarios
-        for seed in sc["seeds"]
-    }
+    expected = expected_episode_slots(cfg, scenarios)
     failed = {}
     for file in sorted(root.glob("runs/*/summary.json")):
-        arm, sep, kin = file.parent.name.partition("__")
-        if not sep:
+        if "__" not in file.parent.name:
             continue
+        directory = directory_episode_identity(file.as_posix())
         summary = json.loads(file.read_text())
         failures = summary.get("failures", [])
         if not isinstance(failures, list):
             raise ValueError(f"malformed failures in {file}")
         for failure in failures:
-            failed[(arm, kin, str(failure["scenario_id"]), failure["seed"])] = failure.get(
-                "error", "runner failure"
-            )
+            failed[
+                episode_slot(
+                    {
+                        **failure,
+                        "scenario_id": failure["scenario_id"],
+                        "_source_file": file.as_posix(),
+                        "_sweep_arm": directory["arm"],
+                    }
+                )
+            ] = failure.get("error", "runner failure")
     observed = {}
     annotated = []
     duplicates, unexpected, incomplete_trace = [], [], []
     for raw in rows:
         row = dict(raw)
-        slot = (_arm_key(row), _kinematics(row), str(row.get("scenario_id")), row["seed"])
+        slot = episode_slot(row)
         observed[slot] = observed.get(slot, 0) + 1
         row["_sweep_execution_status"] = "written"
         if slot not in expected:
@@ -562,8 +622,7 @@ def reconcile_execution(
             row["_sweep_execution_status"] = "incomplete_trace"
         annotated.append(row)
     missing = []
-    for arm, kin, scenario, seed in sorted(expected - observed.keys()):
-        slot = (arm, kin, scenario, seed)
+    for slot in sorted(expected - observed.keys()):
         status = (
             "execution_failed"
             if slot in failed or result.get("execution_error")
@@ -572,10 +631,7 @@ def reconcile_execution(
         missing.append(slot)
         annotated.append(
             {
-                "_sweep_arm": arm,
-                "_sweep_kinematics": kin,
-                "scenario_id": scenario,
-                "seed": seed,
+                **episode_slot_row(slot),
                 "status": status,
                 "termination_reason": status,
                 "_sweep_execution_status": status,

@@ -4,7 +4,7 @@ Stops at the first accepted seed or when the budget is spent. A seed whose run e
 non-zero halts the claim (an unrun seed is not a rejected seed). Resumable: a seed whose
 receipt shows rc 0 is evaluated from its stored rows instead of being rerun.
 
-    python screen.py --contract <claim>/contract.yaml --wt <execution worktree> \
+    python screen.py --contract <claim>/contract.yaml.txt --wt <execution worktree> \
         --runs <raw output dir> [--trace-rerun]
 
 With --trace-rerun it reruns the accepted seed for every arm with step traces and

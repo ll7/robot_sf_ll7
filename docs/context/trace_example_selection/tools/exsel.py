@@ -21,7 +21,7 @@ Every rule here is the protocol's own text applied to one serialized episode row
 
 The projection mirrors ``episode_record``/``claim_record_from_release``/``class_matches``/
 ``acceptance_count`` of ll7/diss ``scripts/dev/diss_worked_example_nomination.py`` at the
-protocol commit named in each contract.yaml.
+protocol commit named in each contract.yaml.txt.
 """
 
 from __future__ import annotations

@@ -15,7 +15,7 @@ import exsel  # noqa: E402
 
 CLAIMS = {
     p.parent.name: exsel.load_claim(yaml.safe_load(p.read_text(encoding="utf-8")))
-    for p in sorted(HERE.parent.glob("exsel-*/contract.yaml"))
+    for p in sorted(HERE.parent.glob("exsel-*/contract.yaml.txt"))
 }
 WALK = CLAIMS["exsel-6.4-measure-walkthrough"]
 DOOR = CLAIMS["exsel-7.2-narrow-doorway"]
@@ -183,7 +183,7 @@ def test_ledger_stops_at_first_accepted_and_skips_unrun_seeds(tmp_path):
     import build_ledger
 
     contract = yaml.safe_load(
-        (HERE.parent / "exsel-6.4-measure-walkthrough" / "contract.yaml").read_text(
+        (HERE.parent / "exsel-6.4-measure-walkthrough" / "contract.yaml.txt").read_text(
             encoding="utf-8"
         )
     )

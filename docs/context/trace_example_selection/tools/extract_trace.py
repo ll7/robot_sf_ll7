@@ -1,6 +1,6 @@
 """Extract the accepted seed's step traces and check them against their own rows.
 
-    python extract_trace.py --contract <claim>/contract.yaml --runs <raw output dir> \
+    python extract_trace.py --contract <claim>/contract.yaml.txt --runs <raw output dir> \
         --out-dir <claim>/trace
 
 Writes, per arm, ``<arm>_seed<seed>_step_trace.json.gz`` (the row's

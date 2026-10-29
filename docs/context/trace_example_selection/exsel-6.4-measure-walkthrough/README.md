@@ -8,9 +8,9 @@ screening row on every match field; trace accepted.
   with at least one exposure step and lies inside all three frozen bands?
 - **Protocol.** ll7/diss `docs/context/trace_example_selection_protocol.yaml`, claim
   EXSEL-6.4-MEASURE-WALKTHROUGH (decision EXSEL-TRACE-SELECTION-PROTOCOL-2026-10-28). The
-  claim block, rules and acquisition spec are copied verbatim into `contract.yaml`
-  (commit 3e60a0924303eaa639b1871fb9bd71743306a80e, pushed before the first screening
-  episode).
+  claim block, rules and acquisition spec are copied verbatim into `contract.yaml.txt`.
+  The original `contract.yaml` was pushed in commit
+  3e60a0924303eaa639b1871fb9bd71743306a80e before the first screening episode.
 - **Source commit.** Unmodified 0.0.8 release code at
   373dbfde4f39667cf9e8732dabe7df5118bdeab1 (branch `exscr1-exec-373dbfde`), release
   campaign config, release scenario matrix, release social-force planner entry, authored
@@ -55,11 +55,14 @@ outputs also differ. Checked with a 1-seed rerun (seed 1197): 813 flattened fiel
 those four differ (`../provenance/reconstruction.json`). `config_hash` is per episode,
 so it differs across seeds but must match for the same seed.
 
+In this claim directory, `SHA256SUMS` covers every tracked packet file except
+`SHA256SUMS` itself.
+
 ## Rerun
 
 ```
 cd <robot_sf_ll7 worktree at 373dbfde4f39667cf9e8732dabe7df5118bdeab1> && uv sync --frozen
-python <packet>/tools/screen.py --contract <packet>/exsel-6.4-measure-walkthrough/contract.yaml \
+python <packet>/tools/screen.py --contract <packet>/exsel-6.4-measure-walkthrough/contract.yaml.txt \
     --wt <worktree> --runs <out>
 python <packet>/tools/screen.py ... --trace-rerun
 python <packet>/tools/build_ledger.py --contract ... --runs <out> --out screening_ledger.csv

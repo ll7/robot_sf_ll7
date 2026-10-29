@@ -1,7 +1,7 @@
-"""Write a claim's contract.yaml, copying the protocol's claim, rules and spec text verbatim.
+"""Write a claim's contract.yaml.txt, copying the protocol's claim, rules and spec text verbatim.
 
     python write_contract.py --protocol <trace_example_selection_protocol.yaml> \
-        --protocol-commit <diss sha> --claim-id <id> --out <claim dir>/contract.yaml
+        --protocol-commit <diss sha> --claim-id <id> --out <claim dir>/contract.yaml.txt
 """
 
 from __future__ import annotations

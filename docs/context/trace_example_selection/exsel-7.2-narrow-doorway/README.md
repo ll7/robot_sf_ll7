@@ -9,9 +9,9 @@ their screening rows on every match field; trace accepted.
   frozen bands?
 - **Protocol.** ll7/diss `docs/context/trace_example_selection_protocol.yaml`, claim
   EXSEL-7.2-NARROW-DOORWAY (decision EXSEL-TRACE-SELECTION-PROTOCOL-2026-10-28). The
-  claim block, rules and acquisition spec are copied verbatim into `contract.yaml`
-  (commit 3e60a0924303eaa639b1871fb9bd71743306a80e, pushed before the first screening
-  episode).
+  claim block, rules and acquisition spec are copied verbatim into `contract.yaml.txt`.
+  The original `contract.yaml` was pushed in commit
+  3e60a0924303eaa639b1871fb9bd71743306a80e before the first screening episode.
 - **Source commit.** Unmodified 0.0.8 release code at
   373dbfde4f39667cf9e8732dabe7df5118bdeab1 (branch `exscr1-exec-373dbfde`), release
   campaign config, release scenario matrix, release orca and goal planner entries,
@@ -56,6 +56,9 @@ Same contract as the walkthrough packet: exact equality on every serialized fiel
 Checked with a 1-seed rerun (seed 1178): orca 725 and goal 720 flattened fields, only
 those four differ (`../provenance/reconstruction.json`).
 
+In this claim directory, `SHA256SUMS` covers every tracked packet file except
+`SHA256SUMS` itself.
+
 ## Rerun
 
-As in `../exsel-6.4-measure-walkthrough/README.md`, with this claim's `contract.yaml`.
+As in `../exsel-6.4-measure-walkthrough/README.md`, with this claim's `contract.yaml.txt`.

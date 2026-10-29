@@ -4,7 +4,7 @@ One row per screened (seed, arm), in screening order then the claim's arm order,
 fields of acquisition_spec_markdown step 2 plus the mode column. The ledger stops after
 the first accepted seed; a seed without a successful run has no row.
 
-    python build_ledger.py --contract <claim>/contract.yaml --runs <raw output dir> \
+    python build_ledger.py --contract <claim>/contract.yaml.txt --runs <raw output dir> \
         --out <claim>/screening_ledger.csv
 """
 

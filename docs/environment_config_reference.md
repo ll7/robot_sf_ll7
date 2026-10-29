@@ -88,7 +88,7 @@ Deprecated: Use RobotSimulationConfig instead.
 | <a id="EnvSettings.predictive_foresight_front_corridor_length"></a>`predictive_foresight_front_corridor_length` | `float` | `3.0` | no | public | inherited from `RobotSimulationConfig`; |
 | <a id="EnvSettings.predictive_foresight_front_corridor_half_width"></a>`predictive_foresight_front_corridor_half_width` | `float` | `1.0` | no | public | inherited from `RobotSimulationConfig`; |
 | <a id="EnvSettings.include_route_waypoints"></a>`include_route_waypoints` | `bool` | `False` | no | public | inherited from `RobotSimulationConfig`; |
-| <a id="EnvSettings.include_goal_next_valid"></a>`include_goal_next_valid` | `bool` | `False` | no | public | inherited from `RobotSimulationConfig`; |
+| <a id="EnvSettings.include_goal_next_valid"></a>`include_goal_next_valid` | `bool` | `current_switch_default()` | no | public | inherited from `RobotSimulationConfig`; |
 
 ### `ImageRobotConfig`
 
@@ -145,7 +145,7 @@ Configuration for robot environments with image observations.
 | <a id="ImageRobotConfig.predictive_foresight_front_corridor_length"></a>`predictive_foresight_front_corridor_length` | `float` | `3.0` | no | public | inherited from `RobotSimulationConfig`; |
 | <a id="ImageRobotConfig.predictive_foresight_front_corridor_half_width"></a>`predictive_foresight_front_corridor_half_width` | `float` | `1.0` | no | public | inherited from `RobotSimulationConfig`; |
 | <a id="ImageRobotConfig.include_route_waypoints"></a>`include_route_waypoints` | `bool` | `False` | no | public | inherited from `RobotSimulationConfig`; |
-| <a id="ImageRobotConfig.include_goal_next_valid"></a>`include_goal_next_valid` | `bool` | `False` | no | public | inherited from `RobotSimulationConfig`; |
+| <a id="ImageRobotConfig.include_goal_next_valid"></a>`include_goal_next_valid` | `bool` | `current_switch_default()` | no | public | inherited from `RobotSimulationConfig`; |
 | <a id="ImageRobotConfig.image_config"></a>`image_config` | `ImageSensorSettings` | `ImageSensorSettings()` | no | public |  |
 
 ### `MultiRobotConfig`
@@ -203,7 +203,7 @@ Configuration for multi-robot environments.
 | <a id="MultiRobotConfig.predictive_foresight_front_corridor_length"></a>`predictive_foresight_front_corridor_length` | `float` | `3.0` | no | public | inherited from `RobotSimulationConfig`; |
 | <a id="MultiRobotConfig.predictive_foresight_front_corridor_half_width"></a>`predictive_foresight_front_corridor_half_width` | `float` | `1.0` | no | public | inherited from `RobotSimulationConfig`; |
 | <a id="MultiRobotConfig.include_route_waypoints"></a>`include_route_waypoints` | `bool` | `False` | no | public | inherited from `RobotSimulationConfig`; |
-| <a id="MultiRobotConfig.include_goal_next_valid"></a>`include_goal_next_valid` | `bool` | `False` | no | public | inherited from `RobotSimulationConfig`; |
+| <a id="MultiRobotConfig.include_goal_next_valid"></a>`include_goal_next_valid` | `bool` | `current_switch_default()` | no | public | inherited from `RobotSimulationConfig`; |
 | <a id="MultiRobotConfig.num_robots"></a>`num_robots` | `int` | `1` | no | public |  |
 
 ### `ObservationVisibilitySettings`
@@ -279,7 +279,7 @@ Deprecated: Use PedestrianSimulationConfig instead.
 | <a id="PedEnvSettings.predictive_foresight_front_corridor_length"></a>`predictive_foresight_front_corridor_length` | `float` | `3.0` | no | public | inherited from `RobotSimulationConfig`; |
 | <a id="PedEnvSettings.predictive_foresight_front_corridor_half_width"></a>`predictive_foresight_front_corridor_half_width` | `float` | `1.0` | no | public | inherited from `RobotSimulationConfig`; |
 | <a id="PedEnvSettings.include_route_waypoints"></a>`include_route_waypoints` | `bool` | `False` | no | public | inherited from `RobotSimulationConfig`; |
-| <a id="PedEnvSettings.include_goal_next_valid"></a>`include_goal_next_valid` | `bool` | `False` | no | public | inherited from `RobotSimulationConfig`; |
+| <a id="PedEnvSettings.include_goal_next_valid"></a>`include_goal_next_valid` | `bool` | `current_switch_default()` | no | public | inherited from `RobotSimulationConfig`; |
 | <a id="PedEnvSettings.ego_ped_config"></a>`ego_ped_config` | `UnicycleDriveSettings` | `UnicycleDriveSettings()` | no | public | inherited from `PedestrianSimulationConfig`; |
 | <a id="PedEnvSettings.ego_ped_lidar_config"></a>`ego_ped_lidar_config` | `LidarScannerSettings | None` | `None` | no | public | inherited from `PedestrianSimulationConfig`; |
 | <a id="PedEnvSettings.spawn_near_robot"></a>`spawn_near_robot` | `bool` | `True` | no | public | inherited from `PedestrianSimulationConfig`; |
@@ -339,7 +339,7 @@ Configuration for pedestrian environments.
 | <a id="PedestrianSimulationConfig.predictive_foresight_front_corridor_length"></a>`predictive_foresight_front_corridor_length` | `float` | `3.0` | no | public | inherited from `RobotSimulationConfig`; |
 | <a id="PedestrianSimulationConfig.predictive_foresight_front_corridor_half_width"></a>`predictive_foresight_front_corridor_half_width` | `float` | `1.0` | no | public | inherited from `RobotSimulationConfig`; |
 | <a id="PedestrianSimulationConfig.include_route_waypoints"></a>`include_route_waypoints` | `bool` | `False` | no | public | inherited from `RobotSimulationConfig`; |
-| <a id="PedestrianSimulationConfig.include_goal_next_valid"></a>`include_goal_next_valid` | `bool` | `False` | no | public | inherited from `RobotSimulationConfig`; |
+| <a id="PedestrianSimulationConfig.include_goal_next_valid"></a>`include_goal_next_valid` | `bool` | `current_switch_default()` | no | public | inherited from `RobotSimulationConfig`; |
 | <a id="PedestrianSimulationConfig.ego_ped_config"></a>`ego_ped_config` | `UnicycleDriveSettings` | `UnicycleDriveSettings()` | no | public |  |
 | <a id="PedestrianSimulationConfig.ego_ped_lidar_config"></a>`ego_ped_lidar_config` | `LidarScannerSettings | None` | `None` | no | public |  |
 | <a id="PedestrianSimulationConfig.spawn_near_robot"></a>`spawn_near_robot` | `bool` | `True` | no | public |  |
@@ -399,7 +399,7 @@ Deprecated: Use ImageRobotConfig instead.
 | <a id="RobotEnvSettings.predictive_foresight_front_corridor_length"></a>`predictive_foresight_front_corridor_length` | `float` | `3.0` | no | public | inherited from `RobotSimulationConfig`; |
 | <a id="RobotEnvSettings.predictive_foresight_front_corridor_half_width"></a>`predictive_foresight_front_corridor_half_width` | `float` | `1.0` | no | public | inherited from `RobotSimulationConfig`; |
 | <a id="RobotEnvSettings.include_route_waypoints"></a>`include_route_waypoints` | `bool` | `False` | no | public | inherited from `RobotSimulationConfig`; |
-| <a id="RobotEnvSettings.include_goal_next_valid"></a>`include_goal_next_valid` | `bool` | `False` | no | public | inherited from `RobotSimulationConfig`; |
+| <a id="RobotEnvSettings.include_goal_next_valid"></a>`include_goal_next_valid` | `bool` | `current_switch_default()` | no | public | inherited from `RobotSimulationConfig`; |
 | <a id="RobotEnvSettings.image_config"></a>`image_config` | `ImageSensorSettings` | `ImageSensorSettings()` | no | public | inherited from `ImageRobotConfig`; |
 
 ### `RobotSimulationConfig`
@@ -457,7 +457,7 @@ Configuration for robot-based environments.
 | <a id="RobotSimulationConfig.predictive_foresight_front_corridor_length"></a>`predictive_foresight_front_corridor_length` | `float` | `3.0` | no | public |  |
 | <a id="RobotSimulationConfig.predictive_foresight_front_corridor_half_width"></a>`predictive_foresight_front_corridor_half_width` | `float` | `1.0` | no | public |  |
 | <a id="RobotSimulationConfig.include_route_waypoints"></a>`include_route_waypoints` | `bool` | `False` | no | public |  |
-| <a id="RobotSimulationConfig.include_goal_next_valid"></a>`include_goal_next_valid` | `bool` | `False` | no | public |  |
+| <a id="RobotSimulationConfig.include_goal_next_valid"></a>`include_goal_next_valid` | `bool` | `current_switch_default()` | no | public |  |
 
 ## Module `robot_sf/gym_env/crowd_sim_env.py`
 

@@ -1,0 +1,204 @@
+{
+  "status": "diagnostic-only; author decision required",
+  "full_suite": {
+    "head": "36aabb14c637039627772c00addf9fe2b46e309c",
+    "command": "scripts/dev/run_worktree_shared_venv.sh -- env -u PYTEST_XDIST_DIST -u PR_READY_ADVISORY ROBOT_SF_TEST_LANE=all uv run pytest -n 2 --cov=robot_sf --cov-report=json",
+    "invocations": 1,
+    "started_at": "2026-10-07T08:30:04.804186+00:00",
+    "completed_at": "2026-10-07T09:48:25.007897+00:00",
+    "exit_code": 1,
+    "passed": 42973,
+    "failed": 28,
+    "skipped": 69,
+    "xfailed": 7,
+    "collected": 43076,
+    "pytest_xdist_preflight_count": 9,
+    "mem_total_kib": 32642132,
+    "mem_available_kib": 14986752,
+    "failures": [
+      {
+        "node": "tests/benchmark/test_control_action_latency_sweep_cheap_lane.py::test_runner_executes_orca_and_hybrid_with_native_runtime[hybrid_rule_v0_minimal]",
+        "classification": "compact_benchmark_bridge_dropped_observed_validity",
+        "current_default_risk_remains": false
+      },
+      {
+        "node": "tests/benchmark/test_frozen_comparator_native_command.py::test_frozen_comparator_native_command_runs_with_verified_geometry[hybrid_rule_v0_minimal-configs/algos/hybrid_rule_v0_minimal.yaml]",
+        "classification": "native_request_fixture_and_bridge_omitted_validity",
+        "current_default_risk_remains": false
+      },
+      {
+        "node": "tests/benchmark/test_frozen_comparator_native_command.py::test_blocking_static_segment_changes_comparator_behavior[hybrid_rule_v0_minimal-configs/algos/hybrid_rule_v0_minimal.yaml]",
+        "classification": "native_request_fixture_and_bridge_omitted_validity",
+        "current_default_risk_remains": false
+      },
+      {
+        "node": "tests/benchmark/test_goal_posterior_planner_input_smoke_issue_4164.py::test_goal_posterior_smoke_report_has_planner_consumption_rows",
+        "classification": "synthetic_proxy_omitted_declared_successor_validity",
+        "current_default_risk_remains": false
+      },
+      {
+        "node": "tests/benchmark/test_goal_posterior_planner_input_smoke_issue_4164.py::test_goal_posterior_smoke_main_writes_json",
+        "classification": "synthetic_proxy_omitted_declared_successor_validity",
+        "current_default_risk_remains": false
+      },
+      {
+        "node": "tests/benchmark/test_map_runner_resume_identity.py::test_resume_identity_is_algorithm_aware",
+        "classification": "test_double_did_not_accept_absent_algorithm_config",
+        "current_default_risk_remains": false
+      },
+      {
+        "node": "tests/benchmark/test_map_runner_resume_identity.py::test_resume_identity_uses_effective_latency_profile_dt",
+        "classification": "test_double_did_not_accept_absent_algorithm_config",
+        "current_default_risk_remains": false
+      },
+      {
+        "node": "tests/benchmark/test_map_runner_resume_identity.py::test_resume_identity_uses_identity_benchmark_track",
+        "classification": "test_double_did_not_accept_absent_algorithm_config",
+        "current_default_risk_remains": false
+      },
+      {
+        "node": "tests/metamorphic/test_mirror_symmetry.py::test_diagnostic_hybrid_v4_trace_is_mirror_equivariant",
+        "classification": "current_static_exclusion_breaks_diagnostic_mirror_relation",
+        "current_default_risk_remains": true
+      },
+      {
+        "node": "tests/planner/test_adaptive_proxemic_selector.py::test_adaptive_selector_uses_open_profile_when_local_context_is_clear",
+        "classification": "sparse_planner_fixture_omitted_validity",
+        "current_default_risk_remains": false
+      },
+      {
+        "node": "tests/planner/test_adaptive_proxemic_selector.py::test_adaptive_selector_v1_uses_neutral_profile_when_context_is_clear",
+        "classification": "sparse_planner_fixture_omitted_validity",
+        "current_default_risk_remains": false
+      },
+      {
+        "node": "tests/planner/test_adaptive_proxemic_selector.py::test_adaptive_selector_uses_conservative_profile_near_humans",
+        "classification": "sparse_planner_fixture_omitted_validity",
+        "current_default_risk_remains": false
+      },
+      {
+        "node": "tests/planner/test_adaptive_proxemic_selector.py::test_adaptive_selector_exposes_density_and_low_progress_reasons",
+        "classification": "sparse_planner_fixture_omitted_validity",
+        "current_default_risk_remains": false
+      },
+      {
+        "node": "tests/planner/test_adaptive_proxemic_selector.py::test_adaptive_selector_uses_neutral_profile_for_constrained_passage",
+        "classification": "sparse_planner_fixture_omitted_validity",
+        "current_default_risk_remains": false
+      },
+      {
+        "node": "tests/planner/test_adaptive_proxemic_selector.py::test_adaptive_selector_v1_uses_conservative_profile_for_constrained_passage",
+        "classification": "sparse_planner_fixture_omitted_validity",
+        "current_default_risk_remains": false
+      },
+      {
+        "node": "tests/planner/test_adaptive_proxemic_selector.py::test_adaptive_selector_v1_reserves_open_for_sparse_low_progress",
+        "classification": "sparse_planner_fixture_omitted_validity",
+        "current_default_risk_remains": false
+      },
+      {
+        "node": "tests/planner/test_adaptive_proxemic_selector.py::test_adaptive_selector_ignores_nonfinite_pedestrian_count",
+        "classification": "sparse_planner_fixture_omitted_validity",
+        "current_default_risk_remains": false
+      },
+      {
+        "node": "tests/planner/test_adaptive_proxemic_selector.py::test_adaptive_selector_requires_positive_constrained_width",
+        "classification": "sparse_planner_fixture_omitted_validity",
+        "current_default_risk_remains": false
+      },
+      {
+        "node": "tests/planner/test_limited_reverse.py::test_hybrid_static_escape_reverses_but_rejects_a_rear_wall",
+        "classification": "sparse_planner_fixture_omitted_validity",
+        "current_default_risk_remains": false
+      },
+      {
+        "node": "tests/planner/test_topology_guided_local_policy.py::test_topology_guided_policy_fails_closed_without_required_inputs",
+        "classification": "sparse_planner_fixture_omitted_validity",
+        "current_default_risk_remains": false
+      },
+      {
+        "node": "tests/planner/test_topology_guided_local_policy.py::test_topology_guided_policy_records_fallback_only_status",
+        "classification": "sparse_planner_fixture_omitted_validity",
+        "current_default_risk_remains": false
+      },
+      {
+        "node": "tests/planner/test_topology_guided_local_policy.py::test_topology_candidate_source_missing_geometry_fails_without_configured_fallback",
+        "classification": "sparse_planner_fixture_omitted_validity",
+        "current_default_risk_remains": false
+      },
+      {
+        "node": "tests/planner/test_topology_guided_local_policy.py::test_topology_candidate_source_malformed_geometry_always_fails_closed",
+        "classification": "sparse_planner_fixture_omitted_validity",
+        "current_default_risk_remains": false
+      },
+      {
+        "node": "tests/planner/test_topology_guided_local_policy.py::test_topology_candidate_source_missing_geometry_uses_configured_diagnostic_fallback",
+        "classification": "sparse_planner_fixture_omitted_validity",
+        "current_default_risk_remains": false
+      },
+      {
+        "node": "tests/planner/test_topology_guided_local_policy.py::test_topology_guided_policy_candidate_required_can_fail_closed",
+        "classification": "sparse_planner_fixture_omitted_validity",
+        "current_default_risk_remains": false
+      },
+      {
+        "node": "tests/planner/test_topology_guided_local_policy.py::test_topology_guided_policy_records_selected_hypothesis_diagnostics",
+        "classification": "sparse_planner_fixture_omitted_validity",
+        "current_default_risk_remains": false
+      },
+      {
+        "node": "tests/planner/test_topology_guided_local_policy.py::test_topology_hypothesis_can_select_local_command_source",
+        "classification": "sparse_planner_fixture_omitted_validity",
+        "current_default_risk_remains": false
+      },
+      {
+        "node": "tests/planner/test_topology_guided_local_policy.py::test_topology_guided_policy_resets_stale_topology_decision",
+        "classification": "sparse_planner_fixture_omitted_validity",
+        "current_default_risk_remains": false
+      }
+    ]
+  },
+  "focused_corrections": {
+    "passed": 210,
+    "xfailed": 1,
+    "duration_s": 123.43,
+    "command": "pytest -n 2 --cov=robot_sf --cov-append --cov-report=json on the 12 affected planner, benchmark, metamorphic and compatibility files",
+    "final_compact_bridge": {
+      "passed": 22,
+      "duration_s": 61.93,
+      "files": [
+        "tests/benchmark/test_fidelity_sensitivity_campaign.py",
+        "tests/benchmark/test_control_action_latency_sweep_cheap_lane.py"
+      ]
+    },
+    "files": [
+      "tests/planner/test_adaptive_proxemic_selector.py",
+      "tests/planner/test_topology_guided_local_policy.py",
+      "tests/planner/test_limited_reverse.py",
+      "tests/benchmark/test_frozen_comparator_native_command.py",
+      "tests/benchmark/test_sipp_native_command.py",
+      "tests/benchmark/test_control_action_latency_sweep_cheap_lane.py",
+      "tests/benchmark/test_goal_posterior_planner_input_smoke_issue_4164.py",
+      "tests/benchmark/test_fidelity_sensitivity_campaign.py",
+      "tests/benchmark/test_map_runner_resume_identity.py",
+      "tests/metamorphic/test_mirror_symmetry.py",
+      "tests/planner/test_hybrid_default_compatibility.py",
+      "tests/planner/test_hybrid_default_review_regressions.py"
+    ]
+  },
+  "coverage": {
+    "threshold_passed": true,
+    "minimum_percent": 80,
+    "common_defaults_changed_lines_percent": 97.4,
+    "other_changed_runtime_lines_percent": 100,
+    "benchmark_scripts_omitted_by_repository_coverage_policy": true
+  },
+  "release_byte_audit": {
+    "baseline_head": "9d8dac2a140f00dadf2c8c2621977bcee96c83e0",
+    "registry_sources": 60,
+    "verified_source_and_dependency_paths": 62,
+    "all_registered_source_bytes_equal_base": true,
+    "all_registry_source_hashes_match": true
+  },
+  "claim_boundary": "The full suite was run once and failed. Focused corrections pass. The original diagnostic mirror controls are explicit; the new default static-exclusion symmetry risk remains for author review. No final-head full-suite or hosted CI pass is claimed."
+}

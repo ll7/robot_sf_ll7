@@ -90,6 +90,7 @@ def test_historical_scheduled_episode_matches_main_row_contract(protocol, name):
         snqi_weights=None,
         snqi_baseline=None,
         scenario_path=ROOT / "scoped_scenarios.json",
+        provenance_scenario_path=cfg.scenario_matrix_path,
         policy_builder=_build_policy if name == "francis2023_blind_corner" else stationary,
     )
     expected = ORACLE["rows"][name]

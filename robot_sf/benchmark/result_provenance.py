@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import ast
 import json
+import operator
 import os
 import platform
 import shlex
@@ -23,7 +24,7 @@ from hashlib import sha256
 from importlib.metadata import PackageNotFoundError, version
 from importlib.util import find_spec
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import numba
 import numpy as np
@@ -54,6 +55,49 @@ _STRENGTHENED_REQUIRED_TOP_LEVEL = _REQUIRED_TOP_LEVEL + ("input_binding_schema_
 _REQUIRED_ROW = ("episode_id", "scenario_id", "seed", "config_hash", "repo_commit")
 _INPUT_ROLES = ("schema_path", "scenario_matrix", "algo_config")
 _SHA256_HEX_CHARS = frozenset("0123456789abcdefABCDEF")
+
+
+def capture_pedestrian_group_provenance(simulator: Any) -> dict[str, Any]:
+    """Copy reset membership without RNG use or changes to simulator state.
+
+    Pedestrian IDs are reset array slots, not persistent identities across respawns.
+    Singleton and empty groups retain their IDs; only groups of size >= 2 count
+    toward social-group prevalence. Missing runtime state is never an empty crowd.
+
+    Returns:
+        A JSON-compatible recorded snapshot or an explicit unavailable block.
+    """
+    block: dict[str, Any] = {
+        "schema_version": "pedestrian_group_provenance.v1",
+        "capture_phase": "reset",
+        "pedestrian_id_scope": "reset_simulator_slot",
+    }
+    grouping = getattr(simulator, "groups", None)
+    groups = getattr(grouping, "groups", None)
+    if not isinstance(groups, Mapping) or not hasattr(simulator, "ped_pos"):
+        return {**block, "status": "unavailable", "reason": "runtime_group_state_missing"}
+    count = len(np.asarray(simulator.ped_pos).reshape(-1, 2))
+    members_seen: set[int] = set()
+    serialized: list[dict[str, Any]] = []
+    for group_id, members in sorted(cast("Mapping[Any, Any]", groups).items()):
+        ids = sorted(operator.index(member) for member in members)
+        if any(member < 0 or member >= count or member in members_seen for member in ids):
+            raise ValueError("invalid reset pedestrian group membership")
+        members_seen.update(ids)
+        serialized.append(
+            {"group_id": operator.index(group_id), "pedestrian_ids": ids, "member_count": len(ids)}
+        )
+    return {
+        **block,
+        "status": "recorded",
+        "pedestrian_count": count,
+        "groups": serialized,
+        "unassigned_pedestrian_ids": sorted(set(range(count)) - members_seen),
+        "multi_member_group_count": sum(group["member_count"] >= 2 for group in serialized),
+        "pedestrians_in_multi_member_groups": sum(
+            group["member_count"] for group in serialized if group["member_count"] >= 2
+        ),
+    }
 
 
 class ProvenanceValidationError(RobotSfError, ValueError):

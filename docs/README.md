@@ -1,5 +1,7 @@
 # Robot SF Documentation
 
+- [Pedestrian group provenance and development reset audit](benchmark_pedestrian_groups.md)
+
 Welcome to the Robot SF documentation! This directory contains comprehensive guides and references for using and developing with the Robot SF simulation framework.
 
 **New to the terminology?** Start with the [Glossary](./glossary.md) — the canonical definitions for acronyms and project-specific terms (VRU, AMV, AMMV, SNQI, occluder, the evidence ladder, and more).

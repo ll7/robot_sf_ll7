@@ -214,6 +214,7 @@ def compute_snqi_step_proxies(
     - ``force_exceed_events``: exact per-step count above comfort threshold.
     - ``comfort_exposure``: per-step normalized force exceed ratio.
     - ``jerk_mean``: running mean of finite-difference jerk magnitude proxy.
+    - ``jerk_step``: current finite-difference jerk magnitude (zero during warmup).
 
     Args:
         simulator: Active simulator backend for the environment.
@@ -256,6 +257,7 @@ def compute_snqi_step_proxies(
     ped_count = max(int(ped_pos.shape[0]), int(force_magnitudes.shape[0]))
     comfort_exposure = force_exceed_events / float(max(1, ped_count))
 
+    jerk_step = 0.0
     if dt > 1e-9:
         if proxy_state.prev_robot_pos is not None:
             vel = (robot_pos - proxy_state.prev_robot_pos) / dt
@@ -265,6 +267,7 @@ def compute_snqi_step_proxies(
                     jerk = (acc - proxy_state.prev_robot_acc) / dt
                     jerk_mag = math.hypot(float(jerk[0]), float(jerk[1]))
                     if np.isfinite(jerk_mag):
+                        jerk_step = jerk_mag
                         proxy_state.jerk_sum += jerk_mag
                         proxy_state.jerk_count += 1
                 proxy_state.prev_robot_acc = acc
@@ -282,4 +285,5 @@ def compute_snqi_step_proxies(
         "force_exceed_events": float(force_exceed_events),
         "comfort_exposure": float(comfort_exposure),
         "jerk_mean": float(jerk_mean),
+        "jerk_step": float(jerk_step),
     }

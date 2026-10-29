@@ -1,8 +1,9 @@
 # EXSEL-7.5-GUARD-PAIR: trace-example screening
 
 **Development-seed diagnostic. New current-version execution on an experimental rebuild
-of the 0.0.8 release code. Not release evidence. Do not merge.** The claim ceiling is
-the guard/escape replication's: within-controller development evidence (PROVISIONAL).
+of the 0.0.8 release code. Not release evidence. Merge only after an independent
+exact-head review.** The claim ceiling is the guard/escape replication's:
+within-controller development evidence (PROVISIONAL).
 
 ## Question
 
@@ -17,8 +18,8 @@ that pattern in the frozen cell `classic_cross_trap_high`, inside the frozen ban
 The protocol is the preregistration. [contract.yaml](contract.yaml) copies its
 identity, rules, outcome predicates, sources, the claim entry and the acquisition
 spec byte for byte, and adds an `execution:` block that records how this lane ran
-it. The contract was committed and pushed in `689959b7a412` (07:48:47 UTC) before
-the first screening episode started (07:48:52 UTC).
+it. The contract was committed as `689959b7a412` at 07:48:43 UTC and pushed at
+07:48:46 UTC, before the first screening episode started at 07:48:52 UTC.
 
 ## Result
 

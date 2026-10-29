@@ -2,7 +2,39 @@
 
 This document shows how to use the `FastPysfWrapper` to sample forces from the bundled `fast-pysf` simulator and how to plot the force field using the example script.
 
-## Obstacle-force semantics
+## 0.1.0 pedestrian wall-law default
+
+From 0.1.0, new simulation settings and new authored scenarios default to the
+radius-aligned **physical_margin x10** preset,
+`body_edge_exponential_v3_physical_margin10x`. It uses a 0.05 m margin added to
+the pedestrian force radius, with ten times the original physical-margin
+amplitude (effective factor 100 at the unchanged config factor 10). The original
+`body_edge_exponential_v3_physical_margin` selector remains the unscaled variant.
+
+This is a maintainer modelling choice, **not shown to be more realistic**.
+[#10376](https://github.com/ll7/robot_sf_ll7/issues/10376) reports 0.085% of
+pedestrian-steps within 10 cm of a wall in a development diagnostic. The flow
+comparison with Seyfried et al. is not matched in population, width, directionality
+or arrival conditions; it cannot establish empirical realism. See also
+[#10310](https://github.com/ll7/robot_sf_ll7/issues/10310) and
+[#10304](https://github.com/ll7/robot_sf_ll7/issues/10304).
+
+The new default **breaks comparability with 0.0.x results**. Released `release_0_0_*`
+and `*_frozen.yaml` scenario inputs retain legacy behavior and unchanged bytes.
+Historical unversioned mappings also resolve to legacy. To reproduce legacy
+physics explicitly in any new scenario, use:
+
+```yaml
+simulation_config:
+  obstacle_force_law: legacy_shifted_gradient_v1
+```
+
+In Python, use `SimulationSettings(obstacle_force_law="legacy_shifted_gradient_v1")`
+or `ObstacleForceConfig(law_version="legacy_shifted_gradient_v1")`. Legacy retains
+its original factor 10; the default preset does not change other laws' strengths.
+Existing checkpoint comparisons must explicitly select the same law on both sides.
+
+## Legacy obstacle-force semantics
 
 `ObstacleForceConfig.threshold` is an additive distance offset in meters, not an
 activation threshold. Before evaluating the potential field, fast-pysf combines it with

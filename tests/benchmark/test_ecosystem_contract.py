@@ -26,6 +26,7 @@ EXPECTED_CAPABILITY_IDS = {
     "robot_sf.schema.aggregate.v1",
     "robot_sf.schema.episode.v1",
     "robot_sf.schema.episode_runtime_input_identity.v1",
+    "robot_sf.schema.episode_planner_key.v1",
     "robot_sf.schema.evidence_bundle.v1",
     "robot_sf.schema.release_assurance_case.v1",
     "robot_sf.schema.report_metadata.v1",
@@ -112,7 +113,7 @@ def test_contract_declares_fixture_identity_without_content_digest() -> None:
     assert contract["canonical_public_fixtures"] == [
         {
             "fixture_id": "robot_sf.ecosystem_handoff.v1",
-            "fixture_version": "1.0.0",
+            "fixture_version": "1.1.0",
             "path": "tests/fixtures/ecosystem_handoff/v1/fixture_manifest.json",
         }
     ]

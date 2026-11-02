@@ -17,6 +17,7 @@ from typing import Any
 import numpy as np
 
 from robot_sf.common.math_utils import wrap_angle_pi
+from robot_sf.nav.occupancy_grid_utils import world_to_ego
 from robot_sf.planner.socnav import OccupancyAwarePlannerMixin
 
 
@@ -290,18 +291,78 @@ class DWAPlannerAdapter(OccupancyAwarePlannerMixin):
         channel_grid = np.asarray(grid[channel], dtype=float)
         if not (0 <= row < channel_grid.shape[0] and 0 <= col < channel_grid.shape[1]):
             return 0.0
-        if channel_grid[row, col] >= float(self.config.obstacle_threshold):
+        return self._point_to_occupied_cell_clearance(
+            point,
+            channel_grid,
+            meta,
+            grid_cell=(row, col),
+        )
+
+    def _point_to_occupied_cell_clearance(
+        self,
+        point: np.ndarray,
+        channel_grid: np.ndarray,
+        meta: dict[str, Any],
+        *,
+        grid_cell: tuple[int, int],
+    ) -> float:
+        """Measure distance from a world point to occupied cell footprints.
+
+        Returns:
+            Clearance in meters, or infinity when no relevant occupied cell exists.
+        """
+        resolution = float(self._as_1d_float(meta.get("resolution", [0.0]), pad=1)[0])
+        if not isfinite(resolution) or resolution <= 0.0:
             return 0.0
-        radius = max(int(self.config.obstacle_search_cells), 1)
+        origin = self._as_1d_float(meta.get("origin", [0.0, 0.0]), pad=2)[:2]
+        point_in_grid_frame = self._as_1d_float(point, pad=2)[:2]
+        use_ego = bool(self._as_1d_float(meta.get("use_ego_frame", [0.0]), pad=1)[0] > 0.5)
+        if use_ego:
+            pose = self._as_1d_float(meta.get("robot_pose", [0.0, 0.0, 0.0]), pad=3)
+            point_in_grid_frame = np.asarray(
+                world_to_ego(
+                    float(point_in_grid_frame[0]),
+                    float(point_in_grid_frame[1]),
+                    ((float(pose[0]), float(pose[1])), float(pose[2])),
+                ),
+                dtype=float,
+            )
+
+        # Clearance scoring saturates at clearance_distance after subtracting the
+        # robot radius, while the feasibility check uses safety_margin. Search far
+        # enough to cover both boundaries, independent of cell size.
+        max_relevant_distance = max(
+            float(self.config.clearance_distance), float(self.config.safety_margin)
+        ) + float(self.config.robot_radius)
+        physical_radius_cells = math.ceil(max_relevant_distance / resolution) + 1
+        # Retain the legacy knob as a minimum crop size for config compatibility;
+        # larger crops cannot change the score beyond max_relevant_distance.
+        radius = max(int(self.config.obstacle_search_cells), physical_radius_cells, 1)
+        row, col = grid_cell
         r0, r1 = max(0, row - radius), min(channel_grid.shape[0], row + radius + 1)
         c0, c1 = max(0, col - radius), min(channel_grid.shape[1], col + radius + 1)
         obstacle_indices = np.argwhere(channel_grid[r0:r1, c0:c1] >= self.config.obstacle_threshold)
         if obstacle_indices.size == 0:
             return float("inf")
-        row_delta = obstacle_indices[:, 0] + r0 - row
-        col_delta = obstacle_indices[:, 1] + c0 - col
-        resolution = float(self._as_1d_float(meta.get("resolution", [0.2]), pad=1)[0])
-        return float(np.min(np.hypot(row_delta, col_delta)) * max(resolution, 1e-6))
+
+        occupied_rows = obstacle_indices[:, 0] + r0
+        occupied_columns = obstacle_indices[:, 1] + c0
+        cell_x_min = origin[0] + occupied_columns * resolution
+        cell_x_max = cell_x_min + resolution
+        cell_y_min = origin[1] + occupied_rows * resolution
+        cell_y_max = cell_y_min + resolution
+        dx = np.maximum(
+            np.maximum(cell_x_min - point_in_grid_frame[0], 0.0),
+            point_in_grid_frame[0] - cell_x_max,
+        )
+        dy = np.maximum(
+            np.maximum(cell_y_min - point_in_grid_frame[1], 0.0),
+            point_in_grid_frame[1] - cell_y_max,
+        )
+        clearance = float(np.min(np.hypot(dx, dy)))
+        if clearance > max_relevant_distance:
+            return float("inf")
+        return clearance
 
     def _rollout_score(  # noqa: PLR0913
         self,

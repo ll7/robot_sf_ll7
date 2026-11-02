@@ -35,6 +35,14 @@ The explicit source registry is
 Maintainers review changes to this file. The registry names each capability and
 the narrow source selectors that own its meaning.
 
+The episode record schema is intentionally open to additional root properties.
+Camera-ready `planner_key` is therefore declared as a separate additive
+`robot_sf.schema.episode_planner_key.v1` capability, whose scalar schema defines
+the non-empty string value. The current producer contract is version `1.1.0`;
+this lets consumers opt into the identity field without rewriting or silently
+changing the pinned `episode.schema.v1` capability. Legacy rows may omit the
+field.
+
 The generator is
 `scripts/tools/build_robot_sf_ecosystem_contract.py`. It resolves the registry,
 validates the selected source objects, and writes these generated files:
@@ -187,11 +195,15 @@ unreleased envelope is a preparation record and is not release evidence.
 
 ## Canonical conformance fixture
 
-The v1 contract declares the stable identity, version, and repository path of
+The producer contract declares the stable identity, version, and repository path of
 `robot_sf.ecosystem_handoff.v1`. It does not include a content digest for that
 packet. The packet records the contract digest, so hashing packet content inside
 the producer contract would create a contract/fixture digest cycle. A future
 release manifest binds the contract and packet content digests together.
+
+The additive planner-key capability is published in producer contract `1.1.0`,
+and the conformance packet is versioned `1.1.0` to bind that contract. Its
+fixture schema and identity remain v1.
 
 The packet is generated from production serializers and writers at
 `tests/fixtures/ecosystem_handoff/v1/`. It contains one deterministic episode,

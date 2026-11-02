@@ -1,0 +1,8 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/robot-sf/episode-planner-key.schema.v1.json",
+  "title": "Robot SF Episode Planner Key (v1)",
+  "description": "Non-empty authoritative camera-ready planner-roster identity carried in an episode record's optional root planner_key field.",
+  "type": "string",
+  "minLength": 1
+}

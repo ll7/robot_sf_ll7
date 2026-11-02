@@ -26,6 +26,25 @@ from robot_sf.benchmark.figures.style import (
 )
 
 
+def test_fixed_timestamp_controls_embedded_pdf_dates(tmp_path):
+    """An explicit export timestamp controls the PDF's actual metadata bytes."""
+    plt = pytest.importorskip("matplotlib.pyplot")
+    fig, ax = plt.subplots()
+    ax.plot([0, 1], [0, 1])
+    try:
+        save_publication_figure(
+            fig,
+            tmp_path / "fixed",
+            provenance={},
+            timestamp=datetime(2000, 1, 1, tzinfo=UTC),
+        )
+        pdf = (tmp_path / "fixed.pdf").read_bytes()
+        assert b"/CreationDate (D:20000101000000Z)" in pdf
+        assert b"/ModDate (D:20000101000000Z)" in pdf
+    finally:
+        plt.close(fig)
+
+
 class TestPlannerPalette:
     """Tests for planner color palette."""
 

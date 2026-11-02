@@ -204,9 +204,12 @@ def test_risk_dwa_progress_escape_breaks_stall() -> None:
         safe_distance=0.2,
     )
     planner = RiskDWAPlannerAdapter(cfg)
-    v, w = planner.plan(_obs(goal=(3.0, 0.0)))
+    (v, w), diagnostics = planner.plan_with_diagnostics(_obs(goal=(3.0, 0.0)))
     assert v >= 0.59
     assert abs(w) <= cfg.max_angular_speed
+    assert diagnostics["status"] == "selected"
+    assert diagnostics["reason"] == "candidate_score_better"
+    assert diagnostics["candidate_command"] == [v, w]
 
 
 def test_risk_dwa_progress_escape_keeps_scored_best_command(monkeypatch) -> None:
@@ -224,13 +227,47 @@ def test_risk_dwa_progress_escape_keeps_scored_best_command(monkeypatch) -> None
         "_rollout_score",
         lambda **kwargs: 10.0 if kwargs["command"] == (0.2, 0.0) else -5.0,
     )
-    v, w = planner.plan(_obs(goal=(3.0, 0.0)))
+    (v, w), diagnostics = planner.plan_with_diagnostics(_obs(goal=(3.0, 0.0)))
     assert (v, w) == (0.2, 0.0)
+    assert diagnostics["status"] == "evaluated_but_not_selected"
+    assert diagnostics["reason"] == "candidate_score_not_better"
+
+
+def test_risk_dwa_progress_escape_call_status_and_legacy_plan_output() -> None:
+    """Disabled and unconsidered escape calls retain the legacy command interface."""
+    observation = _obs(goal=(3.0, 0.0))
+    disabled = RiskDWAPlannerAdapter(
+        RiskDWAPlannerConfig(
+            linear_candidates=(0.2,),
+            angular_candidates=(0.0,),
+            progress_escape_enabled=False,
+        )
+    )
+    disabled_command, disabled_diagnostics = disabled.plan_with_diagnostics(observation)
+    assert disabled_command == disabled.plan(observation)
+    assert disabled_diagnostics["status"] == "disabled"
+    assert disabled_diagnostics["reason"] == "disabled_by_config"
+    retained = disabled.diagnostics()
+    assert retained["planner_type"] == "RiskDWAPlannerAdapter"
+    assert retained["planner_target_xy"] == [3.0, 0.0]
+    assert "status" not in retained
+    assert "candidate_command" not in retained
+
+    not_considered = RiskDWAPlannerAdapter(
+        RiskDWAPlannerConfig(
+            linear_candidates=(0.8,),
+            angular_candidates=(0.0,),
+            progress_escape_enabled=True,
+        )
+    )
+    _command, diagnostics = not_considered.plan_with_diagnostics(observation)
+    assert diagnostics["status"] == "not_evaluated"
+    assert diagnostics["reason"] == "escape_conditions_not_met"
 
 
 def test_mppi_is_deterministic_for_fixed_seed() -> None:
     """Two planners with same seed should produce identical action on same observation."""
-    cfg = MPPISocialConfig(random_seed=7, sample_count=24, iterations=2, horizon_steps=5)
+    cfg = MPPISocialConfig(random_seed=1001, sample_count=24, iterations=2, horizon_steps=5)
     p1 = MPPISocialPlannerAdapter(cfg)
     p2 = MPPISocialPlannerAdapter(cfg)
     o = _obs(ped_positions=[(0.6, 0.2), (0.8, -0.1)], ped_velocities=[(0.0, 0.0), (0.0, 0.0)])
@@ -248,7 +285,7 @@ def test_mppi_ttc_computation_emits_no_divide_warning() -> None:
     """
     import warnings
 
-    cfg = MPPISocialConfig(random_seed=7, sample_count=24, iterations=2, horizon_steps=5)
+    cfg = MPPISocialConfig(random_seed=1001, sample_count=24, iterations=2, horizon_steps=5)
     planner = MPPISocialPlannerAdapter(cfg)
 
     o = _obs(
@@ -363,7 +400,11 @@ def test_mppi_obstacle_clearance_accepts_precomputed_grid_without_observation(mo
 def test_mppi_progress_escape_breaks_stall() -> None:
     """MPPI should inject progress command when first action is too conservative."""
     cfg = MPPISocialConfig(
-        random_seed=3,
+        random_seed=1003,
+        # Force conservative candidates so the escape assertion does not depend
+        # on a particular sampled sequence or an out-of-band historical seed.
+        init_linear_std=0.0,
+        init_angular_std=0.0,
         sample_count=12,
         iterations=1,
         horizon_steps=4,
@@ -976,3 +1017,25 @@ def test_hybrid_orca_sampler_builder_preserves_nested_configs() -> None:
     assert build.socnav.orca_obstacle_margin == pytest.approx(0.18)
     assert build.mppi.sample_count == 12
     assert build.mppi.max_linear_speed == pytest.approx(1.05)
+
+
+def test_progress_escape_status_tracks_infeasible_recovery_selection(monkeypatch) -> None:
+    """The status reflects the escape chosen by current least-bad recovery ranking."""
+    planner = RiskDWAPlannerAdapter(
+        RiskDWAPlannerConfig(linear_candidates=(0.0,), angular_candidates=(0.0,))
+    )
+    monkeypatch.setattr(planner, "_rollout_score", lambda **kwargs: float("-inf"))
+    monkeypatch.setattr(
+        planner, "_infeasible_command_rank", lambda command, **kwargs: (command[0], 0.0)
+    )
+    command, status = planner.plan_with_diagnostics(_obs(goal=(3.0, 0.0)))
+    assert command == (planner.config.progress_escape_speed, 0.0)
+    assert status["status"] == "selected"
+    assert status["reason"] == "infeasible_recovery_rank_better"
+    assert planner.diagnostics()["recovery_kind"] == "progress_escape"
+    # Infeasible ranking sentinels must never enter public JSON diagnostics.
+    import json
+
+    json.dumps(status, allow_nan=False)
+    assert status["candidate_score"] is None
+    assert status["candidate_score_status"] == "infeasible"

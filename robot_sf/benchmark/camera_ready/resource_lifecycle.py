@@ -193,8 +193,15 @@ def _run_single_arm_subprocess(params: _SubprocessArmParams) -> dict[str, Any]:
         Summary dict compatible with campaign orchestration expectations.
     """
 
+    import time  # noqa: PLC0415
+
+    from robot_sf.benchmark.aggregate import read_jsonl  # noqa: PLC0415
     from robot_sf.benchmark.camera_ready._config import (  # noqa: PLC0415
         _scenario_with_kinematics,
+    )
+    from robot_sf.benchmark.camera_ready._run_state import (  # noqa: PLC0415
+        _count_episode_rows_written_since,
+        _episode_jsonl_snapshot,
     )
     from robot_sf.benchmark.camera_ready._util import (  # noqa: PLC0415
         _latency_stress_metadata,
@@ -237,6 +244,9 @@ def _run_single_arm_subprocess(params: _SubprocessArmParams) -> dict[str, Any]:
     # Run the batch
     status = "ok"
     warnings: list[str] = []
+    planner_started_at_utc = _utc_now()
+    planner_start = time.perf_counter()
+    episode_file_before = _episode_jsonl_snapshot(params.episodes_path)
     try:
         summary = run_batch(
             scoped_scenarios,
@@ -281,36 +291,40 @@ def _run_single_arm_subprocess(params: _SubprocessArmParams) -> dict[str, Any]:
             status = "partial-failure"
         elif availability.availability_status == "failed":
             status = "failed"
-    except (RuntimeError, ValueError, OSError, ImportError) as exc:
+    except Exception as exc:  # noqa: BLE001 - preserve partial rows for any ordinary runner error
         status = "failed"
         summary = {
             "status": "failed",
             "error": repr(exc),
             "total_jobs": 0,
-            "written": 0,
+            "written": _count_episode_rows_written_since(
+                params.episodes_path,
+                episode_file_before,
+            ),
             "failed_jobs": 0,
             "failures": [],
         }
         warnings.append(f"Arm failed: {exc}")
 
-    # Add metadata to summary
-    import time  # noqa: PLC0415
-
-    planner_started_at_utc = _utc_now()
-    planner_start = time.perf_counter()
-
     planner_finished_at_utc = _utc_now()
     runtime_sec = float(max(1e-9, time.perf_counter() - planner_start))
     episodes_written = int(summary.get("written", 0))
+    retained_records = (
+        read_jsonl(str(params.episodes_path))
+        if params.episodes_path.is_file() and params.episodes_path.stat().st_size > 0
+        else []
+    )
+    episodes_total = len(retained_records)
 
     summary["status"] = status
     summary["started_at_utc"] = planner_started_at_utc
     summary["finished_at_utc"] = planner_finished_at_utc
     summary["runtime_sec"] = runtime_sec
     summary["episodes_per_second"] = (episodes_written / runtime_sec) if runtime_sec > 0 else 0.0
+    summary["episodes_written_this_invocation"] = episodes_written
     summary["kinematics"] = params.kinematics
     summary["benchmark_availability"] = availability_payload(summary)
-    summary["episodes_total"] = episodes_written
+    summary["episodes_total"] = episodes_total
 
     # Write summary.json
     params.summary_path.parent.mkdir(parents=True, exist_ok=True)
@@ -327,7 +341,8 @@ def _run_single_arm_subprocess(params: _SubprocessArmParams) -> dict[str, Any]:
         "summary": summary,
         "cleanup_metrics": cleanup_metrics,
         "warnings": warnings,
-        "episodes_total": episodes_written,
+        "episodes_total": episodes_total,
+        "episodes_written_this_invocation": episodes_written,
     }
 
     return result
@@ -369,6 +384,8 @@ def _main_subprocess_worker() -> int:
     # propagating while guaranteeing structured output for every ordinary
     # failure (issue #4826 robustness / fail-closed).
     params: _SubprocessArmParams | None = None
+    episode_file_before = None
+    episode_file_snapshot_taken = False
     try:
         # Read parameters from stdin
         params_json = sys.stdin.read()
@@ -381,6 +398,12 @@ def _main_subprocess_worker() -> int:
                 params_dict[field_name] = Path(field_value)
 
         params = _SubprocessArmParams(**params_dict)
+        from robot_sf.benchmark.camera_ready._run_state import (  # noqa: PLC0415
+            _episode_jsonl_snapshot,
+        )
+
+        episode_file_before = _episode_jsonl_snapshot(params.episodes_path)
+        episode_file_snapshot_taken = True
 
         logger.info(
             "Subprocess arm execution: planner={} algo={} kinematics={}",
@@ -408,6 +431,16 @@ def _main_subprocess_worker() -> int:
                 )
             except Exception:  # noqa: BLE001 - cleanup must never mask the original error
                 logger.opt(exception=True).debug("Cleanup after unexpected worker error failed")
+        written = 0
+        if params is not None and episode_file_snapshot_taken:
+            from robot_sf.benchmark.camera_ready._run_state import (  # noqa: PLC0415
+                _count_episode_rows_written_since,
+            )
+
+            written = _count_episode_rows_written_since(
+                params.episodes_path,
+                episode_file_before,
+            )
         logger.error("Subprocess arm failed: {}", exc)
         print(  # noqa: T201 - subprocess JSON IPC to parent process
             json.dumps(
@@ -416,7 +449,8 @@ def _main_subprocess_worker() -> int:
                         "status": "failed",
                         "error": repr(exc),
                         "total_jobs": 0,
-                        "written": 0,
+                        "written": written,
+                        "episodes_written_this_invocation": written,
                         "failed_jobs": 0,
                         "failures": [],
                     },

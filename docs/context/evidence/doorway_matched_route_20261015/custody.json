@@ -1,0 +1,23 @@
+{
+  "schema": "recovered-packet-custody.v1",
+  "packet": "doorway_matched_route-20261015",
+  "robot_sf_source_commit": "373dbfde4f39667cf9e8732dabe7df5118bdeab1",
+  "seeds": "development seeds 1001-1030 only",
+  "acquisition_utc": "2026-10-15T07:35:29Z to 2026-10-15T07:39:23Z (provenance.json)",
+  "original_preservation": "one transfer to the external data hub, recorded in report.md; that copy was later unavailable",
+  "recovery": "2026-11-04: archive rebuilt from the original files retained on the acquisition host; every delivery file matches MANIFEST",
+  "manifest_sha256": "44affe4c373dd5fe513196a4f5bf5911b77c0b8f2c3a378ac28f7e8b8601e0f8",
+  "archive": "matched-route-packet.tar.gz",
+  "archive_sha256": "6ad5d53737c2ae5995a4d3492a945282e0fc9b0cde72c67a89a4959aca6d8ded",
+  "archive_bytes": 201141322,
+  "payload_files": 664,
+  "raw_width_records": 450,
+  "prior_comparison_records": 150,
+  "wandb_artifact": "wandb://ll7/robot_sf/doorway-matched-route-20261015-recovered:v0",
+  "wandb_artifact_digest": "633ec35b13230c3a4d496c6d31a208aa",
+  "wandb_readback": "2026-11-05: 9 of 9 delivery files downloaded into an empty directory, state COMMITTED, byte-identical to the recovered copy; sha256sum -c MANIFEST and MANIFEST.sha256 pass",
+  "payload_check": "2026-11-05: archive extracted into an empty directory; sha256sum -c PAYLOAD_MANIFEST passes for all 664 files",
+  "recount": "2026-11-05: canonical outcome.route_complete recounted over all 450 raw records; ORCA 0/0/0/0/25 and SocNav sampling 0/0/16/24/29 of 30 at 2.00/2.20/2.40/2.60/2.80 m, equal to analysis/terminal_summary.csv and report.md",
+  "operational_files": "prereg.md, provenance.json, report.md and result.md are held in W&B archive ll7/robot_sf/doorway-matched-route-20261015-recovered:v0 and were sent to the external data hub, whose copy was later unavailable; their fingerprints are in SHA256SUMS.",
+  "host_local_copy": "durable host-local copy retained (path not published)"
+}

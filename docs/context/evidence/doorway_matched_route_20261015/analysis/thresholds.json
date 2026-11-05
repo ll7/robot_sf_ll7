@@ -1,0 +1,30 @@
+[
+  {
+    "policy": "orca",
+    "smallest_passing_width_m": null,
+    "bootstrap_ci95_lower_m": 2.8,
+    "bootstrap_ci95_upper_m": ">2.80",
+    "bootstrap_mass": {
+      "2.0": 0.0,
+      "2.2": 0.0,
+      "2.4": 0.0,
+      "2.6": 0.0,
+      "2.8": 0.23949,
+      ">2.80": 0.76051
+    }
+  },
+  {
+    "policy": "socnav_sampling",
+    "smallest_passing_width_m": 2.8,
+    "bootstrap_ci95_lower_m": 2.6,
+    "bootstrap_ci95_upper_m": 2.8,
+    "bootstrap_mass": {
+      "2.0": 0.0,
+      "2.2": 0.0,
+      "2.4": 2e-05,
+      "2.6": 0.12213,
+      "2.8": 0.86461,
+      ">2.80": 0.01324
+    }
+  }
+]

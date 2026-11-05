@@ -1,0 +1,24 @@
+[
+  {
+    "policy": "orca",
+    "n_pairs": 30,
+    "previous_success": 27,
+    "matched_success": 25,
+    "difference": -0.06666666666666667,
+    "ci95_lower": -0.23333333333333334,
+    "ci95_upper": 0.1,
+    "success_to_failure": 5,
+    "failure_to_success": 3
+  },
+  {
+    "policy": "socnav_sampling",
+    "n_pairs": 30,
+    "previous_success": 30,
+    "matched_success": 29,
+    "difference": -0.03333333333333333,
+    "ci95_lower": -0.1,
+    "ci95_upper": 0.0,
+    "success_to_failure": 1,
+    "failure_to_success": 0
+  }
+]

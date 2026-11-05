@@ -1,0 +1,41 @@
+{
+  "status": "PASS",
+  "raw_records_independently_recounted": 450,
+  "all_reported_intervals_match_independent_100000_resample_replay": true,
+  "exact_binomial_comparison_max_cdf_error": 0.002612437590322092,
+  "finite_resample_quantile_differences": [
+    {
+      "width_m": 2.6,
+      "policy": "socnav_sampling",
+      "outcome": "success",
+      "endpoint": "ci95_lower",
+      "empirical": 0.6666666666666666,
+      "exact_binomial": 0.6333333333333333
+    },
+    {
+      "width_m": 2.6,
+      "policy": "socnav_sampling",
+      "outcome": "timeout",
+      "endpoint": "ci95_upper",
+      "empirical": 0.3333333333333333,
+      "exact_binomial": 0.36666666666666664
+    }
+  ],
+  "paired_intervals_independently_checked": 36,
+  "supplemental_route_contrasts_verified": 2,
+  "joint_threshold_distribution_independently_recomputed": true,
+  "all_baseline_terminals_reproduce": true,
+  "baseline_episodes_with_identical_robot_trace_and_actions": 90,
+  "stationary_trace_steps_verified": 60000,
+  "independent_xml_geometry_passed": true,
+  "prior_2p80_comparison": {
+    "orca": {
+      "previous_success": 27,
+      "matched_success": 25
+    },
+    "socnav_sampling": {
+      "previous_success": 30,
+      "matched_success": 29
+    }
+  }
+}

@@ -113,7 +113,7 @@ AUDITED_UNIT_FIELDS = frozenset(
     route_trace_recovery_min_nearest_ped_distance
     route_trace_recovery_min_route_remaining_distance
     route_trace_recovery_route_stall_progress_3s
-    route_trace_recovery_route_regression_1s sacadrl_pref_speed safe_distance
+    route_trace_recovery_route_regression_1s sacadrl_max_goal_distance sacadrl_pref_speed safe_distance
     safety_margin slow_distance_human social_force_desired_speed
     social_force_goal_approach_clearance social_force_goal_approach_max_speed
     social_force_goal_approach_radius social_force_goal_approach_stop_distance
@@ -483,6 +483,12 @@ def _all_values() -> tuple[tuple[str, dict[str, Any]], ...]:
         config = cls()
         values = {field.name: getattr(config, field.name) for field in fields(config)}
         result.append((f"{cls.__name__} defaults", values))
+    result.append(
+        (
+            "SocNavPlannerConfig goal-cap opt-in",
+            SocNavPlannerConfig(sacadrl_max_goal_distance=10.0)._config_hash_overrides(),
+        )
+    )
     return tuple(result)
 
 

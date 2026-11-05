@@ -1,5 +1,6 @@
 {
   "schema": "recovered-packet-custody.v1",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "packet": "doorway_matched_route-20261015",
   "robot_sf_source_commit": "373dbfde4f39667cf9e8732dabe7df5118bdeab1",
   "seeds": "development seeds 1001-1030 only",
@@ -11,6 +12,7 @@
   "archive_sha256": "6ad5d53737c2ae5995a4d3492a945282e0fc9b0cde72c67a89a4959aca6d8ded",
   "archive_bytes": 201141322,
   "payload_files": 664,
+  "verification_metadata": "SHA256SUMS is newly generated verification metadata, not part of the original delivery, and the exact-byte preservation scope covers only delivery and payload files.",
   "raw_width_records": 450,
   "prior_comparison_records": 150,
   "wandb_artifact": "wandb://ll7/robot_sf/doorway-matched-route-20261015-recovered:v0",

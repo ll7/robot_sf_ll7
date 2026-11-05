@@ -7,10 +7,13 @@
 to the dissertation by itself.
 
 The packet runs ORCA, SocNav sampling and a stationary control through one doorway map
-whose gap is widened from 2.00 to 2.80 m while the robot route (`[[7,5],[25.5,5]]`),
-pedestrians and starts stay fixed. 450 episodes: five widths × three policies × 30
-development seeds. The full interpretation, final report and frozen contract are
-in the files held outside this public tree (see Custody).
+whose gap is widened from 2.00 to 2.80 m. Two authored robot waypoints
+(`[[7,5],[25.5,5]]`) are fixed, while the sampled final goal and robot start are
+seed-specific. There are 30 realized routes, one per development seed; each route and
+robot start are held fixed across that seed's 15 width/policy combinations. Pedestrian
+definitions and starts are fixed across episodes. The 450 episodes span five widths ×
+three policies × 30 development seeds. The full interpretation, final report and frozen
+contract are in the files held outside this public tree (see Custody).
 
 | Width (m) | 2.00 | 2.20 | 2.40 | 2.60 | 2.80 |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -38,22 +41,27 @@ as W&B artifact `ll7/robot_sf/doorway-matched-route-20261015-recovered:v0`; see
 * Payload members copied from the archive, each matching its `PAYLOAD_MANIFEST` line:
   `analysis/` (terminal summary, thresholds, validation, tables, paired differences,
   independent verification, verification note, route contrasts).
-* `custody.json` and this README are new; `SHA256SUMS` covers these files and the four
-  omitted operational files.
+* `custody.json` and this README are newly written custody documentation.
+
+`SHA256SUMS` is newly generated verification metadata, not part of the original delivery,
+and the exact-byte preservation scope covers only delivery and payload files.
 
 The four operational files (`prereg.md`, `provenance.json`, `report.md` and `result.md`)
 are held in W&B archive `ll7/robot_sf/doorway-matched-route-20261015-recovered:v0` and
 were sent to the external data hub, whose copy was later unavailable; their fingerprints are
 in `SHA256SUMS`.
 
-Verify the files in this tree with `sha256sum --ignore-missing -c SHA256SUMS`; this does
-not verify the four omitted files. To check the archive, download the W&B artifact
-into an empty directory and run `sha256sum -c MANIFEST.sha256 && sha256sum -c MANIFEST`.
+Verify the files in this tree with `sha256sum -c SHA256SUMS`; this does not verify the
+four omitted files. To check the archive, download the W&B artifact into an empty
+directory and run `sha256sum -c MANIFEST.sha256 && sha256sum -c MANIFEST`. From the
+extracted archive directory, set `PACKET_DIR` to the checked-out packet directory and
+run `sed -n 's/^# archive-only: //p' "$PACKET_DIR/SHA256SUMS" | sha256sum -c -` to
+strip the archive-only prefix and check the four omitted files.
 
 ## Limits
 
 The ORCA zeros at 2.40 and 2.60 m are not explained by this packet; it records outcomes,
-not their cause. The series is one map and route on development seeds; it does not give a
+not their cause. The series is one map and 30 seed-specific routes on development seeds; it does not give a
 physical doorway-width requirement, a release-seed result, or behaviour of other planners.
 The `result.md` 27/30 ORCA count at 2.80 m belongs to an earlier run with a different
 robot route, not to this series.

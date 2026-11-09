@@ -557,6 +557,21 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
 
     def plan(self, observation: dict[str, Any]) -> tuple[float, float]:
         """Return best unicycle command `(v, omega)` for the current observation."""
+        command, _diagnostics = self.plan_with_diagnostics(observation)
+        return command
+
+    def plan_with_diagnostics(
+        self, observation: dict[str, Any]
+    ) -> tuple[tuple[float, float], dict[str, Any]]:
+        """Return the command with call-scoped progress-escape diagnostics.
+
+        The diagnostics distinguish a disabled feature, a call where the escape
+        candidate was not considered, a scored candidate that lost, and a
+        selected escape command. They are returned rather than stored on the
+        planner so repeated calls cannot leak stale status into a later trace.
+        """
+        progress_escape = self._initial_progress_escape_status()
+
         self._no_admissible_command = False
         self._recovery_kind = None
         self._recovery_command = False
@@ -581,7 +596,7 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
             float(np.clip(0.0, angular_min, angular_max)),
         )
         if to_goal <= float(self.config.goal_tolerance):
-            return braking_cmd
+            return braking_cmd, self._initial_progress_escape_status(reason="goal_reached")
         best_score = float("-inf")
         best_cmd = braking_cmd
 
@@ -611,36 +626,55 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
                     best_score = score
                     best_cmd = (v, w)
 
-        if bool(self.config.progress_escape_enabled):
-            if to_goal > float(self.config.progress_escape_distance) and (
+        if (
+            bool(self.config.progress_escape_enabled)
+            and to_goal > float(self.config.progress_escape_distance)
+            and (
                 best_cmd[0] < float(self.config.progress_escape_speed) * 0.6
                 or best_score == float("-inf")
-            ):
-                goal_heading = float(np.arctan2(goal[1] - robot_pos[1], goal[0] - robot_pos[0]))
-                heading_err = _wrap_angle(goal_heading - heading)
-                escape_v = float(np.clip(self.config.progress_escape_speed, linear_min, linear_max))
-                escape_w = float(
-                    np.clip(
-                        heading_err * float(self.config.progress_escape_heading_gain),
-                        angular_min,
-                        angular_max,
-                    )
+            )
+        ):
+            goal_heading = float(np.arctan2(goal[1] - robot_pos[1], goal[0] - robot_pos[0]))
+            heading_err = _wrap_angle(goal_heading - heading)
+            escape_v = float(np.clip(self.config.progress_escape_speed, linear_min, linear_max))
+            escape_w = float(
+                np.clip(
+                    heading_err * float(self.config.progress_escape_heading_gain),
+                    angular_min,
+                    angular_max,
                 )
-                recovery_candidates.append(((escape_v, escape_w), "progress_escape"))
-                escape_score = self._rollout_score(
-                    robot_pos=robot_pos,
-                    heading=heading,
-                    goal=goal,
-                    command=(escape_v, escape_w),
-                    ped_pos=ped_pos,
-                    ped_vel=ped_vel,
-                    observation=observation,
-                    current_speed=current_speed,
-                    grid_payload=grid_payload,
-                )
-                if escape_score > best_score:
-                    best_score = escape_score
-                    best_cmd = (escape_v, escape_w)
+            )
+            recovery_candidates.append(((escape_v, escape_w), "progress_escape"))
+            escape_score = self._rollout_score(
+                robot_pos=robot_pos,
+                heading=heading,
+                goal=goal,
+                command=(escape_v, escape_w),
+                ped_pos=ped_pos,
+                ped_vel=ped_vel,
+                observation=observation,
+                current_speed=current_speed,
+                grid_payload=grid_payload,
+            )
+            progress_escape["status"] = "evaluated_but_not_selected"
+            progress_escape["reason"] = "candidate_score_not_better"
+            progress_escape["candidate_command"] = [escape_v, escape_w]
+            # Ranking uses -inf for infeasible rollouts; public diagnostics must
+            # remain strict JSON while retaining the reason no score is available.
+            finite_score = bool(np.isfinite(escape_score))
+            progress_escape["candidate_score"] = float(escape_score) if finite_score else None
+            progress_escape["candidate_score_status"] = (
+                "finite"
+                if finite_score
+                else "infeasible"
+                if escape_score == float("-inf")
+                else "non_finite"
+            )
+            if escape_score > best_score:
+                best_score = escape_score
+                best_cmd = (escape_v, escape_w)
+                progress_escape["status"] = "selected"
+                progress_escape["reason"] = "candidate_score_better"
         # Keep finite-score arbitration unchanged. Rank only the infeasible state.
         if best_score == float("-inf"):
             self._no_admissible_command = True
@@ -658,6 +692,29 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
                     grid_payload=grid_payload,
                 ),
             )
+        if self._recovery_kind == "progress_escape":
+            progress_escape["status"] = "selected"
+            progress_escape["reason"] = "infeasible_recovery_rank_better"
+        self._record_command_recovery(robot_pos, observation, grid_payload, best_score)
+        return best_cmd, progress_escape
+
+    def _initial_progress_escape_status(
+        self, *, reason="escape_conditions_not_met"
+    ) -> dict[str, Any]:
+        """Build fresh status for an unconsidered or disabled escape candidate.
+
+        Returns:
+            dict: Call-scoped status with no retained candidate fields.
+        """
+        enabled = bool(self.config.progress_escape_enabled)
+        return {
+            "schema_version": "risk-dwa-progress-escape.v1",
+            "status": "not_evaluated" if enabled else "disabled",
+            "reason": reason if enabled else "disabled_by_config",
+        }
+
+    def _record_command_recovery(self, robot_pos, observation, grid_payload, best_score) -> None:
+        """Retain recovery counters without affecting command arbitration."""
         current_clearance = self._min_obstacle_clearance(
             robot_pos, observation=observation, grid_payload=grid_payload
         )
@@ -667,7 +724,6 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
             and np.isfinite(best_score)
         )
         self._recovery_command_count += int(self._recovery_command)
-        return best_cmd
 
     def diagnostics(self) -> dict[str, Any]:
         """Return execution diagnostics."""

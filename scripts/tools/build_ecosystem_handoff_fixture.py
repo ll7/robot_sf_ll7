@@ -28,7 +28,7 @@ from robot_sf.evidence.writers import sha256_file, write_sha256sums
 
 REPOSITORY_URL = "https://github.com/ll7/robot_sf_ll7"
 FIXTURE_ID = "robot_sf.ecosystem_handoff.v1"
-FIXTURE_VERSION = "1.0.0"
+FIXTURE_VERSION = "1.1.0"
 FIXTURE_SCHEMA_VERSION = "robot_sf_ecosystem_handoff_fixture.v1"
 ARTIFACT_SCHEMA_VERSION = "robot_sf_ecosystem_artifact_manifest.v1"
 PACKET_CLOCK = "2026-01-01T00:00:00Z"

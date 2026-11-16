@@ -523,18 +523,19 @@ def _timeout_term(meta: Mapping[str, object]) -> float:
 
 
 def _stagnation_term(meta: Mapping[str, object]) -> float:
-    """Return a bounded stagnation proxy from non-positive route progress.
+    """Return the bounded deficit of goal progress over a short window.
 
     Args:
-        meta: Reward metadata mapping with goal-distance fields.
+        meta: Reward metadata with ten-step goal progress and warmup readiness.
 
     Returns:
         Scalar in ``[0, 1]`` where larger values indicate stronger stagnation.
     """
-    progress = _progress_term(meta)
-    if progress > 0.0:
+    if not meta.get("goal_progress_window_ready", True):
         return 0.0
-    return _bounded(max(1e-6, -progress), 0.0, 1.0)
+    # Standalone/custom reward callers without history use their local progress delta.
+    progress = _float(meta, "goal_progress_window", _progress_term(meta))
+    return _bounded(1.0 - progress / 0.05, 0.0, 1.0)
 
 
 def _reward_with_terms(

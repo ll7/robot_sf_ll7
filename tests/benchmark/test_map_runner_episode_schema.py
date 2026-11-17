@@ -214,6 +214,25 @@ class _PedEnv:
         return None
 
 
+def _assert_runtime_identity_schema(record: dict) -> None:
+    """Validate recorded identities and reject a malformed map digest."""
+    runtime_identity_validator = Draft202012Validator(
+        json.loads(
+            (
+                _REPO_ROOT / "robot_sf/benchmark/schemas/episode_runtime_input_identity.v1.json"
+            ).read_text()
+        )
+    )
+    runtime_identity_validator.validate(record)
+    invalid_identity = dict(record)
+    invalid_identity["selected_map_identity"] = {
+        **record["selected_map_identity"],
+        "sha256": "not-a-sha256",
+    }
+    with pytest.raises(ValidationError):
+        runtime_identity_validator.validate(invalid_identity)
+
+
 @pytest.mark.parametrize("gated_learned_policy", [False, True])
 def test_run_map_episode_record_carries_native_blocks(
     monkeypatch: pytest.MonkeyPatch, gated_learned_policy: bool
@@ -278,6 +297,8 @@ def test_run_map_episode_record_carries_native_blocks(
         "enabled": True,
         "applied": True,
         "resolution_mode": "explicit",
+        "config_hash": "stale-config",
+        "source_commit": "stale-source",
     }
 
     def policy_builder(_algo, _algo_config, **_kwargs):
@@ -289,6 +310,10 @@ def test_run_map_episode_record_carries_native_blocks(
         policy._planner_stats = lambda: {
             "planner_type": "SocialForcePlannerAdapter",
             "obstacle_force_law": planner_metadata,
+            "fallback": True,
+            "fallback_count": 2,
+            "fallback_reason": "synthetic_diagnostic",
+            "fallback_reasons": {"synthetic_diagnostic": 2},
         }
         return policy, {"status": "ok"}
 
@@ -320,21 +345,7 @@ def test_run_map_episode_record_carries_native_blocks(
     Draft202012Validator(
         json.loads((_REPO_ROOT / "robot_sf/benchmark/schemas/episode.schema.v1.json").read_text())
     ).validate(record)
-    runtime_identity_validator = Draft202012Validator(
-        json.loads(
-            (
-                _REPO_ROOT / "robot_sf/benchmark/schemas/episode_runtime_input_identity.v1.json"
-            ).read_text()
-        )
-    )
-    runtime_identity_validator.validate(record)
-    invalid_identity = dict(record)
-    invalid_identity["selected_map_identity"] = {
-        **record["selected_map_identity"],
-        "sha256": "not-a-sha256",
-    }
-    with pytest.raises(ValidationError):
-        runtime_identity_validator.validate(invalid_identity)
+    _assert_runtime_identity_schema(record)
 
     assert record["failure_mechanism"]["mechanism_schema_version"] == MECHANISM_SCHEMA_VERSION
     assert record["failure_mechanism"]["mechanism_label"] == "unknown"
@@ -367,6 +378,23 @@ def test_run_map_episode_record_carries_native_blocks(
     assert runtime["sites"]["fast_pysf"]["applied"] is True
     assert runtime["sites"]["fast_pysf"]["config_hash"] == record["config_hash"]
     assert runtime["sites"]["fast_pysf"]["source_commit"] == record["git_hash"]
+    fast_receipt = runtime["sites"]["fast_pysf"]["diagnostic_receipt"]
+    assert fast_receipt["claim_boundary"] == "diagnostic_only"
+    assert fast_receipt["fallback"]["used"] is False
+    assert fast_receipt["input_identity"]["config_hash"] == record["config_hash"]
+    assert fast_receipt["input_identity"]["source_commit"] == record["git_hash"]
+    planner_receipt = runtime["sites"]["socnav_social_force"]["diagnostic_receipt"]
+    assert runtime["sites"]["socnav_social_force"]["config_hash"] == record["config_hash"]
+    assert runtime["sites"]["socnav_social_force"]["source_commit"] == record["git_hash"]
+    assert planner_receipt["input_identity"]["config_hash"] == record["config_hash"]
+    assert planner_receipt["input_identity"]["source_commit"] == record["git_hash"]
+    assert planner_receipt["fallback"] == {
+        "used": True,
+        "count": 2,
+        "first_reason": "synthetic_diagnostic",
+        "reasons": {"synthetic_diagnostic": 2},
+    }
+    json.dumps(record, allow_nan=False)
     assert runtime["sites"]["socnav_social_force"]["law_version"] == (
         "surface_distance_unit_normal_v2"
     )

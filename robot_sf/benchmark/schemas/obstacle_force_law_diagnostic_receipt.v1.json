@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://robot-sf.local/schemas/obstacle_force_law_diagnostic_receipt.v1.json",
+  "title": "Obstacle-force law diagnostic receipt (v1)",
+  "description": "Diagnostic-only selection, application, fallback, and input identity receipt. It is not benchmark, physical, safety, social, or domain-approval evidence.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "claim_boundary",
+    "site",
+    "law_version",
+    "selection_source",
+    "parameters_sha256",
+    "enabled",
+    "applied",
+    "fallback",
+    "input_identity"
+  ],
+  "properties": {
+    "schema_version": {"const": "obstacle_force_law_diagnostic_receipt.v1"},
+    "claim_boundary": {"const": "diagnostic_only"},
+    "site": {"type": "string", "minLength": 1},
+    "law_version": {
+      "enum": ["legacy_shifted_gradient_v1", "surface_distance_unit_normal_v2"]
+    },
+    "selection_source": {
+      "enum": ["defaulted_missing", "historical_unversioned", "explicit"]
+    },
+    "parameters_sha256": {
+      "type": ["string", "null"],
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "enabled": {"type": "boolean"},
+    "applied": {"type": "boolean"},
+    "fallback": {"$ref": "#/$defs/fallback"},
+    "input_identity": {"$ref": "#/$defs/inputIdentity"}
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "fallback": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["used", "count", "first_reason", "reasons"],
+      "properties": {
+        "used": {"type": "boolean"},
+        "count": {"type": "integer", "minimum": 0},
+        "first_reason": {"type": ["string", "null"], "minLength": 1},
+        "reasons": {
+          "type": "object",
+          "additionalProperties": {"type": "integer", "minimum": 0}
+        }
+      }
+    },
+    "inputIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["config_hash", "source_commit", "input_sha256"],
+      "properties": {
+        "config_hash": {"type": "string", "minLength": 1},
+        "source_commit": {"type": "string", "minLength": 1},
+        "input_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    }
+  }
+}

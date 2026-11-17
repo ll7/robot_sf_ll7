@@ -73,7 +73,7 @@ def _with_grid(observation: dict, resolution: float, occupied) -> dict:
     observation["occupancy_grid_meta_resolution"] = np.array([resolution], dtype=np.float32)
     observation["occupancy_grid_meta_size"] = np.array([GRID_EXTENT, GRID_EXTENT], np.float32)
     observation["occupancy_grid_meta_use_ego_frame"] = np.array([1.0], dtype=np.float32)
-    observation["occupancy_grid_meta_channel_indices"] = np.array([0, 1, 2], dtype=np.float32)
+    observation["occupancy_grid_meta_channel_indices"] = np.array([0, 1, 2, -1], dtype=np.float32)
     return observation
 
 

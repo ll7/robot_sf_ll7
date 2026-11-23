@@ -296,7 +296,8 @@ def test_all_tracked_canonical_expert_configs_load() -> None:
     # release-contract config a shared base, so the runnable inventory grows by one.
     # The development-only train010 restart adds two runnable leaves: the fixed
     # arm (runnable on its own) and the safety overlay that inherits it.
-    assert len(config_paths) == 149
+    # #9628 adds one stock-loader-compatible benchmark-aligned leaf.
+    assert len(config_paths) == 150
     release_robot_leaves = {
         "configs/training/ppo/ablations/expert_ppo_release_contract_a_seed1001.yaml",
         "configs/training/ppo/ablations/expert_ppo_release_contract_a_seed1002.yaml",
@@ -307,6 +308,7 @@ def test_all_tracked_canonical_expert_configs_load() -> None:
         "configs/training/ppo/dev_delta_recovery_pilot.yaml",
     }
     canonical_paths = {path.relative_to(_REPO_ROOT).as_posix() for path in config_paths}
+    assert "configs/training/ppo/benchmark_aligned_v1.yaml" in canonical_paths
     assert release_robot_leaves <= canonical_paths
     assert delta_recovery_leaves <= canonical_paths
     assert "configs/training/ppo/expert_ppo_release_contract_b_seed1001.yaml" not in canonical_paths

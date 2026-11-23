@@ -1,0 +1,19 @@
+# Development successor of #9628's 48-cell release campaign. Seed values in the
+# included matrix are provenance only; the guarded trainer supplies disjoint pools.
+includes:
+- ../../scenarios/classic_interactions_francis2023_goal_zone_entry_v1.yaml
+map_search_paths:
+- ../../../maps/svg_maps
+- ../../../maps/successor_svg_maps
+scenario_overrides:
+  robot_config:
+    max_linear_speed: 2.0
+    max_angular_speed: 1.0
+    allow_backwards: false
+    max_linear_accel: 1.0
+    max_linear_decel: 1.0
+    max_angular_accel: 1.0
+  simulation_config:
+    goal_completion_policy: goal_zone_entry_v1
+    time_per_step_in_secs: 0.1
+    max_episode_steps: 600

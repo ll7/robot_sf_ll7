@@ -111,12 +111,27 @@ __all__ = [
 # Helper to compute a stable, short hash for env_config
 # Placed near imports for reuse and clarity
 def _hash_payload_without_default_goal_policy(value: Any) -> Any:
-    """Remove policy fields that did not exist in historical config hashes.
+    """Preserve historical field names and omit default-only policy additions.
 
     Returns:
         Any: Recursively normalized payload suitable for stable JSON hashing.
     """
     if isinstance(value, dict):
+        geometry = value.get("rollover_proxy_params")
+        if isinstance(geometry, dict):
+            # #10278 (408ffb1ba719805eab793ac739fb0c65eb9710a9) renamed
+            # Python fields without changing geometry. Keep historical hash bytes
+            # for both disabled and enabled rollover; runtime names stay neutral.
+            historical_names = {
+                "two_wheel_axle_track_m": "track_width_m",
+                "single_wheel_axle_to_cog_m": "front_axle_to_cog_m",
+            }
+            value = dict(
+                value,
+                rollover_proxy_params={
+                    historical_names.get(key, key): item for key, item in geometry.items()
+                },
+            )
         return {
             key: _hash_payload_without_default_goal_policy(item)
             for key, item in value.items()

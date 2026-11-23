@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from dataclasses import asdict, replace
 from types import SimpleNamespace
 
 import numpy as np
+import pytest
 from gymnasium import spaces
 from pysocialforce.config import LEGACY_SHIFTED_GRADIENT_V1
 
@@ -34,6 +36,7 @@ from robot_sf.nav.map_config import (
     MapDefinitionPool,
 )
 from robot_sf.nav.occupancy_grid import GridChannel, GridConfig
+from robot_sf.robot.rollover_proxy import RolloverProxyParams
 from robot_sf.sim.sim_config import SimulationSettings
 
 
@@ -237,6 +240,78 @@ def test_robot_env_hash_changes_for_corrected_goal_sampling_policy() -> None:
     legacy_hash = _stable_config_hash(cfg)
     cfg.sim_config.robot_goal_sampling_policy = ROBOT_GOAL_SAMPLING_FOOTPRINT_CLEARANCE_V1
     assert _stable_config_hash(cfg) != legacy_hash
+
+
+@pytest.mark.parametrize("enabled", [False, True])
+@pytest.mark.parametrize(
+    "wall_law",
+    [LEGACY_SHIFTED_GRADIENT_V1, "body_edge_exponential_v3", "surface_distance_unit_normal_v2"],
+)
+@pytest.mark.parametrize(
+    ("field", "historical_field", "value"),
+    [
+        ("two_wheel_axle_track_m", "track_width_m", 0.9),
+        ("single_wheel_axle_to_cog_m", "front_axle_to_cog_m", 0.4),
+        ("cog_height_m", "cog_height_m", 0.7),
+        ("wheelbase_m", "wheelbase_m", 1.4),
+        ("gravity_m_s2", "gravity_m_s2", 9.8),
+        ("schema_version", "schema_version", "rollover_proxy.test"),
+    ],
+)
+def test_robot_env_hash_preserves_historical_rollover_geometry(
+    enabled: bool, wall_law: str, field: str, historical_field: str, value: float | str
+) -> None:
+    """The #10278 field rename must preserve identity for every geometry value."""
+    # Historical dataclass shape from 408ffb1ba719805eab793ac739fb0c65eb9710a9^1.
+    historical_geometry = {
+        "track_width_m": 0.8,
+        "front_axle_to_cog_m": 0.5,
+        "cog_height_m": 0.6,
+        "wheelbase_m": 1.2,
+        "gravity_m_s2": 9.81,
+        "schema_version": "rollover_proxy.v1",
+    }
+    historical_geometry[historical_field] = value
+    cfg = EnvSettings(
+        sim_config=SimulationSettings(obstacle_force_law=wall_law),
+        rollover_proxy_enabled=enabled,
+        rollover_proxy_params=RolloverProxyParams(**{field: value}),
+        map_pool=MapDefinitionPool(maps_folder="fixture", map_defs={"fixture": _minimal_map_def()}),
+    )
+    # Hash the historical asdict representation without constructing a simulator.
+    historical_cfg = SimpleNamespace(**dict(asdict(cfg), rollover_proxy_params=historical_geometry))
+    geometry_before = asdict(cfg.rollover_proxy_params)
+    assert _stable_config_hash(cfg) == _stable_config_hash(historical_cfg)
+    assert asdict(cfg.rollover_proxy_params) == geometry_before
+    assert _stable_config_hash(cfg) != _stable_config_hash(
+        replace(cfg, rollover_proxy_params=RolloverProxyParams())
+    )
+    assert _stable_config_hash(cfg) != _stable_config_hash(
+        replace(cfg, rollover_proxy_enabled=not enabled)
+    )
+
+
+def test_robot_env_hash_ignores_dict_order_without_renaming_unrelated_keys() -> None:
+    """Hash normalization is order-independent and scoped to rollover geometry."""
+    payload = {
+        "rollover_proxy_params": {
+            "two_wheel_axle_track_m": 0.9,
+            "single_wheel_axle_to_cog_m": 0.4,
+        },
+        "other": {"two_wheel_axle_track_m": 1.1, "label": "fixture"},
+    }
+    reordered = {
+        key: dict(reversed(list(value.items()))) for key, value in reversed(list(payload.items()))
+    }
+    original = SimpleNamespace(**payload)
+    original_hash = _stable_config_hash(original)
+    assert original_hash == _stable_config_hash(SimpleNamespace(**reordered))
+    assert original.rollover_proxy_params == {
+        "two_wheel_axle_track_m": 0.9,
+        "single_wheel_axle_to_cog_m": 0.4,
+    }
+    renamed_other = dict(payload, other={"track_width_m": 1.1, "label": "fixture"})
+    assert original_hash != _stable_config_hash(SimpleNamespace(**renamed_other))
 
 
 def test_robot_env_flatten_helpers() -> None:

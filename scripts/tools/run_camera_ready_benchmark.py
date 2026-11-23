@@ -4,7 +4,7 @@
 Exit codes preserve fail-closed campaign semantics for non-success outcomes:
 - 0: benchmark-success campaign
 - 2: unexpected failure, malformed result, or mixed failed/partial-failure outcome
-- 3: accepted-unavailable-only campaign outcome (non-success, fail-closed)
+- 3: blocked checkpoint preflight or accepted-unavailable-only campaign outcome (non-success)
 """
 
 from __future__ import annotations
@@ -45,6 +45,12 @@ from robot_sf.benchmark.camera_ready_campaign import (  # noqa: E402
     load_campaign_config,
     prepare_campaign_preflight,
     run_campaign,
+)
+from robot_sf.benchmark.campaign.campaign_checkpoint_preflight import (  # noqa: E402
+    CampaignCheckpointPreflightError,
+)
+from robot_sf.benchmark.campaign.predictive_horizon_preflight import (  # noqa: E402
+    PredictiveHorizonPreflightError,
 )
 from robot_sf.benchmark.fallback_policy import campaign_exit_code  # noqa: E402
 from robot_sf.benchmark.orca_preflight import OrcaRvo2PreflightError  # noqa: E402
@@ -207,6 +213,20 @@ def main(argv: Sequence[str] | None = None) -> int:
                 invoked_command=invoked_command,
                 arm_isolation=args.arm_isolation,
             )
+    except CampaignCheckpointPreflightError as exc:
+        result = {
+            "mode": args.mode,
+            "status": "blocked",
+            "status_reason": str(exc),
+            "checkpoint_preflight_mode": args.checkpoint_preflight_mode,
+            "stage": args.checkpoint_preflight_mode == "enforced_staged",
+            "arms": list(exc.arms),
+            "benchmark_success": False,
+            "evidence_status": "blocked",
+            "exit_code": 3,
+        }
+        if isinstance(exc, PredictiveHorizonPreflightError):
+            result["predictive_horizons"] = [exc.binding]
     except OrcaRvo2PreflightError as exc:
         result = {
             "mode": args.mode,
@@ -240,6 +260,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             },
         }
     print(json.dumps(result, indent=2))
+    if result.get("status") == "blocked":
+        return 3
     if args.mode == "preflight" and result.get("status") not in {
         "orca_preflight_failed",
         "radius_binding_preflight_failed",

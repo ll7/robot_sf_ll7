@@ -316,11 +316,14 @@ def test_prediction_mpc_cbf_trace_campaign_arm_builds_map_runner_policy() -> Non
 
 def test_runnable_h600_preflight_reports_guarded_ppo_accepted_unavailable(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Preflight exposes gated guarded_ppo as accepted unavailable, not unexpected failure."""
     from robot_sf.benchmark.camera_ready._config import load_campaign_config
     from robot_sf.benchmark.camera_ready._preflight import prepare_campaign_preflight
+    from tests.support.predictive_checkpoints import stage_predictive_checkpoint_registry
 
+    stage_predictive_checkpoint_registry(tmp_path, monkeypatch)
     cfg = load_campaign_config(RUN_CONFIG_PATH)
     preflight = prepare_campaign_preflight(
         cfg,
@@ -337,3 +340,7 @@ def test_runnable_h600_preflight_reports_guarded_ppo_accepted_unavailable(
     assert (
         guarded_ppo["fail_closed_reason"] == "guarded_ppo_checkpoint_observation_contract_missing"
     )
+    predictor = preflight["checkpoint_preflight_summary"]["predictive_horizons"][0]
+    assert predictor["planner_key"] == "prediction_planner"
+    assert predictor["status"] == "compatible"
+    assert predictor["required_horizon_steps"] == predictor["forecast_steps"] == 8

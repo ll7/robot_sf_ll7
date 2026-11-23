@@ -506,3 +506,103 @@ def test_cli_stage_writes_report_and_exits_nonzero_on_failure(
     persisted = json.loads(report_path.read_text(encoding="utf-8"))
     assert persisted["status"] == "blocked"
     assert "ppo" in persisted["arms"]
+
+
+@pytest.mark.parametrize("cli", ("campaign", "submission"))
+@pytest.mark.parametrize("stage", (False, True), ids=("metadata", "staging"))
+def test_cli_blocked_reports_retain_unverified_predictor(
+    tmp_path: Path, cli: str, stage: bool
+) -> None:
+    """Both CLI entry points report the missing default predictor's structured binding."""
+    import subprocess
+
+    registry_path = _write_registry(tmp_path, [])
+    scenario_path = tmp_path / "scenarios.yaml"
+    scenario_path.write_text("scenarios: []\n", encoding="utf-8")
+    config_path = tmp_path / "campaign.yaml"
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "name": "missing_default_predictor",
+                "scenario_matrix": str(scenario_path),
+                "planners": [{"key": "prediction", "algo": "prediction_planner"}],
+                "seed_policy": {"mode": "fixed-list", "seeds": [1001]},
+            }
+        ),
+        encoding="utf-8",
+    )
+    mode = "enforced_staged" if stage else "metadata_only"
+    report_path = tmp_path / "submit_packet" / "blocked.json"
+    output_root = tmp_path / "campaign_output"
+    if cli == "submission":
+        command = [
+            sys.executable,
+            str(SCRIPT_PATH),
+            "--config",
+            str(config_path),
+            "--registry-path",
+            str(registry_path),
+            "--json",
+            "--report-path",
+            str(report_path),
+        ]
+        if stage:
+            command.append("--stage")
+    else:
+        command = [
+            sys.executable,
+            str(WORKTREE_ROOT / "scripts/tools/run_camera_ready_benchmark.py"),
+            "--config",
+            str(config_path),
+            "--mode",
+            "preflight",
+            "--checkpoint-preflight-mode",
+            mode,
+            "--checkpoint-registry-path",
+            str(registry_path),
+            "--output-root",
+            str(output_root),
+        ]
+    result = subprocess.run(
+        command,
+        capture_output=True,
+        text=True,
+        cwd=tmp_path,
+        env=_subprocess_env(
+            {
+                "OMP_NUM_THREADS": "1",
+                "MKL_NUM_THREADS": "1",
+                "OPENBLAS_NUM_THREADS": "1",
+                "TORCH_NUM_THREADS": "1",
+            }
+        ),
+        check=False,
+    )
+    assert result.returncode == 3, result.stderr
+    payload = json.loads(result.stdout)
+    reports = [payload]
+    if cli == "submission":
+        persisted = json.loads(report_path.read_text(encoding="utf-8"))
+        assert persisted["mode"] == mode
+        assert persisted["stage"] is stage
+        reports.append(persisted)
+    else:
+        assert not output_root.exists()
+    for report in reports:
+        assert report["status"] == "blocked"
+        assert report["arms"] == ["prediction"]
+        assert report["predictive_horizons"] == [
+            {
+                "planner_key": "prediction",
+                "algo": "prediction_planner",
+                "scenario": "base",
+                "family": "all",
+                "contexts": [{"scenario": "base", "family": "all"}],
+                "algo_config_path": "None",
+                "checkpoint": "predictive_proxy_selected_v1",
+                "status": "unverified",
+                "unverified_reason": "missing_checkpoint",
+            }
+        ]
+    if cli == "submission":
+        assert persisted == payload

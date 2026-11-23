@@ -593,6 +593,8 @@ def reconcile_execution(
             "non_success_runs",
             "accepted_unavailable_runs",
             "execution_error",
+            "execution_error_detail",
+            "preflight_binding",
         )
     }
     runner_ok = (
@@ -617,6 +619,55 @@ def reconcile_execution(
         and result.get("total_episodes") == len(rows)
     )
     return annotated, axes
+
+
+def execution_failure_result(error: Exception) -> dict[str, Any]:
+    """Describe a campaign start failure, keeping the refusal detail diagnosable.
+
+    Returns:
+        A failed-execution result with the error text and, for predictive horizon preflight
+        refusals, the planner, checkpoint and requested/supported forecast steps.
+    """
+    result: dict[str, Any] = {
+        "campaign_execution_status": "failed",
+        "status": "failed",
+        "exit_code": 1,
+        "unexpected_failed_runs": 1,
+        "total_episodes": None,
+        "execution_error": f"{type(error).__name__} during campaign execution",
+        "execution_error_detail": str(error)[:4000],
+    }
+    binding = getattr(error, "binding", None)
+    if isinstance(binding, dict):
+        keys = (
+            "planner_key",
+            "algo",
+            "checkpoint",
+            "resolved_path",
+            "status",
+            "unverified_reason",
+            "required_horizon_steps",
+            "forecast_steps",
+        )
+        result["preflight_binding"] = {k: binding.get(k) for k in keys if k in binding}
+    return result
+
+
+def stage_campaign_checkpoints(
+    cfg: Any, *, registry_path: Path | None = None, cache_dir: Path | None = None
+) -> None:
+    """Download and verify every registered checkpoint before the campaign preflight runs.
+
+    The campaign preflight is network-free and refuses an unstaged predictive checkpoint, so a
+    fresh checkout must stage its registry artifacts first. Missing artifacts raise.
+    """
+    from robot_sf.benchmark.campaign.campaign_checkpoint_preflight import (
+        check_campaign_arm_checkpoints_preflight,
+    )
+
+    check_campaign_arm_checkpoints_preflight(
+        cfg, stage=True, registry_path=registry_path, cache_dir=cache_dir
+    )
 
 
 def write_outputs(out_dir: Path, rows: list[dict[str, Any]], suite: str, meta: dict) -> None:
@@ -756,6 +807,7 @@ def main(argv: list[str] | None = None) -> int:
         cfg = load_campaign_config(cfg_path)
         t0 = time.time()
         try:
+            stage_campaign_checkpoints(cfg)
             result = run_campaign(
                 cfg,
                 output_root=out_dir / "campaigns",
@@ -766,14 +818,7 @@ def main(argv: list[str] | None = None) -> int:
                 arm_isolation=args.arm_isolation,
             )
         except (RuntimeError, OSError, ValueError) as error:
-            result = {
-                "campaign_execution_status": "failed",
-                "status": "failed",
-                "exit_code": 1,
-                "unexpected_failed_runs": 1,
-                "total_episodes": None,
-                "execution_error": f"{type(error).__name__} during campaign execution",
-            }
+            result = execution_failure_result(error)
         campaign_root = Path(
             result.get("campaign_root") or out_dir / "campaigns" / f"empty_world_{suite}"
         )

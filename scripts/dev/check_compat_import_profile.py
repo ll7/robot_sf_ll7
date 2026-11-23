@@ -139,6 +139,18 @@ OWNER_RUNTIME_IMPORT_EXEMPTIONS = {
     },
 }
 
+# A deferred first-party adapter may be outside the lane only at this named
+# owner/target boundary. Eager imports and direct imports by tests still enter
+# the closure. The predictive preflight invokes this adapter only for enabled
+# learned-predictor bindings; those checkpoint tests run with the training extra.
+OWNER_DEFERRED_IMPORT_EXEMPTIONS = {
+    "robot_sf/benchmark/campaign/predictive_horizon_preflight.py": {
+        "robot_sf.benchmark.campaign.predictive_checkpoint_validation": (
+            "torch-backed .pt validation only for enabled learned predictive campaign bindings"
+        ),
+    },
+}
+
 # In-repo namespaces that resolve from the checkout, not from the environment.
 LOCAL_NAMESPACES = frozenset({"robot_sf", "tests", "examples", "hooks", "scripts"})
 
@@ -615,8 +627,8 @@ def _collect_closure(
 
     Source-owner function bodies are checked under the explicit, path-scoped
     lazy-adapter policy. Unknown deferred imports and all undocumented
-    ``importorskip`` targets fail closed; local imports from either phase still
-    enter the closure so their owners cannot hide dependencies.
+    ``importorskip`` targets fail closed. Local imports from either phase enter
+    the closure except for named owner/target deferred adapter boundaries.
     """
     seen_files: set[Path] = set()
     while pending:
@@ -641,7 +653,15 @@ def _collect_closure(
         _check_owner_deferred_imports(display, buckets["func_heavy"], errors, report)
         _check_owner_skip_strings(display, buckets["skip_strings"], errors, report)
         pending.extend(sorted(buckets["top_in_repo"]))
-        pending.extend(sorted(buckets["deferred_in_repo"]))
+        deferred_exemptions = OWNER_DEFERRED_IMPORT_EXEMPTIONS.get(display, {})
+        pending.extend(
+            module
+            for module in sorted(buckets["deferred_in_repo"])
+            if not any(
+                module == target or module.startswith(f"{target}.")
+                for target in deferred_exemptions
+            )
+        )
 
 
 def check_profile(root: Path) -> tuple[list[str], dict[str, list[str]]]:

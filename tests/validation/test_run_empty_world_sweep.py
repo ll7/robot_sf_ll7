@@ -109,3 +109,35 @@ def test_width_diagnostic_does_not_inherit_historical_snqi_anchors(tmp_path):
     source = yaml.safe_load((REPO_ROOT / sweep.SUITES["width"]).read_text())
     assert source["snqi_weights"] is not None
     assert source["snqi_baseline"] is not None
+
+
+@pytest.mark.parametrize(
+    ("arm_key", "profile"),
+    [
+        ("predictive_mppi", "configs/algos/predictive_mppi_release_v0_0_8.yaml"),
+        ("prediction_planner", "configs/algos/prediction_planner_release_v0_0_8.yaml"),
+    ],
+)
+def test_generated_width_predictive_arms_use_published_profiles(tmp_path, arm_key, profile):
+    """Generated predictive arms select the published eight-step release profiles."""
+    import yaml
+
+    cfg_path, _ = sweep.build_derived_inputs(
+        "width",
+        seeds=[1001],
+        arms=[arm_key],
+        scenarios_filter=None,
+        workers=1,
+        out_dir=tmp_path,
+        step_trace=False,
+    )
+    arm = yaml.safe_load(cfg_path.read_text())["planners"][0]
+    assert arm["algo_config"] == profile
+    settings = yaml.safe_load((REPO_ROOT / arm["algo_config"]).read_text())
+    assert settings["predictive_horizon_steps"] == 8
+    assert settings["predictive_rollout_dt"] == 0.1
+    assert settings["predictive_adaptive_horizon_enabled"] is False
+    assert settings["predictive_horizon_boost_steps"] == 0
+    if arm_key == "predictive_mppi":
+        assert settings["horizon_steps"] == 8
+        assert settings["rollout_dt"] == 0.1

@@ -98,6 +98,7 @@ _BASELINE_CATEGORY_BY_CANONICAL: dict[str, str] = {
     "planner_selector_v2_diagnostic": "diagnostic",
     "policy_stack_v1": "classical",
     "hybrid_orca_sampler": "classical",
+    "orca_mpc": "classical",
     "stream_gap": "classical",
     "gap_prediction": "classical",
     "socnav_bench": "classical",
@@ -182,6 +183,7 @@ _POLICY_SEMANTICS_BY_CANONICAL: dict[str, str] = {
     "planner_selector_v2_diagnostic": "deterministic_diagnostic_planner_selector",
     "policy_stack_v1": "policy_stack_v1_portfolio",
     "hybrid_orca_sampler": "orca_primary_with_sampled_progress_repair",
+    "orca_mpc": "orca_seeded_native_drive_swept_mpc_v1",
     "stream_gap": "gap_acceptance_local_planner",
     "gap_prediction": "predictive_planner_with_gap_veto",
     "socnav_bench": "socnav_adapter",
@@ -303,6 +305,7 @@ _OBSERVATION_SPEC_BY_CANONICAL: dict[str, dict[str, Any]] = {
     "hybrid_portfolio": _DEFAULT_OBSERVATION_SPEC,
     "planner_selector_v2_diagnostic": _DEFAULT_OBSERVATION_SPEC,
     "hybrid_orca_sampler": _DEFAULT_OBSERVATION_SPEC,
+    "orca_mpc": _DEFAULT_OBSERVATION_SPEC,
     "policy_stack_v1": _DEFAULT_OBSERVATION_SPEC,
     "safety_barrier": {
         "default_mode": "socnav_state",
@@ -878,6 +881,13 @@ _KINEMATICS_PROFILE_BY_CANONICAL: dict[str, dict[str, Any]] = {
         "supports_adapter_commands": True,
         "default_execution_mode": "adapter",
         "default_adapter_name": "PolicyStackV1Adapter",
+    },
+    "orca_mpc": {
+        "planner_command_space": "unicycle_vw",
+        "supports_native_commands": True,
+        "supports_adapter_commands": True,
+        "default_execution_mode": "adapter",
+        "default_adapter_name": "ORCAMPCAdapter",
     },
     "hybrid_orca_sampler": {
         "planner_command_space": "unicycle_vw",

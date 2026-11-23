@@ -212,3 +212,37 @@ __all__ = [
     "validate_clearance_model",
     "validate_surface_clearance_radii",
 ]
+
+
+def swept_relative_clearance(paths: np.ndarray, futures: np.ndarray, radius: float) -> np.ndarray:
+    """Return each path's minimum circle separation on relative linear segments.
+
+    Both arrays include time zero. Robot paths have shape (batch,time,2), actor
+    futures (actors,time,2). Minima include segment interiors, not just endpoints.
+
+    Returns:
+        Minimum signed surface clearance per candidate, infinity with no actors.
+    """
+    paths, futures = np.asarray(paths, float), np.asarray(futures, float)
+    if (
+        paths.ndim != 3
+        or futures.ndim != 3
+        or paths.shape[1:] != futures.shape[1:]
+        or paths.shape[1] < 2
+        or paths.shape[-1] != 2
+        or not np.isfinite(paths).all()
+        or not np.isfinite(futures).all()
+        or not np.isfinite(radius)
+        or radius < 0
+    ):
+        raise ValueError("Require finite synchronized paths/futures and nonnegative radius")
+    if not len(futures):
+        return np.full(len(paths), np.inf)
+    relative = paths[:, None] - futures[None]
+    start = relative[:, :, :-1]
+    edge = np.diff(relative, axis=2)
+    fraction = np.clip(
+        -np.sum(start * edge, axis=-1) / np.maximum(np.sum(edge * edge, axis=-1), 1e-30), 0, 1
+    )
+    nearest = start + fraction[..., None] * edge
+    return np.min(np.linalg.norm(nearest, axis=-1), axis=(1, 2)) - radius

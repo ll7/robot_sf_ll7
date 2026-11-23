@@ -1,0 +1,16 @@
+# Experimental B v1 (#10405): native ORCA + existing MPPI/CEM sequence search.
+allow_testing_algorithms: true
+allow_fallback: false
+max_linear_speed: 2.0
+max_angular_speed: 1.0
+orca_adapter_trace_enabled: true
+horizon_steps: 30
+rollout_dt: 0.1
+sample_count: 48
+iterations: 2
+random_seed: 10405
+goal_progress_weight: 5.0
+clearance_weight: 1.0
+smoothness_weight: 0.15
+hard_clearance: 0.02
+progress_escape_enabled: false

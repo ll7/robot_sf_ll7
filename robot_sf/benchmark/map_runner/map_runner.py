@@ -275,6 +275,7 @@ from robot_sf.planner.nmpc_social import (  # noqa: F401 - registry re-export.
     NMPCSocialPlannerAdapter,
     build_nmpc_social_config,
 )
+from robot_sf.planner.orca_mpc import ORCAMPCAdapter, build_orca_mpc_config  # noqa: F401
 from robot_sf.planner.predictive_mppi import (
     PredictiveMPPIAdapter,
     build_predictive_mppi_config,
@@ -459,6 +460,7 @@ _SOCNAV_ALGO_KEYS = {
     "socnav_bench",
     "hybrid_portfolio",
     "hybrid_orca_sampler",
+    "orca_mpc",
     "social_navigation_pyenvs_orca",
     "social_nav_pyenvs_orca",
     "social_navigation_pyenvs_socialforce",

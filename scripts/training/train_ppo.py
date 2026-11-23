@@ -95,6 +95,7 @@ from robot_sf.training.scenario_sampling import (
     ScenarioSwitchingEnv,
     scenario_id_from_definition,
 )
+from robot_sf.training.seed_receipts import EpisodeSeedReceiptEnv
 from robot_sf.training.snqi_utils import (
     TrainingSNQIContext,
     compute_training_snqi,
@@ -975,6 +976,25 @@ def _load_expert_training_config_mapping(
     return _deep_merge_config(base_data, data)
 
 
+def _validate_seed_control_config(data: Mapping[str, Any], training_seeds: tuple[int, ...]) -> None:
+    """Reject impossible receipt or initialisation controls before environment construction."""
+    if data.get("training_seed_telemetry"):
+        pool = (data.get("scenario_sampling") or {}).get("episode_seed_pool")
+        if not pool and not data.get("training_seed_range"):
+            raise ValueError("training seed telemetry requires a reset pool or training range")
+        if any(
+            isinstance(v, bool) or not isinstance(v, int) or not 100000 <= v <= 199999
+            for v in (*training_seeds, *(pool or ()))
+        ):
+            raise ValueError("training seed telemetry requires training-only episode identities")
+    if (
+        data.get("ppo_initialization_seed") is not None
+        and data.get("randomize_seeds", False)
+        and data.get("training_master_seed") is None
+    ):
+        raise ValueError("separate PPO initialisation requires a seeded layout schedule")
+
+
 def load_expert_training_config(config_path: str | Path) -> ExpertTrainingConfig:
     """Load an :class:`ExpertTrainingConfig` from a YAML file."""
 
@@ -993,6 +1013,7 @@ def load_expert_training_config(config_path: str | Path) -> ExpertTrainingConfig
     scenario_id = data.get("scenario_id")
     training_seeds = common.ensure_seed_tuple(data.get("seeds", []))
 
+    _validate_seed_control_config(data, training_seeds)
     convergence_raw = data.get("convergence", {})
     evaluation_raw = data.get("evaluation", {})
     step_schedule = _parse_step_schedule(evaluation_raw.get("step_schedule"))
@@ -1059,6 +1080,8 @@ def load_expert_training_config(config_path: str | Path) -> ExpertTrainingConfig
         scenario_id=str(scenario_id) if scenario_id else None,
         seeds=training_seeds,
         randomize_seeds=bool(data.get("randomize_seeds", False)),
+        ppo_initialization_seed=data.get("ppo_initialization_seed"),
+        training_seed_telemetry=data.get("training_seed_telemetry", False),
         total_timesteps=int(data["total_timesteps"]),
         policy_id=str(data["policy_id"]),
         convergence=convergence,
@@ -1233,6 +1256,8 @@ class _TrainingEnvFactory:
     scenario_sampling: dict[str, object]
     domain_randomization: DomainRandomization | None = None
     density_curriculum: DensityCurriculumSchedule | None = None
+    training_seed_telemetry: bool = False
+    worker_index: int = 0
 
     def _build_config(self, scenario_def: Mapping[str, Any]):
         """Build an environment config for one scenario definition."""
@@ -1248,7 +1273,7 @@ class _TrainingEnvFactory:
 
     def __call__(self) -> Any:
         """Build one training environment instance."""
-        if self.scenario is not None:
+        if self.scenario is not None and not self.training_seed_telemetry:
             env_config = self._build_config(self.scenario)
             scenario_id = scenario_id_from_definition(self.scenario, index=0)
             return make_robot_env(
@@ -1259,11 +1284,13 @@ class _TrainingEnvFactory:
                 algorithm_name=self.algorithm_name,
                 **self.env_factory_kwargs,
             )
-        if self.scenario_definitions is None:
+        if self.scenario_definitions is None and self.scenario is None:
             raise ValueError("scenario_definitions required when scenario is None.")
 
         sampler = ScenarioSampler(
-            self.scenario_definitions,
+            (self.scenario,)
+            if self.scenario is not None
+            else cast("tuple[dict[str, Any], ...]", self.scenario_definitions),
             include_scenarios=tuple(
                 str(name)
                 for name in self.scenario_sampling.get(  # type: ignore[union-attr]
@@ -1292,7 +1319,7 @@ class _TrainingEnvFactory:
             seed=self.seed,
             strategy=str(self.scenario_sampling.get("strategy", "random")),  # type: ignore[union-attr]
         )
-        return ScenarioSwitchingEnv(
+        env = ScenarioSwitchingEnv(
             scenario_sampler=sampler,
             scenario_path=self.scenario_path,
             config_builder=self._build_config,
@@ -1303,6 +1330,11 @@ class _TrainingEnvFactory:
             domain_randomization=self.domain_randomization,
             episode_seed_pool=self.scenario_sampling.get("episode_seed_pool"),
             seed=self.seed,
+        )
+        return (
+            EpisodeSeedReceiptEnv(env, worker_index=self.worker_index)
+            if self.training_seed_telemetry
+            else env
         )
 
 
@@ -1320,6 +1352,8 @@ def _make_training_env(  # noqa: PLR0913
     scenario_sampling: Mapping[str, object],
     domain_randomization: DomainRandomization | None = None,
     density_curriculum: DensityCurriculumSchedule | None = None,
+    training_seed_telemetry: bool = False,
+    worker_index: int = 0,
 ) -> Callable[[], Any]:
     """Create a picklable training environment factory (seeded when provided)."""
     return _TrainingEnvFactory(
@@ -1339,6 +1373,8 @@ def _make_training_env(  # noqa: PLR0913
         scenario_sampling=dict(scenario_sampling),
         domain_randomization=domain_randomization,
         density_curriculum=density_curriculum,
+        training_seed_telemetry=training_seed_telemetry,
+        worker_index=worker_index,
     )
 
 
@@ -1594,6 +1630,8 @@ def _init_wandb(
             "total_timesteps": config.total_timesteps,
             "seeds": list(config.seeds),
             "randomize_seeds": bool(config.randomize_seeds),
+            "ppo_initialization_seed": config.ppo_initialization_seed,
+            "training_seed_telemetry": config.training_seed_telemetry,
             "evaluation_randomize_seeds": bool(_randomize_eval_seeds(config)),
             "evaluation_seed_manifest": (
                 str(config.evaluation.evaluation_seed_manifest)
@@ -2617,6 +2655,17 @@ def _train_with_schedule(  # noqa: C901,PLR0913,PLR0915
     return metrics_raw, episode_records, best_summary, eval_timeline, perf_timeline
 
 
+def _resolve_policy_initialization_seed(
+    config: ExpertTrainingConfig, layout_seed: int | None
+) -> int | None:
+    """Resolve a policy control without losing the independent physical reset seed."""
+    if config.ppo_initialization_seed is None:
+        return layout_seed
+    if layout_seed is None:
+        raise ValueError("separate PPO initialisation requires a seeded layout schedule")
+    return config.ppo_initialization_seed
+
+
 def _init_training_model(
     config: ExpertTrainingConfig,
     *,
@@ -2633,6 +2682,7 @@ def _init_training_model(
     """
     use_random = _randomize_seeds(config)
     base_seed = None if use_random else int(config.seeds[0]) if config.seeds else 0
+    policy_seed = _resolve_policy_initialization_seed(config, base_seed)
     density_curriculum = build_density_curriculum_schedule(config.density_curriculum)
     if not density_curriculum.enabled:
         density_curriculum = None
@@ -2657,8 +2707,10 @@ def _init_training_model(
             scenario_sampling=config.scenario_sampling,
             domain_randomization=config.domain_randomization,
             density_curriculum=density_curriculum,
+            training_seed_telemetry=config.training_seed_telemetry,
+            worker_index=worker_index,
         )
-        for seed in env_seeds
+        for worker_index, seed in enumerate(env_seeds)
     ]
     if worker_mode == "subproc":
         with _subproc_worker_log_environment(worker_mode):
@@ -2697,11 +2749,15 @@ def _init_training_model(
             policy_class,
             vec_env,
             verbose=1,
-            seed=base_seed,
+            seed=policy_seed,
             tensorboard_log=str(tensorboard_log) if tensorboard_log is not None else None,
             policy_kwargs=policy_kwargs,
             **ppo_kwargs,
         )
+        if config.ppo_initialization_seed is not None:
+            # SB3 seeds its VecEnv with the policy seed during construction.
+            # Restore the layout master before the first physical reset.
+            vec_env.seed(base_seed)
     logger.info(
         "Training envs initialized num_envs={} worker_mode={} base_seed={} critic_profile={}",
         num_envs,
@@ -3088,7 +3144,9 @@ def _write_episode_log(path: Path, records: Iterable[Mapping[str, object]]) -> N
 
 def _prepare_seed_state(config: ExpertTrainingConfig) -> None:
     """Apply training seed configuration and warn when randomness overrides it."""
-    if _randomize_seeds(config):
+    if config.ppo_initialization_seed is not None:
+        common.set_global_seed(config.ppo_initialization_seed)
+    elif _randomize_seeds(config):
         if config.seeds:
             logger.warning("randomize_seeds enabled; ignoring provided seeds for training.")
     elif config.seeds:
@@ -3159,6 +3217,8 @@ def _build_training_notes(  # noqa: C901, PLR0912
         f"Converged at {config.total_timesteps} timesteps",
         f"eval_steps={eval_steps}",
     ]
+    notes.append(f"ppo_initialization_seed={config.ppo_initialization_seed}")
+    notes.append(f"training_seed_telemetry={config.training_seed_telemetry}")
     if config_sha256 is not None:
         notes.append(f"config_sha256={config_sha256}")
     if training_seed is not None:

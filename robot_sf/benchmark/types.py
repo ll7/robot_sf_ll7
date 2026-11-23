@@ -266,6 +266,7 @@ class EpisodeRecordDict(TypedDict, total=False):
     outcome: OutcomePayload
     integrity: dict[str, Any]
     pedestrian_model: dict[str, Any]
+    pedestrian_group_provenance: dict[str, Any]
     development_pedestrian_model: str
     evaluation_pedestrian_model: str
     failure_mechanism: dict[str, Any]

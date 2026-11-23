@@ -148,7 +148,10 @@ from robot_sf.benchmark.planner_command_contract import (
     validate_planner_contract as _validate_planner_contract,
 )
 from robot_sf.benchmark.public_requirement_events import evaluate_public_requirement_events
-from robot_sf.benchmark.result_provenance import build_simulator_settings_provenance
+from robot_sf.benchmark.result_provenance import (
+    build_simulator_settings_provenance,
+    capture_pedestrian_group_provenance,
+)
 from robot_sf.benchmark.runtime_seed_guard import check_seed_config, check_simulation_seed
 from robot_sf.benchmark.safety.cbf_safety_filter_runtime import (
     CBFSafetyFilterRuntimeConfig,
@@ -1992,6 +1995,7 @@ class _EpisodeStepLoopResult:
     planner_runtime_snapshot: dict[str, Any] | None
     obstacle_force_law_metadata: dict[str, Any] | None
     effective_physics: dict[str, Any] | None = None
+    pedestrian_group_provenance: dict[str, Any] = field(default_factory=dict)
     sampler_capture: dict[str, Any] | None = None
     robot_force_samples: list[dict[str, Any]] = field(default_factory=list)
     reset_spawn_clearance: dict[str, Any] | None = None
@@ -2060,6 +2064,7 @@ class _StepLoopState:
     simulator_obstacle_force_law_metadata: dict[str, Any] | None = None
     planner_obstacle_force_law_metadata: dict[str, Any] | None = None
     effective_physics: dict[str, Any] | None = None
+    pedestrian_group_provenance: dict[str, Any] = field(default_factory=dict)
     sampler_capture: dict[str, Any] | None = None
     reset_spawn_clearance: dict[str, Any] | None = None
     reset_spawn_clearance_error: str | None = None
@@ -2408,6 +2413,7 @@ def _init_step_loop_state(
         state.goal_zone = np.array(zone, dtype=float, copy=True) if zone is not None else None
         state.completion_policy = getattr(navigators[0], "completion_policy", "waypoint_radius_v1")
     state.initial_ped_positions = initial_ped_positions
+    state.pedestrian_group_provenance = capture_pedestrian_group_provenance(env.simulator)
     state.initial_robot_velocity = initial_robot_velocity
     state.initial_robot_angular_velocity = _initial_robot_angular_velocity(env.simulator)
     state.initial_ped_velocities = initial_ped_velocities
@@ -3670,6 +3676,7 @@ def _build_step_loop_result(state: _StepLoopState) -> _EpisodeStepLoopResult:
             planner_runtime_snapshot=state.planner_runtime_snapshot,
         ),
         effective_physics=state.effective_physics,
+        pedestrian_group_provenance=state.pedestrian_group_provenance,
         sampler_capture=state.sampler_capture,
         reset_spawn_clearance=state.reset_spawn_clearance,
         reset_spawn_clearance_error=state.reset_spawn_clearance_error,
@@ -5363,6 +5370,7 @@ def _assemble_episode_record(  # noqa: PLR0913
         contradictions=contradictions,
         view_integrity=loop_result.view_integrity,
     )
+    record["pedestrian_group_provenance"] = deepcopy(loop_result.pedestrian_group_provenance)
     if loop_result.effective_physics is not None:
         record["effective_physics"] = deepcopy(loop_result.effective_physics)
         record["release_design_parameters"] = deepcopy(

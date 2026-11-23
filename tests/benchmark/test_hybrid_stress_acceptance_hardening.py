@@ -19,6 +19,7 @@ from robot_sf.benchmark.camera_ready._preflight import _config_hash_payload, _sc
 from robot_sf.benchmark.camera_ready._run_state import validate_campaign_integrity
 from robot_sf.benchmark.camera_ready_campaign import load_campaign_config
 from robot_sf.benchmark.identity.hash_utils import sha256_file
+from robot_sf.benchmark.map_runner.map_runner_identity import _scenario_with_episode_seed_defaults
 from robot_sf.benchmark.map_runner_policies.map_runner_policy_resolution import (
     resolve_episode_policy_runtime,
 )
@@ -36,6 +37,7 @@ from robot_sf.benchmark.result_provenance import (
     write_result_provenance_manifest,
 )
 from robot_sf.benchmark.utils import _config_hash
+from tests.benchmark.campaign_identity_support import producer_params, producer_record_identity
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MANIFEST_PATH = REPO_ROOT / (
@@ -116,51 +118,63 @@ def _repo_relative(path: Path) -> str:
     return path.resolve().relative_to(REPO_ROOT).as_posix()
 
 
-def _row(*, algo: str, algo_config: dict[str, Any], scenario_id: str, seed: int) -> dict[str, Any]:
-    scenario_params = {
-        "algo": algo,
-        "algo_config_hash": _config_hash(algo_config),
-        "id": scenario_id,
-        "robot_config": {"type": "differential_drive"},
-        "run_dt": 0.1,
-    }
+def _row(
+    *, algo: str, algo_config: dict[str, Any], scenario: dict[str, Any], seed: int, cfg: Any
+) -> dict[str, Any]:
+    scenario_id = str(scenario["name"])
+    scenario_params = producer_params(
+        scenario,
+        seed,
+        algo=algo,
+        algo_config=algo_config,
+        horizon=cfg.horizon,
+        dt=cfg.dt,
+        record_forces=cfg.record_forces,
+        record_planner_decision_trace=cfg.record_planner_decision_trace,
+        record_simulation_step_trace=cfg.record_simulation_step_trace,
+    )
     config_hash = _config_hash(scenario_params)
-    return {
-        "algo": algo,
-        "config_hash": config_hash,
-        "episode_id": f"{scenario_id}--{seed}",
-        "event_ledger": {"software_commit": SOURCE_COMMIT},
-        "git_hash": SOURCE_COMMIT,
-        "horizon": 600,
-        "scenario_id": scenario_id,
-        "scenario_params": scenario_params,
-        "seed": seed,
-        "status": "success",
-        "algorithm_metadata": {
-            "algorithm": "ppo" if algo == "guarded_ppo" else algo,
-            "canonical_algorithm": algo,
-            "planner_kinematics": {
-                "robot_kinematics": "differential_drive",
-                "scenario_kinematics": ["differential_drive"],
-            },
-            "planner_contract": {
-                "planner_id": algo,
-                "action_contract": {"active_robot_kinematics": "differential_drive"},
-            },
-        },
-        "provenance": {
+    return producer_record_identity(
+        {
+            "algo": algo,
+            "config_hash": config_hash,
+            "episode_id": f"{scenario_id}--{seed}",
+            "event_ledger": {"software_commit": SOURCE_COMMIT},
             "git_hash": SOURCE_COMMIT,
-            "config_hash": config_hash,
-            "config_identity": {"algo": algo},
-        },
-        "result_provenance": {
-            "config_hash": config_hash,
-            "repo_commit": SOURCE_COMMIT,
+            "horizon": 600,
             "scenario_id": scenario_id,
+            "scenario_params": scenario_params,
             "seed": seed,
-            "simulator_settings": {"dt": 0.1, "horizon": 600, "kinematics": "differential_drive"},
-        },
-    }
+            "status": "success",
+            "algorithm_metadata": {
+                "algorithm": "ppo" if algo == "guarded_ppo" else algo,
+                "canonical_algorithm": algo,
+                "planner_kinematics": {
+                    "robot_kinematics": "differential_drive",
+                    "scenario_kinematics": ["differential_drive"],
+                },
+                "planner_contract": {
+                    "planner_id": algo,
+                    "action_contract": {"active_robot_kinematics": "differential_drive"},
+                },
+            },
+            "provenance": {
+                "git_hash": SOURCE_COMMIT,
+                "config_hash": config_hash,
+            },
+            "result_provenance": {
+                "config_hash": config_hash,
+                "repo_commit": SOURCE_COMMIT,
+                "scenario_id": scenario_id,
+                "seed": seed,
+                "simulator_settings": {
+                    "dt": 0.1,
+                    "horizon": 600,
+                    "kinematics": "differential_drive",
+                },
+            },
+        }
+    )
 
 
 @pytest.fixture
@@ -274,8 +288,9 @@ def _build_stress_fixture(
                 _row(
                     algo=algo,
                     algo_config=algo_config,
-                    scenario_id=str(scenario["name"]),
+                    scenario=scenario,
                     seed=fixture_seed,
+                    cfg=campaign_config,
                 )
             )
         episodes_path.parent.mkdir(parents=True, exist_ok=True)
@@ -345,6 +360,7 @@ def _build_stress_fixture(
         resolved_seeds=[fixture_seed],
         campaign_root=root,
         campaign_manifest=campaign_manifest,
+        cfg=campaign_config,
     )
     _write_json(
         root / "reports" / "campaign_summary.json",
@@ -1265,9 +1281,22 @@ def test_analysis_trace_config_hash_keeps_legacy_trace_binding(
     path = _first_row_path(root, "prediction_planner")
     rows = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
     row = rows[0]
-    trace_hash = "trace-config-hash"
-    row["algorithm_metadata"]["analysis_trace"] = {"config_hash": trace_hash}
-    row["provenance"]["config_hash"] = trace_hash if trace_hash_matches else "wrong-trace-hash"
+    selected = next(
+        s for s in _load_campaign_scenarios(campaign_config) if s["name"] == row["scenario_id"]
+    )
+    selected = _scenario_with_kinematics(
+        selected,
+        kinematics="differential_drive",
+        holonomic_command_mode=campaign_config.holonomic_command_mode,
+    )
+    source = _scenario_with_episode_seed_defaults(selected, seed=row["seed"])
+    trace_hash = _config_hash(
+        {key: value for key, value in source.items() if key not in {"seed", "repeats"}}
+    )
+    row["algorithm_metadata"]["analysis_trace"] = {
+        "config_hash": trace_hash if trace_hash_matches else "wrong-trace-hash",
+        "git_hash": SOURCE_COMMIT,
+    }
     path.write_text("".join(json.dumps(item) + "\n" for item in rows), encoding="utf-8")
     _refresh_sidecar_raw_hash(path)
 
@@ -1297,19 +1326,11 @@ def test_unrelated_nested_business_metadata_does_not_trigger_emergency_marker(
     root, manifest, campaign_config = stress_fixture
     path = _first_row_path(root, "prediction_planner")
     rows = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
-    rows[0]["scenario_params"]["metadata"] = {
+    rows[0]["metadata"] = {
         "planner_mode": "REORIENT",
         "selected_source": "static_reorient",
     }
-    config_hash = _config_hash(rows[0]["scenario_params"])
-    rows[0]["config_hash"] = config_hash
-    rows[0]["provenance"]["config_hash"] = config_hash
-    rows[0]["result_provenance"]["config_hash"] = config_hash
     path.write_text("".join(json.dumps(item) + "\n" for item in rows), encoding="utf-8")
-    sidecar_path = path.with_name(f"{path.name}.provenance.json")
-    sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
-    sidecar["rows"][0]["config_hash"] = config_hash
-    sidecar_path.write_text(json.dumps(sidecar), encoding="utf-8")
     _refresh_sidecar_raw_hash(path)
 
     report = _acceptance(root, manifest, campaign_config)

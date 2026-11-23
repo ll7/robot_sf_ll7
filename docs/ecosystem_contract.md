@@ -200,6 +200,10 @@ manifest, portable `SHA256SUMS`, and five negative variants. It is diagnostic
 conformance material only. It is not benchmark output, software release
 content, or scientific evidence.
 
+The current packet and standalone validator use fixture version `1.1.0` and bind producer
+contract version `1.1.0`. The validator rejects a mismatched fixture minor version before
+validating the packet's declared contract and checksums.
+
 Generate and validate the packet:
 
 ```text

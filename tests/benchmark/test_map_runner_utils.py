@@ -6131,9 +6131,9 @@ def test_analysis_trace_profile_does_not_change_recorded_actions_or_outcome(
     assert on["algorithm_metadata"]["analysis_trace"]["steps"][0]["time_s"] == 0.0
     assert on["config_hash"] == _config_hash(on["scenario_params"])
     assert on["result_provenance"]["config_hash"] == on["config_hash"]
-    assert (
-        on["provenance"]["config_hash"] == on["algorithm_metadata"]["analysis_trace"]["config_hash"]
-    )
+    assert on["provenance"]["config_hash"] == on["config_hash"]
+    # The trace binds its selected source scenario; row provenance binds the complete runtime.
+    assert on["algorithm_metadata"]["analysis_trace"]["config_hash"] != on["config_hash"]
     # Compare the actual commands passed to env.step, not only the terminal
     # result. This catches profile-induced control changes.
     assert action_sequences[0] == action_sequences[1]

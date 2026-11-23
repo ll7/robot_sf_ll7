@@ -9,7 +9,8 @@ from typing import Any
 import pytest
 
 from robot_sf.benchmark.camera_ready_campaign import load_campaign_config, run_campaign
-from robot_sf.benchmark.utils import _config_hash
+from robot_sf.benchmark.map_runner.map_runner_identity import _compute_map_episode_id
+from tests.benchmark.campaign_identity_support import producer_params, producer_record_identity
 
 
 def _fake_aggregates(*args: Any, **kwargs: Any) -> dict[str, Any]:
@@ -44,11 +45,11 @@ def _write_resume_config(tmp_path: Path):
                 "- id: unit-a",
                 "  name: unit-a",
                 "  map_file: maps/svg_maps/classic_crossing.svg",
-                "  seeds: [101]",
+                "  seeds: [1001]",
                 "- id: unit-b",
                 "  name: unit-b",
                 "  map_file: maps/svg_maps/classic_crossing.svg",
-                "  seeds: [101]",
+                "  seeds: [1001]",
             ]
         )
         + "\n",
@@ -66,13 +67,13 @@ def _write_resume_config(tmp_path: Path):
                 "export_publication_bundle: false",
                 "seed_policy:",
                 "  mode: fixed-list",
-                "  seeds: [101]",
+                "  seeds: [1001]",
                 "planners:",
                 "  - key: complete",
-                "    algo: complete",
+                "    algo: goal",
                 "    planner_group: core",
                 "  - key: partial",
-                "    algo: partial",
+                "    algo: social_force",
                 "    planner_group: core",
             ]
         )
@@ -96,8 +97,9 @@ def _install_campaign_stubs(monkeypatch, dispatched_arms, executed_units) -> Non
         **kwargs: Any,
     ) -> dict[str, Any]:
         """Emulate runner-level unit filtering while recording arm dispatch."""
-        del schema_path, kwargs
-        dispatched_arms.append(algo)
+        del schema_path
+        arm_key = Path(out_path).parent.name.split("__")[0]
+        dispatched_arms.append(arm_key)
         output_path = Path(out_path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         prior_rows = _episode_rows(output_path) if resume and output_path.is_file() else []
@@ -106,21 +108,19 @@ def _install_campaign_stubs(monkeypatch, dispatched_arms, executed_units) -> Non
         missing_rows: list[dict[str, Any]] = []
         for scenario in scenarios_or_path:
             scenario_id = str(scenario.get("id") or scenario.get("name"))
-            seed = int((scenario.get("seeds") or [101])[0])
-            episode_id = f"{scenario_id}:{seed}"
+            seed = int((scenario.get("seeds") or [1001])[0])
+            params = producer_params(scenario, seed, algo=algo, **kwargs)
+            episode_id = _compute_map_episode_id(params, seed)
             if episode_id in prior_ids:
                 continue
-            executed_units.append((algo, episode_id))
+            executed_units.append((arm_key, episode_id))
             missing_rows.append(
                 {
                     "episode_id": episode_id,
                     "scenario_id": scenario_id,
                     "seed": seed,
-                    "scenario_params": {
-                        "algo": algo,
-                        "algo_config_hash": _config_hash({}),
-                        "metadata": {"archetype": "crossing"},
-                    },
+                    "algo": algo,
+                    "scenario_params": params,
                     "metrics": {
                         "success": 1.0,
                         "collisions": 0.0,
@@ -131,7 +131,7 @@ def _install_campaign_stubs(monkeypatch, dispatched_arms, executed_units) -> Non
             )
 
         for row in missing_rows:
-            row["config_hash"] = _config_hash(row["scenario_params"])
+            producer_record_identity(row)
         with output_path.open("a", encoding="utf-8") as handle:
             for row in missing_rows:
                 handle.write(json.dumps(row) + "\n")

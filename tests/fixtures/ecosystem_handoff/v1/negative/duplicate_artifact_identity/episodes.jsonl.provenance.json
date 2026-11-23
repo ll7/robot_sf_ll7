@@ -1,7 +1,7 @@
 {
   "campaign_identity": {
-    "config_hash": "8be75a0e6f13356a",
-    "scenario_matrix_hash": "8be75a0e6f13356a",
+    "config_hash": "e71f1a81cb8a84a5",
+    "scenario_matrix_hash": "e71f1a81cb8a84a5",
     "suite_key": "robot_sf.ecosystem_handoff.v1",
     "total_jobs": 1,
     "written": 1
@@ -32,12 +32,12 @@
     "algo_config": {
       "artifact_status": "available",
       "path": "fixture_manifest.json",
-      "sha256": "aeba3a724624052e1ffee180da81071dfc01c6a455e53d7fbff922469136dd3a"
+      "sha256": "bb5a973c6fd25df4c37d524a8ce68ee9b5ebc6bc689973ddddf0824ffc6c4d54"
     },
     "scenario_matrix": {
       "artifact_status": "available",
       "path": "fixture_manifest.json",
-      "sha256": "aeba3a724624052e1ffee180da81071dfc01c6a455e53d7fbff922469136dd3a"
+      "sha256": "bb5a973c6fd25df4c37d524a8ce68ee9b5ebc6bc689973ddddf0824ffc6c4d54"
     },
     "schema_path": {
       "artifact_status": "available",
@@ -50,12 +50,12 @@
       "artifact_status": "available",
       "kind": "episodes_jsonl",
       "path": "episodes.jsonl",
-      "sha256": "040a809461204dcecea37874d80e341b0b65ced5f9dadadf9df5accfa8310e5f"
+      "sha256": "a2c6b571a15a8b527b05da3deef0b72c30f4bccbc4a16bf5b67c6cc63b44834d"
     }
   ],
   "rows": [
     {
-      "config_hash": "8be75a0e6f13356a",
+      "config_hash": "e71f1a81cb8a84a5",
       "episode_id": "ecosystem-handoff-v1-episode-0001",
       "jsonl_line": 0,
       "postprocessing": [
@@ -69,7 +69,7 @@
         }
       ],
       "raw_artifact": "episodes.jsonl",
-      "repo_commit": "contract:3dfa55a49b11efdccb006c6e6e84d80aa2cf79f3e7dec355eae550e17efb141e",
+      "repo_commit": "contract:ba7b6892abed712ce32ad5764484e53dc58aebadfa18c82272e47fcc4d8fee47",
       "scenario_id": "conformance.minimal_success",
       "seed": 271828,
       "simulator_settings": {
@@ -93,7 +93,7 @@
     "invocation": "uv run python scripts/tools/build_ecosystem_handoff_fixture.py",
     "protocol_version": "0.1.0",
     "python_version": "3.11+",
-    "repo_commit": "contract:3dfa55a49b11efdccb006c6e6e84d80aa2cf79f3e7dec355eae550e17efb141e",
+    "repo_commit": "contract:ba7b6892abed712ce32ad5764484e53dc58aebadfa18c82272e47fcc4d8fee47",
     "run_id": "ecosystem-handoff-v1",
     "runner": "ecosystem_handoff_fixture"
   },

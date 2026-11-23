@@ -125,14 +125,14 @@
             "description": "Active graded benchmark observation-level contract for this episode."
         },
         "benchmark_track": {
-            "type": "string",
+            "type": ["string", "null"],
             "minLength": 1,
-            "description": "Primary observation-track aggregation fence for track-aware benchmark rows."
+            "description": "Primary observation-track aggregation fence for track-aware benchmark rows. Null records the explicit absence of this optional selection in the identity-copy contract."
         },
         "track_schema_version": {
-            "type": "string",
+            "type": ["string", "null"],
             "minLength": 1,
-            "description": "Version slug for the benchmark-track metadata contract."
+            "description": "Version slug for the benchmark-track metadata contract. Null records the explicit absence of this optional selection in the identity-copy contract."
         },
         "algorithm_metadata": {
             "type": "object",

@@ -147,6 +147,7 @@ from robot_sf.benchmark.pedestrian_control_trace import (
 from robot_sf.benchmark.planner_command_contract import (
     validate_planner_contract as _validate_planner_contract,
 )
+from robot_sf.benchmark.provenance_identity import publish_episode_identity
 from robot_sf.benchmark.public_requirement_events import evaluate_public_requirement_events
 from robot_sf.benchmark.result_provenance import build_simulator_settings_provenance
 from robot_sf.benchmark.runtime_seed_guard import check_seed_config, check_simulation_seed
@@ -5219,6 +5220,9 @@ def _finalize_result_provenance_block(  # noqa: PLR0913
             {"step": "post_process_metrics", "status": "completed"},
         ],
     }
+    publish_episode_identity(
+        record, simulator_settings=record["result_provenance"]["simulator_settings"]
+    )
 
 
 def _finalize_assembled_record_provenance(  # noqa: PLR0913

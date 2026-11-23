@@ -19,6 +19,7 @@ from typing import Any
 import jsonschema
 
 FIXTURE_ID = "robot_sf.ecosystem_handoff.v1"
+FIXTURE_VERSION = "1.1.0"
 FIXTURE_SCHEMA_VERSION = "robot_sf_ecosystem_handoff_fixture.v1"
 ARTIFACT_SCHEMA_VERSION = "robot_sf_ecosystem_artifact_manifest.v1"
 NEGATIVE_SCHEMA_VERSION = "robot_sf_ecosystem_negative_fixture.v1"
@@ -166,10 +167,12 @@ def _verify_fixture_manifest(root: Path) -> dict[str, Any]:
         )
     if manifest.get("fixture_id") != FIXTURE_ID:
         raise PacketValidationError("fixture_identity", "fixture ID does not match the v1 contract")
+    if manifest.get("fixture_version") != FIXTURE_VERSION:
+        raise PacketValidationError("fixture_identity", "fixture version does not match v1.1")
     contract = manifest.get("contract")
-    if not isinstance(contract, dict) or contract.get("version") != "1.0.0":
+    if not isinstance(contract, dict) or contract.get("version") != "1.1.0":
         raise PacketValidationError(
-            "contract_binding", "fixture does not bind contract version 1.0.0"
+            "contract_binding", "fixture does not bind contract version 1.1.0"
         )
     digest = contract.get("digest")
     if not isinstance(digest, str) or len(digest) != 64:

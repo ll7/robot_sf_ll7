@@ -112,7 +112,7 @@ def test_contract_declares_fixture_identity_without_content_digest() -> None:
     assert contract["canonical_public_fixtures"] == [
         {
             "fixture_id": "robot_sf.ecosystem_handoff.v1",
-            "fixture_version": "1.0.0",
+            "fixture_version": "1.1.0",
             "path": "tests/fixtures/ecosystem_handoff/v1/fixture_manifest.json",
         }
     ]

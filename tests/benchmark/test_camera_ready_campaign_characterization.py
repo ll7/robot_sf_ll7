@@ -16,14 +16,21 @@ from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import replace
 from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 import pytest
 
 import robot_sf.benchmark.camera_ready.campaign as campaign_module
+from robot_sf.benchmark.camera_ready._config import _scenario_with_kinematics
 from robot_sf.benchmark.camera_ready._resume_plan import ResumeMismatchError
-from robot_sf.benchmark.utils import _config_hash
+from robot_sf.benchmark.utils import _config_hash, _git_hash_fallback
+from tests.benchmark.campaign_identity_support import (
+    fixture_campaign,
+    producer_params,
+    producer_record_identity,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -369,36 +376,48 @@ def test_resume_partial_plan_is_deterministic_and_context_mismatch_is_fail_close
     runs_dir = campaign_root / "runs"
     arm_dir = runs_dir / "goal__differential_drive"
     arm_dir.mkdir(parents=True)
+    source_commit = _git_hash_fallback()
     (campaign_root / "campaign_manifest.json").write_text(
-        json.dumps({"campaign_id": "campaign", "config_hash": "config"}) + "\n",
-        encoding="utf-8",
-    )
-    params = {"algo": "goal", "algo_config_hash": _config_hash({})}
-    (arm_dir / "episodes.jsonl").write_text(
         json.dumps(
-            {
-                "episode_id": "fixture-1",
-                "scenario_id": "fixture",
-                "seed": 0,
-                "scenario_params": params,
-                "config_hash": _config_hash(params),
-            }
+            {"campaign_id": "campaign", "config_hash": "config", "git": {"commit": source_commit}}
         )
         + "\n",
         encoding="utf-8",
     )
-    cfg = SimpleNamespace(
-        resume=True,
-        planners=(SimpleNamespace(key="goal", algo="goal", algo_config_path=None, enabled=True),),
-        kinematics_matrix=("differential_drive",),
+    scenario = {
+        "name": "fixture",
+        "id": "fixture",
+        "map_file": "maps/fixture.svg",
+        "seeds": [1001, 1002],
+    }
+    selected = _scenario_with_kinematics(
+        scenario, kinematics="differential_drive", holonomic_command_mode="vx_vy"
     )
+    params = producer_params(selected, 1001, algo="goal")
+    (arm_dir / "episodes.jsonl").write_text(
+        json.dumps(
+            producer_record_identity(
+                {
+                    "episode_id": "fixture-1",
+                    "scenario_id": "fixture",
+                    "seed": 1001,
+                    "git_hash": source_commit,
+                    "scenario_params": params,
+                    "config_hash": _config_hash(params),
+                }
+            )
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    cfg = replace(fixture_campaign([{"key": "goal", "algo": "goal"}]), resume=True)
     kwargs = {
         "cfg": cfg,
         "campaign_id": "campaign",
         "config_hash": "config",
         "campaign_root": campaign_root,
         "runs_dir": runs_dir,
-        "scenarios": [{"name": "fixture", "id": "fixture", "repeats": 2}],
+        "scenarios": [scenario],
     }
 
     verdicts = campaign_module._emit_resume_plan_preflight(**kwargs)

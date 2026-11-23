@@ -1564,7 +1564,7 @@ def validate_runtime_smoke_result(  # noqa: C901, PLR0912, PLR0915
                 "checkpoint staging receipt hash",
             )
             try:
-                cfg = load_campaign_config(config_path)
+                cfg = load_campaign_config(config_path, repository_root=resolved_repo)
                 admitted_checkpoint = validate_checkpoint_staging_receipt(
                     cfg,
                     checkpoint_path,
@@ -1931,13 +1931,18 @@ def validate_runtime_smoke_result(  # noqa: C901, PLR0912, PLR0915
         )
     recomputed_integrity: dict[str, Any] | None = None
     try:
+        from robot_sf.benchmark.camera_ready._config import _load_campaign_scenarios  # noqa: PLC0415
+
+        identity_cfg = load_campaign_config(config_path, repository_root=resolved_repo)
+        identity_scenarios = _load_campaign_scenarios(identity_cfg, repository_root=resolved_repo)
         recomputed_integrity = validate_campaign_integrity(
             integrity_entries,
-            scenarios=[{"id": scenario_id, "seeds": [seed]}],
+            scenarios=identity_scenarios,
             resolved_seeds=[seed],
             campaign_root=campaign_root,
             campaign_manifest={"git": {"commit": expected_source_commit}},
             config_root=resolved_repo,
+            cfg=identity_cfg,
         )
     except (OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
         problems.append(f"runtime smoke raw integrity recomputation failed: {exc}")

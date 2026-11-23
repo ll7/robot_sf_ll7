@@ -518,6 +518,14 @@ Benchmark mode is fail-closed:
 
 Each campaign now stores the exact invocation and timing provenance.
 
+New map-runner rows repeat the complete runtime `config_hash` at the row root,
+`provenance.config_hash`, and `result_provenance.config_hash`. An analysis trace's
+`algorithm_metadata.analysis_trace.config_hash` binds the selected source scenario instead;
+it has a separate hash scope. Admission checks that trace hash against the selected campaign
+input and checks each runtime hash against the full runtime settings. A self-consistent saved
+row cannot substitute its own scenario inputs for the selected campaign. Historical rows are
+not rewritten by this producer change.
+
 Captured fields include:
 
 * exact command used to launch the campaign (`invoked_command`)

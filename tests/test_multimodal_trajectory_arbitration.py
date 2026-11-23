@@ -282,6 +282,23 @@ def _arbitrate(candidates: list[object], forecast: MultimodalPrediction, **kwarg
     )
 
 
+def _evaluate_base(candidates: list[object], forecast: MultimodalPrediction, **kwargs: object):
+    """Run the additive evaluate-once seam against the shared fixture belief."""
+    risk_config = kwargs.pop("risk_config", _risk_config())
+    joined, belief = _join_belief(forecast)
+    route_progress = kwargs.pop("route_progress", None)
+    if route_progress is None:
+        route_progress = {str(_candidate_id(item)): 0.0 for item in candidates}
+    return arb_module.evaluate_multimodal_trajectories_base(
+        candidates,
+        joined,
+        belief=belief,
+        risk_config=risk_config,
+        route_progress=route_progress,
+        **kwargs,
+    )
+
+
 def _candidate_id(candidate: object) -> str:
     """Read a stable candidate identifier from either public candidate form."""
     return str(
@@ -664,6 +681,208 @@ def test_supplied_switch_cost_breaks_last_tie() -> None:
     assert result.selected_candidate_id == "right"
 
 
+def test_base_evaluation_forces_zero_switch_cost_and_normalizes_invalid_records() -> None:
+    """The base seam hides metadata costs and keeps retained failures finite."""
+
+    class _MetadataCostAction(_FixtureCandidateAction):
+        metadata = {**_FixtureCandidateAction.metadata, "switch_cost": 99.0}
+
+    first = _action("first")
+    second = _MetadataCostAction("second", _action("second").waypoints)
+    empty = MultimodalPrediction({}, HORIZON * DT_S, DT_S, timestamp=0.0, metadata={"step": 0})
+    base = _evaluate_base([first, second], empty)
+
+    assert base.status == "selected"
+    assert all(item.switch_cost == 0.0 for item in base.evaluations)
+
+    capped = _evaluate_base(
+        [first, second],
+        empty,
+        arbitration_config=MultimodalArbitrationConfig(max_candidates=1),
+    )
+    assert capped.status == "evaluation_error"
+    assert capped.evaluations
+    assert all(item.switch_cost == 0.0 for item in capped.evaluations)
+    assert all(not item.eligible for item in capped.evaluations)
+    combined = _arbitrate(
+        [first, second], empty, arbitration_config=MultimodalArbitrationConfig(max_candidates=1)
+    )
+    original_keys = {item.candidate_id: item.decision_key for item in combined.evaluations}
+    assert all(item.decision_key == original_keys[item.candidate_id] for item in capped.evaluations)
+    reordered = arb_module.reorder_multimodal_trajectories(
+        capped,
+        [item.candidate_id for item in capped.evaluations],
+        {item.candidate_id: 3.0 for item in capped.evaluations},
+        switch_cost_scale=2.0,
+    )
+    assert reordered.status == "evaluation_error"
+    assert reordered.selected_candidate_id is None
+    assert all(
+        item.decision_key == original_keys[item.candidate_id] for item in reordered.evaluations
+    )
+    assert all(item.switch_cost == 3.0 for item in reordered.evaluations)
+
+
+def test_evaluate_once_then_reorder_does_not_recompute_risk_or_verification(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The post-evaluation seam is pure and does not revisit expensive checks."""
+    calls: list[str] = []
+    original_risk = arb_module.estimate_trajectory_mode_risk
+    original_verify = arb_module.verify_trajectory
+
+    def counted_risk(*args: object, **kwargs: object):
+        calls.append("risk")
+        return original_risk(*args, **kwargs)
+
+    def counted_verify(*args: object, **kwargs: object):
+        calls.append("verify")
+        return original_verify(*args, **kwargs)
+
+    monkeypatch.setattr(arb_module, "estimate_trajectory_mode_risk", counted_risk)
+    monkeypatch.setattr(arb_module, "verify_trajectory", counted_verify)
+    base = _evaluate_base([_action("a"), _action("b")], _forecast(99, (_mode("only", (8.0, 5.0)),)))
+    evaluation_calls = len(calls)
+    assert evaluation_calls > 0
+
+    monkeypatch.setattr(
+        arb_module, "estimate_trajectory_mode_risk", lambda *_a, **_k: pytest.fail("risk rerun")
+    )
+    monkeypatch.setattr(
+        arb_module, "verify_trajectory", lambda *_a, **_k: pytest.fail("verify rerun")
+    )
+    monkeypatch.setattr(
+        arb_module, "_coerce_forecast", lambda *_a, **_k: pytest.fail("forecast rerun")
+    )
+    final = arb_module.reorder_multimodal_trajectories(
+        base,
+        ["b", "a"],
+        {item.candidate_id: float(index) for index, item in enumerate(base.evaluations)},
+        switch_cost_scale=1.0,
+    )
+
+    assert len(calls) == evaluation_calls
+    assert final.candidate_count == 2
+
+
+def test_reorder_filters_exact_ids_preserves_base_identity_and_inputs() -> None:
+    """Filtering is pure and retains the original portfolio identity."""
+    empty = MultimodalPrediction({}, HORIZON * DT_S, DT_S, timestamp=0.0, metadata={"step": 0})
+    base = _evaluate_base([_action("a"), _action("b")], empty)
+    original_evaluations = base.evaluations
+    original_order = base.ordered_candidate_ids
+    final = arb_module.reorder_multimodal_trajectories(
+        base,
+        ["b"],
+        {"a": 4.0, "b": 0.5},
+        switch_cost_scale=2.0,
+    )
+
+    assert tuple(item.candidate_id for item in final.evaluations) == ("b",)
+    assert final.ordered_candidate_ids == ("b",)
+    assert final.candidate_count == 1
+    assert final.candidate_set_id == base.candidate_set_id
+    assert final.evaluations[0].switch_cost == 0.5
+    assert final.evaluations[0].decision_key[-2] == pytest.approx(0.25)
+    assert base.evaluations == original_evaluations
+    assert base.ordered_candidate_ids == original_order
+    assert base.evaluations[1].switch_cost == 0.0
+
+
+def test_reorder_rejects_duplicate_unknown_and_incomplete_cost_inputs() -> None:
+    """Allowed IDs and costs must form strict, known, complete contracts."""
+    empty = MultimodalPrediction({}, HORIZON * DT_S, DT_S, timestamp=0.0, metadata={"step": 0})
+    base = _evaluate_base([_action("a"), _action("b")], empty)
+    complete = {"a": 0.0, "b": 0.0}
+
+    with pytest.raises(ValueError, match="unique"):
+        arb_module.reorder_multimodal_trajectories(
+            base, ["a", "a"], complete, switch_cost_scale=1.0
+        )
+    with pytest.raises(ValueError, match="unknown IDs"):
+        arb_module.reorder_multimodal_trajectories(
+            base, ["missing"], complete, switch_cost_scale=1.0
+        )
+    with pytest.raises(ValueError, match="exactly base evaluation IDs"):
+        arb_module.reorder_multimodal_trajectories(base, ["a"], {"a": 0.0}, switch_cost_scale=1.0)
+    with pytest.raises(ValueError, match="exactly base evaluation IDs"):
+        arb_module.reorder_multimodal_trajectories(
+            base,
+            ["a"],
+            {"a": 0.0, "b": 0.0, "extra": 0.0},
+            switch_cost_scale=1.0,
+        )
+    with pytest.raises(ValueError, match="finite and non-negative"):
+        arb_module.reorder_multimodal_trajectories(
+            base,
+            ["a"],
+            {"a": float("nan"), "b": 0.0},
+            switch_cost_scale=1.0,
+        )
+    with pytest.raises(ValueError, match="finite and positive"):
+        arb_module.reorder_multimodal_trajectories(base, ["a"], complete, switch_cost_scale=0.0)
+
+
+def test_reorder_rejects_switch_cost_scaling_overflow() -> None:
+    """Finite inputs must not create an infinite tie-break decision value."""
+    empty = MultimodalPrediction({}, HORIZON * DT_S, DT_S, timestamp=0.0, metadata={"step": 0})
+    base = _evaluate_base([_action("route")], empty)
+
+    with pytest.raises(ValueError, match="scaled switch cost must be finite"):
+        arb_module.reorder_multimodal_trajectories(
+            base,
+            ["route"],
+            {"route": 1e308},
+            switch_cost_scale=1e-308,
+        )
+
+
+def test_reorder_preserves_fail_closed_non_selected_status() -> None:
+    """Reordering cannot upgrade an invalid base result into a selection."""
+    empty = MultimodalPrediction({}, HORIZON * DT_S, DT_S, timestamp=0.0, metadata={"step": 0})
+    base = _evaluate_base([_action("route")], empty, route_progress={})
+    assert base.status == "invalid_route_context"
+    final = arb_module.reorder_multimodal_trajectories(
+        base, [], {"route": 0.0}, switch_cost_scale=1.0
+    )
+    assert final.status == base.status
+    assert final.selected_candidate_id is None
+    assert final.candidate_count == 0
+
+
+def test_reorder_keeps_safety_prefix_ahead_of_switch_cost() -> None:
+    """A lower switch cost cannot outrank an earlier safety decision field."""
+    empty = MultimodalPrediction({}, HORIZON * DT_S, DT_S, timestamp=0.0, metadata={"step": 0})
+    base = _evaluate_base([_action("safe"), _action("risky")], empty)
+    safe = next(item for item in base.evaluations if item.candidate_id == "safe")
+    risky = next(item for item in base.evaluations if item.candidate_id == "risky")
+    safe = replace(
+        safe,
+        risk_bucket=0,
+        decision_key=(0, 0, 0, 0, *safe.decision_key[4:12], 0.0, "safe"),
+    )
+    risky = replace(
+        risky,
+        risk_bucket=3,
+        decision_key=(0, 0, 0, 3, *risky.decision_key[4:12], 0.0, "risky"),
+    )
+    synthetic = replace(
+        base,
+        selected_candidate_id="safe",
+        ordered_candidate_ids=("safe", "risky"),
+        evaluations=(safe, risky),
+        status="selected",
+    )
+    final = arb_module.reorder_multimodal_trajectories(
+        synthetic,
+        ["safe", "risky"],
+        {"safe": 100.0, "risky": 0.0},
+        switch_cost_scale=1.0,
+    )
+    assert final.selected_candidate_id == "safe"
+    assert final.ordered_candidate_ids == ("safe", "risky")
+
+
 def test_candidate_input_permutation_keeps_stable_order() -> None:
     """Stable candidate IDs make ordering independent of sequence order."""
     empty = MultimodalPrediction({}, HORIZON * DT_S, DT_S, timestamp=0.0, metadata={"step": 0})
@@ -740,6 +959,13 @@ def test_invalid_forecast_grid_returns_explicit_no_selection() -> None:
     assert result.status == "invalid_forecast"
     assert result.selected_candidate_id is None
     assert result.no_selection_reason
+
+    base = arb_module.evaluate_multimodal_trajectories_base(
+        [_action("invalid")], invalid, belief=_empty_belief(), risk_config=_risk_config()
+    )
+    reordered = arb_module.reorder_multimodal_trajectories(base, [], {}, switch_cost_scale=1.0)
+    assert reordered.status == "invalid_forecast"
+    assert reordered.selected_candidate_id is None
 
 
 def test_missing_mode_uncertainty_fails_closed() -> None:
@@ -1123,3 +1349,40 @@ def test_fallback_brake_without_predicates_is_still_hard_invalid(
     assert any(
         "fallback_brake without violated predicates" in reason for reason in evaluation.hard_reasons
     )
+
+
+@pytest.mark.parametrize(
+    ("allowed", "costs", "scale", "error", "message"),
+    [
+        ("a", {"a": 0.0}, 1.0, TypeError, "iterable of candidate IDs"),
+        (None, {"a": 0.0}, 1.0, TypeError, "must be iterable"),
+        ([None], {"a": 0.0}, 1.0, ValueError, "non-empty strings"),
+        (["a"], [], 1.0, TypeError, "must be a mapping"),
+        (["a"], {None: 0.0}, 1.0, ValueError, "non-empty candidate ID strings"),
+        (["a"], {"a": True}, 1.0, ValueError, "finite and non-negative"),
+        (["a"], {"a": "invalid"}, 1.0, ValueError, "finite and non-negative"),
+        (["a"], {"a": 0.0}, True, ValueError, "finite and positive"),
+        (["a"], {"a": 0.0}, "invalid", ValueError, "finite and positive"),
+    ],
+)
+def test_reorder_rejects_malformed_identity_and_numeric_inputs(
+    allowed, costs, scale, error, message
+) -> None:
+    """Public reorder rejects malformed caller values before creating a decision key."""
+    empty = MultimodalPrediction({}, HORIZON * DT_S, DT_S, timestamp=0.0, metadata={"step": 0})
+    base = _evaluate_base([_action("a")], empty)
+    with pytest.raises(error, match=message):
+        arb_module.reorder_multimodal_trajectories(base, allowed, costs, switch_cost_scale=scale)
+
+
+def test_reorder_empty_allowed_set_cannot_retain_a_selected_command() -> None:
+    """Filtering every safe command out removes the prior selection and gives its reason."""
+    empty = MultimodalPrediction({}, HORIZON * DT_S, DT_S, timestamp=0.0, metadata={"step": 0})
+    base = _evaluate_base([_action("a")], empty)
+    assert base.status == "selected"
+    final = arb_module.reorder_multimodal_trajectories(base, [], {"a": 0.0}, switch_cost_scale=1.0)
+    assert final.status == "no_candidates"
+    assert final.selected_candidate_id is None
+    assert final.no_selection_reason == "allowed candidate set is empty"
+    assert final.evaluations == ()
+    assert base.selected_candidate_id == "a"

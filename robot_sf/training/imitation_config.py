@@ -58,6 +58,9 @@ class ExpertTrainingConfig:
     snqi_weights_path: Path | None = None
     snqi_baseline_path: Path | None = None
     randomize_seeds: bool = False
+    training_seed_range: tuple[int, int] | None = None
+    training_master_seed: int | None = None
+    development_evaluation_seeds: tuple[int, ...] = ()
     scenario_id: str | None = None
     feature_extractor: str = "default"
     feature_extractor_kwargs: dict[str, object] = field(default_factory=dict)
@@ -85,6 +88,9 @@ class ExpertTrainingConfig:
         scenario_config: Path,
         seeds: tuple[int, ...] | list[int],
         randomize_seeds: bool = False,
+        training_seed_range: tuple[int, int] | None = None,
+        training_master_seed: int | None = None,
+        development_evaluation_seeds: tuple[int, ...] = (),
         total_timesteps: int,
         policy_id: str,
         convergence: ConvergenceCriteria,
@@ -130,6 +136,9 @@ class ExpertTrainingConfig:
             scenario_config=scenario_config,
             seeds=ensure_seed_tuple(seeds),
             randomize_seeds=bool(randomize_seeds),
+            training_seed_range=training_seed_range,
+            training_master_seed=training_master_seed,
+            development_evaluation_seeds=tuple(development_evaluation_seeds),
             total_timesteps=total_timesteps,
             policy_id=policy_id,
             convergence=convergence,

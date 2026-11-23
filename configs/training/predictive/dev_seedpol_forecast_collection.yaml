@@ -1,0 +1,101 @@
+# Train010 scientific settings; fresh episode identities from one logged master.
+collection_entrypoint: scripts/training/collect_predictive_hardcase_data.py
+base_matrix: configs/scenarios/classic_interactions.yaml
+hardcase_matrix: configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml
+hardcase_names_contain:
+- cross_trap
+- doorway
+- bottleneck
+base_max_steps: 240
+hardcase_max_steps: 260
+max_agents: 24
+forecast_steps: 8
+max_speed: 1.2
+hardcase_repeat: 3
+supervision_schema: predictive_planner_dataset_v2_identity
+allow_legacy_supervision: false
+training:
+  epochs: 220
+  batch_size: 128
+  lr: 0.0002
+  weight_decay: 1.0e-05
+  val_split: 0.2
+  seed: 1008
+  hidden_dim: 192
+  message_passing_steps: 3
+  num_workers: 2
+  pin_memory: true
+  max_val_ade: 1.0
+  max_val_fde: 1.8
+  proxy_every_epochs: 0
+models:
+  forecast: forecast_identity_dev_seedpol_20261012
+  prediction: prediction_identity_dev_seedpol_20261012
+training_seed_range:
+- 100000
+- 199999
+training_master_seed: 20261012
+selection_seeds:
+- 1031
+- 1032
+- 1033
+- 1034
+- 1035
+- 1036
+- 1037
+- 1038
+- 1039
+- 1040
+- 1041
+- 1042
+- 1043
+- 1044
+- 1045
+- 1046
+- 1047
+- 1048
+- 1049
+- 1050
+- 1051
+- 1052
+- 1053
+- 1054
+- 1055
+- 1056
+- 1057
+- 1058
+- 1059
+- 1060
+evaluation_seeds:
+- 1101
+- 1102
+- 1103
+- 1104
+- 1105
+- 1106
+- 1107
+- 1108
+- 1109
+- 1110
+- 1111
+- 1112
+- 1113
+- 1114
+- 1115
+- 1116
+- 1117
+- 1118
+- 1119
+- 1120
+- 1121
+- 1122
+- 1123
+- 1124
+- 1125
+- 1126
+- 1127
+- 1128
+- 1129
+- 1130
+collection_episodes_per_scenario: 15
+consumer: forecast

@@ -93,8 +93,12 @@ def _coerce_identifier(value: Any) -> int | str | None:
 
 
 def _episode_identity(record: Mapping[str, Any]) -> tuple[str, int | str | None]:
-    """Return the stable logical identity used by aggregate-integrity checks."""
-    return str(record.get("scenario_id", "")).strip(), _coerce_identifier(record.get("seed"))
+    """Return a logical identity only for exact integer saved seeds.
+
+    Invalid seed types remain unavailable rather than aliasing an expected slot.
+    """
+    seed = record.get("seed")
+    return str(record.get("scenario_id", "")).strip(), seed if type(seed) is int else None
 
 
 def _episode_identity_sort_key(

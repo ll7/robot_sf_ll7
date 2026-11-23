@@ -127,12 +127,12 @@ class TestEpisodeIdentity:
     def test_missing_seed_returns_none(self) -> None:
         assert _episode_identity({"scenario_id": "corridor"}) == ("corridor", None)
 
-    def test_string_seed_is_coerced_to_string(self) -> None:
-        # A non-numeric seed string stays a string in the identity tuple.
-        assert _episode_identity({"seed": "abc"}) == ("", "abc")
+    def test_string_seed_is_unavailable(self) -> None:
+        # Malformed saved seeds cannot form an admitted logical identity.
+        assert _episode_identity({"seed": "abc"}) == ("", None)
 
-    def test_numeric_string_seed_is_coerced_to_int(self) -> None:
-        assert _episode_identity({"scenario_id": "s1", "seed": "9"}) == ("s1", 9)
+    def test_numeric_string_seed_is_unavailable(self) -> None:
+        assert _episode_identity({"scenario_id": "s1", "seed": "1001"}) == ("s1", None)
 
     def test_none_scenario_id_becomes_string_none(self) -> None:
         # A present-but-None scenario_id is stringified rather than defaulted;

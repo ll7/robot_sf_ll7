@@ -34,6 +34,7 @@ from robot_sf.benchmark.artifact_publication import (
     list_publication_files,
     measure_artifact_size_ranges,
 )
+from tests._publication_fixtures import publication_campaign, stage_publication_custody
 
 
 def _write(path: Path, payload: str) -> None:
@@ -49,11 +50,17 @@ def _make_run(run_dir: Path, *, with_video: bool = True) -> None:
     )
     _write(
         run_dir / "run_meta.json",
-        json.dumps({"repo": {"remote": "git@github.com:ll7/robot_sf_ll7.git", "commit": "abc123"}}),
+        json.dumps(
+            {
+                "repo": {"remote": "git@github.com:ll7/robot_sf_ll7.git", "commit": "abc123"},
+                "snqi_score_version": "SNQI-v2",
+            }
+        ),
     )
     _write(run_dir / "episodes" / "episodes.jsonl", '{"episode_id":"ep-1"}\n')
     _write(run_dir / "aggregates" / "summary.json", '{"success_rate":1.0}\n')
     _write(run_dir / "reports" / "report.md", "# Report\n")
+    stage_publication_custody(run_dir)
     _write(run_dir / "plots" / "path_efficiency.pdf", "fake-pdf")
     if with_video:
         _write(run_dir / "videos" / "episode_001.mp4", "fake-video")
@@ -339,6 +346,7 @@ def test_export_bundle_matrix_path_is_repo_relative_from_any_cwd(
             {
                 "repo": {"remote": "git@github.com:ll7/robot_sf_ll7.git", "commit": "abc123"},
                 "matrix_path": matrix_path,
+                "snqi_score_version": "SNQI-v2",
             }
         ),
     )
@@ -361,7 +369,7 @@ def test_export_camera_campaign_bundle_requires_preflight_artifacts(tmp_path: Pa
     """Camera-ready bundle export must fail when required preflight files are missing."""
     run_dir = tmp_path / "benchmarks" / "camera_campaign_missing_preflight"
     _make_run(run_dir, with_video=False)
-    _write(run_dir / "campaign_manifest.json", json.dumps({"schema_version": "camera-ready"}))
+    _write(run_dir / "campaign_manifest.json", json.dumps(publication_campaign(run_dir)))
 
     with pytest.raises(ValueError, match="missing required preflight artifacts"):
         export_publication_bundle(
@@ -376,7 +384,7 @@ def test_export_camera_campaign_bundle_includes_preflight_seed_policy(tmp_path: 
     """Camera-ready bundle manifest should carry preflight paths and seed policy provenance."""
     run_dir = tmp_path / "benchmarks" / "camera_campaign_ok"
     _make_run(run_dir, with_video=False)
-    _write(run_dir / "campaign_manifest.json", json.dumps({"schema_version": "camera-ready"}))
+    _write(run_dir / "campaign_manifest.json", json.dumps(publication_campaign(run_dir)))
     _write(run_dir / "preflight" / "validate_config.json", "{}")
     _write(run_dir / "preflight" / "preview_scenarios.json", "{}")
     _write(
@@ -385,6 +393,7 @@ def test_export_camera_campaign_bundle_includes_preflight_seed_policy(tmp_path: 
             {
                 "repo": {"remote": "git@github.com:ll7/robot_sf_ll7.git", "commit": "abc123"},
                 "matrix_path": "configs/scenarios/classic_interactions.yaml",
+                "snqi_score_version": "SNQI-v2",
                 "seed_policy": {
                     "mode": "fixed-list",
                     "seeds": [1, 2],
@@ -668,7 +677,8 @@ def test_release_bundle_stages_cold_verification_metadata_and_raw_policy(tmp_pat
                 "repo": {
                     "remote": "git@github.com:ll7/robot_sf_ll7.git",
                     "commit": "a" * 40,
-                }
+                },
+                "snqi_score_version": "SNQI-v2",
             }
         ),
     )

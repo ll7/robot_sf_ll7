@@ -8,6 +8,8 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from tests._publication_fixtures import stage_publication_custody
+
 if TYPE_CHECKING:
     from pathlib import Path
 
@@ -31,10 +33,16 @@ def _make_valid_run(run_dir: Path) -> None:
     _write(run_dir / "manifest.json", json.dumps({"git_hash": "abc123"}))
     _write(
         run_dir / "run_meta.json",
-        json.dumps({"repo": {"remote": "git@github.com:ll7/robot_sf_ll7.git", "commit": "abc123"}}),
+        json.dumps(
+            {
+                "repo": {"remote": "git@github.com:ll7/robot_sf_ll7.git", "commit": "abc123"},
+                "snqi_score_version": "SNQI-v2",
+            }
+        ),
     )
     _write(run_dir / "episodes" / "episodes.jsonl", '{"episode_id":"ep-1"}\n')
     _write(run_dir / "reports" / "report.md", "# Report\n")
+    stage_publication_custody(run_dir)
 
 
 def _seed_release_bundle(bundle_dir: Path, *, publication_commit: str = "abc123") -> None:
@@ -566,7 +574,7 @@ def test_preflight_fails_on_episode_row_that_is_not_an_object(tmp_path: Path) ->
     """An episode row that is valid JSON but not an object must be rejected."""
     bundle_dir = _build_bundle(tmp_path)
     _episodes_path(bundle_dir).write_text("[1, 2]\n", encoding="utf-8")
-    with pytest.raises(PublicationPreflightError, match="episode row must be an object"):
+    with pytest.raises(PublicationPreflightError, match="expected a JSON object"):
         verify_publication_bundle_preflight(bundle_dir)
 
 

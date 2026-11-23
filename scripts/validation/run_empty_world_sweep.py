@@ -36,6 +36,8 @@ from typing import Any
 
 import yaml
 
+from robot_sf.benchmark.footprint_metrics import FOOTPRINT_MARKER, FOOTPRINT_SCHEMA
+
 DEV_SEED_MIN = 1001
 DEV_SEED_MAX = 1030
 DEFAULT_SEEDS = (1001, 1002)
@@ -188,7 +190,7 @@ def _write_authored_horizon_schedule(
     payload["scenario_horizons_sha256"] = hashlib.sha256(schedule_out.read_bytes()).hexdigest()
 
 
-def build_derived_inputs(  # noqa: C901
+def build_derived_inputs(  # noqa: C901, PLR0915
     suite: str,
     *,
     seeds: list[int],
@@ -197,6 +199,7 @@ def build_derived_inputs(  # noqa: C901
     workers: int,
     out_dir: Path,
     step_trace: bool,
+    footprint_metrics: bool = False,
 ) -> tuple[Path, list[dict[str, Any]]]:
     """Write the derived scenario matrix and campaign config for ``suite``.
 
@@ -234,6 +237,8 @@ def build_derived_inputs(  # noqa: C901
         if scenarios_filter and item["name"] not in scenarios_filter:
             continue
         cleaned = remove_pedestrians(item, seeds)
+        if footprint_metrics:
+            cleaned.setdefault("metadata", {})[FOOTPRINT_MARKER] = FOOTPRINT_SCHEMA
         residue = pedestrian_residue(cleaned)
         if residue:
             raise RuntimeError(f"{cleaned['name']}: pedestrian residue {residue}")
@@ -701,6 +706,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--check-only", action="store_true", help="Derive inputs, verify, stop")
     parser.add_argument("--no-step-trace", action="store_true")
+    parser.add_argument(
+        "--footprint-metrics",
+        action="store_true",
+        help="Enable the separate robot-sf-footprint.v1 diagnostic block",
+    )
     parser.add_argument("--arm-isolation", choices=("in_process", "subprocess"), default=None)
     args = parser.parse_args(argv)
 
@@ -731,6 +741,7 @@ def main(argv: list[str] | None = None) -> int:
             workers=args.workers,
             out_dir=out_dir,
             step_trace=not args.no_step_trace,
+            footprint_metrics=args.footprint_metrics,
         )
         cfg = load_campaign_config(cfg_path)
         if args.summarize_only:

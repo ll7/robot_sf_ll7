@@ -1,0 +1,86 @@
+{
+  "schema_version": "predictive-identity-dev-proof.v1",
+  "claim_boundary": "Collection identity diagnostics only; no model training, navigation evaluation or admission claim.",
+  "producer_revision": "e52ffbb70e030c9a589ea04c10bfe2d06c4fe226",
+  "python": "3.13.14",
+  "numpy": "2.4.6",
+  "seeds": [
+    1001,
+    1002,
+    1003
+  ],
+  "artifacts": [
+    {
+      "artifact_path": "tests/fixtures/predictive_sample_identity/README.md",
+      "sha256": "c26942e123d9eb68d2718c6e85d6b888b16e800f293696b5e6242e51e4b45fa5"
+    },
+    {
+      "artifact_path": "tests/fixtures/predictive_sample_identity/base-regression.txt",
+      "sha256": "d4b462981854f0eb9b6d574ba8c93a90006aa3edcd3b52bb86d9a65ed8139d4e"
+    },
+    {
+      "artifact_path": "tests/fixtures/predictive_sample_identity/base-source-frames.json",
+      "sha256": "fb3d2b10bed06b0942ee7ae02f15fef101ff149f74aa538b73c44237cce8e65a"
+    },
+    {
+      "artifact_path": "tests/fixtures/predictive_sample_identity/base.json",
+      "sha256": "ca10f9185b68ff91bb4fed4e5fbb66d9ba0aac8008ca666cc4ae317fa28e87ec"
+    },
+    {
+      "artifact_path": "tests/fixtures/predictive_sample_identity/base.npz",
+      "sha256": "faae717138101e56ab91cf537c2f55b4f85b35b3ba003198e00060bbdedeef90"
+    },
+    {
+      "artifact_path": "tests/fixtures/predictive_sample_identity/base.npz.manifest.json",
+      "sha256": "7eba95316b0af851a0099d8c606937b2be93fdc22356f2b6ca13b67cced8f6cc"
+    },
+    {
+      "artifact_path": "tests/fixtures/predictive_sample_identity/hardcase-source-frames.json",
+      "sha256": "6c88a56c50389449b3dd48ef220270c415e3bca8035fca969e7448337c2dea2d"
+    },
+    {
+      "artifact_path": "tests/fixtures/predictive_sample_identity/hardcase.json",
+      "sha256": "2ab14447c395c5e84e67eb96447700aeb8b900a07196f1c71529e24abb1dbf87"
+    },
+    {
+      "artifact_path": "tests/fixtures/predictive_sample_identity/hardcase.npz",
+      "sha256": "7e3c17712116973122d358ca3db4d781d34796d018235721088382539a30f248"
+    },
+    {
+      "artifact_path": "tests/fixtures/predictive_sample_identity/hardcase.npz.manifest.json",
+      "sha256": "8f38ab98f7085c1950b6ebf24318e591621b7acd4656d8d7411757221a95a1db"
+    },
+    {
+      "artifact_path": "tests/fixtures/predictive_sample_identity/reproduce.py",
+      "sha256": "c666ee7261ed301c98e72fe7efeb13bee034d248d1789cfdeb9f2d436cc85851"
+    },
+    {
+      "artifact_path": "tests/fixtures/predictive_sample_identity/scenario.yaml",
+      "sha256": "6ea008342cc020ac756ad2ecb41344a3184437523a2c4ae889ea6967621c12e8"
+    },
+    {
+      "artifact_path": "tests/fixtures/predictive_sample_identity/seeds.yaml",
+      "sha256": "aa2bfd681c2000deef35fc40f24851fbcb0bff38c458c6f13e56279e1466971b"
+    },
+    {
+      "artifact_path": "tests/fixtures/predictive_sample_identity/verification.json",
+      "sha256": "5117a4aeb9132d35e83293586d5837c9dca36827736b75984e2102818cf52666"
+    },
+    {
+      "artifact_path": "tests/fixtures/predictive_sample_identity/producer_sources/robot_sf/training/predictive_supervision.py.txt",
+      "sha256": "6ff6384a2cf06c0c0f74760c157587782d863fd83cc2cfe42c7840431e0029cb"
+    },
+    {
+      "artifact_path": "tests/fixtures/predictive_sample_identity/producer_sources/scripts/training/collect_predictive_planner_data.py.txt",
+      "sha256": "2c7fe385ba7f08601801ea42f7b06b2662ccbf6ee5891ed401d5802154c8a8bc"
+    },
+    {
+      "artifact_path": "tests/fixtures/predictive_sample_identity/producer_sources/scripts/training/collect_predictive_hardcase_data.py.txt",
+      "sha256": "263d201b1aa91993373a504ffc7959d8171b33692d33e6d8095656e62162df63"
+    },
+    {
+      "artifact_path": "tests/fixtures/predictive_sample_identity/producer_sources/scripts/training/build_predictive_mixed_dataset.py.txt",
+      "sha256": "19c5094091dc90cf42cf26782ea1655ceaa49fca9f76a928d10d8b191d750838"
+    }
+  ]
+}

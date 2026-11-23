@@ -522,22 +522,31 @@ def _build_random_seed_manifest(
     *,
     scenario_matrix: Path,
     seeds_per_scenario: int,
-    random_seed_base: int,
+    master_seed: int,
     output_path: Path,
 ) -> Path:
     """Create random seed manifest over all scenarios for base data collection."""
     if seeds_per_scenario < 1:
         raise ValueError("base_collection.seeds_per_scenario must be >= 1")
+    if not 100000 <= master_seed <= 199999:
+        raise ValueError("base_collection.master_seed must use the training seed pool")
     scenarios = load_scenarios(scenario_matrix)
+    scenario_ids = [
+        str(scenario.get("name") or scenario.get("scenario_id") or scenario.get("id"))
+        for scenario in scenarios
+        if scenario.get("name") or scenario.get("scenario_id") or scenario.get("id")
+    ]
+    if len(set(scenario_ids)) != len(scenario_ids):
+        raise ValueError("Duplicate scenario identities in training seed recipe")
+    count = len(scenario_ids) * seeds_per_scenario
+    if count > 100000:
+        raise ValueError("Training seed recipe exceeds the distinct training seed pool")
+    seeds = np.random.default_rng(master_seed).choice(100000, size=count, replace=False) + 100000
     manifest: dict[str, list[int]] = {}
-    for idx, scenario in enumerate(scenarios):
-        scenario_id = str(
-            scenario.get("name") or scenario.get("scenario_id") or scenario.get("id") or "unknown"
-        )
-        if scenario_id == "unknown":
-            continue
-        base = int(random_seed_base + (idx * 100_000))
-        manifest[scenario_id] = [base + i for i in range(seeds_per_scenario)]
+    for idx, scenario_id in enumerate(scenario_ids):
+        manifest[scenario_id] = seeds[
+            idx * seeds_per_scenario : (idx + 1) * seeds_per_scenario
+        ].tolist()
     if not manifest:
         raise RuntimeError(f"Could not build random seed manifest from {scenario_matrix}")
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -647,7 +656,10 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         base=base_dir,
     )
     hard_seed_manifest = _resolve(
-        scenario_cfg.get("hard_seed_manifest", "configs/benchmarks/predictive_hard_seeds_v1.yaml"),
+        scenario_cfg.get(
+            "hard_seed_manifest",
+            _REPO_ROOT / "configs/training/predictive/predictive_development_seeds_v1.yaml",
+        ),
         base=base_dir,
     )
     planner_grid = _resolve(
@@ -696,6 +708,13 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
             f"base_collection/model_family={model_family!r} "
             f"hardcase_collection.model_family={hardcase_model_family!r}"
         )
+    hardcase_seed_manifest = _resolve(
+        hardcase_cfg.get(
+            "seed_manifest",
+            _REPO_ROOT / "configs/training/predictive/predictive_hardcase_training_seeds_v1.yaml",
+        ),
+        base=base_dir,
+    )
     base_manifest_cfg = base_collection.get("seed_manifest")
     if base_manifest_cfg:
         base_manifest = _resolve(base_manifest_cfg, base=base_dir)
@@ -709,7 +728,7 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         _build_random_seed_manifest(
             scenario_matrix=scenario_matrix,
             seeds_per_scenario=int(base_collection.get("seeds_per_scenario", 4)),
-            random_seed_base=int(base_collection.get("random_seed_base", 11_000)),
+            master_seed=int(base_collection.get("master_seed", 100001)),
             output_path=base_manifest,
         )
         base_manifest_generated = True
@@ -723,6 +742,7 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
             str(scenario_matrix),
             "--seed-manifest",
             str(base_manifest),
+            "--training-seeds-only",
             "--max-steps",
             str(int(base_collection.get("max_steps", 200))),
             "--max-agents",
@@ -750,6 +770,9 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         extra={
             "seed_manifest": str(base_manifest),
             "seed_manifest_generated": base_manifest_generated,
+            "master_seed": int(base_collection.get("master_seed", 100001))
+            if base_manifest_generated
+            else None,
             "ego_conditioning": bool(base_collection.get("ego_conditioning", False)),
             "model_family": model_family,
         },
@@ -773,7 +796,8 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
             "--scenario-matrix",
             str(scenario_matrix),
             "--seed-manifest",
-            str(hard_seed_manifest),
+            str(hardcase_seed_manifest),
+            "--training-seeds-only",
             "--max-steps",
             str(int(hardcase_cfg.get("max_steps", 220))),
             "--max-agents",
@@ -799,7 +823,10 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         config_hash=config_hash,
         git_commit=git_commit,
         extra={
-            "seed_manifest": str(hard_seed_manifest),
+            "seed_manifest": str(hardcase_seed_manifest),
+            "master_seed": int(hardcase_cfg["master_seed"])
+            if "master_seed" in hardcase_cfg
+            else (None if hardcase_cfg.get("seed_manifest") else 100002),
             "ego_conditioning": bool(hardcase_cfg.get("ego_conditioning", False)),
             "model_family": hardcase_model_family,
         },
@@ -1154,6 +1181,7 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         "base_seed_manifest": str(base_manifest),
         "base_seed_manifest_generated": base_manifest_generated,
         "hard_seed_manifest": str(hard_seed_manifest),
+        "hardcase_training_seed_manifest": str(hardcase_seed_manifest),
         "planner_grid": str(planner_grid),
         "model_family": model_family,
         "producer_metadata_preflight_report": str(paths.producer_preflight_report),

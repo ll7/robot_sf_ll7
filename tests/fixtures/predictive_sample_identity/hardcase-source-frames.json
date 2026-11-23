@@ -1,0 +1,686 @@
+[
+  {
+    "episode_id": "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-0",
+    "step": 0,
+    "actors_world": {
+      "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-0:simulator-slot-0": [
+        19.768735151282037,
+        18.389529116077306
+      ],
+      "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-0:simulator-slot-1": [
+        19.64250904180415,
+        20.76943084555095
+      ]
+    },
+    "robot_position": [
+      20.68006706237793,
+      29.5452938079834
+    ],
+    "robot_heading": -1.575972080230713
+  },
+  {
+    "episode_id": "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-0",
+    "step": 1,
+    "actors_world": {
+      "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-0:simulator-slot-0": [
+        19.77140301038196,
+        18.442780567535678
+      ],
+      "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-0:simulator-slot-1": [
+        19.64774061310564,
+        20.822301097627225
+      ]
+    },
+    "robot_position": [
+      20.680036544799805,
+      29.540294647216797
+    ],
+    "robot_heading": -1.5776383876800537
+  },
+  {
+    "episode_id": "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-0",
+    "step": 2,
+    "actors_world": {
+      "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-0:simulator-slot-0": [
+        19.775216496416036,
+        18.498627620376062
+      ],
+      "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-0:simulator-slot-1": [
+        19.655131437911677,
+        20.87751177286087
+      ]
+    },
+    "robot_position": [
+      20.679906845092773,
+      29.52529525756836
+    ],
+    "robot_heading": -1.58137047290802
+  },
+  {
+    "episode_id": "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-0",
+    "step": 3,
+    "actors_world": {
+      "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-0:simulator-slot-0": [
+        19.779909039060342,
+        18.556534502808162
+      ],
+      "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-0:simulator-slot-1": [
+        19.664175457138683,
+        20.934589021716164
+      ]
+    },
+    "robot_position": [
+      20.67958641052246,
+      29.50029754638672
+    ],
+    "robot_heading": -1.585883617401123
+  },
+  {
+    "episode_id": "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-0",
+    "step": 4,
+    "actors_world": {
+      "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-0:simulator-slot-0": [
+        19.785258934635706,
+        18.616073178287724
+      ],
+      "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-0:simulator-slot-1": [
+        19.674449982904797,
+        20.99315263727698
+      ]
+    },
+    "robot_position": [
+      20.678966522216797,
+      29.465303421020508
+    ],
+    "robot_heading": -1.5911383628845215
+  },
+  {
+    "episode_id": "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-0",
+    "step": 5,
+    "actors_world": {
+      "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-0:simulator-slot-0": [
+        19.791082532970215,
+        18.676901822460874
+      ],
+      "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-0:simulator-slot-1": [
+        19.68560372499441,
+        21.052897417642214
+      ]
+    },
+    "robot_position": [
+      20.67791748046875,
+      29.42031478881836
+    ],
+    "robot_heading": -1.5970885753631592
+  },
+  {
+    "episode_id": "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-0",
+    "step": 6,
+    "actors_world": {
+      "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-0:simulator-slot-0": [
+        19.797228406598602,
+        18.73874755875578
+      ],
+      "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-0:simulator-slot-1": [
+        19.69734640229141,
+        21.113578271097754
+      ]
+    },
+    "robot_position": [
+      20.67629051208496,
+      29.365339279174805
+    ],
+    "robot_heading": -1.6036816835403442
+  },
+  {
+    "episode_id": "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-0",
+    "step": 7,
+    "actors_world": {
+      "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-0:simulator-slot-0": [
+        19.80357236652035,
+        18.801392620778
+      ],
+      "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-0:simulator-slot-1": [
+        19.709439728072116,
+        21.174998303062726
+      ]
+    },
+    "robot_position": [
+      20.673919677734375,
+      29.300382614135742
+    ],
+    "robot_heading": -1.610858678817749
+  },
+  {
+    "episode_id": "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-0",
+    "step": 8,
+    "actors_world": {
+      "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-0:simulator-slot-0": [
+        19.810013206555134,
+        18.864663270047608
+      ],
+      "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-0:simulator-slot-1": [
+        19.721689595305747,
+        21.23699928019209
+      ]
+    },
+    "robot_position": [
+      20.67062759399414,
+      29.225454330444336
+    ],
+    "robot_heading": -1.618554949760437
+  },
+  {
+    "episode_id": "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-0",
+    "step": 9,
+    "actors_world": {
+      "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-0:simulator-slot-0": [
+        19.816469074023992,
+        18.9284209270555
+      ],
+      "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-0:simulator-slot-1": [
+        19.73393931453895,
+        21.29945399140937
+      ]
+    },
+    "robot_position": [
+      20.666223526000977,
+      29.140567779541016
+    ],
+    "robot_heading": -1.626700520515442
+  },
+  {
+    "episode_id": "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-0",
+    "step": 10,
+    "actors_world": {
+      "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-0:simulator-slot-0": [
+        19.822874378228,
+        18.99255507841017
+      ],
+      "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-0:simulator-slot-1": [
+        19.74606377641274,
+        21.362260124242816
+      ]
+    },
+    "robot_position": [
+      20.660511016845703,
+      29.045740127563477
+    ],
+    "robot_heading": -1.6352204084396362
+  },
+  {
+    "episode_id": "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-0",
+    "step": 11,
+    "actors_world": {
+      "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-0:simulator-slot-0": [
+        19.829177160194508,
+        19.056977607772343
+      ],
+      "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-0:simulator-slot-1": [
+        19.757964425977327,
+        21.42533535288316
+      ]
+    },
+    "robot_position": [
+      20.653289794921875,
+      28.940988540649414
+    ],
+    "robot_heading": -1.6440351009368896
+  },
+  {
+    "episode_id": "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-1",
+    "step": 0,
+    "actors_world": {
+      "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-1:simulator-slot-0": [
+        19.890841794414452,
+        16.374775236926133
+      ],
+      "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-1:simulator-slot-1": [
+        19.78394746438725,
+        13.895388002766564
+      ]
+    },
+    "robot_position": [
+      21.389041900634766,
+      30.18511199951172
+    ],
+    "robot_heading": -1.575972080230713
+  },
+  {
+    "episode_id": "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-1",
+    "step": 1,
+    "actors_world": {
+      "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-1:simulator-slot-0": [
+        19.891712754786028,
+        16.428817825744503
+      ],
+      "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-1:simulator-slot-1": [
+        19.786347073168606,
+        13.951201143947406
+      ]
+    },
+    "robot_position": [
+      21.389009475708008,
+      30.180540084838867
+    ],
+    "robot_heading": -1.579710602760315
+  },
+  {
+    "episode_id": "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-1",
+    "step": 2,
+    "actors_world": {
+      "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-1:simulator-slot-0": [
+        19.892886621592254,
+        16.486084253015303
+      ],
+      "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-1:simulator-slot-1": [
+        19.790019533476475,
+        14.011616249512997
+      ]
+    },
+    "robot_position": [
+      21.388824462890625,
+      30.166397094726562
+    ],
+    "robot_heading": -1.5879487991333008
+  },
+  {
+    "episode_id": "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-1",
+    "step": 3,
+    "actors_world": {
+      "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-1:simulator-slot-0": [
+        19.894282491618263,
+        16.545916165992548
+      ],
+      "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-1:simulator-slot-1": [
+        19.794662316471555,
+        14.075654079237866
+      ]
+    },
+    "robot_position": [
+      21.38829231262207,
+      30.14225959777832
+    ],
+    "robot_heading": -1.5976693630218506
+  },
+  {
+    "episode_id": "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-1",
+    "step": 4,
+    "actors_world": {
+      "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-1:simulator-slot-0": [
+        19.89583464736446,
+        16.607785066893637
+      ],
+      "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-1:simulator-slot-1": [
+        19.799856716803117,
+        14.140446194539
+      ]
+    },
+    "robot_position": [
+      21.38718605041504,
+      30.10813331604004
+    ],
+    "robot_heading": -1.608785629272461
+  },
+  {
+    "episode_id": "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-1",
+    "step": 5,
+    "actors_world": {
+      "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-1:simulator-slot-0": [
+        19.89750768831384,
+        16.671245029054514
+      ],
+      "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-1:simulator-slot-1": [
+        19.805353216176258,
+        14.205213381405818
+      ]
+    },
+    "robot_position": [
+      21.385234832763672,
+      30.06403160095215
+    ],
+    "robot_heading": -1.6211978197097778
+  },
+  {
+    "episode_id": "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-1",
+    "step": 6,
+    "actors_world": {
+      "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-1:simulator-slot-0": [
+        19.89927341855307,
+        16.735937049183576
+      ],
+      "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-1:simulator-slot-1": [
+        19.811007541552232,
+        14.269966980568665
+      ]
+    },
+    "robot_position": [
+      21.382139205932617,
+      30.00997543334961
+    ],
+    "robot_heading": -1.634793758392334
+  },
+  {
+    "episode_id": "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-1",
+    "step": 7,
+    "actors_world": {
+      "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-1:simulator-slot-0": [
+        19.901086237840634,
+        16.800911764929246
+      ],
+      "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-1:simulator-slot-1": [
+        19.8167135480465,
+        14.334716046120898
+      ]
+    },
+    "robot_position": [
+      21.377567291259766,
+      29.945995330810547
+    ],
+    "robot_heading": -1.6494499444961548
+  },
+  {
+    "episode_id": "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-1",
+    "step": 8,
+    "actors_world": {
+      "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-1:simulator-slot-0": [
+        19.90291607296522,
+        16.86588600369675
+      ],
+      "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-1:simulator-slot-1": [
+        19.822397540511826,
+        14.399467047886539
+      ]
+    },
+    "robot_position": [
+      21.371166229248047,
+      29.872127532958984
+    ],
+    "robot_heading": -1.6650317907333374
+  },
+  {
+    "episode_id": "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-1",
+    "step": 9,
+    "actors_world": {
+      "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-1:simulator-slot-0": [
+        19.904743559462556,
+        16.930860308564924
+      ],
+      "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-1:simulator-slot-1": [
+        19.828006519765417,
+        14.464224590703825
+      ]
+    },
+    "robot_position": [
+      21.362564086914062,
+      29.788423538208008
+    ],
+    "robot_heading": -1.6813949346542358
+  },
+  {
+    "episode_id": "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-1",
+    "step": 10,
+    "actors_world": {
+      "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-1:simulator-slot-0": [
+        19.9065533499775,
+        16.995835108743854
+      ],
+      "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-1:simulator-slot-1": [
+        19.833501857891452,
+        14.528991876109966
+      ]
+    },
+    "robot_position": [
+      21.35137939453125,
+      29.6949462890625
+    ],
+    "robot_heading": -1.698386311531067
+  },
+  {
+    "episode_id": "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-1",
+    "step": 11,
+    "actors_world": {
+      "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-1:simulator-slot-0": [
+        19.908333407810982,
+        17.060810730280778
+      ],
+      "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-1:simulator-slot-1": [
+        19.83885605561265,
+        14.593770982052874
+      ]
+    },
+    "robot_position": [
+      21.33722686767578,
+      29.591768264770508
+    ],
+    "robot_heading": -1.7158448696136475
+  },
+  {
+    "episode_id": "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-2",
+    "step": 0,
+    "actors_world": {
+      "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-2:simulator-slot-0": [
+        20.853737988006323,
+        19.202440799430185
+      ],
+      "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-2:simulator-slot-1": [
+        19.91189059448515,
+        14.409207280587406
+      ]
+    },
+    "robot_position": [
+      19.513771057128906,
+      33.032752990722656
+    ],
+    "robot_heading": -1.575972080230713
+  },
+  {
+    "episode_id": "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-2",
+    "step": 1,
+    "actors_world": {
+      "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-2:simulator-slot-0": [
+        20.838371263968956,
+        19.25534995169697
+      ],
+      "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-2:simulator-slot-1": [
+        19.912491207524802,
+        14.464635117255556
+      ]
+    },
+    "robot_position": [
+      19.51374626159668,
+      33.02775192260742
+    ],
+    "robot_heading": -1.5752832889556885
+  },
+  {
+    "episode_id": "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-2",
+    "step": 2,
+    "actors_world": {
+      "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-2:simulator-slot-0": [
+        20.814864321623883,
+        19.310765288908776
+      ],
+      "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-2:simulator-slot-1": [
+        19.913305782109987,
+        14.524356434320202
+      ]
+    },
+    "robot_position": [
+      19.513694763183594,
+      33.012752532958984
+    ],
+    "robot_heading": -1.5732194185256958
+  },
+  {
+    "episode_id": "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-2",
+    "step": 3,
+    "actors_world": {
+      "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-2:simulator-slot-0": [
+        20.78527996539681,
+        19.368178487517977
+      ],
+      "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-2:simulator-slot-1": [
+        19.91428240794988,
+        14.587458466766597
+      ]
+    },
+    "robot_position": [
+      19.5136775970459,
+      32.98775100708008
+    ],
+    "robot_heading": -1.5697907209396362
+  },
+  {
+    "episode_id": "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-2",
+    "step": 4,
+    "actors_world": {
+      "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-2:simulator-slot-0": [
+        20.752887266536653,
+        19.42453195289993
+      ],
+      "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-2:simulator-slot-1": [
+        19.915365585845333,
+        14.652449440952608
+      ]
+    },
+    "robot_position": [
+      19.513795852661133,
+      32.95275115966797
+    ],
+    "robot_heading": -1.565017580986023
+  },
+  {
+    "episode_id": "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-2",
+    "step": 5,
+    "actors_world": {
+      "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-2:simulator-slot-0": [
+        20.718944936103252,
+        19.479965861338265
+      ],
+      "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-2:simulator-slot-1": [
+        19.91649707866017,
+        14.717439591929583
+      ]
+    },
+    "robot_position": [
+      19.514192581176758,
+      32.907752990722656
+    ],
+    "robot_heading": -1.5589306354522705
+  },
+  {
+    "episode_id": "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-2",
+    "step": 6,
+    "actors_world": {
+      "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-2:simulator-slot-0": [
+        20.684216926234903,
+        19.534910973319075
+      ],
+      "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-2:simulator-slot-1": [
+        19.917655851005716,
+        14.78242926223688
+      ]
+    },
+    "robot_position": [
+      19.515047073364258,
+      32.852760314941406
+    ],
+    "robot_heading": -1.5515705347061157
+  },
+  {
+    "episode_id": "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-2",
+    "step": 7,
+    "actors_world": {
+      "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-2:simulator-slot-0": [
+        20.649262588776164,
+        19.5897123810822
+      ],
+      "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-2:simulator-slot-1": [
+        19.918825509895857,
+        14.847418737523888
+      ]
+    },
+    "robot_position": [
+      19.51657485961914,
+      32.787776947021484
+    ],
+    "robot_heading": -1.5429878234863281
+  },
+  {
+    "episode_id": "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-2",
+    "step": 8,
+    "actors_world": {
+      "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-2:simulator-slot-0": [
+        20.614495422677592,
+        19.644632724867307
+      ],
+      "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-2:simulator-slot-1": [
+        19.919993342144085,
+        14.91240824566051
+      ]
+    },
+    "robot_position": [
+      19.519025802612305,
+      32.71281814575195
+    ],
+    "robot_heading": -1.53324294090271
+  },
+  {
+    "episode_id": "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-2",
+    "step": 9,
+    "actors_world": {
+      "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-2:simulator-slot-0": [
+        20.58022330156405,
+        19.699863347843866
+      ],
+      "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-2:simulator-slot-1": [
+        19.921149563906432,
+        14.977397961394896
+      ]
+    },
+    "robot_position": [
+      19.522676467895508,
+      32.62789535522461
+    ],
+    "robot_heading": -1.522405743598938
+  },
+  {
+    "episode_id": "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-2",
+    "step": 10,
+    "actors_world": {
+      "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-2:simulator-slot-0": [
+        20.546676048606912,
+        19.755537235969538
+      ],
+      "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-2:simulator-slot-1": [
+        19.922286729835072,
+        15.042388013354028
+      ]
+    },
+    "robot_position": [
+      19.527833938598633,
+      32.53303527832031
+    ],
+    "robot_heading": -1.510555386543274
+  },
+  {
+    "episode_id": "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-2",
+    "step": 11,
+    "actors_world": {
+      "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-2:simulator-slot-0": [
+        20.514024585506277,
+        19.811741167837226
+      ],
+      "4f29e5d2d1f746c59811e3b45cfe8151:hardcase-episode-2:simulator-slot-1": [
+        19.923399263006004,
+        15.107378491656188
+      ]
+    },
+    "robot_position": [
+      19.53482437133789,
+      32.42826843261719
+    ],
+    "robot_heading": -1.497780203819275
+  }
+]

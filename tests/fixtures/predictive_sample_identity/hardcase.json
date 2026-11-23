@@ -1,0 +1,40 @@
+{
+  "dataset_schema": "predictive_planner_dataset_v2_identity",
+  "collector_version": "predictive_collectors_identity_v2",
+  "collector_id": "hardcase",
+  "matching_method": "episode_scoped_simulator_source_slot",
+  "identity_source": "socnav_observation_source_indices",
+  "velocity_coordinate_frame": "robot_ego_xy_rotation_only",
+  "pedestrian_id_scope": "reset_episode",
+  "sample_identity_schema": "predictive_sample_identity_v1",
+  "supervision_metadata": {
+    "dataset_schema": "predictive_planner_dataset_v2_identity",
+    "collector_version": "predictive_collectors_identity_v2",
+    "collector_id": "hardcase",
+    "matching_method": "episode_scoped_simulator_source_slot",
+    "identity_source": "socnav_observation_source_indices",
+    "velocity_coordinate_frame": "robot_ego_xy_rotation_only",
+    "pedestrian_id_scope": "reset_episode",
+    "sample_identity_schema": "predictive_sample_identity_v1"
+  },
+  "scenario_matrix": "tests/fixtures/predictive_sample_identity/scenario.yaml",
+  "seed_manifest": "tests/fixtures/predictive_sample_identity/seeds.yaml",
+  "num_scenarios": 3,
+  "num_samples": 24,
+  "active_agent_ratio": 0.125,
+  "active_target_ratio": 0.125,
+  "max_agents": 16,
+  "state_dim": 4,
+  "horizon_steps": 4,
+  "model_family": "predictive_legacy_v1",
+  "feature_schema": {
+    "name": "predictive_legacy_v1",
+    "base_schema": "predictive_legacy_v1",
+    "base_feature_dim": 4,
+    "obstacle_feature_schema": null,
+    "input_dim": 4,
+    "ego_motion_channel_producer": null
+  },
+  "ego_conditioning": false,
+  "output": "tests/fixtures/predictive_sample_identity/hardcase.npz"
+}

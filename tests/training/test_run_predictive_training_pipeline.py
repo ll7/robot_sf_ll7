@@ -55,7 +55,7 @@ def _obstacle_feature_schema_json(base_dim: int = 4) -> str:
 
 def _write_seed_manifest(output_path: Path) -> Path:
     """Write a minimal seed manifest used by pipeline smoke tests."""
-    output_path.write_text("scenario: [1]\n", encoding="utf-8")
+    output_path.write_text("scenario: [100001]\n", encoding="utf-8")
     return output_path
 
 
@@ -223,14 +223,22 @@ def test_build_random_seed_manifest_generates_all_scenarios(monkeypatch, tmp_pat
     manifest_path = pipeline._build_random_seed_manifest(
         scenario_matrix=scenario_matrix,
         seeds_per_scenario=3,
-        random_seed_base=100,
+        master_seed=100001,
         output_path=out_path,
     )
 
     assert manifest_path == out_path
     payload = yaml.safe_load(out_path.read_text(encoding="utf-8"))
-    assert payload["classic_cross_trap_low"] == [100, 101, 102]
-    assert payload["classic_doorway_high"] == [100100, 100101, 100102]
+    values = [seed for seeds in payload.values() for seed in seeds]
+    assert len(values) == 6 and len(set(values)) == 6
+    assert all(100000 <= seed <= 199999 for seed in values)
+    again = pipeline._build_random_seed_manifest(
+        scenario_matrix=scenario_matrix,
+        seeds_per_scenario=3,
+        master_seed=100001,
+        output_path=tmp_path / "again.yaml",
+    )
+    assert yaml.safe_load(again.read_text()) == payload
 
 
 def test_run_capture_json_anchors_subprocess_to_repo_root(monkeypatch) -> None:
@@ -316,7 +324,7 @@ def test_pipeline_collection_commands_pass_ego_conditioning(monkeypatch, tmp_pat
                 },
                 "base_collection": {
                     "seeds_per_scenario": 1,
-                    "random_seed_base": 7,
+                    "master_seed": 100001,
                     "ego_conditioning": True,
                 },
                 "hardcase_collection": {
@@ -392,6 +400,13 @@ def test_pipeline_collection_commands_pass_ego_conditioning(monkeypatch, tmp_pat
         Path(final_summary["dataset_manifests"]["mixed"]).read_text(encoding="utf-8")
     )
     assert mixed_manifest["extra"]["producer_metadata_preflight_status"] == "ok"
+    collectors = [
+        cmd for cmd in invoked if any("collect_predictive_hardcase_data.py" in part for part in cmd)
+    ]
+    assert len(collectors) == 2
+    assert all("--training-seeds-only" in cmd for cmd in collectors)
+    hard_manifest = collectors[1][collectors[1].index("--seed-manifest") + 1]
+    assert hard_manifest != str(tmp_path / "hard.yaml")
 
 
 def test_pipeline_passes_resolved_weighting_spec_to_mixed_builder(
@@ -926,7 +941,7 @@ def test_pipeline_uses_resolved_model_id_and_fails_when_promotion_fails(
     def _fake_build_seed_manifest(**kwargs) -> Path:
         """Write the seed manifest path requested by the promotion pipeline."""
         output_path = Path(kwargs["output_path"])
-        output_path.write_text("scenario: [1]\n", encoding="utf-8")
+        output_path.write_text("scenario: [100001]\n", encoding="utf-8")
         return output_path
 
     monkeypatch.setattr(pipeline, "_build_random_seed_manifest", _fake_build_seed_manifest)
@@ -1057,7 +1072,7 @@ def test_pipeline_uses_committed_base_seed_manifest_without_generating(
         """Capture unexpected seed-manifest generation requests."""
         build_calls.append(kwargs)
         output_path = Path(kwargs["output_path"])
-        output_path.write_text("scenario: [1]\n", encoding="utf-8")
+        output_path.write_text("scenario: [100001]\n", encoding="utf-8")
         return output_path
 
     monkeypatch.setattr(pipeline, "_build_random_seed_manifest", _fake_build_seed_manifest)

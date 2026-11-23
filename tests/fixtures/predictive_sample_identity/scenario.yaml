@@ -1,0 +1,6 @@
+map_search_paths: [../../..]
+scenarios:
+  - name: provenance_dev
+    map_file: maps/svg_maps/classic_bottleneck.svg
+    simulation_config:
+      ped_density: 0.04

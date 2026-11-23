@@ -1,0 +1,12 @@
+# Training-only; generated without replacement from the training pool under master seed 100002.
+classic_cross_trap_high:
+- 162907
+- 167255
+- 160849
+classic_cross_trap_medium:
+- 194400
+- 130906
+classic_cross_trap_low:
+- 118384
+classic_group_crossing_high:
+- 116702

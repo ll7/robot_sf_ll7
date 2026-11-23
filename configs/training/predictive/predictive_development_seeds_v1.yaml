@@ -1,0 +1,12 @@
+# Development diagnostics only; never use as collected training supervision.
+classic_cross_trap_high:
+- 1001
+- 1002
+- 1003
+classic_cross_trap_medium:
+- 1004
+- 1005
+classic_cross_trap_low:
+- 1006
+classic_group_crossing_high:
+- 1007

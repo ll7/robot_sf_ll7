@@ -1,0 +1,26 @@
+{
+  "dataset_id": "hardcase",
+  "dataset_schema": "predictive_planner_dataset_v2_identity",
+  "feature_schema": {
+    "base_feature_dim": 4,
+    "base_schema": "predictive_legacy_v1",
+    "ego_motion_channel_producer": null,
+    "input_dim": 4,
+    "name": "predictive_legacy_v1",
+    "obstacle_feature_schema": null
+  },
+  "horizon_steps": 4,
+  "max_agents": 16,
+  "model_family": "predictive_legacy_v1",
+  "state_dim": 4,
+  "supervision_metadata": {
+    "collector_id": "hardcase",
+    "collector_version": "predictive_collectors_identity_v2",
+    "dataset_schema": "predictive_planner_dataset_v2_identity",
+    "identity_source": "socnav_observation_source_indices",
+    "matching_method": "episode_scoped_simulator_source_slot",
+    "pedestrian_id_scope": "reset_episode",
+    "sample_identity_schema": "predictive_sample_identity_v1",
+    "velocity_coordinate_frame": "robot_ego_xy_rotation_only"
+  }
+}

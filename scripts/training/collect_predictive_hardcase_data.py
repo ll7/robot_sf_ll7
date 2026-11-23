@@ -5,9 +5,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import uuid
 import warnings
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import yaml
@@ -26,9 +28,11 @@ from robot_sf.planner.obstacle_features import (
 )
 from robot_sf.training.predictive_supervision import (
     PREDICTIVE_DATASET_SCHEMA,
+    SAMPLE_IDENTITY_KEYS,
+    collection_metadata,
     identity_match_indices,
     observation_episode_ids,
-    supervision_metadata,
+    sample_identity_arrays,
 )
 from robot_sf.training.scenario_loader import load_scenarios
 
@@ -344,6 +348,11 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--scenario-matrix", type=Path, required=True)
     parser.add_argument("--seed-manifest", type=Path, required=True)
+    parser.add_argument(
+        "--training-seeds-only",
+        action="store_true",
+        help="Refuse development seeds when collecting training supervision.",
+    )
     parser.add_argument("--max-steps", type=int, default=220)
     parser.add_argument("--max-agents", type=int, default=24)
     parser.add_argument("--horizon-steps", type=int, default=8)
@@ -369,7 +378,7 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def main() -> int:  # noqa: C901
+def main() -> int:  # noqa: C901, PLR0915
     """Collect hard-case trajectories and persist ``.npz`` + metadata sidecar."""
     args = parse_args()
     scenarios = load_scenarios(args.scenario_matrix)
@@ -386,6 +395,12 @@ def main() -> int:  # noqa: C901
                 stacklevel=1,
             )
         for seed in seed_manifest.get(scenario_id, []):
+            if getattr(args, "training_seeds_only", False) and not 100000 <= seed <= 199999:
+                raise ValueError("Predictive training collection requires training-role seeds")
+            if not (1001 <= seed <= 1200 or 100000 <= seed <= 199999):
+                raise ValueError(
+                    "Predictive collection requires development or training seed roles"
+                )
             selected.append((scenario, int(seed)))
 
     if not selected:
@@ -397,6 +412,8 @@ def main() -> int:  # noqa: C901
     all_targets: list[np.ndarray] = []
     all_masks: list[np.ndarray] = []
     all_target_masks: list[np.ndarray] = []
+    all_identities: list[dict] = []
+    collection_id = uuid.uuid4().hex
     obstacle_line_counts: list[int] = []
 
     for episode_index, (scenario, seed) in enumerate(selected):
@@ -407,13 +424,15 @@ def main() -> int:  # noqa: C901
             obstacle_line_counts.append(len(obstacle_lines))
             obs, _ = env.reset(seed=int(seed))
             episode_frames: list[Frame] = []
-            episode_id = f"hardcase-episode-{episode_index}"
+            episode_id = f"{collection_id}:hardcase-episode-{episode_index}"
             for _step in range(int(args.max_steps)):
                 episode_frames.append(
                     _extract_frame(
                         obs,
                         int(args.max_agents),
-                        ped_ids=observation_episode_ids(env, episode_id=episode_id),
+                        ped_ids=observation_episode_ids(
+                            env, episode_id=episode_id, observation=obs
+                        ),
                     )
                 )
                 action = _goal_policy(obs, max_speed=float(args.max_speed))
@@ -434,6 +453,20 @@ def main() -> int:  # noqa: C901
                 all_targets.append(targets)
                 all_masks.append(masks)
                 all_target_masks.append(target_masks)
+                all_identities.append(
+                    sample_identity_arrays(
+                        episode_frames,
+                        scenario_id=str(
+                            scenario.get("name")
+                            or scenario.get("scenario_id")
+                            or scenario.get("id")
+                        ),
+                        episode_id=episode_id,
+                        seed=seed,
+                        mask=masks,
+                        target_mask=target_masks,
+                    )
+                )
         finally:
             env.close()
 
@@ -448,13 +481,18 @@ def main() -> int:  # noqa: C901
     args.output.parent.mkdir(parents=True, exist_ok=True)
     if args.output.exists():
         raise FileExistsError(f"Refusing to overwrite predictive dataset artifact: {args.output}")
+    identity_payload: dict[str, Any] = {
+        key: np.concatenate([identity[key] for identity in all_identities], axis=0)
+        for key in SAMPLE_IDENTITY_KEYS
+    }
     np.savez_compressed(
         args.output,
+        **identity_payload,
         state=states_cat,
         target=targets_cat,
         mask=masks_cat,
         target_mask=target_masks_cat,
-        supervision_metadata_json=json.dumps(supervision_metadata("hardcase"), sort_keys=True),
+        supervision_metadata_json=json.dumps(collection_metadata("hardcase"), sort_keys=True),
         feature_schema_json=json.dumps(
             _effective_predictive_feature_schema(
                 model_family=str(args.model_family),
@@ -465,8 +503,8 @@ def main() -> int:  # noqa: C901
     )
 
     summary = {
-        **supervision_metadata("hardcase"),
-        "supervision_metadata": supervision_metadata("hardcase"),
+        **collection_metadata("hardcase"),
+        "supervision_metadata": collection_metadata("hardcase"),
         "scenario_matrix": str(args.scenario_matrix),
         "seed_manifest": str(args.seed_manifest),
         "num_scenarios": len(selected),
@@ -499,7 +537,7 @@ def main() -> int:  # noqa: C901
                 "dataset_schema": PREDICTIVE_DATASET_SCHEMA,
                 "model_family": str(args.model_family),
                 "feature_schema": summary["feature_schema"],
-                "supervision_metadata": supervision_metadata("hardcase"),
+                "supervision_metadata": collection_metadata("hardcase"),
                 "state_dim": int(states_cat.shape[2]),
                 "max_agents": int(args.max_agents),
                 "horizon_steps": int(args.horizon_steps),

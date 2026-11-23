@@ -1,0 +1,10 @@
+Base source: 33a4735900153e742828227cc2171436ea09cd90
+Command: uv run pytest -p tests.support.heldout_seed_guard tests/training/test_predictive_sample_provenance.py::test_collection_persists_sample_identity -q
+Exit: 1; production bytes restored afterward.
+>           assert required <= set(raw.files), "NPZ discarded checkable predictive sample identities"
+E           AssertionError: NPZ discarded checkable predictive sample identities
+>           assert required <= set(raw.files), "NPZ discarded checkable predictive sample identities"
+E           AssertionError: NPZ discarded checkable predictive sample identities
+FAILED tests/training/test_predictive_sample_provenance.py::test_collection_persists_sample_identity[base]
+FAILED tests/training/test_predictive_sample_provenance.py::test_collection_persists_sample_identity[hardcase]
+2 failed in 9.43s

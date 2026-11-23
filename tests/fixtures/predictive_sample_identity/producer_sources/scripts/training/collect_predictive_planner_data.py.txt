@@ -1,0 +1,592 @@
+#!/usr/bin/env python3
+"""Collect trajectory-supervision data for predictive planner training."""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import sys
+import uuid
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+import numpy as np
+from loguru import logger
+
+from robot_sf.gym_env.environment_factory import make_robot_env
+from robot_sf.gym_env.observation_mode import ObservationMode
+from robot_sf.gym_env.unified_config import RobotSimulationConfig
+from robot_sf.planner.obstacle_features import (
+    PREDICTIVE_EGO_FEATURE_SCHEMA,
+    PREDICTIVE_EGO_MOTION_PRODUCER_STANDALONE,
+    PREDICTIVE_LEGACY_FEATURE_SCHEMA,
+    PREDICTIVE_OBSTACLE_FEATURE_SCHEMA,
+    LocalObstacleFeatureExtractor,
+    append_obstacle_features,
+    obstacle_lines_from_map,
+    predictive_feature_schema_metadata,
+)
+from robot_sf.training.predictive_supervision import (
+    PREDICTIVE_DATASET_SCHEMA,
+    SAMPLE_IDENTITY_KEYS,
+    collection_metadata,
+    identity_match_indices,
+    observation_episode_ids,
+    sample_identity_arrays,
+)
+
+
+@dataclass
+class Frame:
+    """Single rollout frame for training sample extraction."""
+
+    robot_pos: np.ndarray
+    robot_heading: float
+    robot_speed: np.ndarray
+    robot_velocity_xy: np.ndarray
+    goal_current: np.ndarray
+    ped_positions_world: np.ndarray
+    ped_velocities_ego: np.ndarray
+    ped_count: int
+    ped_ids: tuple[str, ...] = ()
+
+
+def _effective_predictive_feature_schema(
+    *,
+    model_family: str,
+    ego_conditioning: bool,
+) -> dict[str, object]:
+    """Resolve the predictive feature schema actually emitted by the collector."""
+    normalized = str(model_family).strip() or PREDICTIVE_LEGACY_FEATURE_SCHEMA
+    if normalized == PREDICTIVE_OBSTACLE_FEATURE_SCHEMA:
+        effective_family = PREDICTIVE_OBSTACLE_FEATURE_SCHEMA
+    elif normalized == PREDICTIVE_EGO_FEATURE_SCHEMA or bool(ego_conditioning):
+        effective_family = PREDICTIVE_EGO_FEATURE_SCHEMA
+    else:
+        effective_family = PREDICTIVE_LEGACY_FEATURE_SCHEMA
+    return predictive_feature_schema_metadata(
+        model_family=effective_family,
+        ego_conditioning=bool(ego_conditioning),
+        ego_motion_channel_producer=PREDICTIVE_EGO_MOTION_PRODUCER_STANDALONE,
+    )
+
+
+def _extract_socnav_blocks(obs: dict) -> tuple[dict, dict, dict]:
+    """Return robot/goal/pedestrian observation blocks for nested or flat payloads."""
+    robot = obs.get("robot")
+    goal = obs.get("goal")
+    peds = obs.get("pedestrians")
+    if isinstance(robot, dict) and isinstance(goal, dict) and isinstance(peds, dict):
+        return robot, goal, peds
+    robot = {
+        "position": obs.get("robot_position", [0.0, 0.0]),
+        "heading": obs.get("robot_heading", [0.0]),
+        "speed": obs.get("robot_speed", [0.0, 0.0]),
+        "velocity_xy": obs.get("robot_velocity_xy", obs.get("robot_speed", [0.0, 0.0])),
+    }
+    goal = {"current": obs.get("goal_current", [0.0, 0.0])}
+    peds = {
+        "positions": obs.get("pedestrians_positions", []),
+        "velocities": obs.get("pedestrians_velocities", []),
+        "count": obs.get("pedestrians_count", [0]),
+    }
+    return robot, goal, peds
+
+
+def _extract_frame(obs: dict, max_agents: int, *, ped_ids: tuple[str, ...] | None = None) -> Frame:
+    """Convert observation payload to a compact frame container."""
+    robot, goal, peds = _extract_socnav_blocks(obs)
+    robot_pos = np.asarray(robot.get("position", [0.0, 0.0]), dtype=np.float32)[:2]
+    robot_heading = float(np.asarray(robot.get("heading", [0.0]), dtype=np.float32).reshape(-1)[0])
+    robot_speed = np.asarray(robot.get("speed", [0.0, 0.0]), dtype=np.float32).reshape(-1)[:2]
+    robot_velocity_xy = np.asarray(robot.get("velocity_xy", robot_speed), dtype=np.float32).reshape(
+        -1
+    )[:2]
+    goal_current = np.asarray(goal.get("current", [0.0, 0.0]), dtype=np.float32)[:2]
+
+    ped_positions = np.asarray(peds.get("positions", []), dtype=np.float32)
+    ped_velocities = np.asarray(peds.get("velocities", []), dtype=np.float32)
+    ped_count_raw = np.asarray(peds.get("count", [0]), dtype=np.float32).reshape(-1)
+
+    if ped_positions.ndim == 1:
+        ped_positions = (
+            ped_positions.reshape(-1, 2)
+            if ped_positions.size % 2 == 0
+            else np.zeros((0, 2), dtype=np.float32)
+        )
+    if ped_velocities.ndim == 1:
+        ped_velocities = (
+            ped_velocities.reshape(-1, 2)
+            if ped_velocities.size % 2 == 0
+            else np.zeros((0, 2), dtype=np.float32)
+        )
+
+    ped_count = int(ped_count_raw[0]) if ped_count_raw.size > 0 else 0
+    if "count" not in peds and ped_count <= 0 and ped_positions.shape[0] > 0:
+        # Some observation payloads omit/zero pedestrian count; infer from positions.
+        ped_count = int(ped_positions.shape[0])
+    ped_count = max(0, min(ped_count, ped_positions.shape[0], max_agents))
+    ped_positions = ped_positions[:ped_count]
+    if ped_velocities.shape[0] < ped_count:
+        ped_velocities = np.pad(ped_velocities, ((0, ped_count - ped_velocities.shape[0]), (0, 0)))
+    ped_velocities = ped_velocities[:ped_count]
+    if ped_ids is None or len(ped_ids) < ped_count:
+        raise ValueError("Predictive frame requires observation-aligned pedestrian identities")
+
+    return Frame(
+        robot_pos=robot_pos,
+        robot_heading=robot_heading,
+        robot_speed=robot_speed,
+        robot_velocity_xy=robot_velocity_xy,
+        goal_current=goal_current,
+        ped_positions_world=ped_positions,
+        ped_velocities_ego=ped_velocities,
+        ped_count=ped_count,
+        ped_ids=tuple(ped_ids[:ped_count]),
+    )
+
+
+def _goal_policy(obs: dict, max_speed: float) -> np.ndarray:
+    """Simple goal-seeking policy used during data collection rollouts."""
+    robot, goal, _peds = _extract_socnav_blocks(obs)
+    pos = np.asarray(robot.get("position", [0.0, 0.0]), dtype=np.float32)[:2]
+    heading = float(np.asarray(robot.get("heading", [0.0]), dtype=np.float32).reshape(-1)[0])
+    tgt = np.asarray(goal.get("current", [0.0, 0.0]), dtype=np.float32)[:2]
+
+    vec = tgt - pos
+    dist = float(np.linalg.norm(vec))
+    if dist < 1e-6:
+        return np.array([0.0, 0.0], dtype=np.float32)
+    desired_heading = float(np.arctan2(vec[1], vec[0]))
+    heading_error = float((desired_heading - heading + np.pi) % (2 * np.pi) - np.pi)
+    omega = np.clip(heading_error, -1.0, 1.0)
+    v = np.clip(dist, 0.0, max_speed * max(0.0, 1.0 - abs(heading_error) / np.pi))
+    return np.array([v, omega], dtype=np.float32)
+
+
+def _world_to_ego(
+    points_world: np.ndarray, robot_pos: np.ndarray, robot_heading: float
+) -> np.ndarray:
+    """Transform world-frame points into the robot frame."""
+    if points_world.size == 0:
+        return np.zeros((0, 2), dtype=np.float32)
+    rel = points_world - robot_pos.reshape(1, 2)
+    cos_h = float(np.cos(robot_heading))
+    sin_h = float(np.sin(robot_heading))
+    x_ego = cos_h * rel[:, 0] + sin_h * rel[:, 1]
+    y_ego = -sin_h * rel[:, 0] + cos_h * rel[:, 1]
+    return np.stack([x_ego, y_ego], axis=1).astype(np.float32)
+
+
+def _frames_to_samples(  # noqa: C901
+    frames: list[Frame],
+    *,
+    max_agents: int,
+    horizon_steps: int,
+    ego_conditioning: bool,
+    model_family: str = "predictive_legacy_v1",
+    obstacle_lines: list | tuple = (),
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Create supervised samples from temporal frame sequences."""
+    schema_metadata = _effective_predictive_feature_schema(
+        model_family=model_family,
+        ego_conditioning=ego_conditioning,
+    )
+    state_dim = int(schema_metadata["input_dim"])
+
+    if len(frames) <= horizon_steps:
+        return (
+            np.zeros((0, max_agents, state_dim), dtype=np.float32),
+            np.zeros((0, max_agents, horizon_steps, 2), dtype=np.float32),
+            np.zeros((0, max_agents), dtype=np.float32),
+            np.zeros((0, max_agents, horizon_steps), dtype=np.float32),
+        )
+
+    states: list[np.ndarray] = []
+    targets: list[np.ndarray] = []
+    masks: list[np.ndarray] = []
+    target_masks: list[np.ndarray] = []
+    base_dim = int(schema_metadata["base_feature_dim"])
+
+    for t in range(0, len(frames) - horizon_steps):
+        frame_t = frames[t]
+        c = min(frame_t.ped_count, max_agents)
+        if len(frame_t.ped_ids) != frame_t.ped_count:
+            raise ValueError("Predictive source frame has missing pedestrian identities")
+        state_base = np.zeros((max_agents, base_dim), dtype=np.float32)
+        target = np.zeros((max_agents, horizon_steps, 2), dtype=np.float32)
+        mask = np.zeros((max_agents,), dtype=np.float32)
+        target_mask = np.zeros((max_agents, horizon_steps), dtype=np.float32)
+
+        if c > 0:
+            pos_rel = _world_to_ego(
+                frame_t.ped_positions_world[:c],
+                frame_t.robot_pos,
+                frame_t.robot_heading,
+            )
+            state_base[:c, 0:2] = pos_rel
+            # SOCNAV observations already rotate velocities by -robot_heading.
+            # Positions remain world-frame; velocity features are already ego-frame.
+            state_base[:c, 2:4] = frame_t.ped_velocities_ego[:c]
+            if base_dim >= 9:
+                goal_rel = _world_to_ego(
+                    frame_t.goal_current.reshape(1, 2),
+                    frame_t.robot_pos,
+                    frame_t.robot_heading,
+                )[0]
+                goal_dist = float(np.linalg.norm(goal_rel))
+                goal_dir = goal_rel / max(goal_dist, 1e-6)
+                ego_features = np.array(
+                    [
+                        float(frame_t.robot_velocity_xy[0])
+                        if frame_t.robot_velocity_xy.size > 0
+                        else 0.0,
+                        float(frame_t.robot_velocity_xy[1])
+                        if frame_t.robot_velocity_xy.size > 1
+                        else 0.0,
+                        float(goal_dir[0]),
+                        float(goal_dir[1]),
+                        goal_dist,
+                    ],
+                    dtype=np.float32,
+                )
+                state_base[:c, 4:9] = ego_features
+            mask[:c] = 1.0
+
+            for k in range(1, horizon_steps + 1):
+                frame_k = frames[t + k]
+                ck = min(frame_k.ped_count, max_agents)
+                if ck <= 0:
+                    continue
+                if len(frame_k.ped_ids) != frame_k.ped_count:
+                    raise ValueError("Predictive future frame has missing pedestrian identities")
+                matches = identity_match_indices(frame_t.ped_ids[:c], frame_k.ped_ids[:ck])
+                if not matches:
+                    continue
+                for src_idx, tgt_idx in matches.items():
+                    tgt_rel = _world_to_ego(
+                        frame_k.ped_positions_world[tgt_idx : tgt_idx + 1],
+                        frame_t.robot_pos,
+                        frame_t.robot_heading,
+                    )[0]
+                    target[src_idx, k - 1, :] = tgt_rel
+                    target_mask[src_idx, k - 1] = 1.0
+
+        if model_family == PREDICTIVE_OBSTACLE_FEATURE_SCHEMA:
+            state = _append_obstacle_feature_rows(
+                state_base=state_base,
+                frame=frame_t,
+                count=c,
+                obstacle_lines=obstacle_lines,
+            )
+        else:
+            state = state_base
+        states.append(state)
+        targets.append(target)
+        masks.append(mask)
+        target_masks.append(target_mask)
+
+    return np.stack(states), np.stack(targets), np.stack(masks), np.stack(target_masks)
+
+
+def _append_obstacle_feature_rows(
+    *,
+    state_base: np.ndarray,
+    frame: Frame,
+    count: int,
+    obstacle_lines: list | tuple = (),
+) -> np.ndarray:
+    """Append deterministic obstacle feature rows to base predictive state.
+
+    Returns
+    -------
+    np.ndarray
+        Predictive state with the obstacle-feature schema appended.
+    """
+    extractor = LocalObstacleFeatureExtractor()
+    obstacle_rows = np.zeros((state_base.shape[0], extractor.feature_dim), dtype=np.float32)
+    if count > 0:
+        obstacle_rows[:count] = extractor.extract_many(
+            [tuple(point) for point in frame.ped_positions_world[:count]],
+            obstacle_lines,
+        )
+    return append_obstacle_features(
+        state_base,
+        obstacle_rows,
+        schema_metadata=extractor.schema_metadata,
+    )
+
+
+def parse_args() -> argparse.Namespace:
+    """Parse CLI args for rollout collection."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--episodes", type=int, default=50)
+    parser.add_argument("--max-steps", type=int, default=200)
+    parser.add_argument("--max-agents", type=int, default=16)
+    parser.add_argument("--horizon-steps", type=int, default=8)
+    parser.add_argument("--ego-conditioning", action="store_true")
+    parser.add_argument(
+        "--model-family",
+        choices=("predictive_legacy_v1", "predictive_ego_v1", PREDICTIVE_OBSTACLE_FEATURE_SCHEMA),
+        default="predictive_legacy_v1",
+        help="Predictive input schema/model family to collect.",
+    )
+    parser.add_argument(
+        "--seed", type=int, default=42, help="Master seed for training episode seeds."
+    )
+    parser.add_argument(
+        "--episode-seeds",
+        type=int,
+        nargs="+",
+        help="Explicit development episode seeds (1001-1200); one per episode.",
+    )
+    parser.add_argument("--max-speed", type=float, default=1.0)
+    parser.add_argument("--min-goal-distance", type=float, default=2.0)
+    parser.add_argument("--max-reset-attempts", type=int, default=12)
+    parser.add_argument("--difficulty", type=int, default=0)
+    parser.add_argument("--max-peds-per-group", type=int, default=1)
+    parser.add_argument(
+        "--use-global-routing",
+        action="store_true",
+        help="Enable planner-backed global spawn/goal sampling (slower but harder routes).",
+    )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=Path("output/tmp/predictive_planner/datasets/predictive_rollouts_identity_v2.npz"),
+    )
+    return parser.parse_args()
+
+
+def _goal_distance(obs: dict) -> float:
+    """Return current robot-to-goal distance."""
+    robot, goal, _peds = _extract_socnav_blocks(obs)
+    robot_pos = np.asarray(robot.get("position", [0.0, 0.0]), dtype=np.float32)[:2]
+    goal_pos = np.asarray(goal.get("current", [0.0, 0.0]), dtype=np.float32)[:2]
+    return float(np.linalg.norm(goal_pos - robot_pos))
+
+
+def _reset_with_min_goal(
+    *,
+    env,
+    rng: np.random.Generator,
+    min_goal_distance: float,
+    max_reset_attempts: int,
+    episode_seed: int | None = None,
+) -> tuple[dict | None, int, int]:
+    """Reset env until a valid observation with sufficient goal distance is obtained.
+
+    Returns:
+        Observation or ``None``, reset failure count and the actual reset seed.
+    """
+    skipped = 0
+    obs = None
+    seed = -1
+    for _attempt in range(1 if episode_seed is not None else max(1, int(max_reset_attempts))):
+        seed = int(episode_seed) if episode_seed is not None else int(rng.integers(100000, 200000))
+        try:
+            obs, _info = env.reset(seed=seed)
+        except Exception:
+            skipped += 1
+            continue
+        if _goal_distance(obs) >= float(min_goal_distance):
+            return obs, skipped, seed
+    return None, skipped, seed
+
+
+def main() -> int:  # noqa: C901, PLR0915
+    """Collect dataset and persist ``.npz`` + metadata sidecar."""
+    args = parse_args()
+    logger.remove()
+    logger.add(sys.stderr, level="INFO")
+    rng = np.random.default_rng(args.seed)
+    episode_seeds = getattr(args, "episode_seeds", None)
+    if episode_seeds is not None and (
+        len(episode_seeds) != args.episodes
+        or any(not 1001 <= seed <= 1200 for seed in episode_seeds)
+    ):
+        raise ValueError("--episode-seeds requires one development seed (1001-1200) per episode")
+
+    cfg = RobotSimulationConfig()
+    cfg.observation_mode = ObservationMode.SOCNAV_STRUCT
+    cfg.use_planner = bool(args.use_global_routing)
+    cfg.sample_positions_globally = bool(args.use_global_routing)
+    cfg.sim_config.difficulty = int(args.difficulty)
+    cfg.sim_config.max_peds_per_group = int(args.max_peds_per_group)
+
+    env = make_robot_env(
+        config=cfg,
+        seed=int(episode_seeds[0]) if episode_seeds else int(rng.integers(100000, 200000)),
+        debug=False,
+        recording_enabled=False,
+    )
+    map_def = getattr(env, "map_def", None)
+    if map_def is None:
+        map_def = getattr(getattr(env, "simulator", None), "map_def", None)
+    obstacle_lines = obstacle_lines_from_map(map_def)
+
+    all_states: list[np.ndarray] = []
+    all_targets: list[np.ndarray] = []
+    all_masks: list[np.ndarray] = []
+    all_target_masks: list[np.ndarray] = []
+    all_identities: list[dict] = []
+    collection_id = uuid.uuid4().hex
+    scenario_definitions: dict[str, Any] = {}
+
+    skipped_resets = 0
+    for episode in range(args.episodes):
+        obs, skipped, seed = _reset_with_min_goal(
+            env=env,
+            rng=rng,
+            min_goal_distance=float(args.min_goal_distance),
+            max_reset_attempts=int(args.max_reset_attempts),
+            episode_seed=episode_seeds[episode] if episode_seeds else None,
+        )
+        skipped_resets += skipped
+        if obs is None:
+            continue
+        episode_frames: list[Frame] = []
+        episode_id = f"{collection_id}:base-episode-{episode}"
+        scenario_definition = {
+            "difficulty": args.difficulty,
+            "max_peds_per_group": args.max_peds_per_group,
+            "use_global_routing": args.use_global_routing,
+            "map_geometry": repr(getattr(env, "map_def", None)),
+        }
+        scenario_id = (
+            "base-config-"
+            + hashlib.sha256(json.dumps(scenario_definition, sort_keys=True).encode()).hexdigest()
+        )
+        scenario_definitions[scenario_id] = scenario_definition
+
+        for _step in range(args.max_steps):
+            episode_frames.append(
+                _extract_frame(
+                    obs,
+                    args.max_agents,
+                    ped_ids=observation_episode_ids(env, episode_id=episode_id, observation=obs),
+                )
+            )
+            action = _goal_policy(obs, max_speed=args.max_speed)
+            obs, _reward, terminated, truncated, _meta = env.step(action)
+            if terminated or truncated:
+                break
+
+        states, targets, masks, target_masks = _frames_to_samples(
+            episode_frames,
+            max_agents=args.max_agents,
+            horizon_steps=args.horizon_steps,
+            ego_conditioning=bool(args.ego_conditioning),
+            model_family=str(args.model_family),
+            obstacle_lines=obstacle_lines,
+        )
+        if states.shape[0] > 0:
+            all_states.append(states)
+            all_targets.append(targets)
+            all_masks.append(masks)
+            all_target_masks.append(target_masks)
+            all_identities.append(
+                sample_identity_arrays(
+                    episode_frames,
+                    scenario_id=scenario_id,
+                    episode_id=episode_id,
+                    seed=seed,
+                    scenario_definitions=scenario_definitions,
+                    mask=masks,
+                    target_mask=target_masks,
+                )
+            )
+
+        if (episode + 1) % 10 == 0:
+            logger.info("Collected episode {}/{}", episode + 1, args.episodes)
+
+    env.close()
+
+    if not all_states:
+        raise RuntimeError("No training samples were collected. Increase episodes/max-steps.")
+
+    states_cat = np.concatenate(all_states, axis=0)
+    targets_cat = np.concatenate(all_targets, axis=0)
+    masks_cat = np.concatenate(all_masks, axis=0)
+    target_masks_cat = np.concatenate(all_target_masks, axis=0)
+
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    if args.output.exists():
+        raise FileExistsError(f"Refusing to overwrite predictive dataset artifact: {args.output}")
+    identity_payload: dict[str, Any] = {
+        key: np.concatenate([identity[key] for identity in all_identities], axis=0)
+        for key in SAMPLE_IDENTITY_KEYS
+    }
+    np.savez_compressed(
+        args.output,
+        **identity_payload,
+        scenario_definitions_json=json.dumps(scenario_definitions, sort_keys=True),
+        state=states_cat,
+        target=targets_cat,
+        mask=masks_cat,
+        target_mask=target_masks_cat,
+        supervision_metadata_json=json.dumps(collection_metadata("base"), sort_keys=True),
+        feature_schema_json=json.dumps(
+            _effective_predictive_feature_schema(
+                model_family=str(args.model_family),
+                ego_conditioning=bool(args.ego_conditioning),
+            ),
+            sort_keys=True,
+        ),
+    )
+
+    summary = {
+        **collection_metadata("base"),
+        "supervision_metadata": collection_metadata("base"),
+        "master_seed": int(args.seed),
+        "collection_seed_role": "development" if episode_seeds else "training",
+        "episodes": int(args.episodes),
+        "max_steps": int(args.max_steps),
+        "max_agents": int(args.max_agents),
+        "horizon_steps": int(args.horizon_steps),
+        "num_samples": int(states_cat.shape[0]),
+        "state_dim": int(states_cat.shape[2]),
+        "model_family": str(args.model_family),
+        "feature_schema": _effective_predictive_feature_schema(
+            model_family=str(args.model_family),
+            ego_conditioning=bool(args.ego_conditioning),
+        ),
+        "active_agent_ratio": float(np.mean(masks_cat)),
+        "active_target_ratio": float(np.mean(target_masks_cat)),
+        "skipped_reset_failures": int(skipped_resets),
+        "ego_conditioning": bool(args.ego_conditioning),
+        "dataset": str(args.output),
+    }
+    if str(args.model_family) == PREDICTIVE_OBSTACLE_FEATURE_SCHEMA:
+        summary["obstacle_feature_source"] = "map_geometry" if obstacle_lines else "not_available"
+        summary["obstacle_line_count"] = len(obstacle_lines)
+    summary_path = args.output.with_suffix(".json")
+    summary_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
+    manifest_path = args.output.with_suffix(args.output.suffix + ".manifest.json")
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "dataset_id": args.output.stem,
+                "dataset_schema": PREDICTIVE_DATASET_SCHEMA,
+                "supervision_metadata": collection_metadata("base"),
+                "model_family": str(args.model_family),
+                "feature_schema": summary["feature_schema"],
+                "obstacle_feature_source": summary.get("obstacle_feature_source"),
+                "obstacle_line_count": summary.get("obstacle_line_count"),
+                "state_dim": int(states_cat.shape[2]),
+                "max_agents": int(args.max_agents),
+                "horizon_steps": int(args.horizon_steps),
+            },
+            indent=2,
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+    logger.info("Saved predictive dataset with {} samples to {}", states_cat.shape[0], args.output)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

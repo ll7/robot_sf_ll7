@@ -34,6 +34,19 @@ structured state fields needed by the safety guard:
 The PPO policy remains the primary action source. The guard reads the same observation and evaluates
 the candidate action in a short local rollout.
 
+At a waypoint boundary, the outer guard retains its one-step lookahead to a real
+next waypoint. The observation producer's `[0, 0]` absent-next placeholder never
+replaces the final active goal. A final active goal at the map origin remains valid.
+
+For both PPO and guarded PPO, missing checkpoint observation keys retain the
+existing space-default backfill in ordinary profiles. Each substituted key emits
+a warning once per planner configuration and is recorded in runtime
+`checkpoint_provenance.observation_backfilled_keys`, including nested key paths.
+These inputs are degraded checkpoint evidence. The map runner's `paper` and
+`paper-baseline` profiles require complete observations and raise before prediction
+when a key is missing, even with goal fallback enabled. Direct PPO callers can
+request the same contract with `require_complete_observation=True`.
+
 ## Intervention semantics
 
 The guard applies a strict decision order:

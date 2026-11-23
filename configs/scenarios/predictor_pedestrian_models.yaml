@@ -1,0 +1,41 @@
+# Diagnostic development options for #10407; no benchmark or realism claim.
+# Native ORCA is independent of SFM; Zanlungo is an SFM-related comparison.
+scenarios:
+  - name: predictor_social_force_control
+    map_file: ../../maps/svg_maps/classic_head_on_corridor.svg
+    seeds: [1001]
+    simulation_config: &shared_simulation
+      max_episode_steps: 100
+      ped_density: 0.05
+      groups: 0.0
+      time_per_step_in_secs: 0.1
+      pedestrian_model: social_force_default
+      route_spawn_seed: 1001
+      desired_speed_seed: 1001
+      archetype_seed: 1001
+      response_law_seed: 1001
+    metadata: &diagnostic_metadata
+      evidence_tier: diagnostic-only
+      benchmark_evidence: false
+      claim_boundary: Model selection and implementation integrity only.
+  - name: predictor_zanlungo_alternative
+    map_file: ../../maps/svg_maps/classic_head_on_corridor.svg
+    seeds: [1001]
+    simulation_config:
+      <<: *shared_simulation
+      pedestrian_model: hsfm_zanlungo_collision_prediction_v1
+      zanlungo_collision_prediction:
+        interaction_strength: 1.13
+        interaction_range_m: 0.71
+        anisotropy_lambda: 0.29
+        angle_threshold_rad: 0.7853981633974483
+        max_force: 5.0
+        include_ped_ped: true
+    metadata: *diagnostic_metadata
+  - name: predictor_orca_alternative
+    map_file: ../../maps/svg_maps/classic_head_on_corridor.svg
+    seeds: [1001]
+    simulation_config:
+      <<: *shared_simulation
+      pedestrian_model: orca_pedestrians_v1
+    metadata: *diagnostic_metadata

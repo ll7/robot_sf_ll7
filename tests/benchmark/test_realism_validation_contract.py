@@ -36,7 +36,19 @@ def test_shipped_contract_freezes_held_out_realism_validation_plan() -> None:
     assert contract.baseline_arms[0] == "constant_velocity"
     assert CONSTANT_VELOCITY_BASELINE in contract.baseline_arms
     assert SOCIAL_FORCE_DEFAULT in contract.baseline_arms
-    assert set(SUPPORTED_PEDESTRIAN_MODELS).issubset(contract.baseline_arms)
+    # Registration of an opt-in runtime model must not expand the frozen study arms.
+    assert contract.baseline_arms == (
+        "constant_velocity",
+        "social_force_default",
+        "hsfm_alignment_torque_v1",
+        "hsfm_anisotropic_fov_v1",
+        "hsfm_ttc_predictive_v1",
+        "hsfm_total_force_v1",
+        "hsfm_zanlungo_collision_prediction_v1",
+    )
+    assert (set(contract.baseline_arms) - {CONSTANT_VELOCITY_BASELINE}).issubset(
+        SUPPORTED_PEDESTRIAN_MODELS
+    )
     assert set(contract.minimum_event_counts) == set(INTERACTION_CLASSES)
     assert contract.synthetic_class_mix.expected_event_counts == dict.fromkeys(
         INTERACTION_CLASSES, 1

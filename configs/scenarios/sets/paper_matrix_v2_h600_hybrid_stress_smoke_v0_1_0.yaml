@@ -1,0 +1,9 @@
+schema_version: robot_sf.scenario_matrix.v1
+includes:
+- ../classic_interactions_francis2023_release_0_0_8_v1.yaml
+select_scenarios:
+- classic_urban_crossing_medium
+- classic_cross_trap_high
+- classic_doorway_high
+- francis2023_exiting_elevator
+- francis2023_robot_crowding

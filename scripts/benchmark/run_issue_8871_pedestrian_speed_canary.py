@@ -8,10 +8,9 @@ row through the native map runner.  The only retained measurements are the
 speed-intervention diagnostics needed by the frozen #6561 activation rule;
 episode outcomes and benchmark metrics are deliberately discarded.
 
-The scenario loader on current ``origin/main`` does not expose the four
-desired-speed fields in its scenario override allowlist.  This runner therefore
-binds those frozen controls to the loaded ``SimulationSettings`` immediately
-before the environment is created, and verifies the resulting values.  The
+The runner resolves the protocol's symbolic desired-speed seed on a runtime
+copy before the strict scenario loader runs, then verifies the frozen controls
+on the loaded ``SimulationSettings`` before the environment is created.  The
 binding is scoped to this process and does not alter a tracked scenario or
 production manifest.
 """
@@ -308,7 +307,6 @@ def _runtime_binding_context(controls: Mapping[str, Any], *, seed: int):
         original = map_runner_episode._build_env_config
 
         def _build(scenario: dict[str, Any], *, scenario_path: Path) -> Any:
-            config = original(scenario, scenario_path=scenario_path)
             scenario_controls = scenario.get("simulation_config", {})
             _require(
                 isinstance(scenario_controls, Mapping), "execution scenario controls are missing"
@@ -318,6 +316,10 @@ def _runtime_binding_context(controls: Mapping[str, Any], *, seed: int):
                 and all(scenario_controls.get(key) == controls.get(key) for key in controls),
                 "scenario controls changed before native config binding",
             )
+            runtime_scenario = copy.deepcopy(scenario)
+            if scenario_controls.get("desired_speed_seed") == "episode_seed":
+                runtime_scenario["simulation_config"]["desired_speed_seed"] = seed
+            config = original(runtime_scenario, scenario_path=scenario_path)
             _apply_runtime_speed_controls(config, controls, seed=seed)
             return config
 

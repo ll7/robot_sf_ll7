@@ -36,3 +36,38 @@ uv run python scripts/validation/check_issue_6561_pedestrian_speed_protocol.py -
 ```
 
 These checks prove protocol identity and manifest construction only. They do not prove runtime activation, native campaign execution, result integrity, or dissertation admission.
+
+## #8872 execution boundary
+
+The public production seam is `scripts/benchmark/run_issue_8872_pedestrian_speed_campaign.py`.
+It has one fixed native execution path through `map_runner_episode.run_map_episode`; it does not
+accept an imported executor or a self-attested executor marker. The native desired-speed controls
+are bound to `SimulationSettings` using the same scoped binding as the #8871 canary, and treatment
+activation is derived from the native simulation trace. Before a success row is accepted, the
+executor rechecks the scenario and planner/config digests, identity, seed, horizon, timestep,
+runtime controls, robot cap, source commit, and native/fallback status.
+
+The source commit is required to resolve to the current clean checkout. Every receipt source SHA
+must equal the packet source SHA, artifact references are restricted to durable `artifact://` or
+`wandb://` references, and row provenance is retained after validation. Production execution uses
+an exclusive campaign lock, an append-only fsynced journal, interrupted-run reconciliation, and an
+atomic final receipt; an existing journal or receipt refuses an automatic retry or duplicate run.
+
+`run-production` has no scheduler submission capability. Its current public implementation is
+explicitly disabled until private-ops supplies a verifiable authenticated authorization contract;
+a caller-supplied issuer, decision id, and token digests are not treated as authority. The current
+#8871 receipt is `invalid_transient`, so `render-production` and `run-production` remain fail-closed.
+Smoke packets are three disjoint, unregistered diagnostic identities and carry
+`scientific_evidence: false`; they cannot enter the production runner.
+
+Each accepted native episode row retains exactly the finite metrics declared by the frozen
+`metric_contract` (primary, exposure, and typed-collision fields) in both the normalized receipt
+row and its durable journal terminal event. The journal is append-only and fsynced; reconciliation
+returns the validated terminal rows without permitting retry. Public receipts and CLI summaries
+carry only safe journal/output basenames, never private absolute paths, and exception diagnostics
+are reduced to stable class/code tokens.
+
+The production packet also binds the compiled planner-to-checkpoint manifest. The native preflight
+receipt carries its digest, and each row's checkpoint IDs and SHA-256 values must equal the packet's
+exact set for that planner; model-free planners bind an empty set. This prevents a structurally valid
+but substituted global checkpoint list from being accepted as row provenance.

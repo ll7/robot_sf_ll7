@@ -387,6 +387,11 @@ def _run(
     scenario = next(
         dict(row) for row in load_scenarios(scenario_path) if row.get("name") == scenario_id
     )
+    # These measured planner bounds use the historical pedestrian wall law.
+    scenario["simulation_config"] = {
+        **scenario.get("simulation_config", {}),
+        "obstacle_force_law": "legacy_shifted_gradient_v1",
+    }
     original = SocialForcePlannerAdapter.plan_velocity_world
     original_plan = SocialForcePlannerAdapter.plan
 

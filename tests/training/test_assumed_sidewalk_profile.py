@@ -34,9 +34,13 @@ def test_profile_loads_through_scenario_robot_config(tmp_path):
     assert config.sim_config.action_latency_metadata()["effective_ms"] == 200.0
 
 
-def test_unselected_profile_preserves_default_bytes(tmp_path):
-    """Default robot settings and latency keep their pre-profile serialization."""
-    config = build_robot_config_from_scenario({}, scenario_path=tmp_path / "scenario.yaml")
+def test_unselected_profile_preserves_legacy_default_bytes(tmp_path):
+    """Explicit legacy walls preserve the pre-profile robot and latency serialization."""
+    # Pin the historical wall selector; 0.1.0 intentionally changes its default.
+    config = build_robot_config_from_scenario(
+        {"simulation_config": {"obstacle_force_law": "legacy_shifted_gradient_v1"}},
+        scenario_path=tmp_path / "scenario.yaml",
+    )
     # Exact default robot + simulation bytes captured on origin/main dada635b4.
     default_bytes = json.dumps(
         {

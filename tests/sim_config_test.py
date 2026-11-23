@@ -7,6 +7,7 @@ from dataclasses import asdict, replace
 import pytest
 from pysocialforce.config import (
     BODY_EDGE_EXPONENTIAL_V3,
+    BODY_EDGE_EXPONENTIAL_V3_PHYSICAL_MARGIN10X,
     LEGACY_SHIFTED_GRADIENT_V1,
     SOCIAL_FORCE_KERNEL_WRAPPED_V2,
     SURFACE_DISTANCE_UNIT_NORMAL_V2,
@@ -209,12 +210,14 @@ def test_sampler_capture_enabled_requires_a_boolean() -> None:
         SimulationSettings(sampler_capture_enabled=1)  # type: ignore[arg-type]
 
 
-def test_obstacle_force_law_defaults_to_legacy_and_accepts_explicit_selectors() -> None:
-    """Simulation settings preserve legacy by default and allow explicit corrected laws."""
-    assert SimulationSettings().obstacle_force_law == LEGACY_SHIFTED_GRADIENT_V1
+def test_obstacle_force_law_defaults_to_physical_margin_x10_and_accepts_explicit_selectors() -> (
+    None
+):
+    """Simulation settings use physical-margin x10 and preserve explicit historical laws."""
+    assert SimulationSettings().obstacle_force_law == BODY_EDGE_EXPONENTIAL_V3_PHYSICAL_MARGIN10X
     assert SimulationSettings().obstacle_force_law_resolution_mode == "defaulted_missing"
     assert SimulationSettings(obstacle_force_law=None).obstacle_force_law == (  # type: ignore[arg-type]
-        LEGACY_SHIFTED_GRADIENT_V1
+        BODY_EDGE_EXPONENTIAL_V3_PHYSICAL_MARGIN10X
     )
     assert (
         SimulationSettings(obstacle_force_law=None).obstacle_force_law_resolution_mode

@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 0.1.0
+
+* **Pedestrian wall-law default:** radius-aligned `physical_margin` x10
+  (`body_edge_exponential_v3_physical_margin10x`) replaces legacy for new code/config
+  inputs. This is a modelling choice, not shown to be more realistic:
+  [#10376](https://github.com/ll7/robot_sf_ll7/issues/10376) is diagnostic only
+  (0.085% of pedestrian-steps within 10 cm of a wall; the Seyfried et al. flow
+  comparison is not matched). This breaks comparability with 0.0.x results.
+  Released and frozen configs keep their original bytes and legacy behavior.
+  Select `simulation_config.obstacle_force_law: legacy_shifted_gradient_v1`
+  (Python: `SimulationSettings(obstacle_force_law="legacy_shifted_gradient_v1")`)
+  to reproduce the previous law. See [wall-law configuration](docs/fast_pysf_wrapper.md).
+
 * **0.1.0 prediction-planner default (#10181).** Binding a differential-drive environment
   selects native-motion prediction; binding static geometry also makes the
   `native_motion_static_footprint_v2` swept-footprint veto always on, with no opt-in flag.

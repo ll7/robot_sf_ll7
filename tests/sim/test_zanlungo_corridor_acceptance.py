@@ -9,7 +9,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from pysocialforce.config import BODY_EDGE_EXPONENTIAL_V3
+from pysocialforce.config import BODY_EDGE_EXPONENTIAL_V3, LEGACY_SHIFTED_GRADIENT_V1
 
 from robot_sf.research import zanlungo_corridor_acceptance
 from robot_sf.research.zanlungo_corridor_acceptance import (
@@ -41,17 +41,17 @@ def config() -> AcceptanceConfig:
 
 @pytest.fixture(
     scope="module",
-    params=[None, BODY_EDGE_EXPONENTIAL_V3],
+    params=[LEGACY_SHIFTED_GRADIENT_V1, BODY_EDGE_EXPONENTIAL_V3],
     ids=["legacy_default", "explicit_body_edge"],
 )
-def wall_law(request: pytest.FixtureRequest) -> str | None:
-    """Exercise both release defaults and the explicitly selected corrected law."""
+def wall_law(request: pytest.FixtureRequest) -> str:
+    """Select the historical release law and the corrected law explicitly."""
     return request.param
 
 
 @pytest.fixture(scope="module")
-def report(config: AcceptanceConfig, wall_law: str | None) -> dict:
-    """Use an explicit opt-in only for the corrected-law regression, not the packet."""
+def report(config: AcceptanceConfig, wall_law: str) -> dict:
+    """Keep both acceptance comparators independent of the moving wall-law default."""
     development_config = replace(config, fixture=replace(config.fixture, seed=1001))
     with pytest.MonkeyPatch.context() as patch:
         patch.setattr(
@@ -82,15 +82,15 @@ def test_canonical_config_predeclares_fixture_and_parameter_bookkeeping(
 
 def test_cpu_harness_labels_reference_yielding_and_law_specific_control(
     report: dict,
-    wall_law: str | None,
+    wall_law: str,
 ) -> None:
     """Legacy keeps its collision label; explicitly corrected walls permit passing."""
     by_id = {row["case_id"]: row for row in report["rows"]}
     assert by_id["zanlungo_paper_reference"]["metrics"]["outcome_label"] == "yielding"
-    expected = "collision_proxy" if wall_law is None else "pass_through"
+    expected = "collision_proxy" if wall_law == LEGACY_SHIFTED_GRADIENT_V1 else "pass_through"
     assert by_id["social_force_control"]["metrics"]["outcome_label"] == expected
     assert by_id["social_force_control"]["metrics"]["collision_proxy_avoided"] is (
-        wall_law is not None
+        wall_law != LEGACY_SHIFTED_GRADIENT_V1
     )
     assert report["acceptance_checks"]["reference_outcome_is_yielding"] is True
     assert report["acceptance_met"] is True

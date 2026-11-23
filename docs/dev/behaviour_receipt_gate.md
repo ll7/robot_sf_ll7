@@ -379,6 +379,16 @@ Scenario names identify slots, including distinct configurations sharing SVGs.
 It includes arm-to-registry mappings, repository-relative map paths and
 campaign/matrix/map digests. Receipts bind its canonical JSON SHA-256.
 
+The width source selects `three_width_doorway_diagnostic_v2.yaml`, matching
+`run_empty_world_sweep.py --suite width`. Its MPPI profile binds the selected
+eight-output predictor to eight steps at 0.1 s, with fallback disabled in
+preflight. The historical width campaign and camera-ready profile remain
+unchanged; their twelve-step MPPI request cannot execute with this predictor.
+This is a development diagnostic binding, not revised 0.0.8 release evidence.
+The inventory-only exemption does not exempt a PR that also changes planner
+configs or the sweep runner. CI still uses the event base's inventory and policy;
+updating this binding does not grant a same-PR receipt waiver.
+
 The vehicle is `differential_drive_r1m`, the current differential-drive body with
 1.0 m radius. The existing 2.0 m narrow doorway remains an infeasible-by-design
 exception, linked to its declaration at the integration base. Release integration

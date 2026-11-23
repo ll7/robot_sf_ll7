@@ -102,8 +102,8 @@
       "matrix_sha256": "af4e9a7a22f9d5f373eb4a3323984e0de6d79edd4263f1c023e9efddff2fd25f"
     },
     "width": {
-      "campaign": "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_three_width_doorway_v1.yaml",
-      "campaign_sha256": "9e815e03f5280c5b8366d7179a4f93d61acc914505f1379660c6467849a26e7c",
+      "campaign": "configs/benchmarks/three_width_doorway_diagnostic_v2.yaml",
+      "campaign_sha256": "486591f85e6cd09b449d1ee188b8612f3f276c94c7043f8846caf29ffdad9cc8",
       "matrix": "configs/scenarios/francis2023_narrow_doorway_three_width_release_0_0_8_v1.yaml",
       "matrix_sha256": "9de1d058c6a9145f76c84be63787d5c704be1db288b47fd9c1d31f3f56367778"
     }

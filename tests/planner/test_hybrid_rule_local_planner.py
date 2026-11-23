@@ -36,6 +36,7 @@ def _obs(
         "goal": {
             "current": np.asarray(goal, dtype=float),
             "next": np.asarray(goal, dtype=float),
+            "next_valid": np.asarray([1.0], dtype=float),
         },
         "pedestrians": {
             "positions": np.asarray(ped_positions, dtype=float),
@@ -2007,6 +2008,7 @@ def test_hybrid_v3_flat_observation_keeps_historical_velocity_frame() -> None:
         "robot_radius": [0.25],
         "goal_current": [-4.0, 0.0],
         "goal_next": [-4.0, 0.0],
+        "goal_next_valid": [1.0],
         "pedestrians_positions": [[-2.0, 0.0]],
         "pedestrians_velocities": ego_vel,
         "pedestrians_count": [1],

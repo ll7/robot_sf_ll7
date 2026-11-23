@@ -211,6 +211,7 @@ from robot_sf.benchmark.utils import (
     attach_track_metadata,
     normalize_track_field,
 )
+from robot_sf.common.hybrid_defaults import episode_default_policy
 from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.gym_env.reset_metadata import resolve_map_id
 from robot_sf.gym_env.unified_config import RobotSimulationConfig  # noqa: TC001
@@ -5620,6 +5621,7 @@ def _finalize_episode_record(  # noqa: PLR0913
     )
 
 
+@episode_default_policy
 def run_map_episode(  # noqa: PLR0913
     scenario: dict[str, Any],
     seed: int,
@@ -5631,6 +5633,7 @@ def run_map_episode(  # noqa: PLR0913
     snqi_baseline: dict[str, dict[str, float]] | None,
     algo: str,
     scenario_path: Path,
+    provenance_scenario_path: Path | None = None,
     algo_config: dict[str, Any] | None = None,
     algo_config_path: str | None = None,
     adapter_impact_eval: bool = False,
@@ -5657,6 +5660,9 @@ def run_map_episode(  # noqa: PLR0913
     runtime_input_records: list[dict[str, str]] | None = None,
 ) -> EpisodeRecordDict:
     """Run one scenario/seed episode and return a benchmark JSONL record.
+
+    The scenario path resolves normalized map references. The optional provenance
+    path selects registered defaults from the original config-less release source.
 
     Returns:
         EpisodeRecordDict: Episode record with metrics, provenance, and planner metadata.

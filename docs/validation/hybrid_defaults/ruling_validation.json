@@ -1,0 +1,299 @@
+{
+  "current_missing_fields": {
+    "goal_next_validity_enabled": true,
+    "include_goal_next_valid": true,
+    "physical_static_exclusion_enabled": false
+  },
+  "final_defaults_test": {
+    "log_sha256": "622798d4819bf1120c31792adfc19db4d8adaeab53c9d4b9721d6e9da7a34e3f",
+    "passed": 1,
+    "seconds": 12.39
+  },
+  "focused": {
+    "failed": 0,
+    "log_sha256": "51847a6aa8b0d2ef11fbc482abbc8e6db41f509fd89bec559edf2da23f40048d",
+    "passed": 183,
+    "seconds": 215.24
+  },
+  "legacy_missing_fields": {
+    "goal_next_validity_enabled": false,
+    "include_goal_next_valid": false,
+    "physical_static_exclusion_enabled": false
+  },
+  "parent_head": "8e6ab04a0c219af3cab085ffd813421772696989",
+  "red": {
+    "failed": 1,
+    "failure": "assert cfg.physical_static_exclusion_enabled is False: got True on parent head.",
+    "log_sha256": "abc02afbbfbd4dc80b3198a611363fa70d86641df3bb59258cc3d721dd8eb74a",
+    "node": "tests/planner/test_hybrid_default_compatibility.py::test_010_defaults_follow_author_ruling_20261008",
+    "seconds": 7.88
+  },
+  "release_constructor_audit": {
+    "baseline_head": "9d8dac2a140f00dadf2c8c2621977bcee96c83e0",
+    "canonical_mappings_match": 179,
+    "frozen_planner_snapshots_match": 9,
+    "full_released_arms": 183,
+    "method": "Focused tests compare complete canonical JSON dataclass dumps, including all fields, to unchanged base snapshots; no reset or step in release audit.",
+    "scenario_environment_snapshots_match": 48,
+    "unchanged_historical_unfrozen_guards": 4
+  },
+  "release_source_audit": {
+    "baseline_head": "9d8dac2a140f00dadf2c8c2621977bcee96c83e0",
+    "frozen_yaml_dirty_diff_empty": true,
+    "path_checks": {
+      "configs/algos/guarded_ppo_camera_ready.yaml": {
+        "matches_base_bytes": true,
+        "sha256": "d2b61082f11574b2f03c50a110cf5f945b908053df65968399a5c863e69ee854"
+      },
+      "configs/algos/guarded_ppo_camera_ready_cpu.yaml": {
+        "matches_base_bytes": true,
+        "sha256": "69f273f311590009a344f3a88592cb19f54524d252f469ab5fc66f7cf2c9e772"
+      },
+      "configs/algos/guarded_ppo_release_v0_0_8.yaml": {
+        "matches_base_bytes": true,
+        "sha256": "330982edb9a5dd4cbaf192232418f7d35171a410e582c4c3d76ca2fb4362464c"
+      },
+      "configs/algos/hybrid_rule_v3_teb_like_rollout.yaml": {
+        "matches_base_bytes": true,
+        "sha256": "daa1f670b377e62128c5292e09412781dba9d17699b92100c7771ff5d255e374"
+      },
+      "configs/algos/hybrid_rule_v4_clearance_braking.yaml": {
+        "matches_base_bytes": true,
+        "sha256": "5dbc4f17a1ca8b44c2f78dc4e5c83e94a60615ebd7e97892109124323bc9c4ab"
+      },
+      "configs/algos/orca_release_v0_0_8.yaml": {
+        "matches_base_bytes": true,
+        "sha256": "5840b9e47088a3da14d684091ad0880a6480340fd274fbf88d3ab5b9a1bda5e4"
+      },
+      "configs/algos/prediction_planner_camera_ready.yaml": {
+        "matches_base_bytes": true,
+        "sha256": "a5f3775110b7c1351e183016afe8a17348a66d35088eeb6ff55a182dc924a481"
+      },
+      "configs/algos/prediction_planner_release_v0_0_8.yaml": {
+        "matches_base_bytes": true,
+        "sha256": "aad5e0bdb3c41273eff8000465399da31949514077e4c98fc22289015888545c"
+      },
+      "configs/algos/predictive_mppi_camera_ready.yaml": {
+        "matches_base_bytes": true,
+        "sha256": "5213a9e44c74cb79f78466d414645f6ca233d761e8fa5b77e5cfc3161ed94adb"
+      },
+      "configs/algos/predictive_mppi_release_v0_0_8.yaml": {
+        "matches_base_bytes": true,
+        "sha256": "79f13475d9d66f0754c11038f6d52a15b3420965b6f639de7f000c5190ba820b"
+      },
+      "configs/algos/risk_dwa_camera_ready.yaml": {
+        "matches_base_bytes": true,
+        "sha256": "1351439539ed02334891f6a1ef6ac652745791b1b830a5f8616850fbd5ccb37c"
+      },
+      "configs/algos/risk_dwa_release_v0_0_8.yaml": {
+        "matches_base_bytes": true,
+        "sha256": "27d0b269e5a65572bdf2f5af069a5e0037eb0728d501ea12438597404e7e1527"
+      },
+      "configs/algos/social_force_release_v0_0_8.yaml": {
+        "matches_base_bytes": true,
+        "sha256": "9a7015a5f66b5d9ddb5d96c706d33ac8fe027bc0aee256e9ab87d2e89804f773"
+      },
+      "configs/algos/social_force_resolution_independent_v2.yaml": {
+        "matches_base_bytes": true,
+        "sha256": "4d32a90dd58c3e0273c175ee03d4de018e0d370e8a3892230942d21ca4a5a81d"
+      },
+      "configs/algos/social_force_resolution_independent_v2_kernel_wrapped_v2.yaml": {
+        "matches_base_bytes": true,
+        "sha256": "43e1e61d6fc50b22a95bbb698d612a63cf229052c043c1d2347c2d7271567c35"
+      },
+      "configs/algos/social_force_terminal_goal_v1.yaml": {
+        "matches_base_bytes": true,
+        "sha256": "bcd785fff7753dd31bcb899b1bab0cfec8d0c706b053ff28cd2988ca58761afb"
+      },
+      "configs/algos/socnav_release_v0_0_8.yaml": {
+        "matches_base_bytes": true,
+        "sha256": "277c57a45caf213fdc4fb2abdb996062669f9ba05fb4e8adf3e47f90f0429b50"
+      },
+      "configs/algos/socnav_sampling_bounded_v2.yaml": {
+        "matches_base_bytes": true,
+        "sha256": "9c52dc30d3894220caabaf1ac80d01561d6c1318d56c50e5ad7fa27d9c7999b3"
+      },
+      "configs/algos/socnav_sampling_release_v0_0_8.yaml": {
+        "matches_base_bytes": true,
+        "sha256": "375df080cae0a1317d43bd2239cf078ecc9c5bc69b10d9973bbe153cb4d1d1a6"
+      },
+      "configs/baselines/ppo_15m_grid_socnav.yaml": {
+        "matches_base_bytes": true,
+        "sha256": "644b57e451cfc42b6ab5cf56ef6ec20fd6290a3bb9bae1be113a1aa6afb792ca"
+      },
+      "configs/baselines/ppo_issue_791_eval_aligned_large_capacity_cpu.yaml": {
+        "matches_base_bytes": true,
+        "sha256": "51ccfbf4400a306b355e2c3f0f46eda3489d5ce3bc85beaa023a6a1da9c9fb41"
+      },
+      "configs/baselines/ppo_release_robot_0_0_8_cpu.yaml": {
+        "matches_base_bytes": true,
+        "sha256": "a5a25bcbba51215acfc808e6cd707c146df5333073d477908e32dff5289b194a"
+      },
+      "configs/benchmarks/paper_experiment_matrix_7planners_v1.yaml": {
+        "matches_base_bytes": true,
+        "sha256": "43eec70a34366239d18e2b5e3cb92f8deb5031990acb8ae1f7981b3aa3fed2f7"
+      },
+      "configs/benchmarks/paper_experiment_matrix_all_planners_v1.yaml": {
+        "matches_base_bytes": true,
+        "sha256": "43319acd6b426d9b34de316487a6c1eb3ce3ea9b9c93fd07b6435a0dbc3a4057"
+      },
+      "configs/benchmarks/paper_experiment_matrix_v1.yaml": {
+        "matches_base_bytes": true,
+        "sha256": "0ad4d441edf57a93c02cfad5e49e466c943a55d34a48b1eb9682920d724454ee"
+      },
+      "configs/benchmarks/paper_experiment_matrix_v1_release_smoke.yaml": {
+        "matches_base_bytes": true,
+        "sha256": "60620b8f28ceb65b6468b343ab1988f87b1187c86ad534bdf2513d48d008ba5e"
+      },
+      "configs/benchmarks/paper_experiment_matrix_v2_h600_hybrid_stress_smoke.yaml": {
+        "matches_base_bytes": true,
+        "sha256": "c088e62e7fb7758dc2670d81600d54c7de903ebf2d6e9310cf6e672c53400184"
+      },
+      "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_2026_08.yaml": {
+        "matches_base_bytes": true,
+        "sha256": "aa3057faeeefbd2ced41e3e093da32d1705270330cb1c124bc0b3558f8f88afd"
+      },
+      "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml": {
+        "matches_base_bytes": true,
+        "sha256": "5d805909643f1b6c5e919a891657ec86e6800f2ab602b7cfd70f1af1aec94462"
+      },
+      "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate_authored.yaml": {
+        "matches_base_bytes": true,
+        "sha256": "de627db9f2999b17ed56378b9d793ee13a4b1bc15d1eb442513360d45f6d76d5"
+      },
+      "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_extended.yaml": {
+        "matches_base_bytes": true,
+        "sha256": "143ab63a235f40326c93c93044fba95e808388751f04d8ca979b89d1142ca465"
+      },
+      "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_extended_post1.yaml": {
+        "matches_base_bytes": true,
+        "sha256": "c43d7bc24a182dcc56082f4da11d76e09a66d8b1cc0d0dc84b29536726022701"
+      },
+      "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_runtime_smoke.yaml": {
+        "matches_base_bytes": true,
+        "sha256": "c3671790d0beb12511223efa86e2cf26245692566b2c849dba956b6e36bdf64a"
+      },
+      "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_3.yaml": {
+        "matches_base_bytes": true,
+        "sha256": "fbd900243f5a004cc07f7d10c672126f46ec583eb6f108ec7a0e8fce9daa7ad4"
+      },
+      "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_4.yaml": {
+        "matches_base_bytes": true,
+        "sha256": "698b4bc44455a3fd4485b5b25b0bca16e47ca7d6ceaf62fd918aaba05df177d4"
+      },
+      "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_5.yaml": {
+        "matches_base_bytes": true,
+        "sha256": "a546df04e8f69896f001792d22931c184dd54d440f2828898049e57bdf92419b"
+      },
+      "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_6.yaml": {
+        "matches_base_bytes": true,
+        "sha256": "6471bc36db5806badd527701ca30b2f63f425dd3830d6b2b86cfa00ade1f5c46"
+      },
+      "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_three_width_doorway_v1.yaml": {
+        "matches_base_bytes": true,
+        "sha256": "9e815e03f5280c5b8366d7179a4f93d61acc914505f1379660c6467849a26e7c"
+      },
+      "configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape.yaml": {
+        "matches_base_bytes": true,
+        "sha256": "cf2e6844b3c8e8315c31e6cf115f66ea2c7051526ff2e1f9cfe3a1c5a3f23cc4"
+      },
+      "configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape_continuous.yaml": {
+        "matches_base_bytes": true,
+        "sha256": "3952b569bb8b5dbb2f4f895b393532b5fc58db2954282af7c68c894e04da4507"
+      },
+      "configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape_continuous_s30_h600_release.yaml": {
+        "matches_base_bytes": true,
+        "sha256": "8ed0a4048cba78f70abf37effaf8b93fe7cbb9de25897d4f65008adcb6e91ecd"
+      },
+      "configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape_s30_h600_release.yaml": {
+        "matches_base_bytes": true,
+        "sha256": "905ec25e24b3d5cedee1508ac6ad20a09f913d368c99d4329c839bc359640935"
+      },
+      "configs/policy_search/candidates/hybrid_rule_v4_fast_progress_static_escape_continuous_s30_h600_release_0_0_8_frozen.yaml": {
+        "matches_base_bytes": true,
+        "sha256": "044931a38f31a7b7c01ba8a750a1d34a79a58200309806e538761a94eff94888"
+      },
+      "configs/policy_search/candidates/hybrid_rule_v4_fast_progress_static_escape_s30_h600_release_0_0_8_frozen.yaml": {
+        "matches_base_bytes": true,
+        "sha256": "1329d3934decb0bf50a803071af69b99e3f12e534083fc3d82e20d4706c76811"
+      },
+      "configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v1.yaml": {
+        "matches_base_bytes": true,
+        "sha256": "3129fed61da9b5edf571a76c4024ce18a1cc2b7e1ee2c026e45605531f1a3541"
+      },
+      "configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v1_s30_h600_release.yaml": {
+        "matches_base_bytes": true,
+        "sha256": "e3ddcdd559e27861e58d7f2a6f1f4adbb8a87fe5ba5bf8d9db6fd170c2c8cd87"
+      },
+      "configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_bottleneck_yield_s30_h600_release.yaml": {
+        "matches_base_bytes": true,
+        "sha256": "895cd46ff26c0b03fd51d5e5fb6e77f16ad2c6f6cd1fcead7089c8dda8c7966d"
+      },
+      "configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4_s30_h600_release_0_0_8_frozen.yaml": {
+        "matches_base_bytes": true,
+        "sha256": "28aafe6352543e4c4d24a146bd3ba7260105362052505af9308f6d45d9d94458"
+      },
+      "configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard.yaml": {
+        "matches_base_bytes": true,
+        "sha256": "d7cb7eef4d3a02a06bb283f870e1279152058c9b91dd3774d029f1a37f0c2afe"
+      },
+      "configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard_s30_h600_release.yaml": {
+        "matches_base_bytes": true,
+        "sha256": "90bc08cffe40e7f5b38c371db7c2a22790970c6817792dc7865686686c0a7dc3"
+      },
+      "configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard_v4_s30_h600_release_0_0_8_frozen.yaml": {
+        "matches_base_bytes": true,
+        "sha256": "54435e7fd39e592d4684fe40f804ab1c080f39925dceb0781dd68c1ce172ef94"
+      },
+      "configs/policy_search/release_0_0_8_placeholders/hybrid_rule_v4_fast_progress_static_escape.unfrozen.yaml": {
+        "matches_base_bytes": true,
+        "sha256": "6c60719a8b59a4eef1651dc94779cffa754c392dcf8641de31f96b9a7f675694"
+      },
+      "configs/policy_search/release_0_0_8_placeholders/hybrid_rule_v4_fast_progress_static_escape_continuous.unfrozen.yaml": {
+        "matches_base_bytes": true,
+        "sha256": "4812a9cecf2a75c9d4b82ad9cf377f4e9406aa09dcd15897caa43932309d2887"
+      },
+      "configs/policy_search/release_0_0_8_placeholders/scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4.unfrozen.yaml": {
+        "matches_base_bytes": true,
+        "sha256": "bfee5ca060ca8c00e5d84b46c1b7b183e66eb9f372a84486042d0d0b21e7d2ef"
+      },
+      "configs/policy_search/release_0_0_8_placeholders/scenario_adaptive_hybrid_orca_v2_collision_guard_v4.unfrozen.yaml": {
+        "matches_base_bytes": true,
+        "sha256": "7c5b4b1a51f7622368cd35926f2452cde0bdc6bac43b0c0d0bde1b45069acb65"
+      },
+      "configs/scenarios/classic_interactions_francis2023.yaml": {
+        "matches_base_bytes": true,
+        "sha256": "d9e148e4b544b4c7e2b6ba98e599aef47046d114e0e25645f021946674cb9dc5"
+      },
+      "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml": {
+        "matches_base_bytes": true,
+        "sha256": "af4e9a7a22f9d5f373eb4a3323984e0de6d79edd4263f1c023e9efddff2fd25f"
+      },
+      "configs/scenarios/francis2023_narrow_doorway_three_width_release_0_0_8_v1.yaml": {
+        "matches_base_bytes": true,
+        "sha256": "9de1d058c6a9145f76c84be63787d5c704be1db288b47fd9c1d31f3f56367778"
+      },
+      "configs/scenarios/sets/paper_matrix_v2_h600_hybrid_stress_smoke.yaml": {
+        "matches_base_bytes": true,
+        "sha256": "61e6211c8b529ee5d3fdcfc8bd31d07054ee0af6db1c7e9fe137f6d628fff5f9"
+      },
+      "configs/scenarios/single/francis2023_blind_corner.yaml": {
+        "matches_base_bytes": true,
+        "sha256": "5c5426d31859cdf69692b85fdade92c58e4379bd9d93963743d932d044c6f6fb"
+      },
+      "configs/scenarios/single/francis2023_blind_corner_goal_zone_entry_v1.yaml": {
+        "matches_base_bytes": true,
+        "sha256": "ae61216593770397fc74a2cb28c7ba0d1005e13e1e59449309155ce9fab331ca"
+      },
+      "configs/scenarios/single/francis2023_blind_corner_release_0_0_8_v1.yaml": {
+        "matches_base_bytes": true,
+        "sha256": "a08ca72f273ebd7532d9a22f1650112133c20606d5a7bc9f31535563b8ce7785"
+      }
+    },
+    "registered_source_and_dependency_paths_verified": 62,
+    "registry_sources": 60,
+    "selection_parent_head": "8e6ab04a0c219af3cab085ffd813421772696989"
+  },
+  "ruling_date": "2026-10-08",
+  "source": "Author ruling in chat to the orchestrator; supersedes author decision 2026-10-05 under its reopen clause."
+}

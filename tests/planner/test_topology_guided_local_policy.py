@@ -36,7 +36,7 @@ def _obs(
             "speed": [0.0],
             "radius": [radius],
         },
-        "goal": {"current": [1.6, 0.0], "next": [1.6, 0.0]},
+        "goal": {"current": [1.6, 0.0], "next": [1.6, 0.0], "next_valid": [1.0]},
         "pedestrians": {"positions": [], "velocities": [], "count": [0], "radius": [0.3]},
         "sim": {"timestep": 0.1},
         "occupancy_grid": grid,

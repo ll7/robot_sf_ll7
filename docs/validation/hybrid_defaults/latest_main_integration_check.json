@@ -1,0 +1,20 @@
+{
+  "integrated_base": "9d8dac2a140f00dadf2c8c2621977bcee96c83e0",
+  "integration_head": "92137afc1143f78589ecb4541672ffb195b22f54",
+  "upstream_changed_paths": [
+    "scripts/analysis/compare_release_0_0_7_to_0_0_8.py",
+    "scripts/tools/revalidate_benchmark_release.py",
+    "tests/analysis/test_resolved_release_comparator.py",
+    "tests/benchmark/test_snqi_context_fix_round.py",
+    "tests/tools/test_revalidate_benchmark_release.py",
+    "tests/tools/test_revalidation_v2_provenance.py"
+  ],
+  "upstream_changed_comparison_bound_files": [],
+  "previously_reviewed_bound_differences": [
+    "robot_sf/common/hybrid_defaults.py",
+    "robot_sf/_version.py"
+  ],
+  "source_review": "post_comparison_source_review.json",
+  "result": "Latest upstream changes affect analysis/revalidation tooling and tests only; measured control and inputs remain applicable.",
+  "planner_validation": "2321 passed, 13 skipped; both explicitly pinned existing characterization witnesses also pass on immutable base planner bytes."
+}

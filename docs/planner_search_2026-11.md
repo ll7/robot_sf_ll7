@@ -1,8 +1,8 @@
-# Two opt-in planners for pedestrians and narrow passages
+# Opt-in planners for pedestrians and narrow passages
 
-The velocity-aware sampler and DRA-MPPI are experimental local planners for
-the simulated differential-drive robot. Select the experimental benchmark
-profile and one of the algorithm configurations below. Each file includes
+The velocity-aware sampler, DRA-MPPI and their combination are experimental
+local planners for the simulated differential-drive robot. Select the experimental
+benchmark profile and one of the algorithm configurations below. Each file includes
 `allow_testing_algorithms: true`.
 
 | Planner | Algorithm key | Configuration |
@@ -10,6 +10,7 @@ profile and one of the algorithm configurations below. Each file includes
 | Velocity-aware sampler | `velocity_sampler` | [velocity_sampler_dev_r9.yaml](../configs/algos/velocity_sampler_dev_r9.yaml) |
 | DRA-MPPI with corridor passing | `dra_mppi` | [dra_mppi_r2.yaml](../configs/algos/dra_mppi_r2.yaml) |
 | DRA-MPPI with corridor passing and crossing yield | `dra_mppi` | [dra_mppi_r3.yaml](../configs/algos/dra_mppi_r3.yaml) |
+| DRA-MPPI with encounter-triggered sampling | `dra_mppi` | [dra_mppi_combo.yaml](../configs/algos/dra_mppi_combo.yaml) |
 
 ## How the planners choose a command
 
@@ -41,10 +42,21 @@ that can stop clear and wait, tries the lowest-cost sample that passes the
 check if the proposed command fails, or commands a stop if none pass.
 [Dynamic Risk-Aware MPPI](https://arxiv.org/abs/2506.21205)
 
+The **combination planner** uses the DRA-MPPI crossing profile by default.
+It switches to the velocity-aware sampler (PLANR1i) near a sparse opening
+on both sides of the active route when tracked motion predicts a pedestrian
+entering the route corridor within three seconds. Walkers staged on opposite
+sides can trigger the switch before moving. The crowd count includes walkers
+merging into the exit lane. If more than two walkers occupy the approach,
+DRA-MPPI retains that opening for the route segment. During the handoff the
+sampler can use ORCA subject to its braking clearance check. It holds control
+for five seconds after the last detection, then clears DRA-MPPI's previous
+command sequence and passing-side preference before returning control.
+
 ## Paired development results
 
-All planners used the same 30 development seeds (7301–7330) and the same
-inputs for each setting and seed. The release grid has 48 settings from
+The standalone profiles and ORCA used the same 30 development seeds (7301–7330)
+and the same inputs for each setting and seed. The release grid has 48 settings from
 Robot SF 0.0.8. Suite v1 has eight cases in corridors, dense crowds,
 doorways and at platforms. Suite v2 has 18 cases and adds situations such as
 overtaking and sudden stops. Suite v3 has 15 cases selected to expose
@@ -93,10 +105,38 @@ narrow openings. The results apply to these simulations and development
 seeds. They cannot estimate physical robot contact rates.
 [Release notes on narrow passages](release/0.0.8/release_notes.md#narrow-passages)
 
+## Combination planner confirmation
+
+The COMBO60 report compares the combination planner at source revision
+`d4432d2d4` with native ORCA on a fresh block of 60 development seeds
+(7391–7450). Both planners ran on the same 48 release settings and 41
+challenge cases, giving 5,340 matched inputs. The release runs used the
+original DRAMPPI5 settings. A separate sensitivity replay restored the
+authored pedestrian-group overrides in two release settings and retained
+the release completion advantage (+5.42 points [+4.31, +6.56]).
+
+The table gives combo-minus-ORCA rate differences in percentage points
+with paired 95% intervals from 20,000 bootstrap draws of whole seed blocks.
+
+| Grid | Episodes per planner | Δ completion | Δ contact |
+| --- | ---: | ---: | ---: |
+| All grids | 5,340 | +8.86 [+7.94, +9.83] | -7.94 [-8.82, -7.08] |
+| Release | 2,880 | +5.49 [+4.41, +6.63] | -6.60 [-7.64, -5.62] |
+| Suite v1 | 480 | +13.75 [+10.42, +17.08] | -7.50 [-10.62, -4.38] |
+| Suite v2 | 1,080 | +19.72 [+17.31, +22.22] | -18.15 [-20.65, -15.74] |
+| Suite v3 | 900 | +4.00 [+2.00, +6.00] | -0.22 [-2.89, +2.33] |
+
+On suite v3 the combination completed 36 more routes, a gain of 4.0 points
+with a 95% interval from +2.0 to +6.0. Total contact fell by two episodes and
+its interval spans zero. Pedestrian contacts rose by 12 episodes and obstacle
+contacts fell by 14. The pooled result is descriptive. This is one confirmation
+block in simulation on fixed cases with known maps and noise-free pedestrian
+tracks. The results support opt-in development analysis.
+
 ## Reproduce the comparison
 
-From the repository root on Linux, install the locked environment with
-native RVO2, the library used by ORCA.
+To replay the standalone-planner comparisons, install the locked environment
+with native RVO2, the library used by ORCA, from the repository root on Linux.
 
 ```bash
 uv sync --locked --python 3.13.14 --extra benchmark --extra viz

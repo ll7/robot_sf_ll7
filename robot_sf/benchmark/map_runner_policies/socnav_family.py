@@ -265,11 +265,46 @@ def _build_planner_selector_v2_diagnostic_adapter(
     return adapter
 
 
+def _build_velocity_sampler_adapter(
+    algo_config: dict[str, Any], socnav_cfg: Any, meta: dict[str, Any]
+) -> Any:
+    """Construct the experimental reachable-velocity sampler.
+
+    Returns:
+        VelocitySamplerAdapter: The configured experimental adapter.
+    """
+    from robot_sf.benchmark.algorithm_readiness import require_algorithm_allowed  # noqa: PLC0415
+    from robot_sf.planner.velocity_sampler_r9 import (  # noqa: PLC0415
+        ContactVelocitySamplerAdapter,
+        ContactWeights,
+    )
+
+    del meta
+    require_algorithm_allowed(
+        algo="velocity_sampler",
+        benchmark_profile="experimental",
+        ppo_paper_ready=False,
+        allow_testing_algorithms=algo_config.get("allow_testing_algorithms") is True,
+    )
+    settings = algo_config.get("velocity_sampler", {})
+    if not isinstance(settings, dict):
+        raise ValueError("velocity_sampler settings must be a mapping")
+    settings = dict(settings)
+    variant = settings.pop("variant", "contact_recovery")
+    if variant != "contact_recovery":
+        raise ValueError(f"unknown velocity sampler variant: {variant}")
+    return ContactVelocitySamplerAdapter(config=socnav_cfg, weights=ContactWeights(**settings))
+
+
 SOCNAV_FAMILY_SPECS: tuple[SocnavFamilySpec, ...] = (
     # Classical in-repo adapters sharing the filtered SocNavPlannerConfig.
     SocnavFamilySpec(
         algorithms=frozenset({"socnav_sampling", "sampling"}),
         adapter_attr="SamplingPlannerAdapter",
+    ),
+    SocnavFamilySpec(
+        algorithms=frozenset({"velocity_sampler"}),
+        builder=_build_velocity_sampler_adapter,
     ),
     SocnavFamilySpec(
         algorithms=frozenset({"social_force", "sf"}),

@@ -450,6 +450,7 @@ def _sonic_crowdnav_symbols() -> tuple[Any, Any]:
 
 _SOCNAV_ALGO_KEYS = {
     "socnav_sampling",
+    "velocity_sampler",
     "sampling",
     "orca",
     "hrvo",

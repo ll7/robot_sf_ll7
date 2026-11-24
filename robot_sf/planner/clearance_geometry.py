@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Literal
 
 import numpy as np
+import shapely
 from shapely.geometry import LineString, Point
 from shapely.ops import unary_union
 
@@ -96,6 +97,30 @@ def occupied_cell_clearance(
     return float(np.min(distance))
 
 
+def swept_pedestrian_clearance(
+    positions: np.ndarray,
+    times: np.ndarray,
+    peds: np.ndarray,
+    velocities: np.ndarray,
+    radius: float,
+) -> np.ndarray:
+    """Closest relative approach on each linear forecast segment.
+
+    Returns:
+        np.ndarray: Surface clearance for each candidate and segment.
+    """
+    if not len(peds):
+        return np.full((len(positions), positions.shape[1] - 1), np.inf)
+    pred = peds[None, :, :] + times[:, None, None] * velocities[None, :, :]
+    relative = positions[:, :, None, :] - pred[None, :, :, :]
+    start = relative[:, :-1]
+    delta = relative[:, 1:] - start
+    denom = np.sum(delta * delta, axis=-1)
+    fraction = np.clip(-np.sum(start * delta, axis=-1) / np.maximum(denom, 1e-12), 0.0, 1.0)
+    closest = start + fraction[..., None] * delta
+    return np.min(np.linalg.norm(closest, axis=-1) - radius, axis=-1)
+
+
 class StaticObstacleClearance:
     """Continuous body distance to the exact world primitives used to build the grid.
 
@@ -119,6 +144,25 @@ class StaticObstacleClearance:
         if previous is not None and not np.array_equal(previous, point):
             query = LineString([previous, point])
         return float(query.distance(self.geometry)) - radius
+
+    def rollout_clearance(self, points: np.ndarray, radius: float) -> np.ndarray:
+        """Find the minimum signed clearance over each rollout's swept polyline.
+
+        Returns:
+            One minimum surface clearance per rollout, including signed solid depth.
+        """
+        if self.geometry.is_empty:
+            return np.full(len(points), np.inf)
+        minimum = shapely.distance(shapely.linestrings(points), self.geometry)
+        # Distance to a solid is zero on contact. Only end poses inside a
+        # solid have a strictly negative center clearance in the scalar check.
+        shapely.prepare(self.solid)
+        endpoints = points[:, 1:]
+        inside = shapely.contains_xy(self.solid, endpoints[..., 0], endpoints[..., 1])
+        if inside.any():
+            depth = shapely.distance(shapely.points(endpoints[inside]), self.solid.boundary)
+            np.minimum.at(minimum, np.nonzero(inside)[0], -depth)
+        return minimum - radius
 
 
 def obstacle_rollout_admissible(current: float, minimum: float, margin: float) -> bool:

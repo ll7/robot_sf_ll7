@@ -38,6 +38,7 @@ _BASELINE_CATEGORY_BY_CANONICAL: dict[str, str] = {
     "goal": "classical",
     "social_force": "classical",
     "orca": CONTRACT_RECORDS_BY_NAME["orca"].baseline_category,
+    "velocity_sampler": CONTRACT_RECORDS_BY_NAME["velocity_sampler"].baseline_category,
     "brne": "diagnostic",
     "hrvo": CONTRACT_RECORDS_BY_NAME["hrvo"].baseline_category,
     "social_navigation_pyenvs_orca": CONTRACT_RECORDS_BY_NAME[
@@ -94,6 +95,7 @@ _BASELINE_CATEGORY_BY_CANONICAL: dict[str, str] = {
     "lidar_grid_route": "classical",
     "trivial_reference": "diagnostic",
     "mppi_social": "classical",
+    "dra_mppi": "classical",
     "hybrid_portfolio": "classical",
     "planner_selector_v2_diagnostic": "diagnostic",
     "policy_stack_v1": "classical",
@@ -122,6 +124,7 @@ _POLICY_SEMANTICS_BY_CANONICAL: dict[str, str] = {
     "goal": "deterministic_goal_seeking",
     "social_force": "social_force_adapter",
     "orca": CONTRACT_RECORDS_BY_NAME["orca"].policy_semantics,
+    "velocity_sampler": CONTRACT_RECORDS_BY_NAME["velocity_sampler"].policy_semantics,
     "brne": "bounded_bayesian_recursive_nash_equilibrium_diagnostic",
     "socnav_orca_nonholonomic": CONTRACT_RECORDS_BY_NAME[
         "socnav_orca_nonholonomic"
@@ -178,6 +181,7 @@ _POLICY_SEMANTICS_BY_CANONICAL: dict[str, str] = {
     "lidar_grid_route": "lidar_ego_occupancy_grid_route_tracking",
     "trivial_reference": "diagnostic_adapter_template",
     "mppi_social": "sampled_sequence_optimizer",
+    "dra_mppi": "dynamic_risk_aware_path_integral_control",
     "hybrid_portfolio": "risk_regime_hybrid_switcher",
     "planner_selector_v2_diagnostic": "deterministic_diagnostic_planner_selector",
     "policy_stack_v1": "policy_stack_v1_portfolio",
@@ -226,6 +230,7 @@ _OBSERVATION_SPEC_BY_CANONICAL: dict[str, dict[str, Any]] = {
     },
     "social_force": _DEFAULT_OBSERVATION_SPEC,
     "orca": deepcopy(CONTRACT_RECORDS_BY_NAME["orca"].observation_spec),
+    "velocity_sampler": deepcopy(CONTRACT_RECORDS_BY_NAME["velocity_sampler"].observation_spec),
     "brne": {
         "default_mode": "socnav_state",
         "supported_modes": ("socnav_state",),
@@ -300,6 +305,12 @@ _OBSERVATION_SPEC_BY_CANONICAL: dict[str, dict[str, Any]] = {
         ),
     },
     "mppi_social": _DEFAULT_OBSERVATION_SPEC,
+    "dra_mppi": {
+        "default_mode": "socnav_state",
+        "supported_modes": ("socnav_state",),
+        "inputs": ("robot_state", "goal", "pedestrians", "static_map_geometry"),
+        "notes": "DRA-MPPI uses observed pedestrian velocity and bound static map geometry.",
+    },
     "hybrid_portfolio": _DEFAULT_OBSERVATION_SPEC,
     "planner_selector_v2_diagnostic": _DEFAULT_OBSERVATION_SPEC,
     "hybrid_orca_sampler": _DEFAULT_OBSERVATION_SPEC,
@@ -444,6 +455,7 @@ _UPSTREAM_REFERENCE_BY_CANONICAL: dict[str, dict[str, Any]] = {
         ),
     },
     "orca": deepcopy(CONTRACT_RECORDS_BY_NAME["orca"].upstream_reference),
+    "velocity_sampler": deepcopy(CONTRACT_RECORDS_BY_NAME["velocity_sampler"].upstream_reference),
     "socnav_orca_nonholonomic": deepcopy(
         CONTRACT_RECORDS_BY_NAME["socnav_orca_nonholonomic"].upstream_reference
     ),
@@ -560,6 +572,7 @@ _KINEMATICS_PROFILE_BY_CANONICAL: dict[str, dict[str, Any]] = {
         "projection_documented": True,
     },
     "orca": deepcopy(CONTRACT_RECORDS_BY_NAME["orca"].kinematics_profile),
+    "velocity_sampler": deepcopy(CONTRACT_RECORDS_BY_NAME["velocity_sampler"].kinematics_profile),
     "brne": {
         "planner_command_space": "unicycle_vw",
         "supports_native_commands": True,
@@ -855,6 +868,14 @@ _KINEMATICS_PROFILE_BY_CANONICAL: dict[str, dict[str, Any]] = {
         "supports_adapter_commands": True,
         "default_execution_mode": "adapter",
         "default_adapter_name": "MPPISocialPlannerAdapter",
+    },
+    "dra_mppi": {
+        "planner_command_space": "unicycle_vw",
+        "supports_native_commands": False,
+        "supports_adapter_commands": True,
+        "default_execution_mode": "adapter",
+        "default_adapter_name": "DRAMPPIAdapter",
+        "compatible_robot_kinematics": ["differential_drive"],
     },
     "hybrid_portfolio": {
         "planner_command_space": "unicycle_vw",

@@ -279,11 +279,58 @@ def _build_dra_mppi_policy_spec(algo_config: dict[str, Any]) -> AdapterPolicySpe
         ppo_paper_ready=False,
         allow_testing_algorithms=algo_config.get("allow_testing_algorithms") is True,
     )
+    if "encounter_sampler" in algo_config:
+        return _build_dra_mppi_encounter_policy_spec(algo_config)
+
     return AdapterPolicySpec(
         algo_key="dra_mppi",
         algo_config=algo_config,
         adapter=DRAMPPIAdapter(build_dra_mppi_config(algo_config)),
         adapter_name="DRAMPPIAdapter",
+    )
+
+
+def _build_dra_mppi_encounter_policy_spec(algo_config: dict[str, Any]) -> AdapterPolicySpec:
+    """Build DRA-MPPI with the contact-recovery sampler for sparse crossings.
+
+    Returns:
+        Adapter construction payload for the map runner.
+    """
+    from robot_sf.benchmark.map_runner_policies.map_runner_policy_resolution import (  # noqa: PLC0415
+        _build_socnav_config,
+    )
+    from robot_sf.benchmark.map_runner_policies.socnav_family import (  # noqa: PLC0415
+        build_socnav_family_adapter,
+    )
+    from robot_sf.planner.dra_mppi import build_dra_mppi_config  # noqa: PLC0415
+    from robot_sf.planner.dra_mppi_encounter import (  # noqa: PLC0415
+        EncounterConfig,
+        EncounterPlannerAdapter,
+    )
+    from robot_sf.planner.velocity_sampler_r9 import ContactVelocitySamplerAdapter  # noqa: PLC0415
+
+    encounter_config = algo_config["encounter_sampler"]
+    mppi_config = algo_config.get("dra_mppi")
+    if not isinstance(encounter_config, dict) or not isinstance(mppi_config, dict):
+        raise ValueError("encounter_sampler and dra_mppi settings must be mappings")
+    sampler = build_socnav_family_adapter(
+        algo_key="velocity_sampler",
+        algo="velocity_sampler",
+        algo_config=algo_config,
+        meta={},
+        socnav_cfg=_build_socnav_config(algo_config),
+    )
+    if not isinstance(sampler, ContactVelocitySamplerAdapter):
+        raise ValueError("encounter_sampler requires the contact_recovery velocity sampler")
+    return AdapterPolicySpec(
+        algo_key="dra_mppi",
+        algo_config=algo_config,
+        adapter=EncounterPlannerAdapter(
+            build_dra_mppi_config(mppi_config),
+            sampler,
+            EncounterConfig(**encounter_config),
+        ),
+        adapter_name="EncounterPlannerAdapter",
     )
 
 

@@ -1249,6 +1249,71 @@ def _load_sweep_rows(sweep_dir: Path) -> dict[tuple[str, str, int], dict[str, An
     return rows
 
 
+def _verify_completion_views(  # noqa: C901 - custody checks remain fail-closed in one read-only pass.
+    directory: Path,
+    contract: dict[str, Any],
+    rows: dict[tuple[str, str, int], dict[str, Any]],
+) -> None:
+    """Verify rebuildable views against the authoritative journal without changing inputs."""
+    from robot_sf.benchmark.receipt_stages import canonical_bytes, encode_row
+
+    committed = set()
+    for raw_path in sorted(directory.glob("campaigns/*/runs/*/episodes.jsonl")):
+        marker = raw_path.parent / "receipt_execution.json"
+        if not marker.is_file():
+            raise ValueError("observation requires atomic completion provenance")
+        descriptor = json.loads(marker.read_bytes())
+        if (
+            descriptor.get("schema_version") != "receipt-execution.v1"
+            or not isinstance(descriptor.get("run_id"), str)
+            or not descriptor["run_id"]
+            or any(descriptor.get(key) != contract[key] for key in ("execution_key", "source_sha"))
+        ):
+            raise ValueError("completion execution provenance differs from contract")
+        seen = set()
+        for line in raw_path.read_text().splitlines():
+            if not line.strip():
+                continue
+            raw = json.loads(line)
+            episode_id = raw.get("episode_id")
+            if not isinstance(episode_id, str) or not episode_id:
+                raise ValueError("raw observation has no completion identity")
+            name = hashlib.sha256(episode_id.encode()).hexdigest() + ".json"
+            path = raw_path.parent / "completed" / name
+            if not path.is_file():
+                raise ValueError("raw observation has no atomic completion")
+            record = json.loads(path.read_bytes())
+            encoded = canonical_bytes(encode_row(raw))
+            if (
+                record.get("schema_version") != "receipt-episode.v1"
+                or record.get("episode_id") != episode_id
+                or any(
+                    record.get(key) != descriptor.get(key)
+                    for key in ("execution_key", "source_sha", "run_id")
+                )
+                or record.get("row_sha256") != hashlib.sha256(encoded).hexdigest()
+                or canonical_bytes(record.get("row")) != encoded
+            ):
+                raise ValueError("completion checksum or provenance differs from raw observation")
+            key = (raw_path.parent.name.split("__")[0], raw["scenario_id"], raw["seed"])
+            if key in committed or name in seen:
+                raise ValueError("duplicate completion observation")
+            joined = rows.get(key)
+            if joined is None:
+                raise ValueError("completion journal and sweep row identities differ")
+            joined_raw = {
+                field: value for field, value in joined.items() if field != "execution_status"
+            }
+            if canonical_bytes(encode_row(joined_raw)) != encoded:
+                raise ValueError("sweep row differs from atomic completion")
+            committed.add(key)
+            seen.add(name)
+        if seen != {path.name for path in raw_path.parent.glob("completed/*.json")}:
+            raise ValueError("completion journal and rebuilt view differ")
+    if committed != rows.keys():
+        raise ValueError("completion journal and sweep row identities differ")
+
+
 def _verify_producing_allocation(run: SweepRun) -> str:
     """Require agreement between the claimed job and the submitted allocation."""
     path = run.output_dir / "submission.json"
@@ -1265,7 +1330,7 @@ def _verify_producing_allocation(run: SweepRun) -> str:
 def _load_producing_rows(
     run: SweepRun, *, scheduler_required: bool
 ) -> dict[tuple[str, str, int], dict[str, Any]]:
-    """Require complete execution and bind every raw row to the producing source."""
+    """Require complete execution and bind observations to the producing journal."""
     contract = _read_producing_contract(run.output_dir, run.source_sha)
     job_id = _verify_producing_allocation(run) if scheduler_required else None
     _verify_sweep_metadata(
@@ -1275,6 +1340,7 @@ def _load_producing_rows(
     for key, row in rows.items():
         if row.get("git_hash") != run.source_sha:
             raise ValueError(f"raw episode producing source differs for {key}")
+    _verify_completion_views(run.output_dir, contract, rows)
     return rows
 
 
@@ -1713,6 +1779,7 @@ def build_rows_and_classifications(
     """Join head/baseline sweep rows into gate payload rows and classifications."""
     from robot_sf.benchmark.metric_definitions import require_uniform_metric_schema
 
+    projected = outcome_projection is not None
     if outcome_projection is None:
         require_uniform_metric_schema([*head_rows.values(), *baseline_rows.values()])
         outcome_projection = compare_episode_observation
@@ -1736,6 +1803,16 @@ def build_rows_and_classifications(
                     raise ValueError(f"baseline sweep omitted {key}")
                 head = head_rows[key]
                 baseline = baseline_rows[key]
+                head_evidence = _execution_evidence(head)
+                projection_evidence = (
+                    {
+                        "projection_execution": _projection_execution_evidence(
+                            key, head, baseline, head_evidence
+                        )
+                    }
+                    if projected
+                    else {}
+                )
                 success, collisions, baseline_success, baseline_collisions = outcome_projection(
                     head, baseline
                 )
@@ -1748,7 +1825,8 @@ def build_rows_and_classifications(
                         "collisions": collisions,
                         "baseline_success": baseline_success,
                         "baseline_collisions": baseline_collisions,
-                        **_execution_evidence(head),
+                        **head_evidence,
+                        **projection_evidence,
                     }
                 )
                 evidence = f"{evidence_base_uri.rstrip('/')}/{arm}/{map_id}/{seed}"
@@ -1784,6 +1862,38 @@ def build_rows_and_classifications(
         ),
     }
     return rows, classifications, totals
+
+
+def _projection_execution_evidence(
+    key: tuple[str, str, int],
+    head: dict[str, Any],
+    baseline: dict[str, Any],
+    head_evidence: dict[str, Any],
+) -> dict[str, Any]:
+    """Reject incomplete or tainted projection pairs before aggregating their outcomes."""
+    execution = {}
+    for label, row, evidence in (
+        ("head", head, head_evidence),
+        ("baseline", baseline, _execution_evidence(baseline)),
+    ):
+        status = row.get("execution_status")
+        audit = _audit_status([evidence])
+        execution[label] = {
+            **evidence,
+            "source_sha": row.get("git_hash"),
+            "episode_id": row.get("episode_id"),
+            "execution_status": status,
+            "audit_status": audit,
+            "eligible": status == "written" and audit == "pass",
+        }
+    if not all(item["eligible"] for item in execution.values()):
+        sides = ", ".join(
+            f"{label} ({item['source_sha']}) execution={item['execution_status']}, "
+            f"audit={item['audit_status']}"
+            for label, item in execution.items()
+        )
+        raise ValueError(f"ineligible outcome projection pair {key}: {sides}")
+    return execution
 
 
 def _audit_status(rows: list[dict[str, Any]]) -> str:

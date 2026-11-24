@@ -926,14 +926,18 @@ def test_comparison_refuses_wrong_execution_completion(tmp_path, monkeypatch):
         )
 
 
-def test_outcome_projection_uses_bound_metrics_across_producer_versions(tmp_path, monkeypatch):
-    """Compare only terminal metrics from each original producer, including horizon misses."""
+def _outcome_projection_fixture(tmp_path, monkeypatch, *, ineligible_side=None, fault=None):
     import hashlib
     import subprocess
 
     from robot_sf.benchmark.receipt_stages import atomic_json, publish_episode, stage_key
 
-    comparator, head, baseline = _comparison_fixture(tmp_path, monkeypatch)
+    with monkeypatch.context() as patch:
+        comparator, head, baseline = _comparison_fixture(tmp_path, patch)
+        inputs = {
+            directory: comparator.producer._load_sweep_rows(directory)
+            for directory in (head, baseline)
+        }
     sources = {
         head: "c9bc60504c5e087126f54a481775e31019cae082",
         baseline: "373dbfde4f39667cf9e8732dabe7df5118bdeab1",
@@ -953,7 +957,7 @@ def test_outcome_projection_uses_bound_metrics_across_producer_versions(tmp_path
             )
             return hashlib.sha256(data).hexdigest()
 
-        rows = comparator.producer._load_sweep_rows(directory)
+        rows = inputs[directory]
         run = directory / "campaigns/empty_world_main/runs/goal__differential_drive"
         (run / "receipt_execution.json").unlink()
         for path in (run / "completed").iterdir():
@@ -986,8 +990,35 @@ def test_outcome_projection_uses_bound_metrics_across_producer_versions(tmp_path
                 "run_id": str(directory),
             },
         )
-        for row in rows.values():
-            row["git_hash"] = source
+        summaries = []
+        for index, row in enumerate(rows.values()):
+            tainted = index == 0 and directory.name == ineligible_side
+            execution_status = "incomplete_trace" if tainted and fault == "status" else "written"
+            row.update(
+                algo="goal",
+                git_hash=source,
+                steps=1,
+                algorithm_metadata={
+                    "status": "ok",
+                    "planner_kinematics": {"execution_mode": "native"},
+                    "simulation_step_trace": {
+                        "schema_version": "simulation-step-trace.v2",
+                        "dt": 0.1,
+                        "reset": {"robot": {"position": [0.0, 0.0]}},
+                        "steps": [
+                            {
+                                "robot": {"position": [0.1, 0.0]},
+                                "pedestrians": [],
+                                "planner": {"selected_action": {"linear_velocity": 1.0}},
+                            }
+                        ],
+                    },
+                },
+            )
+            if tainted and fault == "raw_trace":
+                row["algorithm_metadata"]["simulation_step_trace"]["steps"].clear()
+            if tainted and fault == "fallback":
+                row["fallback"] = True
             row["outcome"].update(
                 route_complete=directory == baseline, collision_event=directory == head
             )
@@ -997,8 +1028,53 @@ def test_outcome_projection_uses_bound_metrics_across_producer_versions(tmp_path
                 collisions=2 if directory == head else 0,
             )
             publish_episode(run / "episodes.jsonl", {}, row)
+            summaries.append(
+                {
+                    "arm": "goal",
+                    "scenario": row["scenario_id"],
+                    "seed": row["seed"],
+                    "success": row["metrics"]["success"],
+                    "collisions": row["metrics"]["collisions"],
+                    "execution_status": execution_status,
+                    "source_file": "runs/goal__differential_drive/episodes.jsonl",
+                }
+            )
         (run / "episodes.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows.values()))
+        (directory / "episodes_main.jsonl").write_text(
+            "".join(json.dumps(row) + "\n" for row in summaries)
+        )
+    return comparator, head, baseline, sources
 
+
+@pytest.mark.parametrize("side", ["baseline", "head"])
+@pytest.mark.parametrize("fault", ["status", "raw_trace", "fallback"])
+def test_outcome_projection_rejects_ineligible_pairs(tmp_path, monkeypatch, side, fault):
+    """A journal-backed observation still needs terminal, untainted execution on both sides."""
+    comparator, head, baseline, sources = _outcome_projection_fixture(
+        tmp_path, monkeypatch, ineligible_side=side, fault=fault
+    )
+    output = tmp_path / "projection.json"
+    with pytest.raises(ValueError, match="ineligible outcome projection pair") as rejected:
+        comparator.compare(
+            head,
+            baseline,
+            {"arms": ["goal"], "maps": ["slot"]},
+            output,
+            outcome_projection=True,
+        )
+    reason = (
+        "incomplete_trace" if fault == "status" else ("degraded" if fault == "fallback" else "fail")
+    )
+    assert f"{side} ({sources[head if side == 'head' else baseline]})" in str(rejected.value)
+    assert sources[head] in str(rejected.value)
+    assert sources[baseline] in str(rejected.value)
+    assert reason in str(rejected.value)
+    assert not output.exists()
+
+
+def test_outcome_projection_uses_bound_metrics_across_producer_versions(tmp_path, monkeypatch):
+    """Compare terminal metrics and preserve execution provenance from both producers."""
+    comparator, head, baseline, sources = _outcome_projection_fixture(tmp_path, monkeypatch)
     output = tmp_path / "projection.json"
     result = comparator.compare(
         head,
@@ -1013,3 +1089,9 @@ def test_outcome_projection_uses_bound_metrics_across_producer_versions(tmp_path
     assert result["rows"][0]["baseline_success"] is True
     assert result["scoring_contracts"]["head"]["source_sha"] == sources[head]
     assert result["scoring_contracts"]["baseline"]["source_sha"] == sources[baseline]
+    for label, directory in (("head", head), ("baseline", baseline)):
+        execution = result["rows"][0]["projection_execution"][label]
+        assert execution["source_sha"] == sources[directory]
+        assert execution["execution_status"] == "written"
+        assert execution["eligible"] is True
+        assert execution["controller_executed"] is True

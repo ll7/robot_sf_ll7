@@ -547,15 +547,27 @@ mask and refuses non-finite samples for present pedestrians. The artifact
 records these producer-specific definitions and compares only the two
 navigation outcomes. Scores, forces and other metrics remain source-specific.
 
-The projection is available for review as a standalone comparison. It emits
-`admission: not_evaluated`, and the receipt producer retains its paired
-schema and metric compatibility gate. Before a paired acquisition relies on
-this projection, reviewers must accept the scope and confirm equivalence on
-the production pair. A change to the covered producer bytes requires a
-renewed comparison of their metric definitions.
+The projection requires a written observation and passing controller execution
+checks on both sides of every pair. An incomplete trace, fallback or degraded
+execution on either side rejects the comparison before publication. The report
+includes both sides' producing SHA, episode identity and execution eligibility,
+and carries `admission: not_evaluated`.
+
+For production acquisition, use the selected immutable train candidate and the
+published release source. Run paired preflight with the pinned acquisition
+bundle, then qualify the scheduler route and collect the full development pair
+once both producing contracts pass the row-schema and metric-semantics check.
+The published 0.0.8 schema differs from the receipt pipeline's schema, and the
+pinned acquisition patch does not apply to the batch 2 candidate in #10479.
+A compatible, independently reviewed route and exact-head evidence remain
+required for that release pair. The standalone projection supplies diagnostic
+comparison only. Changes to either producer's covered bytes require renewed
+metric equivalence review.
 
 Receipt assembly checks each suite's execution key against its preflight
-contract. For scheduler runs, the claimed job must match both the submission
-manifest and the job ID recorded by the completed sweep. Resumed observations
-retain their original execution key. The final scheduler job records the
-allocation that completed the sweep.
+contract. On both sides it matches each observation to its atomic completion
+record and rejects missing records or changes to the raw or summary views.
+For scheduler runs, the claimed job must match both the submission manifest
+and the job ID recorded by the completed sweep. Resumed observations retain
+their original execution key. The final scheduler job records the allocation
+that completed the sweep.

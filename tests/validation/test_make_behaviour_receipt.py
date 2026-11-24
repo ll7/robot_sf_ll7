@@ -1583,6 +1583,8 @@ def test_p1_regression_controls_fail_on_reviewed_head(monkeypatch, tmp_path, fin
 
 
 def _install_cli_fixture(tmp_path, monkeypatch):
+    from robot_sf.benchmark.receipt_stages import atomic_json, publish_episode
+
     git = _git_repo(tmp_path)
     for filename in (
         "make_behaviour_receipt.py",
@@ -1633,6 +1635,22 @@ def _install_cli_fixture(tmp_path, monkeypatch):
         execution = json.loads(metadata.read_text())
         execution.update(execution_key=contract["execution_key"], scheduler_job_id=job_id)
         metadata.write_text(json.dumps(execution))
+        raw = next(output.glob("campaigns/*/runs/*/episodes.jsonl"))
+        atomic_json(
+            raw.parent / "receipt_execution.json",
+            {
+                "schema_version": "receipt-execution.v1",
+                "source_sha": producing_sha,
+                "execution_key": contract["execution_key"],
+                "run_id": output.name,
+            },
+        )
+        records = [json.loads(line) for line in raw.read_text().splitlines()]
+        for row in records:
+            row["episode_id"] = f"open-{row['seed']}"
+            row["outcome"] = {"route_complete": row["metrics"]["success"]}
+            publish_episode(raw, {}, row)
+        raw.write_text("".join(json.dumps(row) + "\n" for row in records))
     _fake_release_api(tmp_path, monkeypatch)
     monkeypatch.delenv("PYTHONPATH", raising=False)
     monkeypatch.setattr(gate, "ROOT", tmp_path)
@@ -1640,11 +1658,9 @@ def _install_cli_fixture(tmp_path, monkeypatch):
     return git, source, head, baseline
 
 
-def test_file_cli_and_real_gate_cover_name_only_baseline(monkeypatch, tmp_path):
-    """File CLI and actual release resolution distinguish origin/main without PYTHONPATH."""
-    git, source, head, baseline = _install_cli_fixture(tmp_path, monkeypatch)
+def _receipt_cli_command(tmp_path, source, head, baseline):
     script = tmp_path / "scripts/ci/make_behaviour_receipt.py"
-    command = [
+    return [
         sys.executable,
         str(script),
         "--head-sha",
@@ -1664,6 +1680,47 @@ def test_file_cli_and_real_gate_cover_name_only_baseline(monkeypatch, tmp_path):
         "--baseline-job-id",
         "456",
     ]
+
+
+@pytest.mark.parametrize("side", ["head", "baseline"])
+@pytest.mark.parametrize(
+    ("fault", "reason"),
+    [
+        ("missing_journal", "raw observation has no atomic completion"),
+        ("missing_descriptor", "requires atomic completion provenance"),
+        ("edited_views", "completion checksum or provenance differs from raw observation"),
+    ],
+)
+def test_file_cli_requires_atomic_completions(monkeypatch, tmp_path, side, fault, reason):
+    """The file CLI rejects missing journals or jointly edited raw and summary outcomes."""
+    _, source, head, baseline = _install_cli_fixture(tmp_path, monkeypatch)
+    directory = head if side == "head" else baseline
+    raw = next(directory.glob("campaigns/*/runs/*/episodes.jsonl"))
+    if fault == "missing_journal":
+        shutil.rmtree(raw.parent / "completed")
+    elif fault == "missing_descriptor":
+        (raw.parent / "receipt_execution.json").unlink()
+    else:
+        summary = directory / "episodes_main.jsonl"
+        raw_rows = [json.loads(line) for line in raw.read_text().splitlines()]
+        summary_rows = [json.loads(line) for line in summary.read_text().splitlines()]
+        raw_rows[0]["metrics"]["success"] = not raw_rows[0]["metrics"]["success"]
+        raw_rows[0]["outcome"]["route_complete"] = raw_rows[0]["metrics"]["success"]
+        summary_rows[0]["success"] = raw_rows[0]["metrics"]["success"]
+        for path, rows in ((raw, raw_rows), (summary, summary_rows)):
+            path.write_text("".join(json.dumps(row) + "\n" for row in rows))
+
+    command = _receipt_cli_command(tmp_path, source, head, baseline)
+    result = subprocess.run(command, cwd=tmp_path, capture_output=True, text=True, check=False)
+    assert result.returncode != 0, "receipt assembly accepted an unbound observation"
+    assert reason in result.stderr
+    assert not (tmp_path / "receipts/behaviour/synthetic.json").exists()
+
+
+def test_file_cli_and_real_gate_cover_name_only_baseline(monkeypatch, tmp_path):
+    """File CLI and actual release resolution distinguish origin/main without PYTHONPATH."""
+    git, source, head, baseline = _install_cli_fixture(tmp_path, monkeypatch)
+    command = _receipt_cli_command(tmp_path, source, head, baseline)
     contract_path = head / "contract.json"
     original_contract = contract_path.read_text()
     contract = json.loads(original_contract)

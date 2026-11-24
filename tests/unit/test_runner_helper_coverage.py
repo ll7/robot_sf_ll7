@@ -767,21 +767,33 @@ def test_runtime_diagnostics_normalization_marks_fallback_and_splits_worker_payl
     assert process.diagnostics() == {"fallback": True}
 
 
-def test_worker_releases_pipe_when_stderr_open_fails(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Temporary-file exhaustion leaves both process pipe handles closed."""
-    closed = []
-    parent = SimpleNamespace(close=lambda: closed.append("parent"))
-    child = SimpleNamespace(close=lambda: closed.append("child"))
-    step_runner = _handshake_runner(_HandshakeConnection(poll_result=True))
-    step_runner._ctx.Pipe = lambda duplex: (parent, child)
+@pytest.mark.skipif(
+    "fork" not in runner_mod.mp.get_all_start_methods(), reason="planner worker requires fork"
+)
+def test_policy_step_succeeds_when_worker_stderr_capture_is_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An unavailable diagnostic file must not replace an otherwise valid planner action."""
 
     def fail_stderr(**_kwargs):
         raise OSError("stderr file unavailable")
 
     monkeypatch.setattr(runner_mod.tempfile, "TemporaryFile", fail_stderr)
-    with pytest.raises(OSError, match="stderr file unavailable"):
-        step_runner._ensure_worker()
-    assert closed == ["parent", "child"]
-    assert step_runner._stderr is None
-    assert step_runner._process is None
+    monkeypatch.setattr(runner_mod, "_config_torch_worker", lambda _planner: None)
+    planner = SimpleNamespace(step=lambda _obs: {"vx": 0.25, "vy": 0.0})
+    step_runner = runner_mod._PlannerStepProcess(planner, timeout_s=2.0)
+    counters = {"step_timeouts": 0, "step_retries": 0, "worker_errors": 0, "fallback_actions": 0}
+    metadata = {"status": "ok"}
+    try:
+        action = runner_mod._step_planner_with_retry(step_runner, {}, "ppo", counters, metadata, 1)
+    finally:
+        step_runner.close()
+
+    assert action == {"vx": 0.25, "vy": 0.0}
+    assert not any(counters.values())
+    assert metadata == {"status": "ok"}
+    assert step_runner.worker_events[0]["exit_code"] == 0
+    assert step_runner.worker_events[0]["stderr_tail"] == ""
     assert step_runner._conn is None
+    assert step_runner._process is None
+    assert step_runner._stderr is None

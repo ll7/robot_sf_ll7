@@ -668,9 +668,13 @@ class _PlannerStepProcess:
         started = False
         try:
             # A file avoids pipe-buffer deadlocks when native libraries write to fd 2.
-            self._stderr = tempfile.TemporaryFile(mode="w+b")
+            try:
+                self._stderr = tempfile.TemporaryFile(mode="w+b")
+            except OSError as exc:
+                logger.debug("Planner worker stderr capture is unavailable: {}", exc)
+            stderr_fd = self._stderr.fileno() if self._stderr is not None else None
             process = self._ctx.Process(
-                target=_planner_step_worker, args=(child_conn, self._planner, self._stderr.fileno())
+                target=_planner_step_worker, args=(child_conn, self._planner, stderr_fd)
             )
             process.start()
             started = True

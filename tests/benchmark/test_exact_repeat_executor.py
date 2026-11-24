@@ -489,6 +489,59 @@ def test_execute_campaign_writes_host_result_json(tmp_path, resolved_bundle):
     assert loaded["schema_version"] == HOST_REPORT_SCHEMA_VERSION
 
 
+@pytest.mark.parametrize(
+    ("metadata", "disposition", "retained_metadata", "worker_events"),
+    [
+        pytest.param(
+            "malformed", PROCESS_ISOLATION_DISPOSITION, "malformed", [], id="scalar-metadata"
+        ),
+        pytest.param(
+            {"status": "ok", "policy_step_timeout": None}, None, None, [], id="null-timeout"
+        ),
+        pytest.param(
+            {
+                "status": "policy_step_isolation_unavailable",
+                "policy_step_timeout": {"worker_events": [{"kind": "crash"}]},
+                "bad_diagnostic": object(),
+            },
+            PROCESS_ISOLATION_DISPOSITION,
+            {},
+            [{"kind": "crash"}],
+            id="non-json-metadata",
+        ),
+    ],
+)
+def test_execute_campaign_preserves_report_with_malformed_diagnostics(
+    tmp_path, development_ppo_bundle, metadata, disposition, retained_metadata, worker_events
+):
+    """Malformed optional diagnostics cannot erase a runnable result or failure disposition."""
+
+    def run_episode_with_metadata(_scenario, *, seed, **_kwargs):
+        record = _build_mock_record(seed)
+        record["algorithm_metadata"] = metadata
+        return record
+
+    report = execute_campaign(
+        development_ppo_bundle, output_dir=tmp_path, run_episode=run_episode_with_metadata
+    )
+    result = report["results"][0]
+    written = json.loads((tmp_path / "host_result.json").read_text(encoding="utf-8"))
+    assert written["results"] == [result]
+    assert result.get("disposition") == disposition
+    if disposition is None:
+        assert len(result["repeats"]) == 3
+    else:
+        assert result["repeats"] == []
+        assert result["repeat_diagnostics"] == [
+            {
+                "repeat_index": index,
+                "algorithm_metadata": retained_metadata,
+                "worker_events": worker_events,
+            }
+            for index in range(3)
+        ]
+
+
 def test_execute_campaign_target_filter_executes_only_requested_targets(
     tmp_path, manifest, resolved_bundle
 ):

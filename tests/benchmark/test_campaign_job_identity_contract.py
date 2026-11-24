@@ -2,18 +2,22 @@
 
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 import pytest
+import yaml
 
 from robot_sf.benchmark.camera_ready._config import _load_campaign_scenarios
 from robot_sf.benchmark.camera_ready._resume_plan import _expected_job_identities
 from robot_sf.benchmark.camera_ready._run_state import _expected_episode_identities
 from robot_sf.benchmark.camera_ready.campaign import _post_run_integrity_and_fairness
-from robot_sf.benchmark.camera_ready_campaign import load_campaign_config
+from robot_sf.benchmark.camera_ready_campaign import load_campaign_config, run_campaign
 from robot_sf.benchmark.map_runner import map_runner_batch_plan, map_runner_identity
 from robot_sf.benchmark.map_runner.map_runner_batch_plan import build_seed_jobs
+from robot_sf.benchmark.seed_bands import DEV_SEEDS
+from robot_sf.common.artifact_paths import get_repository_root
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -49,6 +53,76 @@ def test_map_job_denominator_excludes_nonexecuting_scenarios(
     else:
         actual = _expected_episode_identities(scenarios, [1001, 1002])
     assert actual == {("kept", 1001)}
+
+
+def test_run_campaign_rejects_empty_executable_job_set(tmp_path: Path) -> None:
+    """An enabled arm and an entirely filtered matrix are insufficient for evidence."""
+    matrix = tmp_path / "matrix.yaml"
+    source_matrix = (
+        get_repository_root()
+        / "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml"
+    )
+    matrix.write_text(
+        yaml.safe_dump(
+            {
+                "includes": [str(source_matrix)],
+                "select_scenarios": ["francis2023_blind_corner"],
+                "scenario_overrides": {"supported": False},
+            }
+        ),
+        encoding="utf-8",
+    )
+    config = tmp_path / "campaign.yaml"
+    config.write_text(
+        yaml.safe_dump(
+            {
+                "name": "empty-executable-job-set",
+                "paper_facing": False,
+                "scenario_matrix": str(matrix),
+                "seed_policy": {"mode": "fixed-list", "seeds": [DEV_SEEDS[0]]},
+                "snqi_weights": "configs/benchmarks/snqi_weights_camera_ready_v3.json",
+                "snqi_baseline": "tests/data/snqi/resume_metric_v2_baseline.json",
+                "snqi_contract": {"enabled": False},
+                "horizon": 1,
+                "dt": 0.1,
+                "workers": 1,
+                "resume": True,
+                "bootstrap_samples": 20,
+                "bootstrap_seed": DEV_SEEDS[0],
+                "kinematics_matrix": ["differential_drive"],
+                "export_publication_bundle": False,
+                "planners": [
+                    {
+                        "key": "social_force",
+                        "algo": "social_force",
+                        "benchmark_profile": "baseline-safe",
+                        "algo_config": (
+                            "configs/algos/social_force_resolution_independent_v2_"
+                            "kernel_wrapped_v2.yaml"
+                        ),
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = run_campaign(
+        load_campaign_config(config),
+        output_root=tmp_path,
+        campaign_id="empty",
+        skip_publication_bundle=True,
+    )
+    summary = json.loads(
+        (tmp_path / "empty" / "reports" / "campaign_summary.json").read_text(encoding="utf-8")
+    )
+    assert result["benchmark_success"] is False
+    assert summary["campaign"]["status"] == "integrity_failed"
+    assert summary["campaign"]["evidence_status"] == "invalid"
+    assert summary["campaign"]["total_episodes"] == 0
+    integrity = summary["campaign_integrity"]
+    assert integrity["expected_identity_count"] == 0
+    assert [blocker["invariant"] for blocker in integrity["blockers"]] == ["no_executable_jobs"]
 
 
 def test_map_integrity_uses_runtime_name_precedence() -> None:

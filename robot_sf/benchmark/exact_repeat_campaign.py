@@ -1524,6 +1524,34 @@ def _execute_target_repeats(  # noqa: PLR0913 - repeat execution requires full t
     return records, repeats
 
 
+def _optional_diagnostic_json(value: Any, default: Any) -> Any:
+    """Prepare optional diagnostics for serialization.
+
+    Returns:
+        The sanitized value, or the default if the value is incompatible.
+    """
+    try:
+        return _safe_json_value(value)
+    except (TypeError, ValueError, RecursionError):
+        return default
+
+
+def _repeat_diagnostic(index: int, record: Mapping[str, Any]) -> dict[str, Any]:
+    """Capture optional diagnostics without changing the repeat's disposition.
+
+    Returns:
+        JSON-compatible metadata and worker events for the indexed repeat.
+    """
+    metadata = record.get("algorithm_metadata", {})
+    timeout = metadata.get("policy_step_timeout") if isinstance(metadata, Mapping) else None
+    events = timeout.get("worker_events", []) if isinstance(timeout, Mapping) else []
+    return {
+        "repeat_index": index,
+        "algorithm_metadata": _optional_diagnostic_json(metadata, {}),
+        "worker_events": _optional_diagnostic_json(events, []),
+    }
+
+
 def _build_executed_target_result(
     key: tuple[str, str, int],
     target: Mapping[str, Any],
@@ -1552,18 +1580,11 @@ def _build_executed_target_result(
         The classified result entry for the executed target.
     """
     any_degraded, any_isolation = _classify_repeat_failure(records)
-    repeat_diagnostics = [
-        {
-            "repeat_index": index,
-            "algorithm_metadata": _safe_json_value(record.get("algorithm_metadata", {})),
-            "worker_events": _safe_json_value(
-                (record.get("algorithm_metadata") or {})
-                .get("policy_step_timeout", {})
-                .get("worker_events", [])
-            ),
-        }
-        for index, record in enumerate(records)
-    ]
+    repeat_diagnostics = (
+        [_repeat_diagnostic(index, record) for index, record in enumerate(records)]
+        if any_degraded or any_isolation
+        else []
+    )
     if records and any_isolation:
         return {
             "scenario_id": key[0],

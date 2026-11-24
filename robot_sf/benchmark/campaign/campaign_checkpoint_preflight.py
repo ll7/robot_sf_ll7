@@ -32,8 +32,11 @@ remain implicit. Other model-loading side channels keep their existing runtime b
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
+from hashlib import sha256
 from pathlib import Path
+from pickle import UnpicklingError
 from typing import TYPE_CHECKING, Any
 
 import yaml
@@ -619,6 +622,114 @@ def check_campaign_arm_checkpoints_preflight_from_config(
     )
 
 
+def _predictive_mppi_effective_bindings(
+    config_path: Path, payload: dict[str, Any], planner: PlannerSpec
+) -> dict[str, tuple[dict[str, Any], list[str]]]:
+    """Resolve the same config and scenario overrides as episode dispatch.
+
+    Returns:
+        Effective config and covered scenarios, grouped by config digest.
+    """
+    from robot_sf.benchmark.camera_ready._config import (  # noqa: PLC0415
+        _filter_scenario_candidates,
+        _parse_scenario_candidates,
+        _resolve_scenario_matrix_path,
+    )
+    from robot_sf.benchmark.map_runner_policies.map_runner_policy_resolution import (  # noqa: PLC0415
+        _parse_algo_config,
+        _resolve_policy_search_candidate_runtime,
+    )
+    from robot_sf.benchmark.policy_search_manifest import _scenario_id  # noqa: PLC0415
+    from robot_sf.training.scenario_loader import load_scenarios  # noqa: PLC0415
+
+    path = str(planner.algo_config_path) if planner.algo_config_path else None
+    raw = _parse_algo_config(path)
+    has_overrides = any(
+        raw.get(key)
+        for key in ("scenario_algo_overrides", "scenario_overrides", "family_overrides")
+    )
+    scenarios: list[dict[str, Any]] = [{}]
+    if has_overrides:
+        matrix = _resolve_scenario_matrix_path(payload, config_path=config_path)
+        scenarios = _filter_scenario_candidates(
+            [dict(scenario) for scenario in load_scenarios(matrix, base_dir=matrix.parent)],
+            names=_parse_scenario_candidates(payload),
+            matrix_path=matrix,
+        )
+        if not scenarios:
+            raise ValueError("no selected scenarios available for planner overrides")
+
+    bindings: dict[str, tuple[dict[str, Any], list[str]]] = {}
+    for scenario in scenarios:
+        algo, settings = _resolve_policy_search_candidate_runtime(
+            default_algo=planner.algo, algo_config_path=path, algo_config=raw, scenario=scenario
+        )
+        if algo.strip().lower() == "predictive_mppi":
+            digest = sha256(json.dumps(settings, sort_keys=True, default=str).encode()).hexdigest()
+            _, names = bindings.setdefault(digest, (settings, []))
+            names.append(_scenario_id(scenario) if has_overrides else "all")
+    return bindings
+
+
+def report_campaign_predictive_mppi(
+    config_path: Path,
+    *,
+    seed: int,
+    registry_path: str | Path | None = None,
+    cache_dir: str | Path | None = None,
+) -> dict[str, Any]:
+    """Report one development planning step per effective MPPI binding without submitting.
+
+    Returns:
+        Per-arm outcomes, including explicit refusals and checked source identity.
+    """
+    from robot_sf.benchmark.camera_ready._config import _parse_planner_specs  # noqa: PLC0415
+    from robot_sf.benchmark.seed_bands import DEV_SEEDS  # noqa: PLC0415
+    from robot_sf.planner.predictive_mppi import (  # noqa: PLC0415
+        build_predictive_mppi_config,
+        probe_predictive_mppi,
+    )
+
+    if seed not in DEV_SEEDS:
+        raise ValueError("predictive MPPI report needs a repository development seed (1001–1030)")
+    source = config_path.read_bytes()
+    payload = yaml.safe_load(source)
+    if not isinstance(payload, dict):
+        raise ValueError("campaign config must be a mapping")
+    planners = _parse_planner_specs(payload.get("planners"), base_dir=config_path.resolve().parent)
+    bindings = []
+    for planner in planners:
+        if not planner.enabled:
+            continue
+        record = {"planner_key": planner.key}
+        try:
+            effective = _predictive_mppi_effective_bindings(config_path, payload, planner)
+        except (OSError, TypeError, ValueError, yaml.YAMLError) as exc:
+            bindings.append({**record, "status": "unverified", "detail": str(exc)})
+            continue
+        for digest, (settings, scenarios) in effective.items():
+            binding = {**record, "effective_config_sha256": digest, "scenarios": scenarios}
+            try:
+                result = probe_predictive_mppi(
+                    build_predictive_mppi_config(settings),
+                    seed=seed,
+                    registry_path=registry_path,
+                    cache_dir=cache_dir,
+                )
+            except (ImportError, KeyError, OSError, EOFError, UnpicklingError) as exc:
+                bindings.append({**binding, "status": "unverified", "detail": str(exc)})
+            except (RuntimeError, ValueError, TypeError, yaml.YAMLError) as exc:
+                bindings.append({**binding, "status": "refused", "detail": str(exc)})
+            else:
+                bindings.append({**binding, **result, "status": "compatible"})
+    return {
+        "campaign_config_sha256": sha256(source).hexdigest(),
+        "seed": seed,
+        "submit_safe": False,
+        "bindings": bindings,
+    }
+
+
 __all__ = [
     "ArmCheckpointReference",
     "ArmCheckpointResolution",
@@ -626,5 +737,6 @@ __all__ = [
     "check_campaign_arm_checkpoints_preflight",
     "check_campaign_arm_checkpoints_preflight_from_config",
     "iter_campaign_arm_checkpoint_references",
+    "report_campaign_predictive_mppi",
     "resolve_arm_checkpoint",
 ]

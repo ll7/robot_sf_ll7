@@ -588,3 +588,129 @@ def test_prediction_planner_surface_clearance_subtracts_both_body_radii_once() -
         valid_dists=np.asarray([[2.0]], dtype=float),
     )
     assert clearance == pytest.approx(0.6)
+
+
+@pytest.fixture
+def forecast_checkpoint(tmp_path, monkeypatch):
+    """Give the forecast probe a real, small checkpoint with a test registry entry."""
+    import torch
+
+    from robot_sf.models.registry import sha256_of_file
+    from robot_sf.planner.predictive_model import (
+        PredictiveModelConfig,
+        PredictiveTrajectoryModel,
+        save_predictive_checkpoint,
+    )
+
+    checkpoint = tmp_path / "forecast.pt"
+    with torch.random.fork_rng(devices=[]):
+        torch.manual_seed(1001)
+        model = PredictiveTrajectoryModel(PredictiveModelConfig(hidden_dim=8, horizon_steps=8))
+    save_predictive_checkpoint(checkpoint, model=model, optimizer=None, epoch=0)
+    digest = sha256_of_file(checkpoint)
+    registry = tmp_path / "registry.yaml"
+    registry.write_text(
+        yaml.safe_dump(
+            {
+                "version": 1,
+                "models": [
+                    {
+                        "model_id": "fixture",
+                        "local_path": str(checkpoint),
+                        "local_only": True,
+                        "github_release": {"sha256": digest},
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    from robot_sf.planner import predictive_mppi
+
+    monkeypatch.setattr(predictive_mppi, "_CHECKPOINT_FORECAST_DT_S", {digest: 0.1}, raising=False)
+    return checkpoint, registry, digest
+
+
+@pytest.mark.parametrize(
+    ("config_file", "override", "refusal"),
+    [
+        ("predictive_mppi_camera_ready.yaml", {}, "horizon_steps=12.*8 steps"),
+        ("predictive_mppi_release_v0_0_8.yaml", {"rollout_dt": 0.2}, "rollout_dt=0.2.*0.1"),
+        (
+            "predictive_mppi_release_v0_0_8.yaml",
+            {"predictive_rollout_dt": 0.2},
+            "predictive_rollout_dt=0.2.*0.1",
+        ),
+        (
+            "predictive_mppi_release_v0_0_8.yaml",
+            {"predictive_adaptive_horizon_enabled": True, "predictive_horizon_boost_steps": 1},
+            "adaptive_horizon_steps=9.*8 steps",
+        ),
+    ],
+)
+def test_forecast_probe_rejects_unusable_binding(
+    forecast_checkpoint, config_file, override, refusal
+):
+    """Check the requested window and both time grids against loaded checkpoint evidence."""
+    from robot_sf.planner import predictive_mppi
+
+    _, registry, _ = forecast_checkpoint
+    settings = yaml.safe_load((Path("configs/algos") / config_file).read_text())
+    config = build_predictive_mppi_config(
+        {**settings, **override, "predictive_model_id": "fixture"}
+    )
+    with pytest.raises(ValueError, match=refusal):
+        predictive_mppi.probe_predictive_mppi(config, seed=1001, registry_path=registry)
+
+
+def test_forecast_probe_rejects_swapped_checkpoint(forecast_checkpoint, tmp_path):
+    """An explicit path override must still match the registered digest before loading."""
+    from robot_sf.planner import predictive_mppi
+
+    _, registry, _ = forecast_checkpoint
+    swapped = tmp_path / "unregistered.pt"
+    swapped.write_bytes(b"different bytes")
+    config = build_predictive_mppi_config(
+        {
+            "predictive_model_id": "fixture",
+            "predictive_checkpoint_path": str(swapped),
+        }
+    )
+    with pytest.raises(ValueError, match="checkpoint SHA-256 mismatch"):
+        predictive_mppi.probe_predictive_mppi(config, seed=1001, registry_path=registry)
+
+
+def test_forecast_probe_runs_one_learned_planning_step(forecast_checkpoint):
+    """The eight-step release config reaches MPPI with loaded weights and a finite command."""
+    from robot_sf.planner import predictive_mppi
+
+    _, registry, digest = forecast_checkpoint
+    settings = yaml.safe_load(Path("configs/algos/predictive_mppi_release_v0_0_8.yaml").read_text())
+    config = build_predictive_mppi_config({**settings, "predictive_model_id": "fixture"})
+    result = predictive_mppi.probe_predictive_mppi(config, seed=1001, registry_path=registry)
+    assert result["checkpoint_sha256"] == digest
+    assert result["forecast_steps"] == 8
+    assert result["forecast_dt_s"] == 0.1
+    assert result["seed"] == 1001
+    assert len(result["command"]) == 2 and np.isfinite(result["command"]).all()
+
+
+def test_forecast_probe_surfaces_post_load_planning_failure(forecast_checkpoint, monkeypatch):
+    """Valid model output alone cannot make a failed first planning call pass."""
+    from robot_sf.planner import predictive_mppi
+
+    def fail_plan(self, observation):
+        assert self.foresight_diagnostics()["foresight_prediction"]["load_status"] == "loaded"
+        raise RuntimeError("planner step failed after load")
+
+    _, registry, _ = forecast_checkpoint
+    monkeypatch.setattr(PredictiveMPPIAdapter, "plan", fail_plan)
+    config = build_predictive_mppi_config(
+        {
+            "predictive_model_id": "fixture",
+            "predictive_rollout_dt": 0.1,
+            "predictive_adaptive_horizon_enabled": False,
+        }
+    )
+    with pytest.raises(RuntimeError, match="planner step failed after load"):
+        predictive_mppi.probe_predictive_mppi(config, seed=1001, registry_path=registry)

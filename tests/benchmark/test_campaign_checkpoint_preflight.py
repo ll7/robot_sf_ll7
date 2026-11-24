@@ -327,3 +327,54 @@ def test_prepare_campaign_preflight_rejects_missing_checkpoint_before_scenarios(
 
     with pytest.raises(CampaignCheckpointPreflightError, match="unknown_model_id"):
         prepare_campaign_preflight(cfg, output_root=tmp_path / "out", label="ckpt")
+
+
+def test_predictive_report_resolves_scenario_override_without_admitting_campaign(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A failed effective binding appears in the opt-in report without granting submit safety."""
+    import json
+
+    from robot_sf.planner import predictive_mppi
+    from scripts.benchmark import preflight_campaign_checkpoints
+
+    _write_algo_config(tmp_path, "scenarios.yaml", {"scenarios": [{"name": "entry"}]})
+    _write_algo_config(
+        tmp_path,
+        "predictive.yaml",
+        {
+            "params": {"horizon_steps": 8},
+            "scenario_overrides": {"entry": {"horizon_steps": 12}},
+        },
+    )
+    campaign = _write_algo_config(
+        tmp_path,
+        "campaign.yaml",
+        {
+            "scenario_matrix": "scenarios.yaml",
+            "planners": [{"algo": "predictive_mppi", "algo_config": "predictive.yaml"}],
+        },
+    )
+
+    def probe(config, *, seed, **_kwargs):
+        assert seed == 1001
+        if config.horizon_steps == 12:
+            raise ValueError("horizon_steps=12 outside eight-step window")
+        return {"forecast_steps": 8}
+
+    monkeypatch.setattr(predictive_mppi, "probe_predictive_mppi", probe)
+    code = preflight_campaign_checkpoints.main(
+        [
+            "--config",
+            str(campaign),
+            "--predictive-mppi-dev-seed",
+            "1001",
+            "--json",
+        ]
+    )
+    report = json.loads(capsys.readouterr().out)
+    assert code == 0
+    assert report["submit_safe"] is False
+    assert report["bindings"][0]["scenarios"] == ["entry"]
+    assert report["bindings"][0]["status"] == "refused"
+    assert "horizon_steps=12" in report["bindings"][0]["detail"]

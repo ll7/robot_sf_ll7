@@ -17,6 +17,10 @@ Modes:
   ``sbatch`` wrapper must run this mode (or the public submit gate
   ``scripts/benchmark/submit_camera_ready_checkpoint_gate.sh``) before requeueing.
 
+- ``--predictive-mppi-dev-seed``: report the measured forecast and a planning call for each
+  effective learned MPPI binding using staged checkpoints. Refusals appear in the report. This
+  mode leaves the staging receipt and campaign submission decision to the standard preflight.
+
 Optionally persist the preflight JSON report with ``--report-path`` so the requeue packet records
 the per-arm staging status.
 
@@ -51,6 +55,7 @@ import yaml
 from robot_sf.benchmark.campaign.campaign_checkpoint_preflight import (
     CampaignCheckpointPreflightError,
     check_campaign_arm_checkpoints_preflight_from_config,
+    report_campaign_predictive_mppi,
 )
 from robot_sf.benchmark.checkpoint_staging_receipt import CHECKPOINT_STAGING_RECEIPT_SCHEMA
 from robot_sf.benchmark.identity.hash_utils import sha256_file
@@ -77,7 +82,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
         type=Path,
         help="Path to a camera-ready campaign config YAML.",
     )
-    parser.add_argument(
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument(
         "--stage",
         action="store_true",
         help=(
@@ -87,6 +93,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
             "must run this mode (or scripts/benchmark/submit_camera_ready_checkpoint_gate.sh) "
             "before requeueing."
         ),
+    )
+    mode.add_argument(
+        "--predictive-mppi-dev-seed",
+        type=int,
+        help="Report one learned MPPI planning step per effective binding on a development seed. "
+        "Uses staged weights and produces no submit-safe receipt.",
     )
     parser.add_argument(
         "--registry-path",
@@ -137,6 +149,26 @@ def expiring_resource_gate(config_path: Path) -> dict[str, Any] | None:
     return evaluate_manifest(payload, as_of=as_of).to_dict()
 
 
+def _predictive_mppi_report(args: argparse.Namespace) -> int:
+    """Emit the optional report without entering the staging or submission gate."""
+    try:
+        report = report_campaign_predictive_mppi(
+            args.config,
+            seed=args.predictive_mppi_dev_seed,
+            registry_path=args.registry_path,
+            cache_dir=args.cache_dir,
+        )
+    except (OSError, TypeError, ValueError, yaml.YAMLError) as exc:
+        print(f"error: could not report predictive MPPI bindings: {exc}", file=sys.stderr)
+        return EXIT_CONFIG_ERROR
+    payload = json.dumps(report, indent=2)
+    if args.report_path is not None:
+        args.report_path.parent.mkdir(parents=True, exist_ok=True)
+        args.report_path.write_text(payload + "\n", encoding="utf-8")
+    print(payload)
+    return EXIT_OK
+
+
 def main(argv: list[str] | None = None) -> int:  # noqa: C901 - gate plus checkpoint failure paths
     """Run the campaign checkpoint preflight CLI.
 
@@ -144,6 +176,8 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901 - gate plus checkp
         int: Process exit code (see module docstring).
     """
     args = build_arg_parser().parse_args(argv)
+    if args.predictive_mppi_dev_seed is not None:
+        return _predictive_mppi_report(args)
     checkpoint_preflight_mode = "enforced_staged" if args.stage else "metadata_only"
     if not args.config.is_file():
         print(f"error: campaign config not found: {args.config}", file=sys.stderr)

@@ -8,7 +8,7 @@ command. The executed control is the first action of the best sampled sequence.
 from __future__ import annotations
 
 from dataclasses import dataclass, fields
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
@@ -37,6 +37,9 @@ from robot_sf.planner.socnav import (
 )
 from robot_sf.planner.socnav_base import _SOCNAV_CONFIG_INIT_KEYS
 from robot_sf.robot.differential_drive import DifferentialDriveSettings
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 _DEFAULT_ITERATIONS = 4
 _DEFAULT_GOAL_PROGRESS_WEIGHT = 6.0
@@ -1108,8 +1111,161 @@ def build_predictive_mppi_config(cfg: dict[str, object] | None) -> PredictiveMPP
     )
 
 
+# These weights have no embedded time grid. The source collector sampled consecutive 0.1 s
+# frames (docs/context/issue_9750_baseline_physical_faithfulness.md, FX3 cadence provenance).
+_CHECKPOINT_FORECAST_DT_S = {
+    "0e7e775fd09509543761d8326237c4f85b0cc540fb24f98b3c5f8f7c0009fccc": 0.1,
+}
+
+
+def _verified_checkpoint(
+    socnav: SocNavPlannerConfig, *, registry_path: str | Path | None, cache_dir: str | Path | None
+) -> tuple[Path, str]:
+    """Resolve the runtime-selected checkpoint and verify its registered bytes.
+
+    Returns:
+        Local checkpoint path and verified SHA-256.
+    """
+    from pathlib import Path  # noqa: PLC0415
+
+    from robot_sf.models.registry import (  # noqa: PLC0415
+        get_registry_entry,
+        resolve_model_path,
+        sha256_of_file,
+    )
+
+    entry = get_registry_entry(socnav.predictive_model_id, registry_path)
+    expected = (entry.get("github_release") or {}).get("sha256")
+    if not expected:
+        raise ValueError(f"missing registry checkpoint SHA-256 for {socnav.predictive_model_id}")
+    checkpoint = (
+        Path(socnav.predictive_checkpoint_path).expanduser()
+        if socnav.predictive_checkpoint_path
+        else resolve_model_path(
+            socnav.predictive_model_id,
+            registry_path=registry_path,
+            cache_dir=cache_dir,
+            allow_download=False,
+        )
+    )
+    digest = sha256_of_file(checkpoint)
+    if digest != expected:
+        raise ValueError(f"checkpoint SHA-256 mismatch for {socnav.predictive_model_id}")
+    return checkpoint, digest
+
+
+def _verified_forecast_window(
+    planner: PredictiveMPPIAdapter, observation: dict[str, object], digest: str
+) -> tuple[int, float]:
+    """Check that both planner time grids use the loaded forecast without extrapolation.
+
+    Returns:
+        Measured forecast steps and the verified interval in seconds.
+    """
+    from math import isclose  # noqa: PLC0415
+
+    config = planner.config
+    socnav = config.socnav
+    predictor = planner._predictor
+    state, mask, *_ = predictor._build_model_input(observation)
+    future = predictor._predict_trajectories(state, mask)
+    if (
+        future.ndim != 3
+        or future.shape[0] != state.shape[0]
+        or future.shape[2] != 2
+        or not np.isfinite(future).all()
+    ):
+        raise ValueError("malformed learned checkpoint forecast")
+    steps = future.shape[1]
+    requests = {
+        "horizon_steps": config.horizon_steps,
+        "predictive_horizon_steps": socnav.predictive_horizon_steps,
+    }
+    if socnav.predictive_adaptive_horizon_enabled:
+        requests["adaptive_horizon_steps"] = socnav.predictive_horizon_steps + max(
+            0, socnav.predictive_horizon_boost_steps
+        )
+    for name, value in requests.items():
+        if not 1 <= value <= steps:
+            raise ValueError(f"{name}={value} outside the checkpoint window of {steps} steps")
+
+    dt = _CHECKPOINT_FORECAST_DT_S.get(digest)
+    if dt is None:
+        raise ValueError(f"forecast cadence is unverified for checkpoint SHA-256 {digest}")
+    for name, value in (
+        ("rollout_dt", config.rollout_dt),
+        ("predictive_rollout_dt", socnav.predictive_rollout_dt),
+    ):
+        if not isclose(value, dt, rel_tol=0.0, abs_tol=1e-9):
+            raise ValueError(f"{name}={value} differs from the checkpoint interval of {dt} s")
+    return steps, dt
+
+
+def probe_predictive_mppi(
+    config: PredictiveMPPIConfig,
+    *,
+    seed: int,
+    registry_path: str | Path | None = None,
+    cache_dir: str | Path | None = None,
+) -> dict[str, Any]:
+    """Verify a staged learned forecast and execute one development-only planning call.
+
+    Returns:
+        Checked checkpoint digest, forecast window, cadence and command for the probe.
+
+    Raises:
+        ValueError: If the seed, learned binding, output, or time grid cannot be verified.
+        RuntimeError: If checkpoint loading or planning fails.
+    """
+    from dataclasses import replace  # noqa: PLC0415
+
+    from robot_sf.benchmark.seed_bands import DEV_SEEDS  # noqa: PLC0415
+
+    if seed not in DEV_SEEDS:
+        raise ValueError("predictive MPPI probe needs a repository development seed (1001–1030)")
+    socnav = config.socnav
+    if (socnav.forecast_variant or "none").strip().lower() not in ("", "none"):
+        raise ValueError("predictive MPPI probe requires a registered learned forecast")
+    checkpoint, digest = _verified_checkpoint(
+        socnav, registry_path=registry_path, cache_dir=cache_dir
+    )
+    probe_config = replace(
+        config,
+        random_seed=seed,
+        socnav=replace(socnav, predictive_checkpoint_path=str(checkpoint)),
+    )
+    planner = PredictiveMPPIAdapter(probe_config, allow_fallback=False)
+    observation: dict[str, object] = {
+        "robot": {"position": [0.0, 0.0], "heading": [0.0], "speed": [0.0, 0.0]},
+        "goal": {"current": [4.0, 0.0], "next": [4.0, 0.0]},
+        "pedestrians": {"positions": [[2.0, 3.0]], "velocities": [[0.0, -0.1]]},
+    }
+    steps, dt = _verified_forecast_window(planner, observation, digest)
+    command = planner.plan(observation)
+    provenance = planner.foresight_diagnostics()["foresight_prediction"]
+    if (
+        provenance["load_status"] != "loaded"
+        or provenance["observed_checkpoint_sha256"] != digest
+        or provenance["fallback_used"]
+        or planner.foresight_degraded()
+        or np.shape(command) != (2,)
+        or not np.isfinite(command).all()
+        or planner.diagnostics()["no_admissible_command"]
+    ):
+        raise RuntimeError("predictive MPPI step did not produce an admissible learned command")
+    return {
+        "model_id": socnav.predictive_model_id,
+        "checkpoint_sha256": digest,
+        "forecast_steps": steps,
+        "forecast_dt_s": dt,
+        "seed": seed,
+        "command": command,
+    }
+
+
 __all__ = [
     "PredictiveMPPIAdapter",
     "PredictiveMPPIConfig",
     "build_predictive_mppi_config",
+    "probe_predictive_mppi",
 ]

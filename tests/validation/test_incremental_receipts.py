@@ -545,7 +545,7 @@ def _comparison_fixture(tmp_path, monkeypatch, *, mismatched_definitions=False):
         run = directory / "campaigns/empty_world_main/runs/goal__differential_drive"
         run.mkdir(parents=True)
         atomic_json(
-            run / "receipt_execution.json",
+            run.parents[1] / "receipt_execution.json",
             {
                 "schema_version": "receipt-execution.v1",
                 "source_sha": source,
@@ -982,7 +982,7 @@ def _outcome_projection_fixture(tmp_path, monkeypatch, *, ineligible_side=None, 
             },
         )
         atomic_json(
-            run / "receipt_execution.json",
+            run.parents[1] / "receipt_execution.json",
             {
                 "schema_version": "receipt-execution.v1",
                 "source_sha": source,

@@ -1255,11 +1255,11 @@ def _verify_completion_views(  # noqa: C901 - custody checks remain fail-closed 
     rows: dict[tuple[str, str, int], dict[str, Any]],
 ) -> None:
     """Verify rebuildable views against the authoritative journal without changing inputs."""
-    from robot_sf.benchmark.receipt_stages import canonical_bytes, encode_row
+    from robot_sf.benchmark.receipt_stages import DESCRIPTOR, canonical_bytes, encode_row
 
     committed = set()
     for raw_path in sorted(directory.glob("campaigns/*/runs/*/episodes.jsonl")):
-        marker = raw_path.parent / "receipt_execution.json"
+        marker = raw_path.parent / DESCRIPTOR
         if not marker.is_file():
             raise ValueError("observation requires atomic completion provenance")
         descriptor = json.loads(marker.read_bytes())
@@ -1270,6 +1270,13 @@ def _verify_completion_views(  # noqa: C901 - custody checks remain fail-closed 
             or any(descriptor.get(key) != contract[key] for key in ("execution_key", "source_sha"))
         ):
             raise ValueError("completion execution provenance differs from contract")
+        campaign_marker = raw_path.parents[2] / DESCRIPTOR
+        if not campaign_marker.is_file():
+            raise ValueError(
+                "atomic completion provenance requires a campaign execution descriptor"
+            )
+        if json.loads(campaign_marker.read_bytes()) != descriptor:
+            raise ValueError("arm execution descriptor differs from campaign")
         seen = set()
         for line in raw_path.read_text().splitlines():
             if not line.strip():

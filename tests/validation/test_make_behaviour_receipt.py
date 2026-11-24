@@ -1637,12 +1637,12 @@ def _install_cli_fixture(tmp_path, monkeypatch):
         metadata.write_text(json.dumps(execution))
         raw = next(output.glob("campaigns/*/runs/*/episodes.jsonl"))
         atomic_json(
-            raw.parent / "receipt_execution.json",
+            raw.parents[2] / "receipt_execution.json",
             {
                 "schema_version": "receipt-execution.v1",
                 "source_sha": producing_sha,
                 "execution_key": contract["execution_key"],
-                "run_id": output.name,
+                "run_id": str(output.resolve()),
             },
         )
         records = [json.loads(line) for line in raw.read_text().splitlines()]
@@ -1688,6 +1688,7 @@ def _receipt_cli_command(tmp_path, source, head, baseline):
     [
         ("missing_journal", "raw observation has no atomic completion"),
         ("missing_descriptor", "requires atomic completion provenance"),
+        ("missing_campaign", "requires a campaign execution descriptor"),
         ("edited_views", "completion checksum or provenance differs from raw observation"),
     ],
 )
@@ -1700,6 +1701,8 @@ def test_file_cli_requires_atomic_completions(monkeypatch, tmp_path, side, fault
         shutil.rmtree(raw.parent / "completed")
     elif fault == "missing_descriptor":
         (raw.parent / "receipt_execution.json").unlink()
+    elif fault == "missing_campaign":
+        (raw.parents[2] / "receipt_execution.json").unlink()
     else:
         summary = directory / "episodes_main.jsonl"
         raw_rows = [json.loads(line) for line in raw.read_text().splitlines()]
@@ -1717,9 +1720,34 @@ def test_file_cli_requires_atomic_completions(monkeypatch, tmp_path, side, fault
     assert not (tmp_path / "receipts/behaviour/synthetic.json").exists()
 
 
+@pytest.mark.parametrize("side", ["head", "baseline"])
+def test_file_cli_binds_completions_to_campaign(monkeypatch, tmp_path, side):
+    """A consistent arm journal from another run cannot substitute for the campaign's journal."""
+    from robot_sf.benchmark.receipt_stages import atomic_json, publish_episode
+
+    _, source, head, baseline = _install_cli_fixture(tmp_path, monkeypatch)
+    directory = head if side == "head" else baseline
+    raw = next(directory.glob("campaigns/*/runs/*/episodes.jsonl"))
+    marker = raw.parent / "receipt_execution.json"
+    descriptor = json.loads(marker.read_bytes())
+    descriptor["run_id"] = "another-run"
+    atomic_json(marker, descriptor)
+    shutil.rmtree(raw.parent / "completed")
+    for line in raw.read_text().splitlines():
+        assert publish_episode(raw, {}, json.loads(line))
+
+    command = _receipt_cli_command(tmp_path, source, head, baseline)
+    result = subprocess.run(command, cwd=tmp_path, capture_output=True, text=True, check=False)
+    assert result.returncode != 0, "receipt assembly accepted a journal from another run"
+    assert "arm execution descriptor differs from campaign" in result.stderr
+    assert not (tmp_path / "receipts/behaviour/synthetic.json").exists()
+
+
 def test_file_cli_and_real_gate_cover_name_only_baseline(monkeypatch, tmp_path):
-    """File CLI and actual release resolution distinguish origin/main without PYTHONPATH."""
+    """File CLI and release resolution work with relocated inputs and without PYTHONPATH."""
     git, source, head, baseline = _install_cli_fixture(tmp_path, monkeypatch)
+    head = head.rename(tmp_path / "archived-head")
+    baseline = baseline.rename(tmp_path / "archived-baseline")
     command = _receipt_cli_command(tmp_path, source, head, baseline)
     contract_path = head / "contract.json"
     original_contract = contract_path.read_text()

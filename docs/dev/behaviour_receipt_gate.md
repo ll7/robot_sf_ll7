@@ -566,7 +566,10 @@ metric equivalence review.
 
 Receipt assembly checks each suite's execution key against its preflight
 contract. On both sides it matches each observation to its atomic completion
-record and rejects missing records or changes to the raw or summary views.
+record and requires the arm descriptor to match the producing campaign
+descriptor. Archived inputs can move because verification compares the recorded
+run identity. Missing descriptors or records and changes to the raw or summary
+views block receipt assembly and diagnostic comparison.
 For scheduler runs, the claimed job must match both the submission manifest
 and the job ID recorded by the completed sweep. Resumed observations retain
 their original execution key. The final scheduler job records the allocation

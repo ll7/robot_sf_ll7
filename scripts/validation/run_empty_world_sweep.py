@@ -28,6 +28,7 @@ import csv
 import hashlib
 import json
 import math
+import os
 import subprocess
 import sys
 import time
@@ -1070,6 +1071,7 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0915
                 "suite": suite,
                 "head_sha": full_sha,
                 "execution_key": contract["execution_key"],
+                "scheduler_job_id": os.environ.get("SLURM_JOB_ID"),
                 "first_seed_only": args.first_seed_only,
                 "sweep_harness_sha256": SWEEP_HARNESS_SHA256,
                 "seeds": seeds,

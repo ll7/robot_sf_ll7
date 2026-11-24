@@ -553,3 +553,9 @@ schema and metric compatibility gate. Before a paired acquisition relies on
 this projection, reviewers must accept the scope and confirm equivalence on
 the production pair. A change to the covered producer bytes requires a
 renewed comparison of their metric definitions.
+
+Receipt assembly checks each suite's execution key against its preflight
+contract. For scheduler runs, the claimed job must match both the submission
+manifest and the job ID recorded by the completed sweep. Resumed observations
+retain their original execution key. The final scheduler job records the
+allocation that completed the sweep.

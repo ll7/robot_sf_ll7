@@ -1059,9 +1059,13 @@ def _submit_sbatch_sweep(  # noqa: PLR0913
         ),
         encoding="utf-8",
     )
-    job_id = subprocess.check_output(
-        ["sbatch", "--parsable", f"--chdir={checkout}", str(script)], text=True
-    ).strip()
+    job_id = (
+        subprocess.check_output(
+            ["sbatch", "--parsable", f"--chdir={checkout}", str(script)], text=True
+        )
+        .strip()
+        .partition(";")[0]
+    )
     submission = {
         "schema_version": "behaviour-sweep-submission.v1",
         "label": label,
@@ -1113,7 +1117,13 @@ def _sweep_harness_manifest(output_dir: Path, source_sha: str) -> dict[str, Any]
     return harness
 
 
-def _verify_sweep_metadata(output_dir: Path, source_sha: str) -> None:
+def _verify_sweep_metadata(
+    output_dir: Path,
+    source_sha: str,
+    *,
+    execution_key: str | None = None,
+    job_id: str | None = None,
+) -> None:
     harness = _sweep_harness_manifest(output_dir, source_sha)
     summaries = sorted(output_dir.glob("episodes_*.jsonl"))
     if not summaries:
@@ -1124,7 +1134,7 @@ def _verify_sweep_metadata(output_dir: Path, source_sha: str) -> None:
         if not metadata_path.is_file():
             raise ValueError(f"missing authoritative execution metadata for {suite}")
         meta = json.loads(metadata_path.read_text(encoding="utf-8"))
-        _verify_executed_harness(harness, meta, suite)
+        _verify_execution_binding(harness, meta, suite, execution_key=execution_key, job_id=job_id)
         if meta.get("head_sha") != source_sha:
             raise ValueError(f"{suite} recorded SHA differs from claimed source SHA")
         if meta.get("suite") != suite:
@@ -1161,8 +1171,19 @@ def _verify_sweep_metadata(output_dir: Path, source_sha: str) -> None:
             raise ValueError(f"{suite} has unsuccessful row execution")
 
 
-def _verify_executed_harness(harness: dict | None, metadata: dict, suite: str) -> None:
-    """Require an execution digest when an explicit acquisition harness was pinned."""
+def _verify_execution_binding(
+    harness: dict | None,
+    metadata: dict,
+    suite: str,
+    *,
+    execution_key: str | None,
+    job_id: str | None,
+) -> None:
+    """Verify the executed harness, captured inputs and allocation."""
+    if execution_key is not None and metadata.get("execution_key") != execution_key:
+        raise ValueError(f"{suite} execution inputs differ from the preflight contract")
+    if job_id is not None and metadata.get("scheduler_job_id") != job_id:
+        raise ValueError(f"{suite} execution allocation differs from the claimed job")
     if harness is not None and metadata.get("sweep_harness_sha256") != harness.get(
         "harness_sha256"
     ):
@@ -1228,9 +1249,28 @@ def _load_sweep_rows(sweep_dir: Path) -> dict[tuple[str, str, int], dict[str, An
     return rows
 
 
-def _load_producing_rows(run: SweepRun) -> dict[tuple[str, str, int], dict[str, Any]]:
+def _verify_producing_allocation(run: SweepRun) -> str:
+    """Require agreement between the claimed job and the submitted allocation."""
+    path = run.output_dir / "submission.json"
+    submission = json.loads(path.read_bytes()) if path.is_file() else {}
+    if (
+        submission.get("schema_version") != "behaviour-sweep-submission.v1"
+        or submission.get("source_sha") != run.source_sha
+        or submission.get("job_id") != run.job_id
+    ):
+        raise ValueError("sweep allocation differs from the claimed job")
+    return run.job_id
+
+
+def _load_producing_rows(
+    run: SweepRun, *, scheduler_required: bool
+) -> dict[tuple[str, str, int], dict[str, Any]]:
     """Require complete execution and bind every raw row to the producing source."""
-    _verify_sweep_metadata(run.output_dir, run.source_sha)
+    contract = _read_producing_contract(run.output_dir, run.source_sha)
+    job_id = _verify_producing_allocation(run) if scheduler_required else None
+    _verify_sweep_metadata(
+        run.output_dir, run.source_sha, execution_key=contract["execution_key"], job_id=job_id
+    )
     rows = _load_sweep_rows(run.output_dir)
     for key, row in rows.items():
         if row.get("git_hash") != run.source_sha:
@@ -1933,26 +1973,41 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def _read_producing_contract(directory: Path, source: str) -> dict:
+    """Read a preflight contract bound to the producing source and captured inputs."""
+    from robot_sf.benchmark.receipt_stages import stage_key
+
+    path = directory / "contract.json"
+    if not path.is_file():
+        raise ValueError(
+            "paired execution requires both preflight contracts; submit --check-only first"
+        )
+    contract = json.loads(path.read_bytes())
+    if contract.get("source_sha") != source or contract.get("full_roster") is not True:
+        raise ValueError("preflight contract source/full-roster differs")
+    if contract.get("schema_version") != "receipt-contract.v1":
+        raise ValueError("preflight contract schema version differs")
+    execution = contract.get("execution")
+    if (
+        not isinstance(execution, dict)
+        or execution.get("source_sha") != source
+        or contract.get("execution_key") != stage_key("execution", execution)
+    ):
+        raise ValueError("preflight execution source or digest differs")
+    if not re.fullmatch(r"[0-9a-f]{64}", str(execution.get("metric_semantics_sha256", ""))):
+        raise ValueError("preflight contract lacks a metric semantics digest")
+    return contract
+
+
 def _validate_paired_contracts(sweeps: tuple[tuple[Path, str], tuple[Path, str]]) -> None:
     """Validate producing contracts before either collection or paired execution."""
-    contracts = []
-    for directory, source in sweeps:
-        path = directory / "contract.json"
-        if not path.is_file():
-            raise ValueError(
-                "paired execution requires both preflight contracts; submit --check-only first"
-            )
-        contract = json.loads(path.read_bytes())
-        if contract.get("source_sha") != source or not contract.get("full_roster"):
-            raise ValueError("preflight contract source/full-roster differs")
-        contracts.append(contract)
+    head, baseline = (_read_producing_contract(directory, source) for directory, source in sweeps)
     for field in ("row_schema_sha256", "metric_schema_version"):
-        if contracts[0][field] != contracts[1][field]:
+        if not head.get(field) or head[field] != baseline.get(field):
             raise ValueError("paired preflight contract row/metric schema mismatch")
-    if contracts[0]["execution"].get(
-        "metric_semantics_sha256", contracts[0]["execution"].get("metric_definitions_sha256")
-    ) != contracts[1]["execution"].get(
-        "metric_semantics_sha256", contracts[1]["execution"].get("metric_definitions_sha256")
+    if (
+        head["execution"]["metric_semantics_sha256"]
+        != baseline["execution"]["metric_semantics_sha256"]
     ):
         raise ValueError("paired preflight contract metric semantics mismatch")
 
@@ -2099,8 +2154,9 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps({"head_job_id": scheduler.job_id, "baseline_job_id": baseline.job_id}))
         return 0
     scope = _load_scope(args.scope_path)
-    head_rows = _load_producing_rows(scheduler)
-    baseline_rows = _load_producing_rows(baseline)
+    scheduler_required = args.mode != "local"
+    head_rows = _load_producing_rows(scheduler, scheduler_required=scheduler_required)
+    baseline_rows = _load_producing_rows(baseline, scheduler_required=scheduler_required)
     rows, classifications, totals = build_rows_and_classifications(
         head_rows,
         baseline_rows,

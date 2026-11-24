@@ -152,14 +152,19 @@ def _sweep_rows(root, label, *, source_sha="a" * 40, failing=False):
     }
     (out / "execution_main.json").write_text(json.dumps(meta))
     (out / "README.md").write_text(label + "\n")
+    from robot_sf.benchmark.receipt_stages import stage_key
+
+    execution = {"source_sha": source_sha, "metric_semantics_sha256": "d" * 64}
     (out / "contract.json").write_text(
         json.dumps(
             {
+                "schema_version": "receipt-contract.v1",
                 "source_sha": source_sha,
                 "full_roster": True,
                 "row_schema_sha256": "c" * 64,
                 "metric_schema_version": "robot-sf-metrics.v2",
-                "execution": {"metric_semantics_sha256": "d" * 64},
+                "execution": execution,
+                "execution_key": stage_key("execution", execution),
             }
         )
     )
@@ -1610,6 +1615,24 @@ def _install_cli_fixture(tmp_path, monkeypatch):
     source = git("rev-parse", "HEAD")
     head = _sweep_rows(tmp_path, "head", source_sha=source, failing=True)
     baseline = _sweep_rows(tmp_path, "baseline", source_sha=baseline_source)
+    for output, producing_sha, job_id in (
+        (head, source, "123"),
+        (baseline, baseline_source, "456"),
+    ):
+        (output / "submission.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": "behaviour-sweep-submission.v1",
+                    "source_sha": producing_sha,
+                    "job_id": job_id,
+                }
+            )
+        )
+        metadata = output / "execution_main.json"
+        contract = json.loads((output / "contract.json").read_text())
+        execution = json.loads(metadata.read_text())
+        execution.update(execution_key=contract["execution_key"], scheduler_job_id=job_id)
+        metadata.write_text(json.dumps(execution))
     _fake_release_api(tmp_path, monkeypatch)
     monkeypatch.delenv("PYTHONPATH", raising=False)
     monkeypatch.setattr(gate, "ROOT", tmp_path)
@@ -1641,6 +1664,16 @@ def test_file_cli_and_real_gate_cover_name_only_baseline(monkeypatch, tmp_path):
         "--baseline-job-id",
         "456",
     ]
+    contract_path = head / "contract.json"
+    original_contract = contract_path.read_text()
+    contract = json.loads(original_contract)
+    contract["execution"]["source_sha"] = "f" * 40
+    contract_path.write_text(json.dumps(contract))
+    rejected = subprocess.run(command, cwd=tmp_path, capture_output=True, text=True, check=False)
+    assert rejected.returncode != 0
+    assert "preflight execution source or digest differs" in rejected.stderr
+    contract_path.write_text(original_contract)
+
     raw = head / "campaigns/empty_world_main/runs/goal__differential_drive/episodes.jsonl"
     original_rows = raw.read_text()
     foreign_row = json.loads(original_rows.splitlines()[-1])
@@ -1650,6 +1683,11 @@ def test_file_cli_and_real_gate_cover_name_only_baseline(monkeypatch, tmp_path):
     assert rejected.returncode != 0
     assert "raw episode producing source differs" in rejected.stderr
     raw.write_text(original_rows)
+    wrong_job = [*command]
+    wrong_job[wrong_job.index("--job-id") + 1] = "999"
+    rejected = subprocess.run(wrong_job, cwd=tmp_path, capture_output=True, text=True, check=False)
+    assert rejected.returncode != 0
+    assert "sweep allocation differs from the claimed job" in rejected.stderr
     first = subprocess.run(command, cwd=tmp_path, capture_output=True, text=True, check=True)
     assert (
         json.loads(first.stdout.split("\n", 1)[1].rsplit("-->", 1)[0])["baseline"]["release"]
@@ -2080,14 +2118,11 @@ def test_all_modes_reject_incompatible_producing_contracts(  # noqa: C901 - expl
     """Collection and launch reject the same producing-contract defects before touching rows."""
     head = _sweep_rows(tmp_path, "head", source_sha="a" * 40)
     baseline = _sweep_rows(tmp_path, "baseline", source_sha="b" * 40)
-    for output, source in ((head, "a" * 40), (baseline, "b" * 40)):
-        contract = {
-            "source_sha": source,
-            "full_roster": True,
-            "row_schema_sha256": "c" * 64,
-            "metric_schema_version": "robot-sf-metrics.v2",
-            "execution": {"metric_semantics_sha256": "d" * 64},
-        }
+    from robot_sf.benchmark.receipt_stages import stage_key
+
+    for output in (head, baseline):
+        contract_path = output / "contract.json"
+        contract = json.loads(contract_path.read_text())
         if output == baseline:
             if fault == "source":
                 contract["source_sha"] = "f" * 40
@@ -2099,8 +2134,8 @@ def test_all_modes_reject_incompatible_producing_contracts(  # noqa: C901 - expl
                 contract["metric_schema_version"] = "robot-sf-metrics.v1"
             elif fault == "semantics":
                 contract["execution"]["metric_semantics_sha256"] = "e" * 64
-        if fault != "missing" or output != baseline:
-            (output / "contract.json").write_text(json.dumps(contract))
+        contract["execution_key"] = stage_key("execution", contract["execution"])
+        contract_path.write_text(json.dumps(contract))
     if fault == "missing":
         (baseline / "contract.json").unlink(missing_ok=True)
     work = tmp_path / "work"

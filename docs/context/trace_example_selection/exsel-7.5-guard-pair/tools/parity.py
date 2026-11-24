@@ -1,6 +1,10 @@
 """Check (e): parity of the rebuilt execution against the replication's compact rows."""
-import gzip, json, sys
+
+import gzip
+import json
+import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent))
 import exsel_screen as ex
 
@@ -26,22 +30,55 @@ for key in sorted(new):
         "steps": (a["steps"], b["steps"]),
         "termination_reason": (a["termination_reason"], b["termination_reason"]),
         "ped_collision_count": (a["metrics"]["ped_collision_count"], b["ped_collision_count"]),
-        "obstacle_collision_count": (a["metrics"]["obstacle_collision_count"], b["obstacle_collision_count"]),
-        "ablation_disable_hard_guard": (a["factors"]["ablation_disable_hard_guard"], b["algo_ablation_disable_hard_guard"]),
+        "obstacle_collision_count": (
+            a["metrics"]["obstacle_collision_count"],
+            b["obstacle_collision_count"],
+        ),
+        "ablation_disable_hard_guard": (
+            a["factors"]["ablation_disable_hard_guard"],
+            b["algo_ablation_disable_hard_guard"],
+        ),
         "mode": (a["mode"], b["mode"]),
         "fallback_count": (a["fallback_count"], b["fallback_count"]),
     }
     match = all(x == y for x, y in cmp.values())
     ok &= match
-    rows.append({"arm": key[0], "seed": key[1], "match": match,
-                 "replication": {k: v[0] for k, v in cmp.items()},
-                 "rebuild": {k: v[1] for k, v in cmp.items()},
-                 "replication_execution_commit": a["git_hash"], "rebuild_execution_commit": b["execution_commit"],
-                 "replication_source_line_sha256": a["source_line_sha256"], "rebuild_row_sha256": b["episode_row_sha256"]})
-res = {"check": "e_parity", "cell": ex.CELL, "seeds": seeds, "arms": list(ex.ARMS),
-       "compared_fields": list(cmp), "n_pairs": len(rows), "all_match": ok, "rows": rows}
+    rows.append(
+        {
+            "arm": key[0],
+            "seed": key[1],
+            "match": match,
+            "replication": {k: v[0] for k, v in cmp.items()},
+            "rebuild": {k: v[1] for k, v in cmp.items()},
+            "replication_execution_commit": a["git_hash"],
+            "rebuild_execution_commit": b["execution_commit"],
+            "replication_source_line_sha256": a["source_line_sha256"],
+            "rebuild_row_sha256": b["episode_row_sha256"],
+        }
+    )
+res = {
+    "check": "e_parity",
+    "cell": ex.CELL,
+    "seeds": seeds,
+    "arms": list(ex.ARMS),
+    "compared_fields": list(cmp),
+    "n_pairs": len(rows),
+    "all_match": ok,
+    "rows": rows,
+}
 out.write_text(json.dumps(res, indent=2, sort_keys=True) + "\n")
 for r in rows:
-    print(r["arm"], r["seed"], r["match"], r["rebuild"]["outcome_class"], r["rebuild"]["steps"], r["rebuild"]["termination_reason"], "| rep:", r["replication"]["outcome_class"], r["replication"]["steps"], r["replication"]["termination_reason"])
+    print(
+        r["arm"],
+        r["seed"],
+        r["match"],
+        r["rebuild"]["outcome_class"],
+        r["rebuild"]["steps"],
+        r["rebuild"]["termination_reason"],
+        "| rep:",
+        r["replication"]["outcome_class"],
+        r["replication"]["steps"],
+        r["replication"]["termination_reason"],
+    )
 print("ALL_MATCH", ok)
 sys.exit(0 if ok else 1)

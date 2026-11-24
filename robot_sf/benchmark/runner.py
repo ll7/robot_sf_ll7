@@ -610,26 +610,29 @@ class _PlannerStepProcess:
         self._conn = None
         self._process = None
 
-        if conn is not None:
-            try:
-                if kind != "timeout" and process is not None and process.is_alive():
-                    conn.send(("close", None))
-            except (BrokenPipeError, EOFError, OSError):
-                pass
-            conn.close()
-        if process is not None:
-            if kind == "timeout":
-                self._terminate_process(process)
-            else:
-                process.join(timeout=0.1)
-                if process.is_alive():
+        try:
+            if conn is not None:
+                try:
+                    if kind != "timeout" and process is not None and process.is_alive():
+                        conn.send(("close", None))
+                except (BrokenPipeError, EOFError, OSError):
+                    pass
+                conn.close()
+            if process is not None:
+                if kind == "timeout":
                     self._terminate_process(process)
-            self._capture_worker_event(
-                process, kind=kind, phase=phase, error=error, timeout_s=timeout_s
-            )
-            if self._stderr is not None:
-                self._stderr.close()
-                self._stderr = None
+                else:
+                    process.join(timeout=0.1)
+                    if process.is_alive():
+                        self._terminate_process(process)
+                self._capture_worker_event(
+                    process, kind=kind, phase=phase, error=error, timeout_s=timeout_s
+                )
+        finally:
+            stderr = self._stderr
+            self._stderr = None
+            if stderr is not None:
+                stderr.close()
 
     def _capture_worker_event(
         self,
@@ -643,11 +646,14 @@ class _PlannerStepProcess:
         """Snapshot the stderr tail without moving the child's shared file offset."""
         stderr_tail = ""
         if self._stderr is not None:
-            fd = self._stderr.fileno()
-            size = os.fstat(fd).st_size
-            stderr_tail = os.pread(fd, min(size, 8192), max(0, size - 8192)).decode(
-                "utf-8", errors="replace"
-            )
+            try:
+                fd = self._stderr.fileno()
+                size = os.fstat(fd).st_size
+                stderr_tail = os.pread(fd, min(size, 8192), max(0, size - 8192)).decode(
+                    "utf-8", errors="replace"
+                )
+            except (OSError, ValueError) as exc:
+                logger.debug("Planner worker stderr readback is unavailable: {}", exc)
         self.worker_events.append(
             {
                 "kind": kind,

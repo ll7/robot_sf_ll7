@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import errno
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -9,6 +10,7 @@ import numpy as np
 import pytest
 
 import robot_sf.benchmark.runner as runner_mod
+from robot_sf.benchmark.seed_bands import DEV_SEEDS
 
 
 class _DummyPlanner:
@@ -797,3 +799,56 @@ def test_policy_step_succeeds_when_worker_stderr_capture_is_unavailable(
     assert step_runner._conn is None
     assert step_runner._process is None
     assert step_runner._stderr is None
+
+
+@pytest.mark.skipif(
+    "fork" not in runner_mod.mp.get_all_start_methods(), reason="planner worker requires fork"
+)
+def test_episode_succeeds_when_worker_stderr_read_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A stderr read error preserves a successful episode and closes both resources."""
+    closed_planners = []
+    planner = SimpleNamespace(
+        step=lambda _obs: {"vx": 0.5, "vy": 0.0},
+        close=lambda: closed_planners.append(True),
+    )
+    monkeypatch.setattr(runner_mod, "_config_torch_worker", lambda _planner: None)
+    monkeypatch.setattr(
+        runner_mod,
+        "_load_baseline_planner",
+        lambda *_args: (planner, runner_mod.Observation, {}),
+    )
+
+    def fail_read(*_args: int) -> bytes:
+        raise OSError(errno.EIO, "worker stderr read failed")
+
+    with runner_mod.tempfile.TemporaryFile(mode="w+b") as stderr:
+        monkeypatch.setattr(runner_mod.tempfile, "TemporaryFile", lambda **_kwargs: stderr)
+        monkeypatch.setattr(runner_mod.os, "pread", fail_read)
+        # The preset's stationary pedestrian is well outside the robot's short route.
+        record = runner_mod.run_episode(
+            {"id": "stderr-readback", "preset": "collision_sanity"},
+            DEV_SEEDS[0],
+            algo="ppo",
+            horizon=2,
+            dt=0.5,
+            robot_start=(2.0, 3.0),
+            robot_goal=(2.4, 3.0),
+            record_forces=False,
+        )
+        assert stderr.closed
+
+    assert closed_planners == [True]
+    assert record["metrics"]["success"] is True
+    timeout = record["algorithm_metadata"]["policy_step_timeout"]
+    counters = ("step_timeouts", "step_retries", "worker_errors", "fallback_actions")
+    assert all(timeout[key] == 0 for key in counters)
+    assert timeout["worker_events"] == [
+        {
+            "kind": "closed",
+            "phase": "cleanup",
+            "exit_code": 0,
+            "stderr_tail": "",
+            "error": None,
+            "timeout_s": None,
+        }
+    ]

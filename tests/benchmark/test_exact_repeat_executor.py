@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import errno
 import json
 import multiprocessing
 import os
@@ -1264,13 +1265,19 @@ class _FailingWorkerPlanner:
         return {"algorithm": "ppo", "status": "ok", "test_marker": "forced failure"}
 
 
+@pytest.mark.parametrize("stderr_read_error", [False, True], ids=["stderr-ok", "stderr-read-error"])
 @pytest.mark.parametrize("failure", ["crash", "timeout"])
 def test_disposition_retains_real_worker_failure_per_repeat(
-    tmp_path, development_ppo_bundle, monkeypatch, failure
+    tmp_path, development_ppo_bundle, monkeypatch, failure, stderr_read_error
 ):
-    """Real worker failures retain stderr, exit status and kind through disposition/cache."""
+    """Real worker failures retain their disposition and available diagnostics through cache."""
     from robot_sf.benchmark import runner
 
+    def fail_read(*_args):
+        raise OSError(errno.EIO, "worker stderr read failed")
+
+    if stderr_read_error:
+        monkeypatch.setattr(runner.os, "pread", fail_read)
     monkeypatch.setattr(runner, "_config_torch_worker", lambda _planner: None)
     monkeypatch.setattr(runner, "POLICY_STEP_TIMEOUT_SECS", 0.05)
     monkeypatch.setattr(runner, "PPO_FIRST_STEP_TIMEOUT_SECS", 0.05)
@@ -1294,7 +1301,10 @@ def test_disposition_retains_real_worker_failure_per_repeat(
         development_ppo_bundle, output_dir=tmp_path, run_episode=failing_runner
     )
     result = report["results"][0]
-    assert result["disposition"] in (UNRUNNABLE_DISPOSITION, PROCESS_ISOLATION_DISPOSITION)
+    expected_disposition = (
+        PROCESS_ISOLATION_DISPOSITION if failure == "crash" else UNRUNNABLE_DISPOSITION
+    )
+    assert result["disposition"] == expected_disposition
     assert result["repeats"] == []
     diagnostics = result["repeat_diagnostics"]
     assert len(diagnostics) == 3
@@ -1305,7 +1315,15 @@ def test_disposition_retains_real_worker_failure_per_repeat(
         assert event["kind"] == failure
         assert event["phase"] == "step"
         assert event["exit_code"] == (23 if failure == "crash" else -15)
-        assert "forced worker diagnostic" in event["stderr_tail"]
+        if stderr_read_error:
+            assert event["stderr_tail"] == ""
+        else:
+            assert "forced worker diagnostic" in event["stderr_tail"]
+        timeout = repeat["algorithm_metadata"]["policy_step_timeout"]
+        assert timeout["worker_errors"] == int(failure == "crash")
+        assert timeout["step_timeouts"] == int(failure == "timeout")
+        assert timeout["step_retries"] == 0
+        assert timeout["fallback_actions"] == 1
     resumed = execute_campaign(
         development_ppo_bundle,
         output_dir=tmp_path,
@@ -1326,7 +1344,7 @@ def test_disposition_retains_real_worker_failure_per_repeat(
     assert verified["targets"][0]["repeat_diagnostics"] == diagnostics
     with pytest.raises(AssertionError) as error:
         _assert_native_ppo_result(result)
-    assert "forced worker diagnostic" in str(error.value)
+    assert ("forced worker diagnostic" in str(error.value)) is not stderr_read_error
     assert "exit_code" in str(error.value)
     assert "algorithm_metadata" in str(error.value)
 

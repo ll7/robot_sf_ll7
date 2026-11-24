@@ -3,6 +3,7 @@
 import importlib.util
 import json
 from dataclasses import replace
+from hashlib import sha256
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -1089,9 +1090,43 @@ def test_outcome_projection_uses_bound_metrics_across_producer_versions(tmp_path
     assert result["rows"][0]["baseline_success"] is True
     assert result["scoring_contracts"]["head"]["source_sha"] == sources[head]
     assert result["scoring_contracts"]["baseline"]["source_sha"] == sources[baseline]
-    for label, directory in (("head", head), ("baseline", baseline)):
+    artifact = json.loads(output.read_bytes())
+    descriptor = Path("campaigns/empty_world_main/receipt_execution.json")
+    sides = zip(
+        (("head", head), ("baseline", baseline)), artifact["input_file_digests"], strict=True
+    )
+    for (label, directory), digests in sides:
         execution = result["rows"][0]["projection_execution"][label]
         assert execution["source_sha"] == sources[directory]
         assert execution["execution_status"] == "written"
         assert execution["eligible"] is True
         assert execution["controller_executed"] is True
+        assert digests[str(descriptor)] == sha256((directory / descriptor).read_bytes()).hexdigest()
+
+
+@pytest.mark.parametrize("side", ["head", "baseline"])
+def test_outcome_projection_refuses_campaign_descriptor_change(tmp_path, monkeypatch, side):
+    """Publication must fail if a verified campaign descriptor changes during comparison."""
+    comparator, head, baseline, _ = _outcome_projection_fixture(tmp_path, monkeypatch)
+    verify = comparator.producer._verify_completion_views
+    changed = head if side == "head" else baseline
+
+    def verify_then_change(directory, contract, rows):
+        verify(directory, contract, rows)
+        if directory == changed:
+            marker = directory / "campaigns/empty_world_main/receipt_execution.json"
+            descriptor = json.loads(marker.read_bytes())
+            descriptor["run_id"] = "changed-after-verification"
+            marker.write_text(json.dumps(descriptor), encoding="utf-8")
+
+    monkeypatch.setattr(comparator.producer, "_verify_completion_views", verify_then_change)
+    output = tmp_path / "projection.json"
+    with pytest.raises(ValueError, match="comparison input rows changed while reading"):
+        comparator.compare(
+            head,
+            baseline,
+            {"arms": ["goal"], "maps": ["slot"]},
+            output,
+            outcome_projection=True,
+        )
+    assert not output.exists()

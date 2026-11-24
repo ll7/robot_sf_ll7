@@ -130,14 +130,14 @@ index 28b2f14cc..1c638d061 100644
              except Exception as exc:  # pragma: no cover  # noqa: BLE001 - batch job isolation
                  logger.exception(
 diff --git a/robot_sf/benchmark/types.py b/robot_sf/benchmark/types.py
-index 957d30ecb..008d6cce8 100644
+index 957d30ecb..26268bc69 100644
 --- a/robot_sf/benchmark/types.py
 +++ b/robot_sf/benchmark/types.py
 @@ -518,6 +518,7 @@ class MapBatchConfig:
      ``run_map_batch(..., batch_config=cfg)``.
      """
 
-+    preflight_only: bool = False
++    preflight_only: bool = field(default=False, kw_only=True)
      scenario_path: str | Path | None = None
      provenance_scenario_path: str | Path | None = None
      horizon: int | None = None

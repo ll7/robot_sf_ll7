@@ -518,7 +518,7 @@ class MapBatchConfig:
     ``run_map_batch(..., batch_config=cfg)``.
     """
 
-    preflight_only: bool = False
+    preflight_only: bool = field(default=False, kw_only=True)
     scenario_path: str | Path | None = None
     provenance_scenario_path: str | Path | None = None
     horizon: int | None = None

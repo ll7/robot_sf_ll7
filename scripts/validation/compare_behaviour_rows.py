@@ -19,6 +19,7 @@ from robot_sf.benchmark.metric_definitions import (
     require_uniform_metric_schema,
 )
 from robot_sf.benchmark.receipt_stages import (
+    DESCRIPTOR,
     METRIC_SOURCE_PATHS,
     ROW_SCHEMA_PATH,
     atomic_json,
@@ -47,7 +48,8 @@ def _inventory(directory: Path) -> dict[str, str]:
     paths = [
         *directory.rglob("*.jsonl"),
         directory / "contract.json",
-        *directory.glob("campaigns/*/runs/*/receipt_execution.json"),
+        *directory.glob(f"campaigns/*/{DESCRIPTOR}"),
+        *directory.glob(f"campaigns/*/runs/*/{DESCRIPTOR}"),
         *directory.glob("campaigns/*/runs/*/completed/*.json"),
     ]
     return {

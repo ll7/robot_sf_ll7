@@ -852,3 +852,71 @@ def test_episode_succeeds_when_worker_stderr_read_fails(monkeypatch: pytest.Monk
             "timeout_s": None,
         }
     ]
+
+
+@pytest.mark.skipif(
+    "fork" not in runner_mod.mp.get_all_start_methods(), reason="planner worker requires fork"
+)
+@pytest.mark.parametrize("setup_call", ["dup2", "fdopen"])
+def test_episode_succeeds_when_worker_stderr_setup_fails(
+    monkeypatch: pytest.MonkeyPatch, setup_call: str
+) -> None:
+    """Child capture setup errors leave the planner action and cleanup intact."""
+    closed_planners = []
+    planner = SimpleNamespace(
+        step=lambda _obs: {"vx": 0.5, "vy": 0.0},
+        close=lambda: closed_planners.append(True),
+    )
+    monkeypatch.setattr(runner_mod, "_config_torch_worker", lambda _planner: None)
+    monkeypatch.setattr(
+        runner_mod,
+        "_load_baseline_planner",
+        lambda *_args: (planner, runner_mod.Observation, {}),
+    )
+    parent_pid = runner_mod.os.getpid()
+    dup2 = runner_mod.os.dup2
+    fdopen = runner_mod.os.fdopen
+    temporary_file = runner_mod.tempfile.TemporaryFile
+    captures = []
+
+    def capture_stderr(**kwargs):
+        capture = temporary_file(**kwargs)
+        captures.append(capture)
+        return capture
+
+    def fail_dup2(fd, fd2, *args, **kwargs):
+        if fd2 == 2 and runner_mod.os.getpid() != parent_pid and fd == captures[-1].fileno():
+            raise OSError(errno.EIO, "worker stderr redirect failed")
+        return dup2(fd, fd2, *args, **kwargs)
+
+    def fail_fdopen(fd, mode="r", *args, **kwargs):
+        if mode == "w" and kwargs.get("buffering") == 1 and runner_mod.os.getpid() != parent_pid:
+            raise OSError(errno.EIO, "worker stderr stream failed")
+        return fdopen(fd, mode, *args, **kwargs)
+
+    monkeypatch.setattr(runner_mod.tempfile, "TemporaryFile", capture_stderr)
+    if setup_call == "dup2":
+        monkeypatch.setattr(runner_mod.os, "dup2", fail_dup2)
+    else:
+        monkeypatch.setattr(runner_mod.os, "fdopen", fail_fdopen)
+    record = runner_mod.run_episode(
+        {"id": "stderr-setup", "preset": "collision_sanity"},
+        DEV_SEEDS[0],
+        algo="ppo",
+        horizon=2,
+        dt=0.5,
+        robot_start=(2.0, 3.0),
+        robot_goal=(2.4, 3.0),
+        record_forces=False,
+    )
+
+    assert captures and all(capture.closed for capture in captures)
+    assert closed_planners == [True]
+    assert record["metrics"]["success"] is True
+    assert record["metrics"]["socnavbench_path_length"] == pytest.approx(0.25)
+    timeout = record["algorithm_metadata"]["policy_step_timeout"]
+    counters = ("step_timeouts", "step_retries", "worker_errors", "fallback_actions")
+    assert all(timeout[key] == 0 for key in counters)
+    assert [(event["kind"], event["exit_code"]) for event in timeout["worker_events"]] == [
+        ("closed", 0)
+    ]

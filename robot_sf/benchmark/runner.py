@@ -32,6 +32,7 @@ import uuid
 from collections.abc import Mapping
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from concurrent.futures import TimeoutError as FuturesTimeoutError
+from contextlib import suppress
 from datetime import (
     UTC,  # type: ignore[attr-defined]
     datetime,
@@ -480,8 +481,10 @@ def _config_torch_worker(planner: Any) -> None:
 def _planner_step_worker(conn: Any, planner: Any, stderr_fd: int | None = None) -> None:
     """Run planner steps in an isolated child process and relay live diagnostics."""
     if stderr_fd is not None:
-        os.dup2(stderr_fd, 2)
-        sys.stderr = os.fdopen(os.dup(2), "w", buffering=1)
+        with suppress(OSError, ValueError):
+            os.dup2(stderr_fd, 2)
+            # Borrow the redirected descriptor so a failed stream open cannot leak a duplicate.
+            sys.stderr = os.fdopen(2, "w", buffering=1, closefd=False)
     try:
         _config_torch_worker(planner)
         ensure_load = getattr(planner, "_ensure_model_loaded", None)

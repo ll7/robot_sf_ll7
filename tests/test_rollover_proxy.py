@@ -84,6 +84,24 @@ def test_deprecated_aliases_still_load_with_deprecation_warning() -> None:
         assert RolloverProxyParams().front_axle_to_cog_m == pytest.approx(0.5)
 
 
+def test_conflicting_alias_and_neutral_names_raise() -> None:
+    """An alias and its replacement with different values must fail (issue #10279)."""
+    with (
+        pytest.raises(TypeError, match="Conflicting values"),
+        pytest.warns(DeprecationWarning, match="track_width_m"),
+    ):
+        RolloverProxyParams(two_wheel_axle_track_m=0.9, track_width_m=0.8)
+    with (
+        pytest.raises(TypeError, match="Conflicting values"),
+        pytest.warns(DeprecationWarning, match="front_axle_to_cog_m"),
+    ):
+        RolloverProxyParams(single_wheel_axle_to_cog_m=0.4, front_axle_to_cog_m=0.5)
+    # The same value on both spellings stays accepted for the one-release transition.
+    with pytest.warns(DeprecationWarning, match="track_width_m"):
+        agreed = RolloverProxyParams(two_wheel_axle_track_m=0.9, track_width_m=0.9)
+    assert agreed.two_wheel_axle_track_m == pytest.approx(0.9)
+
+
 def test_front_single_and_rear_single_tricycles_share_threshold() -> None:
     """The same vehicle as a front-single or rear-single tricycle shares one threshold."""
     front_single = RolloverProxyParams(

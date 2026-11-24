@@ -279,7 +279,12 @@ def test_non_release_goal_zone_entry_v1_bounded_v2_replay_safety(
     scenario_path = Path(
         "configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v1.yaml"
     )
-    scenario = select_scenario(load_classic_matrix(str(scenario_path)), scenario_id)
+    scenario = dict(select_scenario(load_classic_matrix(str(scenario_path)), scenario_id))
+    # Keep the #9727 diagnostic physics fixed across the 0.1.0 default change.
+    scenario["simulation_config"] = {
+        **scenario.get("simulation_config", {}),
+        "obstacle_force_law": "legacy_shifted_gradient_v1",
+    }
     authored_budget = int(scenario["simulation_config"]["max_episode_steps"])
     record = _run_map_episode(
         scenario,

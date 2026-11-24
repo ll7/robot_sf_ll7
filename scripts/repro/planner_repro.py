@@ -1,5 +1,8 @@
 """Replay the frozen development comparisons for two Robot SF planner candidates."""
 
+# evidence-writer-exempt: Replay restores exact, hash-checked simulator inputs
+# in a temporary directory. It publishes no generated evidence files.
+
 from __future__ import annotations
 
 import argparse
@@ -36,11 +39,16 @@ GRIDS = ("release", "v1", "v2", "v3")
 OUTCOMES = ("route_complete", "collision_event", "timeout_event")
 
 
-def read_json(path: Path) -> dict:
-    """Load an archive file, decompressing it when needed."""
-    if path.suffix == ".gz":
-        return json.loads(gzip.decompress(path.read_bytes()))
-    return json.loads(path.read_bytes())
+def read_json(path: Path, *, uncompressed_sha256: str | None = None) -> dict:
+    """Load JSON and optionally verify the original, uncompressed bytes."""
+    raw = path.read_bytes()
+    content = gzip.decompress(raw) if path.suffix == ".gz" else raw
+    if (
+        uncompressed_sha256 is not None
+        and hashlib.sha256(content).hexdigest() != uncompressed_sha256
+    ):
+        raise ValueError(f"Original JSON bytes differ for {path.name}")
+    return json.loads(content)
 
 
 def verify_environment(manifest: dict, *, allow_rebuilt_rvo2: bool) -> None:
@@ -112,7 +120,10 @@ def prepare_cases(manifest: dict, scratch: Path, seeds: tuple[int, ...]) -> dict
                 None,
             )
     for grid in GRIDS[1:]:
-        suite = read_json(ARCHIVE / f"challenge_suite.{grid}.json")
+        suite = read_json(
+            ARCHIVE / f"challenge_suite.{grid}.json.gz",
+            uncompressed_sha256=manifest["challenge_suite_json_sha256"][grid],
+        )
         for entry in suite["cases"]:
             case_id = entry["case"]["id"]
             for seed in seeds:

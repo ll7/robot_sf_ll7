@@ -8245,3 +8245,7 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/planner_search_2026-11
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence

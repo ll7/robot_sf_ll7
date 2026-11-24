@@ -115,10 +115,12 @@ planners with `--arms orca drammpi2 drammpi3 sampler`. The native library's bina
 hash can differ after a source build. The rebuild option prints that hash and
 requires the replay to match the archived rows.
 
-The archive contains the unmodified challenge manifests and the exact
-inputs for all 30 development seeds, with checksums in the manifest.
-[Suite v1](context/evidence/planner_search_2026-11/challenge_suite.v1.json) ·
-[Suite v2](context/evidence/planner_search_2026-11/challenge_suite.v2.json) ·
-[Suite v3](context/evidence/planner_search_2026-11/challenge_suite.v3.json) ·
+The archive contains the original challenge manifests as gzip files, with
+checksums for their uncompressed bytes. They preserve the source names and
+selection history. The replay loads the exact simulation inputs archived for
+all 30 development seeds.
+[Suite v1](context/evidence/planner_search_2026-11/challenge_suite.v1.json.gz) ·
+[Suite v2](context/evidence/planner_search_2026-11/challenge_suite.v2.json.gz) ·
+[Suite v3](context/evidence/planner_search_2026-11/challenge_suite.v3.json.gz) ·
 [ORCA and DRA-MPPI outcomes](context/evidence/planner_search_2026-11/paired_outcomes.csv.gz) ·
 [Sampler outcomes](context/evidence/planner_search_2026-11/sampler_outcomes.csv.gz)

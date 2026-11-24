@@ -108,19 +108,16 @@
     ]
   },
   "files_sha256": {
-    "challenge_suite.v1.json": "5a355b9dff7ee4bd4a4473b30f9d8bb25254743053fa52e2c14b0802bf84ff19",
-    "challenge_suite.v1.sha256": "fc9ccb711b3056bd3da5a789cc7797cbf399523d7742128ef92e073cbfa25943",
-    "challenge_suite.v2.json": "876bee6fad28b7df207041149c1dc89a795d11ebd62845ca496015b492db670b",
-    "challenge_suite.v2.sha256": "56b3b8966d5b76b43133a3091cb0914b0c89c1376fd3ce10fed66edd1f8a7ce3",
-    "challenge_suite.v3.json": "330cb158c194f69c99f4754e8626ab8c61452951175afad75d0fc293145b3c22",
-    "challenge_suite.v3.sha256": "af23af23fbe82bb3d1c722d2af837ddb554a146c620b8698da8d8ef021e5f331",
     "input_hashes.json.gz": "9af171d0b470199f925031c1678fb7e049090e40ba6a94f7c9f2636dbf7d658a",
     "challenge_inputs.json.gz": "af7a5d0b6e92298b41eb2bedb20c57626f045ca547ce51ef84b0de7d75bdf1ed",
     "release_cases.json.gz": "0e135d16fa032500d95555ea890e9705dcd9516237d788648bfaa27a3d48dbd6",
     "paired_outcomes.csv.gz": "1d9b3fa0d9397b286203de098e0711e4a288c17a63ee54e789a448292e185c83",
     "paired_intervals.csv.gz": "9c95735fc85b26de62ae42d55e3f403938bee482e804df94f282fc93e591b147",
     "outcome_intervals.csv.gz": "c47021045f79be64323223ef923f7c6a76eb493e9ff50dbdee98e5ee0975def6",
-    "sampler_outcomes.csv.gz": "6d82095e8954aec2d96876c09e7ce6e7ba0ec6aefce031be892c85e8e9b66edf"
+    "sampler_outcomes.csv.gz": "6d82095e8954aec2d96876c09e7ce6e7ba0ec6aefce031be892c85e8e9b66edf",
+    "challenge_suite.v1.json.gz": "a09ce8600ceca0530d889ab47a05cffa5a1c9c1928f2c8c200ea70178d59509b",
+    "challenge_suite.v2.json.gz": "1a8b98128a3abb9a9eff120f1bc56ea4f95714fe9bebe6415ef6be66bc1e3d20",
+    "challenge_suite.v3.json.gz": "1db6bac3c928ce2d3505cd8245bbab6d6d9a21a79796a9c07db7abbccc636dc8"
   },
   "original_csv_sha256": {
     "paired_outcomes.csv": "5143f7835773752dc43da1076a0e811ee6dfe1d023ae34c3da14ae02cfea7ba1",
@@ -175,5 +172,10 @@
   "review_marker": [
     "AI-GENERATED",
     "NEEDS-REVIEW"
-  ]
+  ],
+  "challenge_suite_json_sha256": {
+    "v1": "5a355b9dff7ee4bd4a4473b30f9d8bb25254743053fa52e2c14b0802bf84ff19",
+    "v2": "876bee6fad28b7df207041149c1dc89a795d11ebd62845ca496015b492db670b",
+    "v3": "330cb158c194f69c99f4754e8626ab8c61452951175afad75d0fc293145b3c22"
+  }
 }

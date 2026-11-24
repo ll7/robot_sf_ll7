@@ -5,12 +5,68 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from loguru import logger
 from shapely.geometry import LineString, Point, Polygon
 
 from robot_sf.sim.simulator import init_simulators
 from robot_sf.training.scenario_loader import build_robot_config_from_scenario, load_scenarios
 
 MATRIX = Path("configs/scenarios/classic_interactions_francis2023_authoring_0_1_0_v1.yaml")
+
+
+def test_scenario_rejects_desired_speed_seed_without_mean_or_tier(tmp_path):
+    """A seed cannot affect the legacy spawn-coupled speed distribution."""
+    with pytest.raises(ValueError, match="desired_speed_seed requires desired_speed_mean"):
+        build_robot_config_from_scenario(
+            {"simulation_config": {"desired_speed_seed": 1001}},
+            scenario_path=tmp_path / "scenario.yaml",
+        )
+
+
+@pytest.mark.parametrize(
+    ("speed_override", "mean"),
+    [
+        ({"desired_speed_mean": 1.0}, 1.0),
+        ({"desired_speed_mean": 0.0}, 0.0),
+        ({"ped_speed_tier": "typical"}, 1.3),
+    ],
+)
+def test_scenario_warns_when_mean_supersedes_speed_multiplier(tmp_path, speed_override, mean):
+    """Report an ignored explicit multiplier, including tier-derived and zero means."""
+    messages = []
+    sink = logger.add(messages.append, level="WARNING", format="{message}")
+    try:
+        config = build_robot_config_from_scenario(
+            {"simulation_config": {"peds_speed_mult": 2.0, **speed_override}},
+            scenario_path=tmp_path / "scenario.yaml",
+        )
+    finally:
+        logger.remove(sink)
+    assert config.sim_config.desired_speed_mean == pytest.approx(mean)
+    assert config.sim_config.peds_speed_mult == 2.0
+    assert any("peds_speed_mult" in msg and "desired_speed_mean" in msg for msg in messages)
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"peds_speed_mult": 2.0},
+        {"desired_speed_mean": 1.0, "desired_speed_seed": 1001},
+        {"ped_speed_tier": "typical", "desired_speed_seed": 1001},
+        {"desired_speed_seed": None},
+    ],
+)
+def test_unambiguous_scenario_speed_overrides_remain_accepted(tmp_path, overrides):
+    """Defaults and seeds with an effective distribution need no warning."""
+    messages = []
+    sink = logger.add(messages.append, level="WARNING", format="{message}")
+    try:
+        build_robot_config_from_scenario(
+            {"simulation_config": overrides}, scenario_path=tmp_path / "scenario.yaml"
+        )
+    finally:
+        logger.remove(sink)
+    assert not messages
 
 
 def _config(name, overrides=None):
@@ -34,6 +90,11 @@ def _config(name, overrides=None):
         (
             {"ped_speed_tier": "typical", "desired_speed_mean": 1.1, "desired_speed_std": 0.0},
             1.1,
+            0.0,
+        ),
+        (
+            {"peds_speed_mult": 2.0, "desired_speed_mean": 1.0, "desired_speed_std": 0.0},
+            1.0,
             0.0,
         ),
     ],

@@ -2975,6 +2975,7 @@ def _normalize_desired_speed_overrides(
 ) -> None:
     """Validate speed fields together after applying scenario overrides."""
     speed_fields = {
+        "peds_speed_mult",
         "ped_speed_tier",
         "desired_speed_mean",
         "desired_speed_std",
@@ -2995,12 +2996,19 @@ def _normalize_desired_speed_overrides(
         raise ValueError("simulation_config.desired_speed_seed must be a non-negative integer.")
     # Normalize after all fields are assigned so explicit values override the tier.
     config.sim_config._validate_desired_speed_config()
-    if (
-        config.sim_config.desired_speed_std is not None
-        and config.sim_config.desired_speed_mean is None
-    ):
-        raise ValueError(
-            "simulation_config.desired_speed_std requires desired_speed_mean or a pedestrian speed tier."
+    if config.sim_config.desired_speed_mean is None:
+        for attr in ("desired_speed_std", "desired_speed_seed"):
+            if getattr(config.sim_config, attr) is not None:
+                raise ValueError(
+                    f"simulation_config.{attr} requires desired_speed_mean or a pedestrian speed tier."
+                )
+    elif "peds_speed_mult" in overrides:
+        logger.warning(
+            "simulation_config.peds_speed_mult={} is ignored for desired-speed caps because "
+            "desired_speed_mean={} takes precedence; remove the explicit peds_speed_mult "
+            "to avoid ambiguity.",
+            config.sim_config.peds_speed_mult,
+            config.sim_config.desired_speed_mean,
         )
 
 

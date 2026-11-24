@@ -1,7 +1,6 @@
 """Focused behavior checks for the experimental velocity sampler."""
 
 from types import SimpleNamespace
-from typing import Any
 
 import numpy as np
 import pytest
@@ -191,7 +190,6 @@ def test_registered_planner_has_its_own_experimental_identity() -> None:
         allow_testing_algorithms=True,
     )
     assert readiness is not None and readiness.canonical_name == "velocity_sampler"
-    policy: Any
     policy, _ = _build_policy(
         "velocity_sampler",
         {
@@ -201,11 +199,10 @@ def test_registered_planner_has_its_own_experimental_identity() -> None:
         },
         robot_kinematics="differential_drive",
     )
-    assert type(policy._planner_adapter) is ContactVelocitySamplerAdapter
-    baseline: Any
+    assert type(vars(policy)["_planner_adapter"]) is ContactVelocitySamplerAdapter
     baseline, _ = _build_policy(
         "socnav_sampling",
         {"socnav_sampling_version": "bounded_v2"},
         robot_kinematics="differential_drive",
     )
-    assert type(baseline._planner_adapter) is not VelocitySamplerAdapter
+    assert type(vars(baseline)["_planner_adapter"]) is not VelocitySamplerAdapter

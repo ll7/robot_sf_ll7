@@ -1,0 +1,10 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/planner_search_2026-11/challenge_suite.v3.json",
+  "artifact_sha256": "330cb158c194f69c99f4754e8626ab8c61452951175afad75d0fc293145b3c22",
+  "preserved_exact_bytes": true,
+  "review_marker": [
+    "AI-GENERATED",
+    "NEEDS-REVIEW"
+  ]
+}

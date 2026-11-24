@@ -1,0 +1,10 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/planner_search_2026-11/input_hashes.json.gz",
+  "artifact_sha256": "9af171d0b470199f925031c1678fb7e049090e40ba6a94f7c9f2636dbf7d658a",
+  "preserved_exact_bytes": true,
+  "review_marker": [
+    "AI-GENERATED",
+    "NEEDS-REVIEW"
+  ]
+}

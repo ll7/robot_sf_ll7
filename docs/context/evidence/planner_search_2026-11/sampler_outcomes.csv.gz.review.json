@@ -1,0 +1,10 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/planner_search_2026-11/sampler_outcomes.csv.gz",
+  "artifact_sha256": "6d82095e8954aec2d96876c09e7ce6e7ba0ec6aefce031be892c85e8e9b66edf",
+  "preserved_exact_bytes": true,
+  "review_marker": [
+    "AI-GENERATED",
+    "NEEDS-REVIEW"
+  ]
+}

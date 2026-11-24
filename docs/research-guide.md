@@ -64,6 +64,8 @@ benchmark or paper-facing evidence.** Match the claim to the proof.
   support mapped to Alyassi-style families, with overclaim guardrails.
 - [Benchmark: Experimental Planners](./benchmark_experimental_planners.md) — opt-in guardrails for
   unfinished planner families.
+- [Opt-in sampler and DRA-MPPI](./planner_search_2026-11.md) — configuration, paired development
+  results, and replay.
 - [Benchmark Planner Quality Audit](./benchmark_planner_quality_audit.md) — planner decision table and
   headline suitability classification.
 - [Prediction Planner Baseline](./baselines/prediction_planner.md) — model description and provenance.

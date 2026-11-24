@@ -2,7 +2,6 @@
 
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any
 
 import numpy as np
 import yaml
@@ -88,35 +87,33 @@ def _observation(peds=()) -> dict:
 
 def test_registered_dra_policy_uses_risk_and_restarts_its_warm_start() -> None:
     """The first command on a clear corridor repeats after reset and yields to contact risk."""
-    policy: Any
     policy, meta = build_map_policy(
         "dra_mppi",
         {"allow_testing_algorithms": True, "random_seed": _DEV_SEED},
         robot_kinematics="differential_drive",
     )
     assert meta["canonical_algorithm"] == "dra_mppi"
-    assert isinstance(policy._planner_adapter, DRAMPPIAdapter)
-    policy._planner_bind_env(_environment())
+    assert isinstance(vars(policy)["_planner_adapter"], DRAMPPIAdapter)
+    vars(policy)["_planner_bind_env"](_environment())
     first = policy(_observation())
     assert 0 < first[0] <= 1.5
     assert abs(first[1]) <= 1.0
 
-    policy._planner_reset()
+    vars(policy)["_planner_reset"]()
     near = policy(_observation([(1.54, 0.0)]))
     assert near[0] < first[0]
-    policy._planner_reset()
+    vars(policy)["_planner_reset"]()
     assert policy(_observation()) == first
 
 
 def _corridor_policy():
     source = Path(__file__).resolve().parents[2] / "configs/algos/dra_mppi_r2.yaml"
-    policy: Any
     policy, _ = build_map_policy(
         "dra_mppi",
         yaml.safe_load(source.read_text()),
         robot_kinematics="differential_drive",
     )
-    policy._planner_bind_env(_environment(half_width=2.2))
+    vars(policy)["_planner_bind_env"](_environment(half_width=2.2))
     return policy
 
 
@@ -124,7 +121,7 @@ def test_corridor_profile_steers_away_from_a_waiting_walker() -> None:
     """A visible walker ahead changes the early approach on either side of the aisle."""
     policy = _corridor_policy()
     for lateral in (-0.4, 0.4):
-        policy._planner_reset()
+        vars(policy)["_planner_reset"]()
         speed, turn = policy(_observation([(6.5, lateral)]))
         assert speed > 0.0
         assert turn * np.sign(lateral) < -0.25
@@ -137,7 +134,7 @@ def test_corridor_profile_yields_until_a_risk_feasible_pass_returns() -> None:
     observation["robot"]["speed"] = [0.8, 0.0]
     observation["pedestrians"]["velocities"] = [(-1.2, 0.0)]
     speed, turn = policy(observation)
-    diagnostics = policy._planner_adapter.diagnostics()
+    diagnostics = vars(policy)["_planner_adapter"].diagnostics()
     assert diagnostics["all_rollouts_over_risk_steps"] == 1
     assert speed == 0.0
     assert turn < -0.25
@@ -153,7 +150,7 @@ def test_corridor_braking_guard_rejects_contact_during_the_stop() -> None:
     observation["robot"]["speed"] = [1.1, 0.0]
     observation["pedestrians"]["velocities"] = [(-1.2, 0.0)]
     assert policy(observation) == (0.0, 0.0)
-    assert policy._planner_adapter.diagnostics()["yield_guard_rejections"] == 1
+    assert vars(policy)["_planner_adapter"].diagnostics()["yield_guard_rejections"] == 1
 
 
 def _crossing_observation(x, pedestrian=None, velocity=None):
@@ -167,7 +164,6 @@ def _crossing_observation(x, pedestrian=None, velocity=None):
 
 
 def _approaching_crossing_policy(*, opening=True):
-    policy: Any
     policy, _ = build_map_policy(
         "dra_mppi",
         {"allow_testing_algorithms": True, "crossing_yield": True, "random_seed": 7023},
@@ -175,7 +171,7 @@ def _approaching_crossing_policy(*, opening=True):
     )
     extents = [(-3.0, 1.0), (6.2, 15.0)] if opening else [(-3.0, 15.0)]
     walls = [[(start, y), (end, y)] for start, end in extents for y in (-2.2, 2.2)]
-    policy._planner_bind_env(
+    vars(policy)["_planner_bind_env"](
         SimpleNamespace(
             _get_static_grid_obstacles=lambda: (walls, []),
             simulator=SimpleNamespace(robots=[SimpleNamespace(config=DifferentialDriveSettings())]),

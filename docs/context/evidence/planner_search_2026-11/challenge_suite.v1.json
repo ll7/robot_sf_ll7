@@ -1,0 +1,2562 @@
+{
+  "cases": [
+    {
+      "case": {
+        "controls": {
+          "departure_s": 1.85967,
+          "encounter_x_m": 10.60639,
+          "gap_m": 2.75545,
+          "gate_center_shift_m": -0.31836,
+          "lateral_change_m": -0.49069,
+          "obstacle_shift_m": -0.16597,
+          "route_offset_m": -0.0673,
+          "spacing_m": 1.58884,
+          "speed_mps": 1.18223,
+          "width_m": 4.38881
+        },
+        "count": 1,
+        "family": "corridor",
+        "flow": 1,
+        "grouped": false,
+        "id": "planadv_corridor_22",
+        "proposal_index": 21,
+        "proposal_seed": 148201
+      },
+      "evaluation_input_sha256": {
+        "1163": {
+          "map.json": "b841655f9039460341b0343478c43a940d5588ba14d3efab2559ea9bec1fabd8",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "429c54b699101bbb58797348393a53f5f283e93056a367ea9cb4eaa6801851c8"
+        },
+        "1164": {
+          "map.json": "277800bda450dd8d0249383d08d5c5ed3215342c38a5a2c6c6bcd08c50a44355",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "99150b8d76b31422a80fc2ceeb5359697d9d30a8a5496c1bb2ee71dce40ece8a"
+        },
+        "1165": {
+          "map.json": "44eed05e58df9f8d1b374e4235bf06ebbe1c6e95a5fa7428d7140fe44fbf515e",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "8487a54baa9ad77672823f112676738c82cfa934dfa2ae7b1a86ba1203fea563"
+        },
+        "1166": {
+          "map.json": "6b57c34426d754d93faff848483b6962fdc74fb53cf87df523628611bf36646b",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "30be9e4a409df59231195512aeff80e6625c42f508a5441024b9eaceda1ec802"
+        },
+        "1167": {
+          "map.json": "2508d71adf26250aa345d52bcaead562b5ef4339e66c55a45e20c9efd78844bb",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "803763dc368ac2b85ece5a2ff3b6e25baad2453739cf873cc9a8f67c0e4f32e2"
+        },
+        "1168": {
+          "map.json": "d1281f87cfad2e98f9f20a235adc45d431c16a50c41a3f73a91836b6623590d3",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "8254dd94645c4e9ffbc4f8dbd325e585111c77615b72659f6d03f1f97bd5ee56"
+        },
+        "1169": {
+          "map.json": "3bec37df4cec84e1d26cc17226e06175183fdbad7cfc1d616c6e87c487237787",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "fbeb0cf5628a9ca3853440377f6254e8dd786a1d406f8ef4cf79f8a87f5fec81"
+        },
+        "1170": {
+          "map.json": "9e7027d0cb31c792566f57cc5b74f0eeb3139b76a36c438f369b5d92442fb70a",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "410912109fe27e26db0c19a8053acaabdf1428ee29e5802e977fc8e2d5ac30ff"
+        },
+        "1171": {
+          "map.json": "32ab2d66975cab2d59e206af78721358e527f944eb082b931062f7b363d91655",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "0a3b26c8008a8e403fc7d89067f7e7969a004d8f25bf060538d0cf2f28472f23"
+        },
+        "1172": {
+          "map.json": "51de792d0710937de5a6a6497d9232ed21eebb913ebe1ea616aa7e40b8669433",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "c1e0f2d43db13834d313fbcc562dc5a10b03102401dce5accc380c6e3667f067"
+        },
+        "1173": {
+          "map.json": "9311f23a57cd8afe9e0b8f3f52eddcc3f91a61fc8be06e1e35b6f3432a02754d",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "68c1ccba42f2891924a9e7dc3fdf36c45cc88ccf9a7a8d1c87e475fed5442283"
+        },
+        "1174": {
+          "map.json": "5f455fe209d5f18fe6e63c04cdc09feb5ffef7164d2d54bae83d59b4d1035448",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "33d3e40f238d0d07b45182578fafc55320293ca37668b0fbe4c18272a1b44008"
+        },
+        "1175": {
+          "map.json": "1b02463154c73542a85cc7cc05553215959bf20835dce42ce16dc7921cf163b5",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "f00a45ac4e2bd2811bd15174ce419d92aa40332b685734bc5a5848ae39359715"
+        },
+        "1176": {
+          "map.json": "e97b50ef85e49fdd94abdbcec011fe198fdf6c48125aca61bc1ff8c44f122ecf",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "d2497a8e664e36f7616531def718456c7dd493e703128233c5612bc6252dd970"
+        },
+        "1177": {
+          "map.json": "0851f3bf28653942e02dfc2d3516b26c0f1bc836693e7b668970cf73a33dbead",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "176fd5df5afa2e10c6b116c54b66143418c88bca91f69cd7aa33a4c22c4ec52c"
+        },
+        "1178": {
+          "map.json": "a5f8a3138df180d6ef5d15230eefdca84817c335146fc613944581f27b44b223",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "a56c83f34f32dcc91f3ac79ad41bac8156d54e462b5ad2fa6ca7f525f25d561f"
+        },
+        "1179": {
+          "map.json": "d40036e70bd8aac688e6293860084ae9483c32ee849e1b440704dfbdc357c6db",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "449615c62e7b8f883a8baed499fa5435058d305337e0c5befd497cf094a7041b"
+        },
+        "1180": {
+          "map.json": "e7fffcd12ddd363d4394b3322fbf7b06306b09c8cb1c5f2c35312147b549b84f",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "f03d39515746e0d3dc08a45dc13671977f39cbccbdc1bf5ee821cd35f5b61db3"
+        }
+      },
+      "geometry": {
+        "obstacles": [
+          [
+            [
+              0.0,
+              0.0
+            ],
+            [
+              28.0,
+              0.0
+            ],
+            [
+              28.0,
+              5.8056
+            ],
+            [
+              0.0,
+              5.8056
+            ]
+          ],
+          [
+            [
+              0.0,
+              10.1944
+            ],
+            [
+              28.0,
+              10.1944
+            ],
+            [
+              28.0,
+              16.0
+            ],
+            [
+              0.0,
+              16.0
+            ]
+          ],
+          [
+            [
+              0.0,
+              5.8056
+            ],
+            [
+              0.65,
+              5.8056
+            ],
+            [
+              0.65,
+              10.1944
+            ],
+            [
+              0.0,
+              10.1944
+            ]
+          ],
+          [
+            [
+              27.35,
+              5.8056
+            ],
+            [
+              28.0,
+              5.8056
+            ],
+            [
+              28.0,
+              10.1944
+            ],
+            [
+              27.35,
+              10.1944
+            ]
+          ]
+        ],
+        "robot_route": [
+          [
+            3.2,
+            8.0
+          ],
+          [
+            24.7,
+            8.0
+          ]
+        ]
+      },
+      "nominal_sha256": {
+        "map.json": "9104b78d450e500cb9fc9aba594d6da44f8fa887cfb6cd043380a3fd08672910",
+        "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+        "scenario.yaml": "dfe3f21db0d55864f05319c332312e9a452491a1364b962a7c2a3aff546dc33a"
+      },
+      "pedestrians": [
+        {
+          "departure_s": 1.85967,
+          "group": null,
+          "id": "p1",
+          "speed_mps": 1.09723,
+          "trajectory": [
+            [
+              10.20639,
+              7.9327
+            ],
+            [
+              4.65,
+              7.73881
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "case": {
+        "controls": {
+          "departure_s": 2.75967,
+          "encounter_x_m": 10.83716,
+          "gap_m": 2.772,
+          "gate_center_shift_m": -0.28362,
+          "lateral_change_m": -0.35433,
+          "obstacle_shift_m": -0.09538,
+          "route_offset_m": 0.0527,
+          "spacing_m": 1.67484,
+          "speed_mps": 0.98223,
+          "width_m": 4.45837
+        },
+        "count": 1,
+        "family": "corridor",
+        "flow": 1,
+        "grouped": false,
+        "id": "planadv_corridor_23",
+        "proposal_index": 22,
+        "proposal_seed": 148201
+      },
+      "evaluation_input_sha256": {
+        "1163": {
+          "map.json": "f4c845ea9fe269b85055dcc1ff53f1ac8ddbfeb5db77e5305a80e6362c3f58fc",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "e4ba04cb185e8eee98506a710b37f603a25e8b156053b451ec46ebd9170218f8"
+        },
+        "1164": {
+          "map.json": "5ab7d4a54ff2f750dfb1ed31dc5a46a00b5d4de5ad55b7dd852276651acfd7e7",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "c9da260f2dbf85d8fb766346ad84dff8598e83ea40ef7cda67063832e5a5c99c"
+        },
+        "1165": {
+          "map.json": "be470e687559084fedced767b61b860a5527d948802ba82fb442705bf67a3ff1",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "b1733381c5e05d1402628061c9fbca6d98b3ec559d23b1ef4bb17ea6632a15ab"
+        },
+        "1166": {
+          "map.json": "f174ba119212978fe4e7768d73ba7d3ebd0f5e9da0f3af68d30909660ca53d60",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "90df572533dc3c3002f7b8e4e8ef6ff983a63a1cb55584cf7d5132467fa58afe"
+        },
+        "1167": {
+          "map.json": "3a29a84d98583eb0f171f7477c43d01504f7b856ea53642af439b83d3abaefe0",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "e4685d6c14dffc620a0c07a24ed170cccc42bba79f9a044be23b4fe93b5528c0"
+        },
+        "1168": {
+          "map.json": "e1870c9515f7c095b3a75a67420447cdbf199018a26fccf55f49e3a0231559ab",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "e3186d752355a29dd0cb2b7257837d95e7eb2e55dc081ff4b6e290b6dc6434fd"
+        },
+        "1169": {
+          "map.json": "bf1fec608abeb9b1d91f8118c0a897b3237d21d771ce9edc7bd2af21c2d7cc1a",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "43e038555f247e4eb017a7f0d265ed2a1ea8cb648395d67075479cc8f063e462"
+        },
+        "1170": {
+          "map.json": "ba48cc788e19cb58338ee834d082c1c4504c8995a84397e051782bbe2e572ba8",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "8a36581fc6f183d7048c58d9006c5811badfb4e0d7f1b2c881d32e48fbe516a6"
+        },
+        "1171": {
+          "map.json": "eb3baf453d5effa3120faf53d156bed9e18ccafbb575fa51a2ae038f02eda064",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "b0f38bab735ac6efb741ffdb8008ebd7bebd1c7a270f11fac3b98f2f3a19ae94"
+        },
+        "1172": {
+          "map.json": "0e755736d138109468412a15858cf4526d520193bcf73448d0e35a38df807be7",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "01ad12cd874fb294fec889e8c0ba441abe16b263e83d998b12ff6c18d5fb80d1"
+        },
+        "1173": {
+          "map.json": "46a633f6ad366bb419d0e337523f13ffe44d325725e97fd0685a56d92a4bd979",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "9568dda5c20fa7e8082fbd802ae62a799d0f26ce70999ca50c9ad13202e240f7"
+        },
+        "1174": {
+          "map.json": "838cd9b742b1f5e9a260421d11fe9245468198488dbed2b07830fc51c256281c",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "db0abf66772bf76d6447c8e3352084ac45a2d130213417287cf2ba84922ea73b"
+        },
+        "1175": {
+          "map.json": "79c27907f56555f353be458290d3733a42d3dc8bff494fcbe16ec5922f4b1ce0",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "b327c014863f04503f6c605e189662a4aba1107376482e670052798297aa11ea"
+        },
+        "1176": {
+          "map.json": "bd195c509d28e7084eb498792db0d5d434c5d40dc1334e2a89628951dde8360a",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "736fcd99ff56f57b78d032f17cb6fdbab43c55abe8e09b1dca90bec8eebf2806"
+        },
+        "1177": {
+          "map.json": "2d8eaf08b1472a477d35d0da44411799b45bcf19388c9fdb5447300bf7151813",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "bb64497c1604d7cec58bcf8f8490280fa6dcc08759e4fdcf91e321c5fc44ea0e"
+        },
+        "1178": {
+          "map.json": "e8fcfd8d00632682f6901f2209b0f14b69390c7d3bb0f324371aa85494264be4",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "68420afe31e497035d5f7561b42ca39d676c2c967bc9976804bdacf9cac8a33d"
+        },
+        "1179": {
+          "map.json": "84a36b55ca6aa064dfc33b3116f3126fe77e050a739782841d4647d1ae317142",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "bdb0760c8b2521fcd1f8f96c7f2229abdda6e4abbb1190adac103c62a7fbc896"
+        },
+        "1180": {
+          "map.json": "daa151a0752500b8bce4aaeef48803c6f4d97115bc27586f08ddb3a02418a5c8",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "1e91abaf5976453152bdf54f702dfe5dd4827ae95e34bfa79e9f65da7caf4995"
+        }
+      },
+      "geometry": {
+        "obstacles": [
+          [
+            [
+              0.0,
+              0.0
+            ],
+            [
+              28.0,
+              0.0
+            ],
+            [
+              28.0,
+              5.77081
+            ],
+            [
+              0.0,
+              5.77081
+            ]
+          ],
+          [
+            [
+              0.0,
+              10.22919
+            ],
+            [
+              28.0,
+              10.22919
+            ],
+            [
+              28.0,
+              16.0
+            ],
+            [
+              0.0,
+              16.0
+            ]
+          ],
+          [
+            [
+              0.0,
+              5.77081
+            ],
+            [
+              0.65,
+              5.77081
+            ],
+            [
+              0.65,
+              10.22919
+            ],
+            [
+              0.0,
+              10.22919
+            ]
+          ],
+          [
+            [
+              27.35,
+              5.77081
+            ],
+            [
+              28.0,
+              5.77081
+            ],
+            [
+              28.0,
+              10.22919
+            ],
+            [
+              27.35,
+              10.22919
+            ]
+          ]
+        ],
+        "robot_route": [
+          [
+            3.2,
+            8.0
+          ],
+          [
+            24.7,
+            8.0
+          ]
+        ]
+      },
+      "nominal_sha256": {
+        "map.json": "26a76a22e416a67866c3f662d3b7d62cb5a12ad8843481ccde3c345e96719749",
+        "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+        "scenario.yaml": "a5dce5a9d4d44bd228b3fb100e378376c78791e2c2393c04259135ca4161d8b7"
+      },
+      "pedestrians": [
+        {
+          "departure_s": 2.75967,
+          "group": null,
+          "id": "p1",
+          "speed_mps": 0.89723,
+          "trajectory": [
+            [
+              10.43716,
+              8.0527
+            ],
+            [
+              4.65,
+              7.87217
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "case": {
+        "controls": {
+          "departure_s": 1.01619,
+          "encounter_x_m": 10.4878,
+          "gap_m": 4.88416,
+          "gate_center_shift_m": -0.29141,
+          "lateral_change_m": 0.47328,
+          "obstacle_shift_m": -0.29052,
+          "route_offset_m": 0.11438,
+          "spacing_m": 1.53289,
+          "speed_mps": 0.86162,
+          "width_m": 7.10953
+        },
+        "count": 8,
+        "family": "crowding",
+        "flow": 2,
+        "grouped": true,
+        "id": "planadv_crowding_11",
+        "proposal_index": 10,
+        "proposal_seed": 148203
+      },
+      "evaluation_input_sha256": {
+        "1163": {
+          "map.json": "f6f57aacb97a5efef182bedf651daa91f3946e41cbb344bbdcd573fc9f17e708",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "45cd3eb637d77f77894d05aeed876b13cc0e67362fb16e710772a586669cecbf"
+        },
+        "1164": {
+          "map.json": "e33424c7f22eda83fd942f2eb21943c731fb45597cc35258710b3a84c4799ef1",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "cdc3c66dc8785731eeb35c2f26cf64aaffc738d0863439493828fb121b0c2cdb"
+        },
+        "1165": {
+          "map.json": "88c14fe3fb0cb9b1e8e98913bb5a55db9bd377d30ef798133af211c1dab570ca",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "6f662bdef57d40434223ed12573f56932ec12c0d6cd98dc5c04f061c8ad8fa02"
+        },
+        "1166": {
+          "map.json": "99eb343b5b0d81b08973f1edd9381579b80c4924e265dbd1af465ac523ada80b",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "23ccacc78871874a989421a09b3d0035c20630ae72b9c449b12fbe64a1362c08"
+        },
+        "1167": {
+          "map.json": "223c00bc163541a3f07442547bfc014b166f7d7c09faf8d3f85522df97e1048d",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "25e61d70cc34e8be21b1448318a0c3ee6739c0efbb5b99a57c0c3839d9df3022"
+        },
+        "1168": {
+          "map.json": "a64fed9429c50998baa1b1c79de5cbb012da2f814f5fc1bb63a9374738df6861",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "2373b5fc5219c65022bd930acb6a44e42a1717aa3e89f324f2efac7f0485c82e"
+        },
+        "1169": {
+          "map.json": "2d6ce9bf79d55e117c9f2f95f8b59aea2406a26b0db527b17132d767ecc082d1",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "375d40b3f295698012a497e492288ca6d7fea71ba72733aabfaf5eea341ab2a2"
+        },
+        "1170": {
+          "map.json": "9769c138b0413cc262982c9f6fc61102e4db6f3c60538c9e6cd541abf4b91a48",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "c79310cafcd3825dc4629a1b695ee6d475710225340b816ca22c072bf142f7c5"
+        },
+        "1171": {
+          "map.json": "bd505f27bf1293a7ef526ce46da26ec953bc6b4289181d3f18bda3bc5d2f9fa3",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "c8295c23c9b8dbfcbe3e8e9ce87165fd63ebd8814d2402db470622015374ed2e"
+        },
+        "1172": {
+          "map.json": "d7a9f0e1fb72d4b28eb70ee41a4fd31adef5443e80e5223b99710c1e4ef739bc",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "2f434080cf808689d07111218ec9a60ed25c98d1a3de47ddbfeb53c82ac51073"
+        },
+        "1173": {
+          "map.json": "3135ece48a062d5ec8c6093b9a70b5774ec5c17c82586a18423e48d5bde751e9",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "3486e1517da5789b53c34e91b09c987cc9a2e97d080336a7ff35cfcab68c5bdb"
+        },
+        "1174": {
+          "map.json": "cf4a60cc1a19e6d41e55e42bc9f20a19b59bac6468cd03f8c3761d8747835a9a",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "f76be2b4b79bc98c16c24b7bb693459a8b494faf1a3f687bc9f026ca2a013512"
+        },
+        "1175": {
+          "map.json": "1f68cd9f5a3b12d220b5b097b26ff9f01674307f61a6881b8952a64a9684f711",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "e3efde7e861d109a286c70db3aff90d26c4d977aa2e49d7b96947907f750cccd"
+        },
+        "1176": {
+          "map.json": "06dde949c88ef3587348e019024d79c06089fb2a9c4db6bcc208dd358a0dedde",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "f2fcb9fbe0a00297e7632e8d8fb5aef290d9f2e12d69095635045ce3d685ce75"
+        },
+        "1177": {
+          "map.json": "77d5e1c643ba852a75d8f37ef1b0b2e88604aae27174b572c259e1a5133bddcc",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "552c4624ce5907c376600f049e4733041e65b1509c75ece3d0fd734fc39ff7a7"
+        },
+        "1178": {
+          "map.json": "115df2c64ab003038a9c6027ec532cd8aaf05fcef0f9f294ec47d01116e5822d",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "66cb84f4350b07f61da19010a653371b3608083f286c1c4b506b94cf504c2ef2"
+        },
+        "1179": {
+          "map.json": "a17f46df106220f3e54147f818c809d5bc2bebd9b3fb2c526e1d6d93fa4a5b0b",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "f7dfb60f5f153aaec7f2bc207d37745c078ef52aa1c2a3f5d0fba1a887fb2c79"
+        },
+        "1180": {
+          "map.json": "5c0148a443a971df3907f86d3be1abd5e06b0083e0a8108234a8c983c6bd607e",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "55c9eb545f1f1a9fb56209b33c504e64729956ea75867ac198e34a34d3bdc13c"
+        }
+      },
+      "geometry": {
+        "obstacles": [
+          [
+            [
+              0.0,
+              0.0
+            ],
+            [
+              28.0,
+              0.0
+            ],
+            [
+              28.0,
+              4.44524
+            ],
+            [
+              0.0,
+              4.44524
+            ]
+          ],
+          [
+            [
+              0.0,
+              11.55476
+            ],
+            [
+              28.0,
+              11.55476
+            ],
+            [
+              28.0,
+              16.0
+            ],
+            [
+              0.0,
+              16.0
+            ]
+          ],
+          [
+            [
+              0.0,
+              4.44524
+            ],
+            [
+              0.65,
+              4.44524
+            ],
+            [
+              0.65,
+              11.55476
+            ],
+            [
+              0.0,
+              11.55476
+            ]
+          ],
+          [
+            [
+              27.35,
+              4.44524
+            ],
+            [
+              28.0,
+              4.44524
+            ],
+            [
+              28.0,
+              11.55476
+            ],
+            [
+              27.35,
+              11.55476
+            ]
+          ],
+          [
+            [
+              10.19728,
+              4.44524
+            ],
+            [
+              11.009279999999999,
+              4.44524
+            ],
+            [
+              11.009279999999999,
+              5.441356
+            ],
+            [
+              10.19728,
+              5.441356
+            ]
+          ],
+          [
+            [
+              10.19728,
+              10.325516
+            ],
+            [
+              11.647279999999999,
+              10.325516
+            ],
+            [
+              11.647279999999999,
+              11.55476
+            ],
+            [
+              10.19728,
+              11.55476
+            ]
+          ]
+        ],
+        "robot_route": [
+          [
+            3.2,
+            8.0
+          ],
+          [
+            24.7,
+            8.0
+          ]
+        ]
+      },
+      "nominal_sha256": {
+        "map.json": "42e2776ddecd492789e49ecb66ac21ebf32325437c9e7b73985156f17ee59b67",
+        "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+        "scenario.yaml": "779b388ee5d6ac0105092556d4d69af7d9524a4b4ccbdef672e1931c6e2320f0"
+      },
+      "pedestrians": [
+        {
+          "departure_s": 1.01619,
+          "group": "incoming_0",
+          "id": "p1",
+          "speed_mps": 0.77662,
+          "trajectory": [
+            [
+              13.2878,
+              7.05438
+            ],
+            [
+              5.2,
+              8.00328
+            ]
+          ]
+        },
+        {
+          "departure_s": 1.01619,
+          "group": "incoming_0",
+          "id": "p2",
+          "speed_mps": 0.77662,
+          "trajectory": [
+            [
+              13.2878,
+              9.17438
+            ],
+            [
+              5.2,
+              8.94328
+            ]
+          ]
+        },
+        {
+          "departure_s": 1.65619,
+          "group": "incoming_1",
+          "id": "p3",
+          "speed_mps": 0.94662,
+          "trajectory": [
+            [
+              15.47069,
+              7.05438
+            ],
+            [
+              6.05,
+              8.00328
+            ]
+          ]
+        },
+        {
+          "departure_s": 1.65619,
+          "group": "incoming_1",
+          "id": "p4",
+          "speed_mps": 0.94662,
+          "trajectory": [
+            [
+              15.47069,
+              9.17438
+            ],
+            [
+              6.05,
+              8.94328
+            ]
+          ]
+        },
+        {
+          "departure_s": 1.33619,
+          "group": "incoming_2",
+          "id": "p5",
+          "speed_mps": 0.86162,
+          "trajectory": [
+            [
+              17.65358,
+              7.05438
+            ],
+            [
+              6.9,
+              8.00328
+            ]
+          ]
+        },
+        {
+          "departure_s": 1.33619,
+          "group": "incoming_2",
+          "id": "p6",
+          "speed_mps": 0.86162,
+          "trajectory": [
+            [
+              17.65358,
+              9.17438
+            ],
+            [
+              6.9,
+              8.94328
+            ]
+          ]
+        },
+        {
+          "departure_s": 1.01619,
+          "group": "crossing_party",
+          "id": "p7",
+          "speed_mps": 0.77662,
+          "trajectory": [
+            [
+              13.8378,
+              5.48
+            ],
+            [
+              14.12177,
+              8.0
+            ],
+            [
+              15.53108,
+              8.86
+            ]
+          ]
+        },
+        {
+          "departure_s": 1.01619,
+          "group": "crossing_party",
+          "id": "p8",
+          "speed_mps": 0.77662,
+          "trajectory": [
+            [
+              15.37069,
+              5.48
+            ],
+            [
+              15.65466,
+              8.0
+            ],
+            [
+              17.06397,
+              8.86
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "case": {
+        "controls": {
+          "departure_s": 1.21317,
+          "encounter_x_m": 12.02934,
+          "gap_m": 3.50898,
+          "gate_center_shift_m": -0.24455,
+          "lateral_change_m": -0.0566,
+          "obstacle_shift_m": -0.17621,
+          "route_offset_m": -0.38282,
+          "spacing_m": 1.73665,
+          "speed_mps": 0.83174,
+          "width_m": 5.84288
+        },
+        "count": 1,
+        "family": "doorway",
+        "flow": 0,
+        "grouped": true,
+        "id": "planadv_doorway_18",
+        "proposal_index": 17,
+        "proposal_seed": 148202
+      },
+      "evaluation_input_sha256": {
+        "1163": {
+          "map.json": "c0362c35dd0468d538f5e6a9720a34db11faaf1feb1877379778b0c83c136cc4",
+          "routes.json": "9e3a9d10f7b5c7fdd495763138090304f49c590ef3c148c51a338ad23147648e",
+          "scenario.yaml": "69f92a4373cc72fa84e1b079aff306754214a0c78ad4cf8d3eca239e4a7a0b91"
+        },
+        "1164": {
+          "map.json": "1c0243aedf942513d4f8f2f71090f47594f328761852196a18d4e349fc634f51",
+          "routes.json": "9e3a9d10f7b5c7fdd495763138090304f49c590ef3c148c51a338ad23147648e",
+          "scenario.yaml": "fece57867a5a469ccda4d3ac940d0ed27bc40ac4677bdb392d1b72f21b838913"
+        },
+        "1165": {
+          "map.json": "cb245499fa0a36e2363e38adad15dbf6924cc7e20d9cbc3e8bc5add673b47812",
+          "routes.json": "9e3a9d10f7b5c7fdd495763138090304f49c590ef3c148c51a338ad23147648e",
+          "scenario.yaml": "2cc15dc5293bd96ebe1d9e0e16645a51a1509e747f000d2563a375c25f0262cd"
+        },
+        "1166": {
+          "map.json": "1d1e68dd5d7acb0f37b9e6b1ffebc82a1945f0258cf8c73c836ff20d22ee6fa0",
+          "routes.json": "9e3a9d10f7b5c7fdd495763138090304f49c590ef3c148c51a338ad23147648e",
+          "scenario.yaml": "f9e9e2cf1dc0ca840c1a341feb851b518d2f0d583a277feebe4d2c7328698932"
+        },
+        "1167": {
+          "map.json": "a029e591c44804baa86a7564515bf59c7d41cd7b098a761b8aee4911f4aa0be7",
+          "routes.json": "9e3a9d10f7b5c7fdd495763138090304f49c590ef3c148c51a338ad23147648e",
+          "scenario.yaml": "e8b070d25ef22d5fb21561daacfabb6abb2f62272696380c8f18d96c0d89b6f9"
+        },
+        "1168": {
+          "map.json": "0d29770020aaa10062601c81649b298d3907775a8785471472536862edbfc974",
+          "routes.json": "9e3a9d10f7b5c7fdd495763138090304f49c590ef3c148c51a338ad23147648e",
+          "scenario.yaml": "a89da1a58ccec4ad576a206591bf48f2180fb110b4b687c87e69933d557d182e"
+        },
+        "1169": {
+          "map.json": "a24cb932a58c9dc9869e05ff730ce98c75b77b8c1f08e022c2d0119045d71206",
+          "routes.json": "9e3a9d10f7b5c7fdd495763138090304f49c590ef3c148c51a338ad23147648e",
+          "scenario.yaml": "0116ce6d217bf771621164addfa987e52d1c7f783f489c5d2ac4218e92f2e405"
+        },
+        "1170": {
+          "map.json": "0fd62f1a0c963d96e92a73fc87ab214ae08ad5da45cb25f8c384ff2b4cd11002",
+          "routes.json": "9e3a9d10f7b5c7fdd495763138090304f49c590ef3c148c51a338ad23147648e",
+          "scenario.yaml": "876bbec6355b9ab03a628d91ef1df5d64f60f6fc4b2739f0b8c353ed1a435433"
+        },
+        "1171": {
+          "map.json": "a180fad1ed9524c6a4e859c3df40dc5019fa83a12faf8ca69f521fd49f04205f",
+          "routes.json": "9e3a9d10f7b5c7fdd495763138090304f49c590ef3c148c51a338ad23147648e",
+          "scenario.yaml": "1e4280c7ef7a7ece311f798cb58bfe1f5abc8e5f6ce55d274b509145e7dfccad"
+        },
+        "1172": {
+          "map.json": "3e39de1b5230af969866d217bf160cd7d963a360da038db43fbdff28c6ed1a3d",
+          "routes.json": "9e3a9d10f7b5c7fdd495763138090304f49c590ef3c148c51a338ad23147648e",
+          "scenario.yaml": "b59dc053d79c62aa4c5b77c8da76f8946d470c7a0d9437ba65bdb7e3965c9896"
+        },
+        "1173": {
+          "map.json": "c3f1af94e18f9ee6c84655fc04e229e90c8e01c211cd25cf3f724bf560628977",
+          "routes.json": "9e3a9d10f7b5c7fdd495763138090304f49c590ef3c148c51a338ad23147648e",
+          "scenario.yaml": "b3f664ed0d7105ba73329231a8903342280de1282be4dd75567dcd27dfa78226"
+        },
+        "1174": {
+          "map.json": "953772b5a132260c14418604f92d08fa03475793cda4962ea82142a1a210925f",
+          "routes.json": "9e3a9d10f7b5c7fdd495763138090304f49c590ef3c148c51a338ad23147648e",
+          "scenario.yaml": "c61dc4638364e8323b1dad6d4460986d08dcda64c60d0c4da7b860911c0ebaea"
+        },
+        "1175": {
+          "map.json": "64e079d3aa206c783f7f08e688f7ee843de6d95092c31f4451acb0d426fd181e",
+          "routes.json": "9e3a9d10f7b5c7fdd495763138090304f49c590ef3c148c51a338ad23147648e",
+          "scenario.yaml": "ba6f4e45be816fe96c73bad1eb7b6190f7646bf45a68fbca266aec68e8b877c2"
+        },
+        "1176": {
+          "map.json": "6d00a4a05c3dded219f8faba6b56947ffc5394aa108ce6919b43bd18baa6bd92",
+          "routes.json": "9e3a9d10f7b5c7fdd495763138090304f49c590ef3c148c51a338ad23147648e",
+          "scenario.yaml": "0b74aa2508f60d6ac343777e636fc5c6c9945f6622d1de84eeb3bf7208b668f7"
+        },
+        "1177": {
+          "map.json": "12c4374d479012917c66aef432bb8dce402466a0977522199eac327b9d8fe67c",
+          "routes.json": "9e3a9d10f7b5c7fdd495763138090304f49c590ef3c148c51a338ad23147648e",
+          "scenario.yaml": "1767cae5ca0d0b583e829b90b266d4444a9693de9f4f52d5f8831a16018d7c3f"
+        },
+        "1178": {
+          "map.json": "057c9ffd4ed90fb65f49495f304c84340d9530f04ea67fac2089aea0c10a8370",
+          "routes.json": "9e3a9d10f7b5c7fdd495763138090304f49c590ef3c148c51a338ad23147648e",
+          "scenario.yaml": "a2cc7aa4ed47e25f167289bab389b85326101fe80cc7b50af44562014a07bdbc"
+        },
+        "1179": {
+          "map.json": "52318064e94c98fdc5f5d3b1d66e784db2d8aabac6a5a4839db0c3d9d9af90eb",
+          "routes.json": "9e3a9d10f7b5c7fdd495763138090304f49c590ef3c148c51a338ad23147648e",
+          "scenario.yaml": "202d5a04412e8f682a655f094555042134105eeb16b4f61ec7ced995cfdcabd7"
+        },
+        "1180": {
+          "map.json": "960eef96eadae34fe666156564f82ea0f0727c47a03d5e016e628dfabf7a8604",
+          "routes.json": "9e3a9d10f7b5c7fdd495763138090304f49c590ef3c148c51a338ad23147648e",
+          "scenario.yaml": "a65f3f28734efc2405cff98793e7016da941b46ad7e6fb6d20f9b3974099e61b"
+        }
+      },
+      "geometry": {
+        "obstacles": [
+          [
+            [
+              0.0,
+              0.0
+            ],
+            [
+              28.0,
+              0.0
+            ],
+            [
+              28.0,
+              5.07856
+            ],
+            [
+              0.0,
+              5.07856
+            ]
+          ],
+          [
+            [
+              0.0,
+              10.92144
+            ],
+            [
+              28.0,
+              10.92144
+            ],
+            [
+              28.0,
+              16.0
+            ],
+            [
+              0.0,
+              16.0
+            ]
+          ],
+          [
+            [
+              0.0,
+              5.07856
+            ],
+            [
+              0.65,
+              5.07856
+            ],
+            [
+              0.65,
+              10.92144
+            ],
+            [
+              0.0,
+              10.92144
+            ]
+          ],
+          [
+            [
+              27.35,
+              5.07856
+            ],
+            [
+              28.0,
+              5.07856
+            ],
+            [
+              28.0,
+              10.92144
+            ],
+            [
+              27.35,
+              10.92144
+            ]
+          ],
+          [
+            [
+              11.70934,
+              5.07856
+            ],
+            [
+              12.34934,
+              5.07856
+            ],
+            [
+              12.34934,
+              6.000959999999999
+            ],
+            [
+              11.70934,
+              6.000959999999999
+            ]
+          ],
+          [
+            [
+              11.70934,
+              9.50994
+            ],
+            [
+              12.34934,
+              9.50994
+            ],
+            [
+              12.34934,
+              10.92144
+            ],
+            [
+              11.70934,
+              10.92144
+            ]
+          ]
+        ],
+        "robot_route": [
+          [
+            3.2,
+            8.0
+          ],
+          [
+            8.92934,
+            7.75545
+          ],
+          [
+            15.12934,
+            7.75545
+          ],
+          [
+            24.7,
+            8.0
+          ]
+        ]
+      },
+      "nominal_sha256": {
+        "map.json": "e48ba5748eada8bf9ad7ce0acdf7a68a57122c1c025eeee7f6c4c069e475fb98",
+        "routes.json": "9e3a9d10f7b5c7fdd495763138090304f49c590ef3c148c51a338ad23147648e",
+        "scenario.yaml": "2b57c53fa5da3fbd39c1e0fbc9b702dc3063648e6e3ff0dcaa62b51292c18262"
+      },
+      "pedestrians": [
+        {
+          "departure_s": 1.21317,
+          "group": null,
+          "id": "p1",
+          "speed_mps": 0.74674,
+          "trajectory": [
+            [
+              15.17934,
+              7.61718
+            ],
+            [
+              12.97934,
+              7.75545
+            ],
+            [
+              11.07934,
+              7.75545
+            ],
+            [
+              4.65,
+              7.74484
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "case": {
+        "controls": {
+          "departure_s": 2.61619,
+          "encounter_x_m": 12.33395,
+          "gap_m": 4.23351,
+          "gate_center_shift_m": -0.01351,
+          "lateral_change_m": -0.05865,
+          "obstacle_shift_m": 0.27418,
+          "route_offset_m": 0.25152,
+          "spacing_m": 1.70902,
+          "speed_mps": 0.91162,
+          "width_m": 7.87474
+        },
+        "count": 3,
+        "family": "crowding",
+        "flow": 0,
+        "grouped": false,
+        "id": "planadv_crowding_19",
+        "proposal_index": 18,
+        "proposal_seed": 148203
+      },
+      "evaluation_input_sha256": {
+        "1163": {
+          "map.json": "548086c650164c1ddd51361910394b2e61d7abe5f573359626a838d489bd3be9",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "49025f87b77153b94fa31c82e846c3b000d8eb94ab20f58d67f2e2c85552258b"
+        },
+        "1164": {
+          "map.json": "87fcd549ff6edad910ec26f81ad365f03382a2694f1ae366dd3f51184b2f83ac",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "9604f7dbad14183d67b83e937ec80a5d72ffddd60fdc1bc4db71487aa23a043c"
+        },
+        "1165": {
+          "map.json": "c580ab6e217f0fab6fb00583922aa88e708a026277ecd98c8c540b7607555cf2",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "dfd86a19620114ea53fc96e8d6b5364b766393f215a314e353851221269c59d5"
+        },
+        "1166": {
+          "map.json": "e32d7dc30dd8b3057bd7ef9f68a05166b61681202c51bb3cfe9c52f37a2c449c",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "fe67ccedf0f0bd16c5c29f3f802af9c42d0890cfdcb00e3911d33f5c72dbc6a1"
+        },
+        "1167": {
+          "map.json": "6dab128f6b0ee7d928b97f775fa7238ca8fb8918d6ab6149aee19fa24faaf802",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "c5034a755e02f4a6af60372011e6ddd6f4b091177f7a6504ce2a5196a7cbeac3"
+        },
+        "1168": {
+          "map.json": "2995e36a4330f499ff3af7c0ce90bf58273edd7a563753947490ecf8f9fc92a7",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "2a1652df17a1b3c32c83f09cdd39ac3b182e08ca1e606d4b2f43b69681dde5f1"
+        },
+        "1169": {
+          "map.json": "c98ef4d6cf94ca56662f253f5314d7f8e102d05af05fadca51861d7e04fab74a",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "f2a17372341780c16f743056f478c41c23af3f5352196971c6ccee2f61eb1a75"
+        },
+        "1170": {
+          "map.json": "81dec97a31b6eab452e87327cdd063718283e6ab2160d0ab565e5c06cb953b91",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "5b6c041bca0cbf4e2a6b17f54c9fe8ce0dffd1886ca4a23774d23ee5ef8f2e4c"
+        },
+        "1171": {
+          "map.json": "0839eed70733dc5f59433b5015da845aea2a1c22c327866fff03b7f6236ad400",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "2bc5332bce9986cc984cabe6e1e06e92c1e2edcf7affbd67852a5c2c77e1acf9"
+        },
+        "1172": {
+          "map.json": "28941d511dac663220abacffdaaa430b55a15c00123af9c5582c152c4bd698c7",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "59451c75f491cbcd49b41677e9477c98a9e876d891ab5d662f87e31c01aab5e7"
+        },
+        "1173": {
+          "map.json": "9e02ad77bab7c5ef627f3754820925ad99d5a9e7133e5f5e6dc7f43f8bfa2ced",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "4dc6947d1bfe1e0608019678f75a63dd0190c9329a561400d080bceab09b777c"
+        },
+        "1174": {
+          "map.json": "77c1ee711f21e77d39cb983b2ac822841ac8d0254eb055a8dac166ef7be83107",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "5b684eef7639bd44cd54feb03456d4ce1986cca82fedb1e4cc48a0347301b4ca"
+        },
+        "1175": {
+          "map.json": "d9911c8545d6ae4f57211243e2bac7aab1b4064ecc4e9f13267b872ede639bba",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "a45d7c4213b51c76395ecd1a6c366a4f125ca407e8f16ea9a769af5b9d15ea5a"
+        },
+        "1176": {
+          "map.json": "b666846e4ce6772617bfb9f5b474c539dd9d555d8ac48d2453d4c369ab1d4659",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "6ab21c018df1f10c53ce05cc3a08053b7bd753da0c3994e86e765785c30736bd"
+        },
+        "1177": {
+          "map.json": "96251bcb2a0471115a3687f79d0747502407ec714250291b77e1b6c36e2ea6ba",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "ceb16261d55b136c71dc42c0a7e42d9f6dbec6ffb182adee44044ae0bd08f44d"
+        },
+        "1178": {
+          "map.json": "e1a20416f88d4bac1422d738de7f81b814494f8137c9cce5b71625a2e3f6117d",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "e69d09c0ffd6177a9ac630002a2b775914fcee005a6a495b570555f8e4de864a"
+        },
+        "1179": {
+          "map.json": "a3ddc8c928ca1c723fac81531ce60dbbfb1ca6d2b267a3f64ebab043fe95df13",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "b87e9d8affe46fe4a66d39b29022099fb9a89b4c70627aad3098d165d853c447"
+        },
+        "1180": {
+          "map.json": "778c03f0160c090eca64d64925bca393597f2c8144edf0e42578cdc8591d344e",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "494f9715c47ebb14b596dde46c5429a5dc60042f3adc0ea83518f9928a8041f5"
+        }
+      },
+      "geometry": {
+        "obstacles": [
+          [
+            [
+              0.0,
+              0.0
+            ],
+            [
+              28.0,
+              0.0
+            ],
+            [
+              28.0,
+              4.06263
+            ],
+            [
+              0.0,
+              4.06263
+            ]
+          ],
+          [
+            [
+              0.0,
+              11.93737
+            ],
+            [
+              28.0,
+              11.93737
+            ],
+            [
+              28.0,
+              16.0
+            ],
+            [
+              0.0,
+              16.0
+            ]
+          ],
+          [
+            [
+              0.0,
+              4.06263
+            ],
+            [
+              0.65,
+              4.06263
+            ],
+            [
+              0.65,
+              11.93737
+            ],
+            [
+              0.0,
+              11.93737
+            ]
+          ],
+          [
+            [
+              27.35,
+              4.06263
+            ],
+            [
+              28.0,
+              4.06263
+            ],
+            [
+              28.0,
+              11.93737
+            ],
+            [
+              27.35,
+              11.93737
+            ]
+          ],
+          [
+            [
+              12.60813,
+              4.06263
+            ],
+            [
+              13.420129999999999,
+              4.06263
+            ],
+            [
+              13.420129999999999,
+              5.877841
+            ],
+            [
+              12.60813,
+              5.877841
+            ]
+          ],
+          [
+            [
+              12.60813,
+              10.111350999999999
+            ],
+            [
+              14.058129999999998,
+              10.111350999999999
+            ],
+            [
+              14.058129999999998,
+              11.93737
+            ],
+            [
+              12.60813,
+              11.93737
+            ]
+          ]
+        ],
+        "robot_route": [
+          [
+            3.2,
+            8.0
+          ],
+          [
+            24.7,
+            8.0
+          ]
+        ]
+      },
+      "nominal_sha256": {
+        "map.json": "8230a769e20001d83c69b172c084db9dea0b27ed9896d6673f42446a9c8384c5",
+        "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+        "scenario.yaml": "db075df76d205dad910d975e70117a7ce1e216ff183a8bce2fad159c7bf9fc84"
+      },
+      "pedestrians": [
+        {
+          "departure_s": 2.61619,
+          "group": null,
+          "id": "p1",
+          "speed_mps": 0.82662,
+          "trajectory": [
+            [
+              15.13395,
+              7.19152
+            ],
+            [
+              5.2,
+              7.47135
+            ]
+          ]
+        },
+        {
+          "departure_s": 2.93619,
+          "group": null,
+          "id": "p2",
+          "speed_mps": 0.91162,
+          "trajectory": [
+            [
+              15.13395,
+              9.31152
+            ],
+            [
+              5.2,
+              8.41135
+            ]
+          ]
+        },
+        {
+          "departure_s": 3.25619,
+          "group": null,
+          "id": "p3",
+          "speed_mps": 0.99662,
+          "trajectory": [
+            [
+              15.68395,
+              5.48
+            ],
+            [
+              15.64876,
+              8.0
+            ],
+            [
+              16.8453,
+              8.86
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "case": {
+        "controls": {
+          "departure_s": 2.41317,
+          "encounter_x_m": 11.10626,
+          "gap_m": 3.30898,
+          "gate_center_shift_m": 0.27467,
+          "lateral_change_m": -0.60206,
+          "obstacle_shift_m": -0.45856,
+          "route_offset_m": -0.03996,
+          "spacing_m": 1.80545,
+          "speed_mps": 0.88174,
+          "width_m": 5.49505
+        },
+        "count": 4,
+        "family": "doorway",
+        "flow": 2,
+        "grouped": true,
+        "id": "planadv_doorway_14",
+        "proposal_index": 13,
+        "proposal_seed": 148202
+      },
+      "evaluation_input_sha256": {
+        "1163": {
+          "map.json": "c9e667e58adbc85e579c48bee58789ef221da636b2cdcbfe62c6c0eae465cecf",
+          "routes.json": "584a149d94189f56ef29a3b228afb619ebd18fd624fdf67d55a301fe66035159",
+          "scenario.yaml": "580c166f5c64118e8f9cd65728c9b194a3afd6d3300f6047356c673c860c5fa9"
+        },
+        "1164": {
+          "map.json": "139351fc3272f8c902af664c8ed2473a6ed4db5b95f83b3827fb9dfe6b1ba9b5",
+          "routes.json": "584a149d94189f56ef29a3b228afb619ebd18fd624fdf67d55a301fe66035159",
+          "scenario.yaml": "42d51a04b26b9f3acee998cfbd76ae8feb6921231f75b2da6931a9e2cab8baa3"
+        },
+        "1165": {
+          "map.json": "6bc4790877c101af862746d47867836bddb2e8d73a0466ccb5bc1afe5df822f6",
+          "routes.json": "584a149d94189f56ef29a3b228afb619ebd18fd624fdf67d55a301fe66035159",
+          "scenario.yaml": "06aa45c8aaedd771c1d40b4b9c94ecef6c2ed4097bb88887f637fddc1236efbd"
+        },
+        "1166": {
+          "map.json": "ac855c4d97944cd7b220f264e8230d2b951a4882db23894eef6f7f77a2708b05",
+          "routes.json": "584a149d94189f56ef29a3b228afb619ebd18fd624fdf67d55a301fe66035159",
+          "scenario.yaml": "693f466e5cf293eb5a11767f00924cc4124aba960b411e2bb78d5b89d4568d54"
+        },
+        "1167": {
+          "map.json": "74e92d3be4f05165ec6c5336326caa0f8228a593f611930a0f5cc396e878c755",
+          "routes.json": "584a149d94189f56ef29a3b228afb619ebd18fd624fdf67d55a301fe66035159",
+          "scenario.yaml": "b14109fbc9c8ab7552f4f4b58a34adcaceef2401b9845172732334a621034861"
+        },
+        "1168": {
+          "map.json": "7d26e5478b9c5de865313f62c1958ee6e2ab10b96db0943a63225c98ca7998a1",
+          "routes.json": "584a149d94189f56ef29a3b228afb619ebd18fd624fdf67d55a301fe66035159",
+          "scenario.yaml": "68d44c2f91b8f5edb0b48027b9397dc8d478e8f652230de9c90c763ddbc9a097"
+        },
+        "1169": {
+          "map.json": "90715427de1742e084f895b560bac95cb55b731ff29cdb9b5671170b9df4c63d",
+          "routes.json": "584a149d94189f56ef29a3b228afb619ebd18fd624fdf67d55a301fe66035159",
+          "scenario.yaml": "78d384ca3b6183f4ff841bdc786ab8c8495aa6b6049158d08e7ce8c2c128576a"
+        },
+        "1170": {
+          "map.json": "0e8c36bca6f8fbf756121bd6e3d27b7b4c3fe708497587ebc44c108f5bdd8f0c",
+          "routes.json": "584a149d94189f56ef29a3b228afb619ebd18fd624fdf67d55a301fe66035159",
+          "scenario.yaml": "7bc2ccd439c8444792f8e39aeb865b36ac97189dc1d21a91c997eac65776b964"
+        },
+        "1171": {
+          "map.json": "2e398eb12206a37eda284a0df3b73b710379b03483c43fd1c587569cdd02ecc2",
+          "routes.json": "584a149d94189f56ef29a3b228afb619ebd18fd624fdf67d55a301fe66035159",
+          "scenario.yaml": "17a66da399b7a0e2ae9613f0b7dcc1bee20aea31be2724ac42eb1085033fd633"
+        },
+        "1172": {
+          "map.json": "76836ef3915fd3e1c2f3c6ba5ec316748d3190062aeec2efd35f4a56ca8275e4",
+          "routes.json": "584a149d94189f56ef29a3b228afb619ebd18fd624fdf67d55a301fe66035159",
+          "scenario.yaml": "a2d070a7c9fcf26a3e60757cbf13205a90a0f778b4bf1bad3134ab5d41fdfc4f"
+        },
+        "1173": {
+          "map.json": "852c240f6eb9e29772dbc0f77b08e8ffad9aad8098ab4eca6b018c345da136a7",
+          "routes.json": "584a149d94189f56ef29a3b228afb619ebd18fd624fdf67d55a301fe66035159",
+          "scenario.yaml": "b83065969fa99a1b19bd3379ecfd10714f89da1ea29e79e25d055f81e25d85ab"
+        },
+        "1174": {
+          "map.json": "5c88a39fc8b4d2c3b2a53e15d17acabf122da1541cb986d9648c06ae11b5cb84",
+          "routes.json": "584a149d94189f56ef29a3b228afb619ebd18fd624fdf67d55a301fe66035159",
+          "scenario.yaml": "3cca8c5ccd6224a2c831b4b724dbd4fcf8cfba53b50aee41710cf469561468f8"
+        },
+        "1175": {
+          "map.json": "f15c3e7b3fcaac7f3a2d783eb7ca4bfa4fe4220e4644c92dfdc2d31d2aab6d29",
+          "routes.json": "584a149d94189f56ef29a3b228afb619ebd18fd624fdf67d55a301fe66035159",
+          "scenario.yaml": "8ea9e55254292ada66c92d8fa69ca831380b775366d324fb6f470b3917e22da7"
+        },
+        "1176": {
+          "map.json": "ef0ede3801acc513cfe45f03429a1201505c65e8d8afe6ab2661a3d1c345df45",
+          "routes.json": "584a149d94189f56ef29a3b228afb619ebd18fd624fdf67d55a301fe66035159",
+          "scenario.yaml": "b4446f55cc728efd9130113a092d5490770bc1904212baa98704b333604df392"
+        },
+        "1177": {
+          "map.json": "5a59d72a5c0f763bffc9a280a83f895712cba0ed522b35a8ab1760e84d4c1f60",
+          "routes.json": "584a149d94189f56ef29a3b228afb619ebd18fd624fdf67d55a301fe66035159",
+          "scenario.yaml": "b13acb63a72e8899fc058406e24e1bfec0c89ef357aa7b4b9460416216408954"
+        },
+        "1178": {
+          "map.json": "35779f4443cbfc05c5021183570c1e1b5eac7ade5b1b4bc1340207b0020c4955",
+          "routes.json": "584a149d94189f56ef29a3b228afb619ebd18fd624fdf67d55a301fe66035159",
+          "scenario.yaml": "7c21809662fec25796cf11d8a9a939558574b1bf2c12a5192d5eecadb51e2c97"
+        },
+        "1179": {
+          "map.json": "85895379db857d3db1a680345d52050e8935fb855cfcac922f7f652f0f48bb87",
+          "routes.json": "584a149d94189f56ef29a3b228afb619ebd18fd624fdf67d55a301fe66035159",
+          "scenario.yaml": "50cbad327863b7bfbad4008b902ecf03b72a55599e27b9c3020ce9e0325d7beb"
+        },
+        "1180": {
+          "map.json": "4beda2993b20b671eb5c4735e0aa2561e8f2ee3ec309e3f638a2d2c9adbc80a7",
+          "routes.json": "584a149d94189f56ef29a3b228afb619ebd18fd624fdf67d55a301fe66035159",
+          "scenario.yaml": "97f6fd50267738b8fc16561a6c94c4bd75c8d117855c1cf07924384ab5aa6b2c"
+        }
+      },
+      "geometry": {
+        "obstacles": [
+          [
+            [
+              0.0,
+              0.0
+            ],
+            [
+              28.0,
+              0.0
+            ],
+            [
+              28.0,
+              5.25248
+            ],
+            [
+              0.0,
+              5.25248
+            ]
+          ],
+          [
+            [
+              0.0,
+              10.74752
+            ],
+            [
+              28.0,
+              10.74752
+            ],
+            [
+              28.0,
+              16.0
+            ],
+            [
+              0.0,
+              16.0
+            ]
+          ],
+          [
+            [
+              0.0,
+              5.25248
+            ],
+            [
+              0.65,
+              5.25248
+            ],
+            [
+              0.65,
+              10.74752
+            ],
+            [
+              0.0,
+              10.74752
+            ]
+          ],
+          [
+            [
+              27.35,
+              5.25248
+            ],
+            [
+              28.0,
+              5.25248
+            ],
+            [
+              28.0,
+              10.74752
+            ],
+            [
+              27.35,
+              10.74752
+            ]
+          ],
+          [
+            [
+              10.78626,
+              5.25248
+            ],
+            [
+              11.426260000000001,
+              5.25248
+            ],
+            [
+              11.426260000000001,
+              6.62018
+            ],
+            [
+              10.78626,
+              6.62018
+            ]
+          ],
+          [
+            [
+              10.78626,
+              9.92916
+            ],
+            [
+              11.426260000000001,
+              9.92916
+            ],
+            [
+              11.426260000000001,
+              10.74752
+            ],
+            [
+              10.78626,
+              10.74752
+            ]
+          ]
+        ],
+        "robot_route": [
+          [
+            3.2,
+            8.0
+          ],
+          [
+            8.00626,
+            8.27467
+          ],
+          [
+            14.20626,
+            8.27467
+          ],
+          [
+            24.7,
+            8.0
+          ]
+        ]
+      },
+      "nominal_sha256": {
+        "map.json": "79ff05b2a13eac2e0fe09d191f46b84b65fd35184b7eda08778d9af4bcb60a8a",
+        "routes.json": "584a149d94189f56ef29a3b228afb619ebd18fd624fdf67d55a301fe66035159",
+        "scenario.yaml": "6f9ae482ddbff3567163bc675e4d4dae41a321894202f45f1778bd3bb449513e"
+      },
+      "pedestrians": [
+        {
+          "departure_s": 2.41317,
+          "group": "party_0",
+          "id": "p1",
+          "speed_mps": 0.79674,
+          "trajectory": [
+            [
+              14.25626,
+              7.44004
+            ],
+            [
+              12.05626,
+              7.77467
+            ],
+            [
+              10.15626,
+              7.77467
+            ],
+            [
+              4.65,
+              7.3931
+            ]
+          ]
+        },
+        {
+          "departure_s": 2.41317,
+          "group": "party_0",
+          "id": "p2",
+          "speed_mps": 0.79674,
+          "trajectory": [
+            [
+              14.25626,
+              8.48004
+            ],
+            [
+              12.05626,
+              8.77467
+            ],
+            [
+              10.15626,
+              8.77467
+            ],
+            [
+              5.0,
+              8.0171
+            ]
+          ]
+        },
+        {
+          "departure_s": 3.05317,
+          "group": "party_1",
+          "id": "p3",
+          "speed_mps": 0.96674,
+          "trajectory": [
+            [
+              17.86716,
+              7.44004
+            ],
+            [
+              12.05626,
+              7.77467
+            ],
+            [
+              10.15626,
+              7.77467
+            ],
+            [
+              5.35,
+              7.3931
+            ]
+          ]
+        },
+        {
+          "departure_s": 3.05317,
+          "group": "party_1",
+          "id": "p4",
+          "speed_mps": 0.96674,
+          "trajectory": [
+            [
+              17.86716,
+              8.48004
+            ],
+            [
+              12.05626,
+              8.77467
+            ],
+            [
+              10.15626,
+              8.77467
+            ],
+            [
+              5.7,
+              8.0171
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "case": {
+        "controls": {
+          "departure_s": 2.20658,
+          "encounter_x_m": 10.70607,
+          "gap_m": 3.70735,
+          "gate_center_shift_m": 0.18287,
+          "lateral_change_m": 0.22842,
+          "obstacle_shift_m": 0.42048,
+          "route_offset_m": 0.22063,
+          "spacing_m": 1.50245,
+          "speed_mps": 0.99043,
+          "width_m": 7.35072
+        },
+        "count": 5,
+        "family": "platform",
+        "flow": 2,
+        "grouped": false,
+        "id": "planadv_platform_01",
+        "proposal_index": 0,
+        "proposal_seed": 148204
+      },
+      "evaluation_input_sha256": {
+        "1163": {
+          "map.json": "ce494cce8263309dcb78477b77e423d5d6e645d22062504c1ce28388d88df73f",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "00a5422f50d8c9e760d1d232995f25b4203b22c934405b0da544ee0dd0e200d4"
+        },
+        "1164": {
+          "map.json": "cdc06e6b88d6be5a73b8aa3f6716bc44b12e430524cec756b109144fe872652a",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "e6f53c10b43e718f244990840536d29452a3bb40fb2047aecfb098adb63ef73e"
+        },
+        "1165": {
+          "map.json": "9ac83e8871d4cb3efcd0a64ae7c3d3d66103353101b0a4a661b8e46a0ce790a9",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "0fbfa410c50fbe94911c69f5a20a5828ed949826ee5d37122e9995370f93dfa9"
+        },
+        "1166": {
+          "map.json": "c5e3c17e325eccf9dbdb94aab655c653d7c31ee8a8e292718d82313c646e9871",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "e8446cf1950fe2595b3b96cde23fc0e5ab0dc0ef8ff5c14006e3335779ad6bcc"
+        },
+        "1167": {
+          "map.json": "f694e80d7831640f113c0dbf4d00ac0d09c4251bbc08046e5c055ca6ac8ee745",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "2f99b37e68dd77604469c3ee91fdd5bfebbd608936f2ed9919813226096139c5"
+        },
+        "1168": {
+          "map.json": "3f4f2ad53a5adee579e6a4418b5aeee005768294091d54b1d4e3a774e4e850da",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "46256a12e82e11d7bfb51b5d61f77ea5561113fb174930871964030c9b9be1d2"
+        },
+        "1169": {
+          "map.json": "751535e0ad4ea1fde4d60f4337396d9f4cfa08ac4049c6db2e74bf5d6e696c6e",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "244e95b5634f976fc5e9f7a1d3139c77d253e169c7071869aace22cc6a553f69"
+        },
+        "1170": {
+          "map.json": "716dbe99353ce6c31ae0d2e4d34836e9874db6670d41003e91b3891d07549cba",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "c5f9aaad1a9641451cb5649bee679fb9434b76f967b73a7e1a13a8273074c65f"
+        },
+        "1171": {
+          "map.json": "fd50ab23589bbb1ccc12a813fb4194102ef3ecaf36253f33358a2cb7d7441581",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "bde6abc4f4a5c562d73e5f495bef61b534a20e25e396ef18a6856a532463d860"
+        },
+        "1172": {
+          "map.json": "c4521d4e74af50e9dac5cc342fecdd65b54e045cd1e3eb9ff67f59a4149e8ef0",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "cf1aefcbe9d7ea160d736ea65c09ed57b88091a0992964060c718efb4870c10a"
+        },
+        "1173": {
+          "map.json": "2bf9ca5c0e7d4fa387ab7c23fce109f5b121ae78dd7f7b781f16eff02497a565",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "225aa1043c20238d88cf23a96e758570a166b0b60d9a523ee9ec3715b2f721bb"
+        },
+        "1174": {
+          "map.json": "7535c5a88dab8fc61d4060c0551cbd8d75c50ed834df88a57914253c923301f0",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "bd59f0631271a1df24ba00aa399e475cacbba1100d33dd92b0710876d18da1ce"
+        },
+        "1175": {
+          "map.json": "ad0e96bda8cd83b68b1e53c209b6d7074edf2b97c1268e9d5a793abd01bd20bf",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "f7fe7c1415e44837966afed21797ecb6cc9671d0124ac444c588a0e5f56798d9"
+        },
+        "1176": {
+          "map.json": "100920fe32be70004cdbe3c0af405bf30422a4499ab901e50362475d5d000660",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "4829993d34bbe4f0a1b609efea71c32545015c8f0b3be60cd1c232712cf0d0d9"
+        },
+        "1177": {
+          "map.json": "d7146387d97cf5b0925d5bc78a40a16a2a54a3accbc7267d22b3087f8ea69d80",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "670400dfa1a6474f09696f5572bb1c2a981d246361ad3368582bc6b37a11325c"
+        },
+        "1178": {
+          "map.json": "56bd8b542571b417f0977927846eb579b8f94dad3d01915ac42b8d06a925222f",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "e98f6abc0069f4cfa918fbf10bdbb5e2369b47195738e2755a7dbfd450c5dbe7"
+        },
+        "1179": {
+          "map.json": "a12f6dac988cecfe77fae71628e1de6e04f09f512d539535fc5a4b8a5ebd5b23",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "d970ae31bf41cfaaf4b47b694363c866fc030d85ac3a68205b067d9eec04d925"
+        },
+        "1180": {
+          "map.json": "b562ed024be669d5e9eeefe785609e828094281c1e1681cadb1a8abcc846c17a",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "91cf33593930768bd5c3dfb60632e0cc0106d2fa0a32b75100bf7689a8e9ec4b"
+        }
+      },
+      "geometry": {
+        "obstacles": [
+          [
+            [
+              0.0,
+              0.0
+            ],
+            [
+              28.0,
+              0.0
+            ],
+            [
+              28.0,
+              4.32464
+            ],
+            [
+              0.0,
+              4.32464
+            ]
+          ],
+          [
+            [
+              0.0,
+              11.67536
+            ],
+            [
+              28.0,
+              11.67536
+            ],
+            [
+              28.0,
+              16.0
+            ],
+            [
+              0.0,
+              16.0
+            ]
+          ],
+          [
+            [
+              0.0,
+              4.32464
+            ],
+            [
+              0.65,
+              4.32464
+            ],
+            [
+              0.65,
+              11.67536
+            ],
+            [
+              0.0,
+              11.67536
+            ]
+          ],
+          [
+            [
+              27.35,
+              4.32464
+            ],
+            [
+              28.0,
+              4.32464
+            ],
+            [
+              28.0,
+              11.67536
+            ],
+            [
+              27.35,
+              11.67536
+            ]
+          ],
+          [
+            [
+              11.12655,
+              4.32464
+            ],
+            [
+              13.14255,
+              4.32464
+            ],
+            [
+              13.14255,
+              6.219473
+            ],
+            [
+              11.12655,
+              6.219473
+            ]
+          ],
+          [
+            [
+              11.12655,
+              9.926822999999999
+            ],
+            [
+              14.72655,
+              9.926822999999999
+            ],
+            [
+              14.72655,
+              11.67536
+            ],
+            [
+              11.12655,
+              11.67536
+            ]
+          ]
+        ],
+        "robot_route": [
+          [
+            3.2,
+            8.0
+          ],
+          [
+            24.7,
+            8.0
+          ]
+        ]
+      },
+      "nominal_sha256": {
+        "map.json": "7f68cd0c5366af753a7e2730f7bf16705845cbfa705bf6b3c6163ca183fb5c69",
+        "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+        "scenario.yaml": "ee9468acea95edbdae28f787840fe7bdfc32ab64b11764edb68dce65ba6e60e2"
+      },
+      "pedestrians": [
+        {
+          "departure_s": 2.20658,
+          "group": null,
+          "id": "p1",
+          "speed_mps": 0.90543,
+          "trajectory": [
+            [
+              13.50607,
+              7.16063
+            ],
+            [
+              5.2,
+              7.75842
+            ]
+          ]
+        },
+        {
+          "departure_s": 2.52658,
+          "group": null,
+          "id": "p2",
+          "speed_mps": 0.99043,
+          "trajectory": [
+            [
+              13.50607,
+              9.28063
+            ],
+            [
+              5.2,
+              8.69842
+            ]
+          ]
+        },
+        {
+          "departure_s": 2.84658,
+          "group": null,
+          "id": "p3",
+          "speed_mps": 1.07543,
+          "trajectory": [
+            [
+              15.65852,
+              7.16063
+            ],
+            [
+              6.05,
+              7.75842
+            ]
+          ]
+        },
+        {
+          "departure_s": 2.20658,
+          "group": null,
+          "id": "p4",
+          "speed_mps": 0.90543,
+          "trajectory": [
+            [
+              9.95607,
+              5.48
+            ],
+            [
+              10.09312,
+              8.0
+            ],
+            [
+              11.40449,
+              8.86
+            ]
+          ]
+        },
+        {
+          "departure_s": 2.52658,
+          "group": null,
+          "id": "p5",
+          "speed_mps": 0.99043,
+          "trajectory": [
+            [
+              8.55362,
+              5.48
+            ],
+            [
+              8.69067,
+              8.0
+            ],
+            [
+              10.00204,
+              8.86
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "case": {
+        "controls": {
+          "departure_s": 1.70658,
+          "encounter_x_m": 10.26228,
+          "gap_m": 4.20045,
+          "gate_center_shift_m": -0.09319,
+          "lateral_change_m": 0.24081,
+          "obstacle_shift_m": 0.0011,
+          "route_offset_m": -0.10508,
+          "spacing_m": 1.54029,
+          "speed_mps": 1.34043,
+          "width_m": 8.49855
+        },
+        "count": 8,
+        "family": "platform",
+        "flow": 0,
+        "grouped": false,
+        "id": "planadv_platform_12",
+        "proposal_index": 11,
+        "proposal_seed": 148204
+      },
+      "evaluation_input_sha256": {
+        "1163": {
+          "map.json": "5f1fb858cef5c67daa2d365a8e5d389886e69c317b975add63cab075e95caf60",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "dc68b819cf70b25ca6c93b09cfc17bb27a86bfd98f6cb4acb8247913a0296071"
+        },
+        "1164": {
+          "map.json": "8dcf425a7185e24edb898d5fdd9650a1ea28f06a80fc0b5830899b86fe058888",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "f244fedfa70a84a6177f2b294ec8b28bccc9e8ee5b24fc9bb9ab3d0c7a9fc663"
+        },
+        "1165": {
+          "map.json": "3a5cf741c8a3c89e6c00fd544d88d9ad9322ad45a75ec3b25b9b01047835d053",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "0f793300b31b25233a44024f5877e9e8a79d304a9352bf053f9c6df6020b0c5e"
+        },
+        "1166": {
+          "map.json": "de30ae66cf7d9094a8e7c17553e058fc82785af6d6371c8aa6265e7a9633a63c",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "fcf7ea7943a6828e531f404007170c52c6a79e92c6ff82d18d8192ab26f72b10"
+        },
+        "1167": {
+          "map.json": "cf3e5dcb351b250c3bc3aab72ded1b51821624c3976ea86a19426ebe2f5cbc3b",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "17d4d4d57056904a1f16d19e0199794cc97c53e8a6100a57f1ded530dba35f8e"
+        },
+        "1168": {
+          "map.json": "7a10ff4b54f9b2a5313a090495b9e04339514acf60ab9cf897d5952426b5c42f",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "3dc9239b1a016312e5674045a6ae72199340d5ea76a943d1d6596860f9461e22"
+        },
+        "1169": {
+          "map.json": "62bd1766f99ac7185755e9d07ebb618cc3c393bc428dd155408584382357f6cf",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "5208a883752c728fdb30b5565eb8a9c1325b8be1eeb980690f019fc58c714460"
+        },
+        "1170": {
+          "map.json": "ec2d9db4f89a174435d7a9eb28a13b669e568528450ab2599f099d6566422405",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "9704b65741a8d0e6ebccccf06bcdd9395bbc9d729d1c7abe3a7666cdfdf95af3"
+        },
+        "1171": {
+          "map.json": "372c4424dfb1e4db43599ecb61100e1006e1ce5acf956ad6535ce4ab8d5164f8",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "5ba86e54234aa7e3efe47372965d7198c93e89f5ffd26ad345cb23a15b56f391"
+        },
+        "1172": {
+          "map.json": "3a07eebc26564cdb7532119b8ab65eeaaf9356181e6349f9033c367cdd1aa9ad",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "80696b2946337e3bf309dbfa8bf7c889379eb7d07f8887cca75f1680eb228c6f"
+        },
+        "1173": {
+          "map.json": "78222cbe76b23710bb6b2cd2faab99ff2e1c8eaf523d090d078a11cdc8663b02",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "2ae41933bd7c02f20819b1acbae1d63797e267266a7aa5a6ab764e63e016c9b7"
+        },
+        "1174": {
+          "map.json": "a7f15adbf33926a902106e60d5e118008fd7674a9582a51cc1e93cc854cf6eba",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "97364019958cdfdf19cea06b8546d2d10c4ef4b6351c8c34326a69268269278e"
+        },
+        "1175": {
+          "map.json": "bb1dd56e38f82097a9040ba39bd990a64af1363b38a47a4502f0a8c552c909f1",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "ccf1d83bea558e3bfad9e05197818d70e527df459383cc27efe8fca5bdfe83e1"
+        },
+        "1176": {
+          "map.json": "17b89bed2071b8d70129850f6138641deb5270f88864a323fca98a06cb7be295",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "f820a1db231a5ede9488e7801185fcf4c10646a77beff59aac9fdf1e0d22ccf1"
+        },
+        "1177": {
+          "map.json": "dcfb4b8642f8696b23fa675b5b991e3655c7a7965006a7fc83fd927e946ed529",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "ea16c2d1cb3d91faf6377d920fad66ecc250a3e2f8d0644d6f9db45a8568b699"
+        },
+        "1178": {
+          "map.json": "85f0ab587c08266c5b02278b33e1a7b2c618ea0b376628fab154514e8aff0edf",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "ab2434d53287a2906dc647917adbe5072fa6c7236771893c5b526573327a8191"
+        },
+        "1179": {
+          "map.json": "60a3826e95121ed741ab7f39e1c07b548ebb4641567e89d092c3d7ca67ebc50a",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "f5d0eeab00e26265185685c9ac1e3211da17a4b3a76608cf96d898a78515fdc9"
+        },
+        "1180": {
+          "map.json": "752d20a5b2ba609d2c5bfa635bf56aa1b6d39d1ffd3016bb253a9c59a41bc758",
+          "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+          "scenario.yaml": "db5ab49277dcaa87ceb0ce987fdc8e86251cbd40af83bc2ca1b77cbdd7bfbe23"
+        }
+      },
+      "geometry": {
+        "obstacles": [
+          [
+            [
+              0.0,
+              0.0
+            ],
+            [
+              28.0,
+              0.0
+            ],
+            [
+              28.0,
+              3.75073
+            ],
+            [
+              0.0,
+              3.75073
+            ]
+          ],
+          [
+            [
+              0.0,
+              12.24928
+            ],
+            [
+              28.0,
+              12.24928
+            ],
+            [
+              28.0,
+              16.0
+            ],
+            [
+              0.0,
+              16.0
+            ]
+          ],
+          [
+            [
+              0.0,
+              3.75073
+            ],
+            [
+              0.65,
+              3.75073
+            ],
+            [
+              0.65,
+              12.24928
+            ],
+            [
+              0.0,
+              12.24928
+            ]
+          ],
+          [
+            [
+              27.35,
+              3.75073
+            ],
+            [
+              28.0,
+              3.75073
+            ],
+            [
+              28.0,
+              12.24928
+            ],
+            [
+              27.35,
+              12.24928
+            ]
+          ],
+          [
+            [
+              10.26338,
+              3.75073
+            ],
+            [
+              12.27938,
+              3.75073
+            ],
+            [
+              12.27938,
+              5.862499
+            ],
+            [
+              10.26338,
+              5.862499
+            ]
+          ],
+          [
+            [
+              10.26338,
+              10.062949
+            ],
+            [
+              13.86338,
+              10.062949
+            ],
+            [
+              13.86338,
+              12.24928
+            ],
+            [
+              10.26338,
+              12.24928
+            ]
+          ]
+        ],
+        "robot_route": [
+          [
+            3.2,
+            8.0
+          ],
+          [
+            24.7,
+            8.0
+          ]
+        ]
+      },
+      "nominal_sha256": {
+        "map.json": "5b4445fc16d9b8fb1639eb18cf187f104e9755701dae8138bf264cd597b2f3ff",
+        "routes.json": "6019db54072b90bc5dcd9d1a107aa9ce0e18dd6eecba28168374cc36e0544293",
+        "scenario.yaml": "50a64987dd83033f49b6f5e86171ce86d0a89844b64432183118f711519520dd"
+      },
+      "pedestrians": [
+        {
+          "departure_s": 1.70658,
+          "group": null,
+          "id": "p1",
+          "speed_mps": 1.25543,
+          "trajectory": [
+            [
+              13.06228,
+              6.83492
+            ],
+            [
+              5.2,
+              7.77081
+            ]
+          ]
+        },
+        {
+          "departure_s": 2.02658,
+          "group": null,
+          "id": "p2",
+          "speed_mps": 1.34043,
+          "trajectory": [
+            [
+              13.06228,
+              8.95492
+            ],
+            [
+              5.2,
+              8.71081
+            ]
+          ]
+        },
+        {
+          "departure_s": 2.34658,
+          "group": null,
+          "id": "p3",
+          "speed_mps": 1.42543,
+          "trajectory": [
+            [
+              15.25257,
+              6.83492
+            ],
+            [
+              6.05,
+              7.77081
+            ]
+          ]
+        },
+        {
+          "departure_s": 1.70658,
+          "group": null,
+          "id": "p4",
+          "speed_mps": 1.25543,
+          "trajectory": [
+            [
+              15.25257,
+              8.95492
+            ],
+            [
+              6.05,
+              8.71081
+            ]
+          ]
+        },
+        {
+          "departure_s": 2.02658,
+          "group": null,
+          "id": "p5",
+          "speed_mps": 1.34043,
+          "trajectory": [
+            [
+              17.44286,
+              6.83492
+            ],
+            [
+              6.9,
+              7.77081
+            ]
+          ]
+        },
+        {
+          "departure_s": 2.34658,
+          "group": null,
+          "id": "p6",
+          "speed_mps": 1.42543,
+          "trajectory": [
+            [
+              17.44286,
+              8.95492
+            ],
+            [
+              6.9,
+              8.71081
+            ]
+          ]
+        },
+        {
+          "departure_s": 1.70658,
+          "group": null,
+          "id": "p7",
+          "speed_mps": 1.25543,
+          "trajectory": [
+            [
+              19.63315,
+              6.83492
+            ],
+            [
+              7.75,
+              7.77081
+            ]
+          ]
+        },
+        {
+          "departure_s": 2.02658,
+          "group": null,
+          "id": "p8",
+          "speed_mps": 1.34043,
+          "trajectory": [
+            [
+              9.51228,
+              5.48
+            ],
+            [
+              9.65677,
+              8.0
+            ],
+            [
+              10.97309,
+              8.86
+            ]
+          ]
+        }
+      ]
+    }
+  ],
+  "confirmation_seeds": [
+    1154,
+    1155,
+    1156,
+    1157,
+    1158,
+    1159,
+    1160,
+    1161,
+    1162
+  ],
+  "discovery_seeds": [
+    1151,
+    1152,
+    1153
+  ],
+  "dt_s": 0.1,
+  "episode_jitter": {
+    "departure_s": 0.2,
+    "speed_mps": 0.06,
+    "x_m": 0.08,
+    "y_m": 0.05
+  },
+  "evaluation_seeds": [
+    1163,
+    1164,
+    1165,
+    1166,
+    1167,
+    1168,
+    1169,
+    1170,
+    1171,
+    1172,
+    1173,
+    1174,
+    1175,
+    1176,
+    1177,
+    1178,
+    1179,
+    1180
+  ],
+  "evidence_tier": "diagnostic-only",
+  "frozen_at_utc": "2026-11-23T08:35:10.735797+00:00",
+  "horizon": 450,
+  "orca_runtime_overrides": {
+    "allow_fallback": false
+  },
+  "planner_base": "251137f6b8485ec72667976d5c6bf15aa36fa5fc",
+  "planner_configs": {
+    "orca": "5840b9e47088a3da14d684091ad0880a6480340fd274fbf88d3ab5b9a1bda5e4",
+    "planr1d": "405a1aece828466a838aaac0c5e13aafd81c4a95037bf840942be0c06d5bdb4a",
+    "socnav": "375df080cae0a1317d43bd2239cf078ecc9c5bc69b10d9973bbe153cb4d1d1a6"
+  },
+  "release_matrix_seeds": [
+    1121,
+    1122,
+    1123,
+    1124,
+    1125,
+    1126,
+    1127,
+    1128,
+    1129,
+    1130,
+    1131,
+    1132,
+    1133,
+    1134,
+    1135,
+    1136,
+    1137,
+    1138,
+    1139,
+    1140,
+    1141,
+    1142,
+    1143,
+    1144,
+    1145,
+    1146,
+    1147,
+    1148,
+    1149,
+    1150
+  ],
+  "scenario_generator_sha256": "59a232cd3ca2862e5d84cc2e01e1447988df918beca940e04e70e8e84c91cb67",
+  "schema_version": "planadv_challenge_suite.v1",
+  "selection": {
+    "confirmation_sha256": "d5338d751035434beea6590f10754b29fa03bbabec04d92f609d4e20cf246b52",
+    "discovery_sha256": "5a5bde32ad6694c6c3487b6703ce7ac7dd12c8409993b4ecd45cd42d5c1ca140",
+    "evaluation_feasibility_rejections": [],
+    "max_per_family": 2,
+    "min_target_failures_on_confirmation": 6,
+    "order": [
+      "orca_only_success_desc",
+      "planr1d_failures_desc",
+      "case_id_asc"
+    ]
+  },
+  "suite_id": "PLANADV-2026-11-23-v1"
+}

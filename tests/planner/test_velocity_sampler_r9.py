@@ -2,7 +2,6 @@
 
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any
 
 import numpy as np
 import pytest
@@ -19,9 +18,8 @@ def _approach(pedestrian_x, pedestrian_y=0.0, *, half_plane_weight=0.0):
     config = yaml.safe_load(CONFIG.read_bytes())
     config["sampling_path_distance"] = False
     config["velocity_sampler"]["orca_half_plane_weight"] = half_plane_weight
-    policy: Any
     policy, _ = build_map_policy("velocity_sampler", config, robot_kinematics="differential_drive")
-    adapter = policy._planner_adapter
+    adapter = vars(policy)["_planner_adapter"]
     walls = [((-5.0, y), (15.0, y)) for y in (-3.6, 3.6)]
     adapter.bind_env(
         SimpleNamespace(

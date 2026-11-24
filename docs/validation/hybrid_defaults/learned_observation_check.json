@@ -1,0 +1,31 @@
+{
+  "model_id": "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200",
+  "sha256": "8367af109a27e8879ced0c8913f6eff26df7ec59c31ea88f9a297bb2c141eb09",
+  "checksum_matches_registry": true,
+  "observation_keys": [
+    "goal_current",
+    "goal_next",
+    "map_size",
+    "occupancy_grid",
+    "occupancy_grid_meta_center_on_robot",
+    "occupancy_grid_meta_channel_indices",
+    "occupancy_grid_meta_origin",
+    "occupancy_grid_meta_resolution",
+    "occupancy_grid_meta_robot_pose",
+    "occupancy_grid_meta_size",
+    "occupancy_grid_meta_use_ego_frame",
+    "pedestrians_count",
+    "pedestrians_positions",
+    "pedestrians_radius",
+    "pedestrians_velocities",
+    "robot_heading",
+    "robot_position",
+    "robot_radius",
+    "robot_speed",
+    "sim_timestep"
+  ],
+  "has_successor_validity_key": false,
+  "executed_model_inference": false,
+  "simulation_reset_or_step_calls": 0,
+  "plain_ppo_release_model_inspection": "not locally hydrated; public model registry observation contract inspected"
+}

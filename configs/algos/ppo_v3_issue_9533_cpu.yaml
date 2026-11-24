@@ -1,0 +1,10 @@
+# Issue #9533 raw PPO control: canonical BR-06 config with CPU device for fork-safe paired execution.
+model_id: ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200
+device: cpu
+deterministic: true
+obs_mode: dict
+action_space: unicycle
+v_max: 2.0
+omega_max: 1.0
+fallback_to_goal: false
+allow_testing_algorithms: true

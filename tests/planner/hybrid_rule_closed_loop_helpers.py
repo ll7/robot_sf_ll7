@@ -105,7 +105,11 @@ def _observation(
             "speed": np.asarray([speed], dtype=float),
             "radius": np.asarray([ROBOT_RADIUS], dtype=float),
         },
-        "goal": {"current": np.asarray(goal, dtype=float), "next": np.asarray(goal, dtype=float)},
+        "goal": {
+            "current": np.asarray(goal, dtype=float),
+            "next": np.asarray(goal, dtype=float),
+            "next_valid": np.asarray([1.0], dtype=np.float32),
+        },
         "pedestrians": {
             "positions": np.asarray(peds, dtype=float),
             "velocities": ego,

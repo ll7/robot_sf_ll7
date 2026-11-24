@@ -1,9 +1,9 @@
-# Issue #9533 treatment profile. The canonical checkpoint, shield thresholds,
-# rollout horizon, and RiskDWA weights match guarded_ppo_camera_ready.yaml.
-# The only behavior change enables RiskDWA's score-checked progress escape.
+# Issue #9533 treatment: the CPU guarded-PPO baseline with only RiskDWA progress escape enabled.
+# Checkpoint, device, shield limits, fallback weights, and horizons remain identical to guarded_ppo_camera_ready_cpu.yaml.
 
 model_id: ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200
-device: auto
+device: cpu
+predictive_foresight_device: cpu
 deterministic: true
 obs_mode: dict
 action_space: unicycle

@@ -1,11 +1,13 @@
 """Focused coverage for the extracted SA-CADRL planner-family module."""
 
+from dataclasses import asdict
 from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
 import pytest
 
+from robot_sf.benchmark.map_runner_policies.map_runner_policy_resolution import _build_socnav_config
 from robot_sf.planner import socnav
 from robot_sf.planner import socnav_sacadrl as sacadrl
 
@@ -232,6 +234,47 @@ def test_network_input_converts_ego_velocity_before_goal_frame_projection() -> N
     # Five scalar fields precede flattened 7-column agent states; columns 2:4
     # are the pedestrian velocity projected onto goal-parallel and goal-lateral.
     np.testing.assert_allclose(network_input[0, 7:9], [0.5, 1.25], rtol=0.0, atol=1e-6)
+
+
+def test_far_goal_uses_actual_distance_by_default() -> None:
+    """The reference GA3C-CADRL observation uses the active goal's distance."""
+    adapter = sacadrl.SACADRLPlannerAdapter(allow_fallback=True)
+    vector, _, true_distance = adapter._build_network_input(_observation(goal=(30.0, 0.0)))
+
+    assert vector[0, 1] == pytest.approx(30.0)
+    assert true_distance == pytest.approx(30.0)
+
+
+def test_goal_cap_serialization_preserves_legacy_defaults_and_opt_in_identity() -> None:
+    """The mapped transfer opt-in survives round trips without changing default bytes."""
+    default = sacadrl.SocNavPlannerConfig()
+    selected = _build_socnav_config({"sacadrl_max_goal_distance": 10.0})
+
+    assert default.sacadrl_max_goal_distance is None
+    assert "sacadrl_max_goal_distance" not in asdict(default)
+    assert "sacadrl_max_goal_distance" not in default.to_dict()
+    assert selected.to_dict()["sacadrl_max_goal_distance"] == 10.0
+    assert sacadrl.SocNavPlannerConfig(**selected.to_dict()) == selected
+    assert selected != default
+    selected.sacadrl_max_goal_distance = None
+    assert selected == default
+    assert selected.to_dict() == default.to_dict()
+
+
+def test_opt_in_goal_cap_changes_only_network_distance() -> None:
+    """A local-goal projection caps the network input without changing the real goal."""
+    adapter = sacadrl.SACADRLPlannerAdapter(
+        config=sacadrl.SocNavPlannerConfig(sacadrl_max_goal_distance=10.0),
+        allow_fallback=True,
+    )
+    observation = _observation(goal=(30.0, 0.0))
+    observation["robot"]["heading"] = np.array([0.3])
+
+    vector, _, true_distance = adapter._build_network_input(observation)
+
+    assert vector[0, 1] == pytest.approx(10.0)
+    assert vector[0, 2] == pytest.approx(0.3)
+    assert true_distance == pytest.approx(30.0)
 
 
 def test_checkpoint_resolution_hashes_bundle_and_fails_closed(tmp_path: Path, monkeypatch) -> None:

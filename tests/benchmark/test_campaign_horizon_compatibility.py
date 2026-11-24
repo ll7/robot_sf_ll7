@@ -82,6 +82,7 @@ def test_unversioned_smoke_identity_equals_literal_main_oracle():
         snqi_weights=None,
         snqi_baseline=None,
         scenario_path=ROOT / "scoped_scenarios.json",
+        provenance_scenario_path=cfg.scenario_matrix_path,
         policy_builder=_build_policy,
     )
     assert row["config_hash"] == "cfd4afbfb80f7d05"
@@ -118,6 +119,7 @@ def test_unversioned_authored_timeout_keeps_main_label():
         snqi_weights=None,
         snqi_baseline=None,
         scenario_path=ROOT / "scoped_scenarios.json",
+        provenance_scenario_path=cfg.scenario_matrix_path,
         policy_builder=stationary,
     )
     assert row["steps"] == 600

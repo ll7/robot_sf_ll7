@@ -395,3 +395,137 @@ be internally consistent: independent review must verify its linked job,
 execution artifacts, body/config/source provenance and classifications. Review
 plus the digest/binding checks remain the safeguards against receipt forgery.
 Synthetic test rows prove validator behaviour only.
+
+## Reconstructing a baseline with repaired acquisition tooling
+
+The historical width template requests twelve MPPI steps from an eight-output
+predictor. Receipt acquisition derives the two predictive width bindings from
+the same source checkout's main release template, which uses the published
+eight-step, 0.1-second profiles. Historical templates and released algorithm
+configs remain unchanged. Both suites check actual checkpoint output before
+any episode collection; unsupported requests are rejected rather than capped.
+
+When the published baseline predates this acquisition repair, pass
+`--sweep-harness-source-sha <full-commit-sha>` to the producer in `local` or
+`sbatch` mode. It installs that commit's sweep script in **both** isolated
+source checkouts, using the sweep's existing tooling-only source exception.
+Runtime HEAD stays at the requested source, including the immutable release
+source for the baseline. Existing unrelated script edits and conflicting
+provenance refuse instead of being overwritten. Use a fresh work directory
+for each source/harness pair.
+
+Each sweep artifact retains `harness.json` with runtime source, harness source,
+and original/replacement script digests. The launcher verifies the selected
+committed digest, then compiles and executes that same captured byte buffer
+with the source path retained as `__file__`. The direct CLI dispatches through
+the same captured-buffer contract. An imported `main()` refuses collection and
+reanalysis unless `_SWEEP_SOURCE_BYTES` was supplied by that dispatcher; a
+separate pathname read cannot establish imported execution identity.
+Execution metadata uses its loaded digest for both suites; a later source-file
+replacement refuses completion
+instead of certifying the replacement. Collection rejects disagreement and
+includes the reconstruction in the receipt's declared baseline differences.
+`--summarize-only` requires authoritative original execution metadata with
+matching source, suite, development-seed selection and loaded harness identity;
+it preserves that provenance and refuses missing or conflicting identity before
+rewriting outputs. A campaign summary alone cannot reconstruct execution identity. Preserve these manifests with the raw
+rows and derived campaign configs. The repaired width binding differs from the
+historical width controller beyond its horizon: it uses the published profile
+as a whole. These are new development reconstructions, not unchanged historical
+outcomes. Both sides must be rerun with the repaired harness; old width rows
+cannot be substituted. Use all seeds 1001–1030, all arms and slots, the required
+Slurm environment, raw-row audit and independent final-head refute review.
+A check-only preflight is not a behaviour receipt, and this option changes no
+trusted admission rule or review requirement.
+
+## Incremental acquisition contracts and recovery
+
+The sweep compiles a `receipt-contract.v1` before any trajectory. It expands the promotion
+roster independently (14 arms × 51 slots × development seeds 1001–1030 = 21,420 IDs), checks
+selected combinations, enters the production batch preflight, and constructs every selected
+arm/slot through the episode resolver, planner builder and simulator factory. Readback includes
+live simulator/robot settings, owned planner configurations and the loaded predictor's declared
+and measured forecast capability. Unsupported horizons fail; they are never clamped. Runtime
+input checksums, model-registry checkpoint digests, row/metric contracts, output publication and
+available disk are checked before collection. `--minimum-free-bytes` declares a storage floor;
+it is a capacity check, not a prediction of the final artifact size.
+
+Submit preflight through the existing producer, with the full development roster and immutable
+candidate/baseline sources:
+
+```bash
+python scripts/ci/make_behaviour_receipt.py \
+  --head-sha "$CANDIDATE_SHA" --baseline "$BASELINE_TAG" --receipt-id "$RUN_ID" \
+  --mode sbatch --submit-only --check-only --work-dir "$ARTIFACT_ROOT"
+```
+
+The submitted script pins its immutable checkout with `sbatch --chdir`, checks its helper path,
+and limits library threads. Set `UV_BIN` to an absolute executable path when submitting, or the
+producer detects `uv` on its own PATH and embeds the resolved absolute path. The batch shell
+checks that executable, then runs `uv sync --frozen --all-extras` before
+`uv run --frozen --all-extras` so preflight and production planner imports have their dependencies.
+Check-only/canary jobs have a fourteen-minute limit; canaries accept
+at most two workers. Supply site-specific scheduling and installed-environment settings outside
+this public repository. Inspect terminal scheduler status and artifacts; submission success is
+not preflight success. Both full-roster contracts must exist, match their requested sources, and
+agree on row schema and metric meanings before the producer submits a long paired acquisition.
+
+Use `--canary` for diagnostic construction/reset/short-step probes and terminal-state fixtures.
+Use `--arms` and `--scenarios` for a handful of probes in a tiny scheduler allocation; the report
+records the selected coverage. All canary scenario identities begin with `canary/` and their
+outputs live below `canary/`, carry `receipt_eligible: false`, and cannot fill scientific slots.
+A selected canary does not establish full arm/slot coverage. The unfiltered canary exercises the
+whole roster; scheduler sizing must still obey the task's compute limit.
+
+Execution, scoring and comparison identities use domain-separated canonical SHA-256 records.
+The conservative execution identity includes the exact source SHA, harness digest, installed
+runtime, resolved inputs, assets and execution-time metric definitions. Continuation requires
+that identical identity and output root. This does not authorize cross-source caching.
+
+For the first complete seed, submit the same full contract with `--first-seed-only`. Continue
+with the same source, roster, seeds, environment and output root, omitting that flag. Dispatch
+selection is separate from execution identity. The first seed's full-length observations remain
+in the journal and count toward the final matrix; the deliberately partial stage cannot pass
+receipt coverage. A timeout or collision is a completed observation and is never retried.
+
+Validated per-episode completion JSON is written to a temporary file, checked, synced and
+published without overwriting a different record. Parallel futures publish immediately rather
+than waiting for an arm to finish. JSONL is a rebuildable view. On continuation, valid completion
+records rebuild it before the normal missing-job filter; invalid records are preserved under
+`invalid/` and only those missing/invalid observations execute again. Banked rows also reconstruct
+arm reporting, including interruptions before `summary.json`. Existing JSONL without completion
+provenance is refused; it is never assigned a new producing source. Keep the artifact directory
+outside the candidate checkout and preserve it before retiring any worktree.
+
+Comparison can be repeated without invoking a simulator:
+
+```bash
+python scripts/validation/compare_behaviour_rows.py \
+  --head-sweep-dir "$HEAD_ROWS" --baseline-sweep-dir "$BASELINE_ROWS" \
+  --output "$COMPARISON_JSON"
+```
+
+This reads immutable rows and their producing contracts, requires full coverage, checks schema
+and definition compatibility, preserves each input's actual execution-time scoring source,
+and publishes an immutable comparison artifact. It does not rescore arbitrary old traces or
+assign the current scorer to historical metrics. Row and contract digests are checked again
+before publication. Changed comparison tooling changes comparison identity; the original scoring
+identities remain bound to their producers. Events requiring classification remain unresolved
+and the output explicitly says `admission: not_evaluated`.
+
+All existing receipt/audit/classification/exact-head review gates remain in force. This tooling
+provides no partial-coverage admission, review exemption, or automatic promotion. For a historical baseline, explicitly pin `--sweep-harness-source-sha` to this reviewed
+acquisition tooling. The installer copies its receipt modules and applies a bounded acquisition
+patch to the historical batch/writer/resume functions. It preserves the historical policy and
+simulator implementation. `harness.json` binds original and installed digests for every file;
+the sweep independently reconstructs the overlay from committed objects before exempting those
+exact bytes from runtime-source verification. An incompatible patch or unrelated local edit is
+refused. This is an explicitly recorded development reconstruction, never unchanged archived data.
+Non-finite observation sentinels (for example infinite empty-world clearance) use versioned,
+lossless numeric tags in completion JSON and are restored when rebuilding the production JSONL.
+
+For historical runtimes without a declared definitions digest, the contract records that absence
+and hashes the actual metric implementation files. It never copies current metric code over the
+historical implementation. Paired preflight rejects incompatible semantic source bundles even
+when a version label is unchanged. Run standalone comparisons from the reviewed acquisition
+checkout; historical runtime overlays contain only the modules needed for acquisition.

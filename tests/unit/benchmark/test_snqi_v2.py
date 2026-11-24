@@ -3987,3 +3987,28 @@ def test_analyzer_bound_schedule_production_entrypoint(spec_files, tmp_path, sch
         with pytest.raises(ValueError, match=reason):
             _analyze_v2(args)
         assert not args.reports_dir.exists()
+
+
+def test_calibration_identity_context_preserves_registered_default_source():
+    """Custody reconstruction must carry the producer's config-less release source."""
+    from robot_sf.benchmark.camera_ready_campaign import CampaignConfig, PlannerSpec
+    from robot_sf.benchmark.map_runner.map_runner import _compute_resume_identity_payload
+    from robot_sf.benchmark.snqi.v2_calibration import _calibration_identity_context
+
+    matrix = ROOT / "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml"
+    planner = PlannerSpec(key="goal", algo="goal")
+    cfg = CampaignConfig(
+        name="identity-context",
+        scenario_matrix_path=matrix,
+        planners=(planner,),
+        horizon=30,
+    )
+    scenario = {"name": "custody-source", "simulation_config": {"max_episode_steps": 30}}
+    ctx = _calibration_identity_context(cfg, planner, {scenario["name"]: scenario})
+    assert ctx.scenario_path == matrix
+    params = _compute_resume_identity_payload(ctx, scenario, 1001)
+    assert "hybrid_default_set" not in params
+    current_cfg = replace(cfg, scenario_matrix_path=ROOT / "new-scenarios.yaml")
+    current_ctx = _calibration_identity_context(current_cfg, planner, {scenario["name"]: scenario})
+    current_params = _compute_resume_identity_payload(current_ctx, scenario, 1001)
+    assert current_params["hybrid_default_set"] == "current"

@@ -19,6 +19,8 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+import time
+from io import StringIO
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -705,7 +707,7 @@ class TestScopedScenarioParity:
         {
             "name": "blind_corner",
             "map_file": "maps/svg_maps/francis2023/francis2023_blind_corner.svg",
-            "seeds": [111],
+            "seeds": [1001],
             "simulation_config": {"max_episode_steps": 30},
             "robot_config": {"kinematics": "differential_drive"},
         }
@@ -890,6 +892,136 @@ class TestScopedScenarioParity:
             _run_single_arm_subprocess(params)
 
         assert captured["resume"] is True
+
+    def test_worker_counts_rows_written_before_runner_exception(self, tmp_path):
+        """The subprocess summary retains rows written before post-run validation fails."""
+        from robot_sf.benchmark.camera_ready.resource_lifecycle import (
+            _run_single_arm_subprocess,
+        )
+
+        episodes_path = tmp_path / "episodes.jsonl"
+        episodes_path.write_text(
+            json.dumps({"scenario_id": "retained", "seed": 1}) + "\n",
+            encoding="utf-8",
+        )
+        scoped_path = tmp_path / "scoped_scenarios.json"
+        scoped_path.write_text("[]", encoding="utf-8")
+        base = _make_arm_params()
+        params = _SubprocessArmParams(
+            **{
+                **base.__dict__,
+                "episodes_path": episodes_path,
+                "summary_path": tmp_path / "summary.json",
+                "scoped_scenarios_path": scoped_path,
+                "resume": True,
+            }
+        )
+
+        def fake_run_batch(*_args, **_kwargs):
+            """Append a valid row before simulating retained-metric validation failure."""
+            with episodes_path.open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps({"scenario_id": "new", "seed": 2}) + "\n")
+            raise RuntimeError("post-run retained metric validation failed")
+
+        with (
+            patch("robot_sf.benchmark.runner.run_batch", side_effect=fake_run_batch),
+            patch(
+                "robot_sf.benchmark.fallback_policy.availability_payload",
+                return_value={},
+            ),
+        ):
+            result = _run_single_arm_subprocess(params)
+
+        assert result["summary"]["status"] == "failed"
+        assert result["summary"]["written"] == 1
+        assert result["summary"]["episodes_written_this_invocation"] == 1
+        assert result["summary"]["episodes_total"] == 2
+
+    def test_worker_counts_appended_rows_for_unexpected_exception_without_resume(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        """The outer worker handler counts only this invocation's rows for any Exception."""
+        from robot_sf.benchmark.camera_ready import resource_lifecycle
+
+        episodes_path = tmp_path / "episodes.jsonl"
+        episodes_path.write_text(
+            json.dumps({"scenario_id": "retained", "seed": 1}) + "\n",
+            encoding="utf-8",
+        )
+        params = _SubprocessArmParams(
+            **{
+                **_make_arm_params().__dict__,
+                "episodes_path": episodes_path,
+                "summary_path": tmp_path / "summary.json",
+                "resume": False,
+            }
+        )
+
+        def append_then_raise(_params):
+            with episodes_path.open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps({"scenario_id": "new", "seed": 2}) + "\n")
+            raise TypeError("unexpected post-run error")
+
+        monkeypatch.setattr(sys, "stdin", StringIO(_serialize_subprocess_arm_params(params)))
+        monkeypatch.setattr(resource_lifecycle, "_run_single_arm_subprocess", append_then_raise)
+        monkeypatch.setattr(
+            resource_lifecycle,
+            "_cleanup_gpu_memory_before_exit",
+            lambda **_kwargs: {},
+        )
+
+        exit_code = _main_subprocess_worker()
+        output = json.loads(capsys.readouterr().out)
+
+        assert exit_code == 1
+        assert output["summary"]["status"] == "failed"
+        assert output["summary"]["written"] == 1
+        assert output["summary"]["episodes_written_this_invocation"] == 1
+
+    def test_worker_runtime_includes_run_batch_execution(self, tmp_path, monkeypatch):
+        """The arm timer starts before the batch and ends after its work."""
+        from unittest.mock import Mock as _Mock
+
+        from robot_sf.benchmark.camera_ready.resource_lifecycle import (
+            _run_single_arm_subprocess,
+        )
+
+        scoped_path = tmp_path / "scoped_scenarios.json"
+        scoped_path.write_text("[]", encoding="utf-8")
+        base = _make_arm_params()
+        params = _SubprocessArmParams(
+            **{
+                **base.__dict__,
+                "episodes_path": tmp_path / "episodes.jsonl",
+                "summary_path": tmp_path / "summary.json",
+                "scoped_scenarios_path": scoped_path,
+            }
+        )
+        clock = [100.0]
+        monkeypatch.setattr(time, "perf_counter", lambda: clock[0])
+
+        def fake_run_batch(*_args, **_kwargs):
+            clock[0] += 4.25
+            return {
+                "status": "ok",
+                "total_jobs": 2,
+                "written": 2,
+                "failed_jobs": 0,
+                "failures": [],
+            }
+
+        with (
+            patch("robot_sf.benchmark.runner.run_batch", side_effect=fake_run_batch),
+            patch(
+                "robot_sf.benchmark.fallback_policy.summarize_benchmark_availability",
+                return_value=_Mock(availability_status="ok"),
+            ),
+            patch("robot_sf.benchmark.fallback_policy.availability_payload", return_value={}),
+        ):
+            result = _run_single_arm_subprocess(params)
+
+        assert result["summary"]["runtime_sec"] == pytest.approx(4.25)
+        assert result["summary"]["episodes_per_second"] == pytest.approx(2 / 4.25)
 
 
 if __name__ == "__main__":

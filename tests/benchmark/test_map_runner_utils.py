@@ -596,6 +596,7 @@ def test_build_policy_routes_adaptive_proxemic_selector_with_diagnostics() -> No
             "goal": {
                 "current": np.asarray([2.0, 0.0], dtype=float),
                 "next": np.asarray([2.0, 0.0], dtype=float),
+                "next_valid": np.asarray([1.0], dtype=np.float32),
             },
             "pedestrians": {
                 "positions": np.zeros((0, 2), dtype=float),
@@ -751,6 +752,7 @@ def test_build_policy_routes_planner_selector_v2_with_diagnostics() -> None:
             "goal": {
                 "current": np.asarray([2.0, 0.0], dtype=float),
                 "next": np.asarray([2.0, 0.0], dtype=float),
+                "next_valid": np.asarray([1.0], dtype=np.float32),
             },
             "pedestrians": {
                 "positions": np.zeros((0, 2), dtype=float),

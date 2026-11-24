@@ -353,6 +353,7 @@ def test_hybrid_static_escape_reverses_but_rejects_a_rear_wall():
         hard_static_clearance=1.2,
     )
     obs = _with_occupancy_grid(_observation())
+    obs["goal"]["next_valid"] = np.array([1.0])
     state = planner._extract_state(obs)
     state.update(
         robot_pos=np.array([10.0, 10.0]),

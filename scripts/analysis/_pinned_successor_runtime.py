@@ -6,6 +6,7 @@ any project import, so production helpers come from the named source commit.
 
 from __future__ import annotations
 
+import inspect
 import json
 import sys
 from dataclasses import replace
@@ -378,8 +379,23 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915 - pinned resolution stays to
             spec.safety_wrapper if spec.safety_wrapper is not None else cfg.safety_wrapper
         )
         seeded_scenario = _scenario_with_episode_seed_defaults(scoped_scenario, seed=slot[3])
+        identity_defaults = {}
+        # Older pinned producers have no typed-default discriminator.
+        if "default_set" in inspect.signature(_scenario_identity_payload).parameters:
+            from robot_sf.common.hybrid_defaults import (
+                configless_release_source,
+                source_default_policy,
+            )
+
+            identity_source = planner["absolute_path"]
+            if identity_source is None and not planner["config"]:
+                identity_source = configless_release_source(
+                    cfg.scenario_matrix_path, planner["algo"]
+                )
+            identity_defaults["default_set"] = source_default_policy(identity_source)["default_set"]
         controls = _scenario_identity_payload(
             seeded_scenario,
+            **identity_defaults,
             algo=algo,
             algo_config=effective,
             horizon=spec.horizon_override if spec.horizon_override is not None else cfg.horizon,

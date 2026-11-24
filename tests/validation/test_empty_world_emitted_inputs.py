@@ -1,8 +1,10 @@
 """Exercise emitted 0.0.8 sweep inputs and execution accounting without a campaign."""
 
 import hashlib
+import importlib.util
 import json
 from collections import Counter
+from pathlib import Path
 
 import pytest
 
@@ -10,7 +12,13 @@ from robot_sf.benchmark.camera_ready._config import _load_campaign_scenarios
 from robot_sf.benchmark.camera_ready_campaign import load_campaign_config
 from robot_sf.scenario_certification.v1 import scenario_actor_source_census
 from robot_sf.training.scenario_loader import build_robot_config_from_scenario, load_scenarios
-from scripts.validation import run_empty_world_sweep as sweep
+
+# Compile the supplied image so main exercises the production capture contract.
+_SWEEP_PATH = Path(__file__).resolve().parents[2] / "scripts/validation/run_empty_world_sweep.py"
+_SWEEP_SPEC = importlib.util.spec_from_file_location("captured_empty_world_sweep", _SWEEP_PATH)
+sweep = importlib.util.module_from_spec(_SWEEP_SPEC)
+sweep._SWEEP_SOURCE_BYTES = _SWEEP_PATH.read_bytes()
+exec(compile(sweep._SWEEP_SOURCE_BYTES, str(_SWEEP_PATH), "exec"), sweep.__dict__)  # noqa: S102
 
 
 @pytest.mark.parametrize("suite", ["main", "width"])
@@ -62,42 +70,6 @@ def test_cli_reports_failed_missing_and_incomplete_trace_slots(tmp_path, monkeyp
     output = tmp_path / "outside"
     root = output / "campaigns" / "empty_world_main"
     run = root / "runs" / "goal__differential_drive"
-    run.mkdir(parents=True)
-    if case == "failed":
-        (run / "summary.json").write_text(
-            json.dumps(
-                {
-                    "failures": [
-                        {
-                            "scenario_id": "classic_bottleneck_low",
-                            "seed": 1001,
-                            "error": "RuntimeError('documented runner failure')",
-                        }
-                    ]
-                }
-            )
-        )
-    elif case in {"incomplete_trace", "complete"}:
-        from robot_sf.benchmark.map_runner.map_runner import _run_map_episode
-        from robot_sf.training.scenario_loader import load_scenarios
-
-        scenario = next(s for s in load_scenarios(matrix) if s["name"] == "classic_bottleneck_low")
-        scenario = sweep.remove_pedestrians(scenario, [1001])
-        row = _run_map_episode(
-            scenario,
-            1001,
-            horizon=2,
-            dt=0.1,
-            record_forces=False,
-            snqi_weights=None,
-            snqi_baseline=None,
-            algo="goal",
-            scenario_path=matrix,
-            record_simulation_step_trace=True,
-        )
-        if case == "incomplete_trace":
-            row["algorithm_metadata"]["simulation_step_trace"]["steps"].pop()
-        (run / "episodes.jsonl").write_text(json.dumps(row) + "\n")
     result = {
         "campaign_root": str(root),
         "campaign_execution_status": "failed" if case in {"failed", "raised"} else "completed",
@@ -110,6 +82,44 @@ def test_cli_reports_failed_missing_and_incomplete_trace_slots(tmp_path, monkeyp
     }
 
     def simulated_campaign(*args, **kwargs):
+        run.mkdir(parents=True)
+        if case == "failed":
+            (run / "summary.json").write_text(
+                json.dumps(
+                    {
+                        "failures": [
+                            {
+                                "scenario_id": "classic_bottleneck_low",
+                                "seed": 1001,
+                                "error": "RuntimeError('documented runner failure')",
+                            }
+                        ]
+                    }
+                )
+            )
+        elif case in {"incomplete_trace", "complete"}:
+            from robot_sf.benchmark.map_runner.map_runner import _run_map_episode
+            from robot_sf.training.scenario_loader import load_scenarios
+
+            scenario = next(
+                s for s in load_scenarios(matrix) if s["name"] == "classic_bottleneck_low"
+            )
+            scenario = sweep.remove_pedestrians(scenario, [1001])
+            row = _run_map_episode(
+                scenario,
+                1001,
+                horizon=2,
+                dt=0.1,
+                record_forces=False,
+                snqi_weights=None,
+                snqi_baseline=None,
+                algo="goal",
+                scenario_path=matrix,
+                record_simulation_step_trace=True,
+            )
+            if case == "incomplete_trace":
+                row["algorithm_metadata"]["simulation_step_trace"]["steps"].pop()
+            (run / "episodes.jsonl").write_text(json.dumps(row) + "\n")
         if case == "raised":
             raise RuntimeError("documented campaign failure")
         return result

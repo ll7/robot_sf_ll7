@@ -665,21 +665,22 @@ class _PlannerStepProcess:
             return
         self.close()
         parent_conn, child_conn = self._ctx.Pipe(duplex=True)
-        # A file avoids pipe-buffer deadlocks when native libraries write to fd 2.
-        self._stderr = tempfile.TemporaryFile(mode="w+b")
-        process = self._ctx.Process(
-            target=_planner_step_worker, args=(child_conn, self._planner, self._stderr.fileno())
-        )
         started = False
         try:
+            # A file avoids pipe-buffer deadlocks when native libraries write to fd 2.
+            self._stderr = tempfile.TemporaryFile(mode="w+b")
+            process = self._ctx.Process(
+                target=_planner_step_worker, args=(child_conn, self._planner, self._stderr.fileno())
+            )
             process.start()
             started = True
         finally:
             if not started:
                 parent_conn.close()
                 child_conn.close()
-                self._stderr.close()
-                self._stderr = None
+                if self._stderr is not None:
+                    self._stderr.close()
+                    self._stderr = None
         child_conn.close()
         self._process = process
         self._conn = parent_conn

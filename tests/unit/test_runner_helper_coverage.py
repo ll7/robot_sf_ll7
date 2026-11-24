@@ -765,3 +765,23 @@ def test_runtime_diagnostics_normalization_marks_fallback_and_splits_worker_payl
     )
     assert process.foresight_diagnostics() == {"model_loaded": False}
     assert process.diagnostics() == {"fallback": True}
+
+
+def test_worker_releases_pipe_when_stderr_open_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Temporary-file exhaustion leaves both process pipe handles closed."""
+    closed = []
+    parent = SimpleNamespace(close=lambda: closed.append("parent"))
+    child = SimpleNamespace(close=lambda: closed.append("child"))
+    step_runner = _handshake_runner(_HandshakeConnection(poll_result=True))
+    step_runner._ctx.Pipe = lambda duplex: (parent, child)
+
+    def fail_stderr(**_kwargs):
+        raise OSError("stderr file unavailable")
+
+    monkeypatch.setattr(runner_mod.tempfile, "TemporaryFile", fail_stderr)
+    with pytest.raises(OSError, match="stderr file unavailable"):
+        step_runner._ensure_worker()
+    assert closed == ["parent", "child"]
+    assert step_runner._stderr is None
+    assert step_runner._process is None
+    assert step_runner._conn is None

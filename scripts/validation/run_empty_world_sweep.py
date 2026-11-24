@@ -32,7 +32,8 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import Any
+from pickle import UnpicklingError
+from typing import Any, cast
 
 import yaml
 
@@ -44,6 +45,13 @@ DEFAULT_MAX_WORKERS = 24
 PED_DEPENDENT_BEHAVIORS = frozenset({"wait", "join", "leave", "follow", "lead", "accompany"})
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+# Only a dispatcher compiling this exact buffer can establish execution identity.
+# Ordinary imports expose helpers, but cannot collect or reanalyse campaigns.
+SWEEP_HARNESS_SHA256 = (
+    hashlib.sha256(globals()["_SWEEP_SOURCE_BYTES"]).hexdigest()
+    if "_SWEEP_SOURCE_BYTES" in globals()
+    else None
+)
 
 SUITES: dict[str, str] = {
     "main": "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml",
@@ -54,6 +62,7 @@ SUITES: dict[str, str] = {
 SWEEP_OWN_PATHS = (
     "scripts/validation/run_empty_world_sweep.py",
     "tests/validation/test_run_empty_world_sweep.py",
+    "tests/validation/test_empty_world_forecast_guard.py",
 )
 
 
@@ -86,6 +95,8 @@ def assert_dev_seeds(seeds: Any) -> list[int]:
                 f"seed {seed} is outside the development range {DEV_SEED_MIN}-{DEV_SEED_MAX} "
                 "(retired 111-140 and the sealed 0.0.8 seeds remain held out); aborting"
             )
+        if seed in checked:
+            raise SeedGuardError(f"duplicate development seed {seed}")
         checked.append(seed)
     return checked
 
@@ -145,7 +156,7 @@ def _git(*args: str) -> str:
     ).stdout.strip()
 
 
-def verify_head(head_sha: str) -> str:
+def verify_head(head_sha: str, *, acquisition_paths: tuple[str, ...] = ()) -> str:
     """Confirm the checkout holds the tree of ``head_sha`` (plus this sweep's own files).
 
     Returns:
@@ -155,7 +166,7 @@ def verify_head(head_sha: str) -> str:
         RuntimeError: If the tree differs from the tested head or the worktree is dirty.
     """
     full = _git("rev-parse", "--verify", f"{head_sha}^{{commit}}")
-    excludes = [f":(exclude){p}" for p in SWEEP_OWN_PATHS]
+    excludes = [f":(exclude){p}" for p in (*SWEEP_OWN_PATHS, *acquisition_paths)]
     diff = _git("diff", "--name-only", full, "HEAD", "--", ".", *excludes)
     if diff:
         raise RuntimeError(f"checkout differs from tested head {full}: {diff.splitlines()[:5]}")
@@ -188,6 +199,124 @@ def _write_authored_horizon_schedule(
     payload["scenario_horizons_sha256"] = hashlib.sha256(schedule_out.read_bytes()).hexdigest()
 
 
+def _checkpoint_forecast_steps(arm_key: str, predictor_config: Any) -> int:
+    """Measure the loaded model's output rather than its declared metadata."""
+    from robot_sf.planner.socnav_prediction import PredictionPlannerAdapter
+
+    predictor = PredictionPlannerAdapter(predictor_config, allow_fallback=False)
+    try:
+        # Load the real checkpoint even when the receipt has no pedestrian actors.
+        # Neither configured horizon nor checkpoint metadata proves output support.
+        import torch
+
+        model = predictor._ensure_model()
+        if model is None:
+            raise RuntimeError("Predictive checkpoint did not load a model")
+        state, mask, *_ = predictor._build_model_input({})
+        with torch.no_grad():
+            output = model(
+                torch.from_numpy(state[None]).to(predictor._device),
+                torch.from_numpy(mask[None]).to(predictor._device),
+            )
+        future = output["future_positions"][0]
+
+    except (
+        ImportError,
+        OSError,
+        RuntimeError,
+        ValueError,
+        TypeError,
+        KeyError,
+        IndexError,
+        AttributeError,
+        EOFError,
+        UnpicklingError,
+    ) as error:
+        raise RuntimeError(
+            f"forecast guard: {arm_key}: checkpoint forecast load failed: {error}"
+        ) from error
+    if future.ndim != 3 or future.shape[-1] != 2:
+        raise ValueError(f"forecast guard: {arm_key}: malformed checkpoint forecast output")
+    return int(future.shape[1])
+
+
+def assert_forecast_support(cfg: Any) -> None:
+    """Reject receipt requests beyond the resolved checkpoint's real forecast output.
+
+    All arm configs are parsed. Predictive arms use the campaign's existing
+    config builder and model loader, with fallback disabled, and perform one
+    model inference without constructing an environment or collecting episodes.
+    """
+    from robot_sf.benchmark.map_runner.map_runner import _build_socnav_config
+    from robot_sf.planner.predictive_mppi import build_predictive_mppi_config
+
+    for arm in cfg.planners:
+        settings = (
+            yaml.safe_load(arm.algo_config_path.read_text(encoding="utf-8")) or {}
+            if arm.algo_config_path is not None
+            else {}
+        )
+        if not isinstance(settings, dict):
+            raise ValueError(f"forecast guard: {arm.key}: algorithm config must be a mapping")
+        requests: dict[str, int] = {}
+        if arm.algo == "predictive_mppi":
+            mppi = build_predictive_mppi_config(settings)
+            predictor_config = mppi.socnav
+            requests["horizon_steps"] = mppi.horizon_steps
+        elif arm.algo == "prediction_planner":
+            predictor_config = _build_socnav_config(settings)
+        elif settings.get("predictive_foresight_enabled"):
+            from types import SimpleNamespace
+
+            from robot_sf.planner.predictive_foresight import (
+                predictive_foresight_config_from_source,
+            )
+
+            foresight = predictive_foresight_config_from_source(SimpleNamespace(**settings))
+            predictor_config = _build_socnav_config(
+                {
+                    "predictive_model_id": foresight.model_id,
+                    "predictive_checkpoint_path": foresight.checkpoint_path,
+                    "predictive_device": foresight.device,
+                    "predictive_max_agents": foresight.max_agents,
+                    "predictive_horizon_steps": foresight.horizon_steps,
+                    "predictive_rollout_dt": foresight.rollout_dt,
+                    "predictive_ego_conditioning": foresight.ego_conditioning,
+                }
+            )
+        else:
+            continue
+        requests["predictive_horizon_steps"] = int(predictor_config.predictive_horizon_steps)
+        if (
+            arm.algo in {"prediction_planner", "predictive_mppi"}
+            and predictor_config.predictive_adaptive_horizon_enabled
+        ):
+            requests["predictive_adaptive_horizon_steps"] = int(
+                predictor_config.predictive_horizon_steps
+            ) + max(0, int(predictor_config.predictive_horizon_boost_steps))
+        supported = _checkpoint_forecast_steps(arm.key, predictor_config)
+        for field, requested in requests.items():
+            if not 1 <= requested <= supported:
+                raise ValueError(
+                    f"forecast guard: {arm.key}: requested {field}={requested}; "
+                    f"checkpoint supported horizon={supported}; no capping or extrapolation"
+                )
+
+
+def _bind_released_width_predictors(payload: dict[str, Any]) -> None:
+    """Take generated predictive bindings from the main release receipt template."""
+    # Keep the historical width matrix frozen. The main release receipt
+    # template is the authoritative source for generated predictive bindings.
+    release_payload = yaml.safe_load((REPO_ROOT / SUITES["main"]).read_text("utf-8"))
+    released = {planner["key"]: planner for planner in release_payload["planners"]}
+    for planner in payload["planners"]:
+        if planner["algo"] in {"prediction_planner", "predictive_mppi"}:
+            release_arm = released[planner["key"]]
+            if release_arm["algo"] != planner["algo"]:
+                raise ValueError(f"release receipt algorithm mismatch: {planner['key']}")
+            planner["algo_config"] = release_arm["algo_config"]
+
+
 def build_derived_inputs(  # noqa: C901
     suite: str,
     *,
@@ -203,7 +332,6 @@ def build_derived_inputs(  # noqa: C901
     Returns:
         The derived campaign config path and the actor-free scenario list.
     """
-    from robot_sf.benchmark.camera_ready_campaign import load_campaign_config
     from robot_sf.training.scenario_loader import load_scenarios
 
     seeds = assert_dev_seeds(seeds)
@@ -254,7 +382,7 @@ def build_derived_inputs(  # noqa: C901
         _write_authored_horizon_schedule(payload, scenarios, out_dir, suite)
     payload["seed_policy"] = {"mode": "fixed-list", "seeds": list(seeds)}
     payload["workers"] = int(workers)
-    payload["resume"] = False
+    payload["resume"] = True
     payload["stop_on_failure"] = False
     payload["export_publication_bundle"] = False
     # Dev diagnostics emit v2 rows; historical width anchors use v1 metrics.
@@ -267,8 +395,18 @@ def build_derived_inputs(  # noqa: C901
         if missing:
             raise RuntimeError(f"unknown arms {sorted(missing)}")
         payload["planners"] = [p for p in payload["planners"] if p["key"] in arms]
+    if suite == "width":
+        _bind_released_width_predictors(payload)
     cfg_out = out_dir / f"campaign_{suite}_empty_world.yaml"
     cfg_out.write_text(yaml.safe_dump(payload, sort_keys=False), "utf-8")
+
+    _verify_derived_inputs(cfg_out)
+    return cfg_out, scenarios
+
+
+def _verify_derived_inputs(cfg_out: Path) -> None:
+    """Resolve the generated campaign through the normal loader and census."""
+    from robot_sf.benchmark.camera_ready_campaign import load_campaign_config
 
     cfg = load_campaign_config(cfg_out)  # same loader the release runner uses
     from robot_sf.benchmark.camera_ready._config import _load_campaign_scenarios
@@ -277,7 +415,6 @@ def build_derived_inputs(  # noqa: C901
     verify_actor_free(resolved, REPO_ROOT / "scoped_scenarios.json")
     seen = {int(s) for sc in resolved for s in sc.get("seeds", [])}
     assert_dev_seeds(sorted(seen))
-    return cfg_out, scenarios
 
 
 def verify_actor_free(scenarios: list[dict[str, Any]], matrix_path: Path) -> list[dict[str, Any]]:
@@ -681,13 +818,50 @@ def describe_trace(campaign_root: Path) -> str:
     return "No step traces were found in the episode rows."
 
 
-def main(argv: list[str] | None = None) -> int:
-    """Run the sweep.
+def _preflight_receipt_inputs(derived: list[tuple]) -> None:
+    """Check every selected suite before starting the first collection."""
+    from robot_sf.benchmark.receipt_contract import check_metric_contract, selected_episode_ids
 
-    Returns:
-        Process exit code: 1 for failed/incomplete execution or requested traces;
-        episode outcomes alone do not cause a nonzero exit. CLI flags are unchanged.
-    """
+    for _suite, _cfg_path, _scenarios, cfg in derived:
+        check_metric_contract(cfg)
+        assert_forecast_support(cfg)
+    selected_episode_ids(derived)
+
+
+def _verify_harness_identity(out_dir: Path, full_sha: str) -> None:
+    """Refuse source drift and disagreement with retained acquisition provenance."""
+    if hashlib.sha256(Path(__file__).read_bytes()).hexdigest() != SWEEP_HARNESS_SHA256:
+        raise RuntimeError("sweep harness source changed after loading")
+    manifest = out_dir / "harness.json"
+    if manifest.is_file():
+        pinned = json.loads(manifest.read_text())
+        if (
+            pinned.get("runtime_source_sha") != full_sha
+            or pinned.get("harness_sha256") != SWEEP_HARNESS_SHA256
+        ):
+            raise RuntimeError("sweep harness differs from pinned provenance")
+
+
+def _original_execution(out_dir: Path, suite: str, full_sha: str, seeds: list[int]) -> dict:
+    """Validate authoritative original identity before reanalysis writes any outputs."""
+    receipt = out_dir / f"execution_{suite}.json"
+    meta = json.loads(receipt.read_text()) if receipt.is_file() else {}
+    if (
+        meta.get("suite") != suite
+        or meta.get("head_sha") != full_sha
+        or meta.get("sweep_harness_sha256") != SWEEP_HARNESS_SHA256
+        or meta.get("seeds") != seeds
+    ):
+        raise ValueError(f"{suite} missing or conflicting original execution provenance")
+    try:
+        _verify_harness_identity(out_dir, full_sha)
+    except RuntimeError as error:
+        raise ValueError(f"{suite} conflicting original execution provenance") from error
+    return meta
+
+
+def _parse_args(argv: list[str] | None) -> argparse.Namespace:
+    """Parse the existing receipt sweep CLI."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--head-sha", required=True, help="Commit under test (checkout must match)")
     parser.add_argument("--suite", choices=[*SUITES, "both"], default="both")
@@ -700,13 +874,55 @@ def main(argv: list[str] | None = None) -> int:
         "--summarize-only", action="store_true", help="Rewrite tables from existing campaigns"
     )
     parser.add_argument("--check-only", action="store_true", help="Derive inputs, verify, stop")
+    parser.add_argument(
+        "--first-seed-only",
+        action="store_true",
+        help="Execute first seed within the unchanged full contract; resume with the same inputs",
+    )
+    parser.add_argument("--minimum-free-bytes", type=int, default=1024**3)
+    parser.add_argument(
+        "--canary",
+        action="store_true",
+        help="Isolated short integration probes; never receipt episodes",
+    )
+    parser.add_argument("--canary-steps", type=int, choices=range(1, 6), default=2)
     parser.add_argument("--no-step-trace", action="store_true")
     parser.add_argument("--arm-isolation", choices=("in_process", "subprocess"), default=None)
-    args = parser.parse_args(argv)
+    return parser.parse_args(argv)
+
+
+def main(argv: list[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0915
+    """Run the resumable sweep from a dispatcher-supplied captured source image.
+
+    Returns:
+        Process exit code: 1 for failed/incomplete execution or requested traces;
+        episode outcomes alone do not cause a nonzero exit. CLI flags are unchanged.
+
+    Raises:
+        RuntimeError: If an ordinary import calls main without captured source.
+    """
+    if "_SWEEP_SOURCE_BYTES" not in globals():
+        raise RuntimeError("sweep execution requires a captured source image")
+    args = _parse_args(argv)
 
     seeds = assert_dev_seeds(args.seeds)  # abort before anything else happens
-    full_sha = verify_head(args.head_sha)
     sys.path.insert(0, str(REPO_ROOT))
+    manifest = args.output_dir.resolve() / "harness.json"
+    if manifest.is_file() and json.loads(manifest.read_bytes()).get("bundle_files"):
+        record = json.loads(manifest.read_bytes())
+        relative = "scripts/validation/receipt_harness.py"
+        committed_helper = subprocess.check_output(
+            ["git", "show", f"{record['harness_source_sha']}:{relative}"], cwd=REPO_ROOT
+        )
+        if (REPO_ROOT / relative).read_bytes() != committed_helper:
+            raise ValueError("acquisition bundle verifier differs from its committed source")
+        from scripts.validation.receipt_harness import verify_bundle
+
+        runtime = _git("rev-parse", "--verify", f"{args.head_sha}^{{commit}}")
+        allowed = verify_bundle(REPO_ROOT, args.output_dir.resolve(), runtime)
+        full_sha = verify_head(args.head_sha, acquisition_paths=allowed)
+    else:
+        full_sha = verify_head(args.head_sha)
     from loguru import logger
 
     logger.remove()
@@ -718,99 +934,178 @@ def main(argv: list[str] | None = None) -> int:
 
     suites = list(SUITES) if args.suite == "both" else [args.suite]
     out_dir = args.output_dir.resolve()
+    # Reject invalid execution identity before creating even the writer lock.
+    if args.summarize_only:
+        for suite in suites:
+            _original_execution(out_dir, suite, full_sha, seeds)
+    _verify_harness_identity(out_dir, full_sha)
     out_dir.mkdir(parents=True, exist_ok=True)
-    started = time.time()
-    trace_notes: list[str] = []
-    incomplete_execution = False
-    for suite in suites:
-        cfg_path, scenarios = build_derived_inputs(
-            suite,
-            seeds=seeds,
-            arms=args.arms,
-            scenarios_filter=args.scenarios,
-            workers=args.workers,
-            out_dir=out_dir,
-            step_trace=not args.no_step_trace,
+    import fcntl
+
+    lock = (out_dir / ".receipt.lock").open("a")
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError as error:
+        lock.close()
+        raise ValueError("receipt output already has an active writer") from error
+    try:
+        originals = (
+            {suite: _original_execution(out_dir, suite, full_sha, seeds) for suite in suites}
+            if args.summarize_only
+            else {}
         )
-        cfg = load_campaign_config(cfg_path)
-        if args.summarize_only:
-            root = out_dir / "campaigns" / f"empty_world_{suite}"
-            receipt = out_dir / f"execution_{suite}.json"
-            summary_path = root / "reports" / "campaign_summary.json"
-            result = (
-                json.loads(receipt.read_text())
-                if receipt.is_file()
-                else (json.loads(summary_path.read_text()) if summary_path.is_file() else {})
+        _verify_harness_identity(out_dir, full_sha)
+        started = time.time()
+        trace_notes: list[str] = []
+        incomplete_execution = False
+        derived = []
+        for suite in suites:
+            cfg_path, scenarios = build_derived_inputs(
+                suite,
+                seeds=seeds,
+                arms=args.arms,
+                scenarios_filter=args.scenarios,
+                workers=args.workers,
+                out_dir=out_dir,
+                step_trace=not args.no_step_trace,
+            )
+            derived.append((suite, cfg_path, scenarios, load_campaign_config(cfg_path)))
+        # Stage models before check-only. Derive every config first so model staging
+        # can inspect the generated receipt even when the initial preflight fails.
+        if not args.summarize_only:
+            _preflight_receipt_inputs(derived)
+            from robot_sf.benchmark.receipt_contract import (
+                compile_contract,
+                prepare_completion_views,
+            )
+            from robot_sf.benchmark.receipt_stages import atomic_json
+
+            contract = compile_contract(
+                derived,
+                source_sha=full_sha,
+                root=REPO_ROOT,
+                output_dir=out_dir,
+                minimum_free_bytes=args.minimum_free_bytes,
+                full_roster=args.suite == "both"
+                and not args.arms
+                and not args.scenarios
+                and sorted(seeds) == list(range(DEV_SEED_MIN, DEV_SEED_MAX + 1)),
+            )
+            contract_path = out_dir / "contract.json"
+            if contract_path.exists():
+                previous = json.loads(contract_path.read_bytes())
+                if previous["execution_key"] != contract["execution_key"]:
+                    raise ValueError(
+                        "receipt execution/source differs; same-source continuation only"
+                    )
+            atomic_json(contract_path, contract)
+            if args.canary:
+                from scripts.validation.receipt_canary import run_canary
+
+                return run_canary(derived, out_dir / "canary", full_sha, args.canary_steps)
+            if not args.check_only:
+                prepare_completion_views(
+                    derived, out_dir, contract, first_seed_only=args.first_seed_only
+                )
+        for suite, cfg_path, scenarios, cfg in derived:
+            _verify_harness_identity(out_dir, full_sha)
+            if args.summarize_only:
+                root = out_dir / "campaigns" / f"empty_world_{suite}"
+                receipt = out_dir / f"execution_{suite}.json"
+                result = originals[suite]
+                rows, axes = reconcile_execution(
+                    cfg, scenarios, load_rows(root), root, result, step_trace=not args.no_step_trace
+                )
+                incomplete_execution |= not axes["complete"]
+                meta = {**result, **axes}
+                write_outputs(out_dir, rows, suite, meta)
+                receipt.write_text(json.dumps(meta, indent=2) + "\n")
+                continue
+            if args.check_only:
+                print(f"{suite}: derived inputs verified actor-free ({cfg_path})")
+                continue
+            t0 = time.time()
+            try:
+                result = run_campaign(
+                    cfg,
+                    output_root=out_dir / "campaigns",
+                    label=f"empty_world_{suite}",
+                    campaign_id=f"empty_world_{suite}",
+                    skip_publication_bundle=True,
+                    invoked_command=" ".join(sys.argv),
+                    arm_isolation=args.arm_isolation,
+                )
+            except (RuntimeError, OSError, ValueError) as error:
+                result = {
+                    "campaign_execution_status": "failed",
+                    "status": "failed",
+                    "exit_code": 1,
+                    "unexpected_failed_runs": 1,
+                    "total_episodes": None,
+                    "execution_error": f"{type(error).__name__} during campaign execution",
+                }
+            _verify_harness_identity(out_dir, full_sha)
+            campaign_root = Path(
+                cast(
+                    "str | Path",
+                    result.get("campaign_root") or out_dir / "campaigns" / f"empty_world_{suite}",
+                )
             )
             rows, axes = reconcile_execution(
-                cfg, scenarios, load_rows(root), root, result, step_trace=not args.no_step_trace
-            )
-            incomplete_execution |= not axes["complete"]
-            meta = {"suite": suite, "head_sha": full_sha, **axes}
-            write_outputs(out_dir, rows, suite, meta)
-            receipt.write_text(json.dumps(meta, indent=2) + "\n")
-            continue
-        if args.check_only:
-            print(f"{suite}: derived inputs verified actor-free ({cfg_path})")
-            continue
-        cfg = load_campaign_config(cfg_path)
-        t0 = time.time()
-        try:
-            result = run_campaign(
                 cfg,
-                output_root=out_dir / "campaigns",
-                label=f"empty_world_{suite}",
-                campaign_id=f"empty_world_{suite}",
-                skip_publication_bundle=True,
-                invoked_command=" ".join(sys.argv),
-                arm_isolation=args.arm_isolation,
+                scenarios,
+                load_rows(campaign_root),
+                campaign_root,
+                result,
+                step_trace=not args.no_step_trace,
             )
-        except (RuntimeError, OSError, ValueError) as error:
-            result = {
-                "campaign_execution_status": "failed",
-                "status": "failed",
-                "exit_code": 1,
-                "unexpected_failed_runs": 1,
-                "total_episodes": None,
-                "execution_error": f"{type(error).__name__} during campaign execution",
+            stage_complete = axes["complete"]
+            if args.first_seed_only:
+                first_seed_rows = [row for row in rows if row["seed"] == min(seeds)]
+                stage_complete = bool(first_seed_rows) and all(
+                    row.get("_sweep_execution_status") == "written" for row in first_seed_rows
+                )
+            incomplete_execution |= not stage_complete
+            meta = {
+                "suite": suite,
+                "head_sha": full_sha,
+                "execution_key": contract["execution_key"],
+                "first_seed_only": args.first_seed_only,
+                "sweep_harness_sha256": SWEEP_HARNESS_SHA256,
+                "seeds": seeds,
+                "workers": args.workers,
+                "runtime_s": round(time.time() - t0, 1),
+                "episodes": len(rows),
+                **axes,
             }
-        campaign_root = Path(
-            result.get("campaign_root") or out_dir / "campaigns" / f"empty_world_{suite}"
+            write_outputs(out_dir, rows, suite, meta)
+            (out_dir / f"execution_{suite}.json").write_text(json.dumps(meta, indent=2) + "\n")
+            trace_notes.append(f"### {suite}\n\n{describe_trace(campaign_root)}\n")
+        if args.check_only or args.summarize_only:
+            return int(incomplete_execution)
+        readme = (
+            "# Empty-world sweep output (#9978)\n\n"
+            f"Head under test: `{full_sha}`. Seeds: {seeds}. Total runtime: "
+            f"{time.time() - started:.0f} s.\n\n"
+            "Files: `episodes_<suite>.jsonl` (one campaign episode row per line), "
+            "`summary_<suite>.csv/.md` (arm x scenario), `campaigns/` (raw campaign roots).\n\n"
+            "## Step-trace format\n\n" + "\n".join(trace_notes)
         )
-        rows, axes = reconcile_execution(
-            cfg,
-            scenarios,
-            load_rows(campaign_root),
-            campaign_root,
-            result,
-            step_trace=not args.no_step_trace,
-        )
-        incomplete_execution |= not axes["complete"]
-        meta = {
-            "suite": suite,
-            "head_sha": full_sha,
-            "seeds": seeds,
-            "workers": args.workers,
-            "runtime_s": round(time.time() - t0, 1),
-            "episodes": len(rows),
-            **axes,
-        }
-        write_outputs(out_dir, rows, suite, meta)
-        (out_dir / f"execution_{suite}.json").write_text(json.dumps(meta, indent=2) + "\n")
-        trace_notes.append(f"### {suite}\n\n{describe_trace(campaign_root)}\n")
-    if args.check_only or args.summarize_only:
+        (out_dir / "README.md").write_text(readme, encoding="utf-8")
         return int(incomplete_execution)
-    readme = (
-        "# Empty-world sweep output (#9978)\n\n"
-        f"Head under test: `{full_sha}`. Seeds: {seeds}. Total runtime: "
-        f"{time.time() - started:.0f} s.\n\n"
-        "Files: `episodes_<suite>.jsonl` (one campaign episode row per line), "
-        "`summary_<suite>.csv/.md` (arm x scenario), `campaigns/` (raw campaign roots).\n\n"
-        "## Step-trace format\n\n" + "\n".join(trace_notes)
-    )
-    (out_dir / "README.md").write_text(readme, encoding="utf-8")
-    return int(incomplete_execution)
+    finally:
+        fcntl.flock(lock, fcntl.LOCK_UN)
+        lock.close()
 
 
 if __name__ == "__main__":
+    if "_SWEEP_SOURCE_BYTES" not in globals():
+        # Direct CLI calls also compile the exact buffer used for identity.
+        # The outer import defines no collection; only this captured image runs main.
+        source = Path(__file__).read_bytes()
+        exec(  # noqa: S102 - Execute this captured local CLI source, never supplied code.
+            compile(source, __file__, "exec"),
+            {"__name__": "__main__", "__file__": __file__, "_SWEEP_SOURCE_BYTES": source},
+        )
+        raise SystemExit(0)
     raise SystemExit(main())

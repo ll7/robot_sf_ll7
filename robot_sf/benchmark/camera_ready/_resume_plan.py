@@ -276,7 +276,7 @@ def _validate_resume_runtime_identities(
                 )
 
 
-def build_resume_plan(
+def build_resume_plan(  # noqa: C901 - journal recovery also rebuilds completed arm summaries.
     runs_dir: Path,
     *,
     planners: list[dict[str, Any]],
@@ -336,6 +336,10 @@ def build_resume_plan(
 
             episodes_remaining = max(0, expected_jobs - episodes_found)
             verdict = _build_verdict_str(episodes_found, expected_jobs)
+            if verdict == "skip-complete" and (arm_dir / "receipt_execution.json").is_file():
+                # Atomic observations survive the arm-summary write. Rebuild reporting from
+                # the banked rows; the batch's missing-only filter schedules zero episodes.
+                verdict = f"continue-from-{episodes_found}"
 
             verdicts.append(
                 ArmResumeVerdict(

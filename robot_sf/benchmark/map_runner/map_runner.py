@@ -38,6 +38,10 @@ from robot_sf.benchmark.latency.latency_stress import (
     not_available_latency_metrics,
 )
 from robot_sf.benchmark.map_runner.map_runner_batch_plan import (
+    _validate_behavior_sanity,  # noqa: F401 - compatibility re-export.
+    select_batch_scenarios,
+)
+from robot_sf.benchmark.map_runner.map_runner_batch_plan import (
     build_seed_jobs as _build_seed_jobs,
 )
 from robot_sf.benchmark.map_runner.map_runner_batch_plan import (
@@ -2430,39 +2434,6 @@ def build_map_policy(
     )
 
 
-def _validate_behavior_sanity(scenario: dict[str, Any]) -> list[str]:
-    """Check behavior metadata has the fields needed by pedestrian definitions.
-
-    Returns:
-        list[str]: Non-fatal behavior sanity errors.
-    """
-    errors: list[str] = []
-    meta = scenario.get("metadata") if isinstance(scenario.get("metadata"), dict) else {}
-    behavior = str(meta.get("behavior") or "").strip().lower()
-    single_peds = (
-        scenario.get("single_pedestrians")
-        if isinstance(scenario.get("single_pedestrians"), list)
-        else []
-    )
-
-    if behavior in {"wait", "join", "leave", "follow", "lead", "accompany"}:
-        if not single_peds:
-            errors.append("behavior requires single_pedestrians entries")
-        else:
-            for ped in single_peds:
-                if not isinstance(ped, dict):
-                    continue
-                role = str(ped.get("role") or "").strip().lower()
-                if behavior == "wait" and not ped.get("wait_at"):
-                    errors.append("wait behavior requires wait_at rules")
-                    break
-                if behavior in {"join", "leave", "follow", "lead", "accompany"} and not role:
-                    errors.append("role behavior requires role field")
-                    break
-
-    return errors
-
-
 @contextmanager
 def _scoped_episode_compat_overrides() -> Iterator[None]:
     """Apply legacy map-runner hooks for one episode and restore prior module state."""
@@ -3027,21 +2998,9 @@ def _load_and_filter_scenarios(ctx: _BatchContext) -> None:
     ctx.suite_key = _suite_key(ctx.provenance_scenario_path)
     _normalize_batch_specs(ctx)
 
-    filtered: list[dict[str, Any]] = []
-    for scenario in ctx.scenarios:
-        if (
-            scenario.get("supported") is False
-            or scenario.get("metadata", {}).get("supported") is False
-        ):
-            continue
-        sanity_errors = _validate_behavior_sanity(scenario)
-        if sanity_errors:
-            logger.warning("Skipping scenario '{}': {}", scenario.get("name"), sanity_errors)
-            continue
-        filtered.append(scenario)
-    ctx.filtered = filtered
+    ctx.filtered = select_batch_scenarios(ctx.scenarios)
     ctx.metric_affecting_config = _representative_metric_affecting_config(
-        filtered, scenario_path=ctx.scenario_path
+        ctx.filtered, scenario_path=ctx.scenario_path
     )
 
 

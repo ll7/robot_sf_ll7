@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import copy
+import errno
 import json
 import multiprocessing
 import os
+import time
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +18,7 @@ from robot_sf._execution_context import execution_context_digest
 from robot_sf.baselines import is_runnable_algo
 from robot_sf.benchmark.exact_repeat_campaign import (
     HOST_REPORT_SCHEMA_VERSION,
+    MANIFEST_SCHEMA_VERSION,
     PROCESS_ISOLATION_DISPOSITION,
     RESOLVED_DEFINITIONS_SCHEMA_VERSION,
     UNRUNNABLE_DISPOSITION,
@@ -485,6 +488,59 @@ def test_execute_campaign_writes_host_result_json(tmp_path, resolved_bundle):
     assert host_path.exists()
     loaded = json.loads(host_path.read_text(encoding="utf-8"))
     assert loaded["schema_version"] == HOST_REPORT_SCHEMA_VERSION
+
+
+@pytest.mark.parametrize(
+    ("metadata", "disposition", "retained_metadata", "worker_events"),
+    [
+        pytest.param(
+            "malformed", PROCESS_ISOLATION_DISPOSITION, "malformed", [], id="scalar-metadata"
+        ),
+        pytest.param(
+            {"status": "ok", "policy_step_timeout": None}, None, None, [], id="null-timeout"
+        ),
+        pytest.param(
+            {
+                "status": "policy_step_isolation_unavailable",
+                "policy_step_timeout": {"worker_events": [{"kind": "crash"}]},
+                "bad_diagnostic": object(),
+            },
+            PROCESS_ISOLATION_DISPOSITION,
+            {},
+            [{"kind": "crash"}],
+            id="non-json-metadata",
+        ),
+    ],
+)
+def test_execute_campaign_preserves_report_with_malformed_diagnostics(
+    tmp_path, development_ppo_bundle, metadata, disposition, retained_metadata, worker_events
+):
+    """Malformed optional diagnostics cannot erase a runnable result or failure disposition."""
+
+    def run_episode_with_metadata(_scenario, *, seed, **_kwargs):
+        record = _build_mock_record(seed)
+        record["algorithm_metadata"] = metadata
+        return record
+
+    report = execute_campaign(
+        development_ppo_bundle, output_dir=tmp_path, run_episode=run_episode_with_metadata
+    )
+    result = report["results"][0]
+    written = json.loads((tmp_path / "host_result.json").read_text(encoding="utf-8"))
+    assert written["results"] == [result]
+    assert result.get("disposition") == disposition
+    if disposition is None:
+        assert len(result["repeats"]) == 3
+    else:
+        assert result["repeats"] == []
+        assert result["repeat_diagnostics"] == [
+            {
+                "repeat_index": index,
+                "algorithm_metadata": retained_metadata,
+                "worker_events": worker_events,
+            }
+            for index in range(3)
+        ]
 
 
 def test_execute_campaign_target_filter_executes_only_requested_targets(
@@ -1185,6 +1241,114 @@ def test_native_runner_preflights_before_repeats_and_blocks_late_downloads(
     assert "disposition" not in host_result["results"][0]
 
 
+def _assert_native_ppo_result(result):
+    """Reject failed native execution with its retained diagnostic payload."""
+    assert "disposition" not in result, (
+        "native PPO must not be dispositioned as unrunnable: " + json.dumps(result, sort_keys=True)
+    )
+
+
+class _FailingWorkerPlanner:
+    """Exercise real child death and timeout without loading a model."""
+
+    def __init__(self, failure):
+        self.failure = failure
+
+    def step(self, _obs):
+        os.write(2, b"forced worker diagnostic\n")
+        if self.failure == "crash":
+            os._exit(23)
+        time.sleep(10)
+        return {"vx": 0.0, "vy": 0.0}
+
+    def get_metadata(self):
+        return {"algorithm": "ppo", "status": "ok", "test_marker": "forced failure"}
+
+
+@pytest.mark.parametrize("stderr_read_error", [False, True], ids=["stderr-ok", "stderr-read-error"])
+@pytest.mark.parametrize("failure", ["crash", "timeout"])
+def test_disposition_retains_real_worker_failure_per_repeat(
+    tmp_path, development_ppo_bundle, monkeypatch, failure, stderr_read_error
+):
+    """Real worker failures retain their disposition and available diagnostics through cache."""
+    from robot_sf.benchmark import runner
+
+    def fail_read(*_args):
+        raise OSError(errno.EIO, "worker stderr read failed")
+
+    if stderr_read_error:
+        monkeypatch.setattr(runner.os, "pread", fail_read)
+    monkeypatch.setattr(runner, "_config_torch_worker", lambda _planner: None)
+    monkeypatch.setattr(runner, "POLICY_STEP_TIMEOUT_SECS", 0.05)
+    monkeypatch.setattr(runner, "PPO_FIRST_STEP_TIMEOUT_SECS", 0.05)
+    monkeypatch.setattr(
+        runner,
+        "_load_baseline_planner",
+        lambda *_: (_FailingWorkerPlanner(failure), runner.Observation, {}),
+    )
+
+    def failing_runner(_scenario, *, seed, **_kwargs):
+        policy, metadata = runner._create_baseline_planner_policy("ppo", None, seed)
+        try:
+            policy(np.zeros(2), np.zeros(2), np.ones(2), np.empty((0, 2)), 0.1)
+        finally:
+            policy.close()
+        record = _build_mock_record(seed)
+        record["algorithm_metadata"] = metadata
+        return record
+
+    report = execute_campaign(
+        development_ppo_bundle, output_dir=tmp_path, run_episode=failing_runner
+    )
+    result = report["results"][0]
+    expected_disposition = (
+        PROCESS_ISOLATION_DISPOSITION if failure == "crash" else UNRUNNABLE_DISPOSITION
+    )
+    assert result["disposition"] == expected_disposition
+    assert result["repeats"] == []
+    diagnostics = result["repeat_diagnostics"]
+    assert len(diagnostics) == 3
+    for index, repeat in enumerate(diagnostics):
+        assert repeat["repeat_index"] == index
+        assert repeat["algorithm_metadata"]["test_marker"] == "forced failure"
+        event = repeat["worker_events"][0]
+        assert event["kind"] == failure
+        assert event["phase"] == "step"
+        assert event["exit_code"] == (23 if failure == "crash" else -15)
+        if stderr_read_error:
+            assert event["stderr_tail"] == ""
+        else:
+            assert "forced worker diagnostic" in event["stderr_tail"]
+        timeout = repeat["algorithm_metadata"]["policy_step_timeout"]
+        assert timeout["worker_errors"] == int(failure == "crash")
+        assert timeout["step_timeouts"] == int(failure == "timeout")
+        assert timeout["step_retries"] == 0
+        assert timeout["fallback_actions"] == 1
+    resumed = execute_campaign(
+        development_ppo_bundle,
+        output_dir=tmp_path,
+        run_episode=lambda *_a, **_k: pytest.fail("resume reran failed target"),
+    )
+    assert resumed["results"][0]["repeat_diagnostics"] == diagnostics
+    verification_manifest = {
+        "schema_version": MANIFEST_SCHEMA_VERSION,
+        "execution_contract": development_ppo_bundle["execution_contract"],
+        "targets": copy.deepcopy(development_ppo_bundle["targets"]),
+    }
+    verification_manifest["targets"][0]["source_git_hash"] = report["environment"]["git_commit"]
+    verification_manifest["manifest_sha256"] = canonical_sha256(verification_manifest)
+    verification_report = copy.deepcopy(report)
+    verification_report["manifest_sha256"] = verification_manifest["manifest_sha256"]
+    verified = verify_host_report(verification_manifest, verification_report)
+    assert verified["cells"][0]["unrunnable"] is True
+    assert verified["targets"][0]["repeat_diagnostics"] == diagnostics
+    with pytest.raises(AssertionError) as error:
+        _assert_native_ppo_result(result)
+    assert ("forced worker diagnostic" in str(error.value)) is not stderr_read_error
+    assert "exit_code" in str(error.value)
+    assert "algorithm_metadata" in str(error.value)
+
+
 @pytest.mark.slow
 def test_native_ppo_runs_offline_after_model_preflight(
     tmp_path, development_ppo_bundle, monkeypatch
@@ -1269,7 +1433,7 @@ def test_native_ppo_runs_offline_after_model_preflight(
     if result.get("disposition") == PROCESS_ISOLATION_DISPOSITION:
         pytest.fail(
             "native PPO could not execute: planner-step isolation boundary failed "
-            "during the required offline proof"
+            "during the required offline proof: " + json.dumps(result, sort_keys=True)
         )
 
     # No worker fetched the model inside the timed loop -- the preflighted cache
@@ -1277,7 +1441,7 @@ def test_native_ppo_runs_offline_after_model_preflight(
     assert not sentinel.exists(), (
         "a worker attempted a network download inside the timed loop after preflight"
     )
-    assert "disposition" not in result, "native PPO must not be dispositioned as unrunnable"
+    _assert_native_ppo_result(result)
     assert result.get("degraded") is not True
     assert len(result["repeats"]) == 3
 

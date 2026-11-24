@@ -2291,6 +2291,26 @@ def _full_release_row_contract_blockers(
     return blockers
 
 
+def _row_matches_canonical_map(
+    row: Mapping[str, Any], scenario: Mapping[str, Any], *, source_root: Path
+) -> bool:
+    """Check whether the row identifies the map selected by the matrix.
+
+    Returns:
+        True when the selected scenario has no map or both paths name the same map.
+    """
+    expected = scenario.get("map_file")
+    if not isinstance(expected, str) or not expected:
+        return True
+    observed = _nested_value(row, "scenario_params", "map_file")
+    if not isinstance(observed, str) or not observed:
+        return False
+    try:
+        return (source_root / observed).resolve() == (source_root / expected).resolve()
+    except (OSError, RuntimeError, ValueError):
+        return False
+
+
 def _full_release_effective_algorithm(
     *,
     planner_spec: Any,
@@ -3251,6 +3271,13 @@ def _validate_benchmark_campaign_acceptance(  # noqa: C901, PLR0912, PLR0915
                         f"runs[{index}].rows[{row_index}] scenario is not in the canonical campaign matrix",
                     )
                 else:
+                    if not _row_matches_canonical_map(
+                        row, canonical_scenario, source_root=trusted_source_root
+                    ):
+                        _append_blocker(
+                            blockers,
+                            f"runs[{index}].rows[{row_index}] canonical scenario map differs",
+                        )
                     cache_key = (arm[0], row_scenario_id)
                     if cache_key not in effective_algorithm_cache:
                         effective_algorithm_cache[cache_key] = _full_release_effective_algorithm(

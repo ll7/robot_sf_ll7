@@ -78,23 +78,13 @@ def _campaign_success_counters(
     }
 
 
-def _coerce_identifier(value: Any) -> int | str | None:
-    """Normalize an optional logical identifier without collapsing valid falsy values.
-
-    Returns:
-        Integer, string, or ``None`` representation of the identifier.
-    """
-    if value is None:
-        return None
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return str(value)
-
-
 def _episode_identity(record: Mapping[str, Any]) -> tuple[str, int | str | None]:
-    """Return the stable logical identity used by aggregate-integrity checks."""
-    return str(record.get("scenario_id", "")).strip(), _coerce_identifier(record.get("seed"))
+    """Return a logical identity only for exact integer saved seeds.
+
+    Invalid seed types remain unavailable rather than aliasing an expected slot.
+    """
+    seed = record.get("seed")
+    return str(record.get("scenario_id", "")).strip(), seed if type(seed) is int else None
 
 
 def _episode_identity_sort_key(
@@ -114,12 +104,23 @@ def _episode_identity_sort_key(
 def _expected_episode_identities(
     scenarios: Sequence[Mapping[str, Any]],
     resolved_seeds: Sequence[int],
+    *,
+    scenario_path: Path | None = None,
 ) -> set[tuple[str, int]]:
     """Build the expected scenario/seed denominator from the prepared campaign matrix.
 
     Returns:
         Set of logical scenario/seed identities expected in every successful arm.
     """
+    if any("map_file" in scenario or "simulation_config" in scenario for scenario in scenarios):
+        from robot_sf.benchmark.camera_ready._resume_plan import (  # noqa: PLC0415
+            _expected_job_identities,
+        )
+
+        return _expected_job_identities(
+            [dict(scenario) for scenario in scenarios], scenario_path=scenario_path
+        )
+
     expected: set[tuple[str, int]] = set()
     fallback_seeds = [int(seed) for seed in resolved_seeds]
     for scenario in scenarios:
@@ -209,6 +210,7 @@ def validate_campaign_integrity(  # noqa: C901, PLR0912, PLR0915
     campaign_root: Path,
     campaign_manifest: Mapping[str, Any],
     config_root: Path | None = None,
+    scenario_path: Path | None = None,
 ) -> dict[str, Any]:
     """Validate final arm aggregates without modifying or deduplicating their rows.
 
@@ -219,8 +221,10 @@ def validate_campaign_integrity(  # noqa: C901, PLR0912, PLR0915
     Returns:
         Machine-readable integrity verdict and blockers.
     """
-    expected = _expected_episode_identities(scenarios, resolved_seeds)
+    expected = _expected_episode_identities(scenarios, resolved_seeds, scenario_path=scenario_path)
     blockers: list[dict[str, Any]] = []
+    if not expected:
+        blockers.append(_integrity_blocker("campaign", "no_executable_jobs"))
     scenarios_by_id = {
         str(sc.get("name") or sc.get("scenario_id") or sc.get("id") or "unknown"): sc
         for sc in scenarios

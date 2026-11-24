@@ -29,7 +29,6 @@ from robot_sf.benchmark.camera_ready._run_state import (
     _build_arm_rollup,
     _campaign_id,
     _campaign_success_counters,
-    _coerce_identifier,
     _episode_identity,
     _episode_identity_sort_key,
     _expected_episode_identities,
@@ -66,48 +65,6 @@ def _minimal_campaign_config(*, name: str = "test_campaign") -> CampaignConfig:
 
 
 # ---------------------------------------------------------------------------
-# _coerce_identifier
-# ---------------------------------------------------------------------------
-
-
-class TestCoerceIdentifier:
-    """``_coerce_identifier`` normalizes a logical id without collapsing valid falsy values."""
-
-    def test_none_returns_none(self) -> None:
-        assert _coerce_identifier(None) is None
-
-    def test_int_is_returned_unchanged(self) -> None:
-        assert _coerce_identifier(5) == 5
-        assert isinstance(_coerce_identifier(5), int)
-
-    def test_numeric_string_is_coerced_to_int(self) -> None:
-        assert _coerce_identifier("5") == 5
-        assert isinstance(_coerce_identifier("5"), int)
-
-    def test_float_is_truncated_to_int(self) -> None:
-        # ``int(3.5)`` truncates toward zero without raising; this documents the
-        # coercion rather than rounding.
-        assert _coerce_identifier(3.5) == 3
-
-    def test_decimal_string_falls_back_to_string(self) -> None:
-        # ``int("3.5")`` raises ValueError, so the value is kept as a string.
-        assert _coerce_identifier("3.5") == "3.5"
-
-    def test_non_numeric_string_is_returned_unchanged(self) -> None:
-        assert _coerce_identifier("abc") == "abc"
-
-    def test_bool_is_coerced_to_int_one(self) -> None:
-        # bool is a subclass of int; ``int(True) == 1``.
-        assert _coerce_identifier(True) == 1
-
-    def test_list_falls_back_to_string(self) -> None:
-        assert _coerce_identifier([1, 2]) == "[1, 2]"
-
-    def test_dict_falls_back_to_string(self) -> None:
-        assert _coerce_identifier({"a": 1}) == "{'a': 1}"
-
-
-# ---------------------------------------------------------------------------
 # _episode_identity
 # ---------------------------------------------------------------------------
 
@@ -127,12 +84,12 @@ class TestEpisodeIdentity:
     def test_missing_seed_returns_none(self) -> None:
         assert _episode_identity({"scenario_id": "corridor"}) == ("corridor", None)
 
-    def test_string_seed_is_coerced_to_string(self) -> None:
-        # A non-numeric seed string stays a string in the identity tuple.
-        assert _episode_identity({"seed": "abc"}) == ("", "abc")
+    def test_string_seed_is_unavailable(self) -> None:
+        # Malformed saved seeds cannot form an admitted logical identity.
+        assert _episode_identity({"seed": "abc"}) == ("", None)
 
-    def test_numeric_string_seed_is_coerced_to_int(self) -> None:
-        assert _episode_identity({"scenario_id": "s1", "seed": "9"}) == ("s1", 9)
+    def test_numeric_string_seed_is_unavailable(self) -> None:
+        assert _episode_identity({"scenario_id": "s1", "seed": "1001"}) == ("s1", None)
 
     def test_none_scenario_id_becomes_string_none(self) -> None:
         # A present-but-None scenario_id is stringified rather than defaulted;

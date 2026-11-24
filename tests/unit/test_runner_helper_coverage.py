@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import errno
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -9,6 +10,7 @@ import numpy as np
 import pytest
 
 import robot_sf.benchmark.runner as runner_mod
+from robot_sf.benchmark.seed_bands import DEV_SEEDS
 
 
 class _DummyPlanner:
@@ -369,7 +371,40 @@ def _handshake_runner(connection: _HandshakeConnection) -> object:
     step_runner._ctx = context
     step_runner._process = None
     step_runner._conn = None
+    step_runner._stderr = None
+    step_runner.worker_events = []
     return step_runner
+
+
+@pytest.mark.parametrize(
+    "start_error",
+    [OSError("start failed"), RuntimeError("start failed"), KeyboardInterrupt("start interrupted")],
+)
+def test_worker_start_failure_releases_pipe_and_stderr(
+    monkeypatch: pytest.MonkeyPatch, start_error: BaseException
+) -> None:
+    """Startup failure or interruption releases resources without masking the cause."""
+    closed = []
+    parent = SimpleNamespace(close=lambda: closed.append("parent"))
+    child = SimpleNamespace(close=lambda: closed.append("child"))
+    step_runner = _handshake_runner(_HandshakeConnection(poll_result=True))
+
+    def fail_start() -> None:
+        """Simulate process startup failure before ownership transfers."""
+        raise start_error
+
+    process = SimpleNamespace(start=fail_start)
+    step_runner._ctx.Pipe = lambda duplex: (parent, child)
+    step_runner._ctx.Process = lambda target, args: process
+    with runner_mod.tempfile.TemporaryFile(mode="w+b") as stderr:
+        monkeypatch.setattr(runner_mod.tempfile, "TemporaryFile", lambda **kwargs: stderr)
+        with pytest.raises(type(start_error), match=str(start_error)):
+            step_runner._ensure_worker()
+        assert closed == ["parent", "child"]
+        assert stderr.closed
+        assert step_runner._stderr is None
+        assert step_runner._process is None
+        assert step_runner._conn is None
 
 
 def test_planner_step_process_handshake_timeout_fails_closed() -> None:
@@ -732,3 +767,156 @@ def test_runtime_diagnostics_normalization_marks_fallback_and_splits_worker_payl
     )
     assert process.foresight_diagnostics() == {"model_loaded": False}
     assert process.diagnostics() == {"fallback": True}
+
+
+@pytest.mark.skipif(
+    "fork" not in runner_mod.mp.get_all_start_methods(), reason="planner worker requires fork"
+)
+def test_policy_step_succeeds_when_worker_stderr_capture_is_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An unavailable diagnostic file must not replace an otherwise valid planner action."""
+
+    def fail_stderr(**_kwargs):
+        raise OSError("stderr file unavailable")
+
+    monkeypatch.setattr(runner_mod.tempfile, "TemporaryFile", fail_stderr)
+    monkeypatch.setattr(runner_mod, "_config_torch_worker", lambda _planner: None)
+    planner = SimpleNamespace(step=lambda _obs: {"vx": 0.25, "vy": 0.0})
+    step_runner = runner_mod._PlannerStepProcess(planner, timeout_s=2.0)
+    counters = {"step_timeouts": 0, "step_retries": 0, "worker_errors": 0, "fallback_actions": 0}
+    metadata = {"status": "ok"}
+    try:
+        action = runner_mod._step_planner_with_retry(step_runner, {}, "ppo", counters, metadata, 1)
+    finally:
+        step_runner.close()
+
+    assert action == {"vx": 0.25, "vy": 0.0}
+    assert not any(counters.values())
+    assert metadata == {"status": "ok"}
+    assert step_runner.worker_events[0]["exit_code"] == 0
+    assert step_runner.worker_events[0]["stderr_tail"] == ""
+    assert step_runner._conn is None
+    assert step_runner._process is None
+    assert step_runner._stderr is None
+
+
+@pytest.mark.skipif(
+    "fork" not in runner_mod.mp.get_all_start_methods(), reason="planner worker requires fork"
+)
+def test_episode_succeeds_when_worker_stderr_read_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A stderr read error preserves a successful episode and closes both resources."""
+    closed_planners = []
+    planner = SimpleNamespace(
+        step=lambda _obs: {"vx": 0.5, "vy": 0.0},
+        close=lambda: closed_planners.append(True),
+    )
+    monkeypatch.setattr(runner_mod, "_config_torch_worker", lambda _planner: None)
+    monkeypatch.setattr(
+        runner_mod,
+        "_load_baseline_planner",
+        lambda *_args: (planner, runner_mod.Observation, {}),
+    )
+
+    def fail_read(*_args: int) -> bytes:
+        raise OSError(errno.EIO, "worker stderr read failed")
+
+    with runner_mod.tempfile.TemporaryFile(mode="w+b") as stderr:
+        monkeypatch.setattr(runner_mod.tempfile, "TemporaryFile", lambda **_kwargs: stderr)
+        monkeypatch.setattr(runner_mod.os, "pread", fail_read)
+        # The preset's stationary pedestrian is well outside the robot's short route.
+        record = runner_mod.run_episode(
+            {"id": "stderr-readback", "preset": "collision_sanity"},
+            DEV_SEEDS[0],
+            algo="ppo",
+            horizon=2,
+            dt=0.5,
+            robot_start=(2.0, 3.0),
+            robot_goal=(2.4, 3.0),
+            record_forces=False,
+        )
+        assert stderr.closed
+
+    assert closed_planners == [True]
+    assert record["metrics"]["success"] is True
+    timeout = record["algorithm_metadata"]["policy_step_timeout"]
+    counters = ("step_timeouts", "step_retries", "worker_errors", "fallback_actions")
+    assert all(timeout[key] == 0 for key in counters)
+    assert timeout["worker_events"] == [
+        {
+            "kind": "closed",
+            "phase": "cleanup",
+            "exit_code": 0,
+            "stderr_tail": "",
+            "error": None,
+            "timeout_s": None,
+        }
+    ]
+
+
+@pytest.mark.skipif(
+    "fork" not in runner_mod.mp.get_all_start_methods(), reason="planner worker requires fork"
+)
+@pytest.mark.parametrize("setup_call", ["dup2", "fdopen"])
+def test_episode_succeeds_when_worker_stderr_setup_fails(
+    monkeypatch: pytest.MonkeyPatch, setup_call: str
+) -> None:
+    """Child capture setup errors leave the planner action and cleanup intact."""
+    closed_planners = []
+    planner = SimpleNamespace(
+        step=lambda _obs: {"vx": 0.5, "vy": 0.0},
+        close=lambda: closed_planners.append(True),
+    )
+    monkeypatch.setattr(runner_mod, "_config_torch_worker", lambda _planner: None)
+    monkeypatch.setattr(
+        runner_mod,
+        "_load_baseline_planner",
+        lambda *_args: (planner, runner_mod.Observation, {}),
+    )
+    parent_pid = runner_mod.os.getpid()
+    dup2 = runner_mod.os.dup2
+    fdopen = runner_mod.os.fdopen
+    temporary_file = runner_mod.tempfile.TemporaryFile
+    captures = []
+
+    def capture_stderr(**kwargs):
+        capture = temporary_file(**kwargs)
+        captures.append(capture)
+        return capture
+
+    def fail_dup2(fd, fd2, *args, **kwargs):
+        if fd2 == 2 and runner_mod.os.getpid() != parent_pid and fd == captures[-1].fileno():
+            raise OSError(errno.EIO, "worker stderr redirect failed")
+        return dup2(fd, fd2, *args, **kwargs)
+
+    def fail_fdopen(fd, mode="r", *args, **kwargs):
+        if mode == "w" and kwargs.get("buffering") == 1 and runner_mod.os.getpid() != parent_pid:
+            raise OSError(errno.EIO, "worker stderr stream failed")
+        return fdopen(fd, mode, *args, **kwargs)
+
+    monkeypatch.setattr(runner_mod.tempfile, "TemporaryFile", capture_stderr)
+    if setup_call == "dup2":
+        monkeypatch.setattr(runner_mod.os, "dup2", fail_dup2)
+    else:
+        monkeypatch.setattr(runner_mod.os, "fdopen", fail_fdopen)
+    record = runner_mod.run_episode(
+        {"id": "stderr-setup", "preset": "collision_sanity"},
+        DEV_SEEDS[0],
+        algo="ppo",
+        horizon=2,
+        dt=0.5,
+        robot_start=(2.0, 3.0),
+        robot_goal=(2.4, 3.0),
+        record_forces=False,
+    )
+
+    assert captures and all(capture.closed for capture in captures)
+    assert closed_planners == [True]
+    assert record["metrics"]["success"] is True
+    assert record["metrics"]["socnavbench_path_length"] == pytest.approx(0.25)
+    timeout = record["algorithm_metadata"]["policy_step_timeout"]
+    counters = ("step_timeouts", "step_retries", "worker_errors", "fallback_actions")
+    assert all(timeout[key] == 0 for key in counters)
+    assert [(event["kind"], event["exit_code"]) for event in timeout["worker_events"]] == [
+        ("closed", 0)
+    ]

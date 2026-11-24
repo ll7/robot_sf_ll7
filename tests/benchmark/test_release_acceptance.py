@@ -202,6 +202,22 @@ def _write_full_campaign(
     return campaign_root
 
 
+def _fixture_episode_rows(episode_path, resolved_scenarios):
+    """Read fixture rows and add their producer map and provenance fields."""
+    maps_by_scenario = {
+        release_acceptance._producer_scenario_id(scenario): scenario["map_file"]
+        for scenario in resolved_scenarios
+        if "map_file" in scenario
+    }
+    rows = [json.loads(line) for line in episode_path.read_text(encoding="utf-8").splitlines()]
+    for row in rows:
+        map_file = maps_by_scenario.get(row["scenario_id"])
+        if map_file is not None:
+            row["scenario_params"]["map_file"] = map_file
+        row["config_hash"] = row["result_provenance"]["config_hash"]
+    return rows
+
+
 def _write_provenance_bound_full_campaign(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -303,9 +319,8 @@ def _write_provenance_bound_full_campaign(
         episode_path.parent.mkdir(parents=True, exist_ok=True)
         old_path.replace(episode_path)
         old_path.parent.rmdir()
-        rows = [json.loads(line) for line in episode_path.read_text(encoding="utf-8").splitlines()]
+        rows = _fixture_episode_rows(episode_path, resolved_scenarios)
         for row in rows:
-            row["config_hash"] = row["result_provenance"]["config_hash"]
             if shared_first_algorithm and planner_key in {"planner_00", "planner_01"}:
                 row["algo"] = expected_algo
                 row["algorithm_metadata"].update(
@@ -1947,3 +1962,41 @@ def test_scheduled_doorway_acceptance_requires_each_width_budget(tmp_path, monke
             f"doorway scenario {scenarios[0]['name']} budget is 399; must be 400"
             in report["blockers"]
         )
+
+
+def test_full_release_rejects_resigned_map_for_canonical_scenario(tmp_path, monkeypatch):
+    """A complete sidecar cannot bind a substituted map to an authoritative scenario."""
+    from robot_sf.benchmark.utils import _config_hash
+
+    scenarios = [{"id": scenario_id} for scenario_id in _SCENARIO_IDS]
+    scenarios[0]["map_file"] = "maps/canonical.svg"
+    campaign_root, config = _write_provenance_bound_full_campaign(
+        tmp_path, monkeypatch, scenarios=scenarios
+    )
+
+    def validate():
+        return validate_full_benchmark_release_acceptance(
+            campaign_root,
+            manifest=_full_manifest(),
+            campaign_config=config,
+            source_repository_root=config.source_repository_root,
+        )
+
+    assert validate()["blockers"] == []
+
+    episode_path = campaign_root / "runs/planner_00__differential_drive/episodes.jsonl"
+    rows = [json.loads(line) for line in episode_path.read_text().splitlines()]
+    sidecar_path = episode_path.with_name(f"{episode_path.name}.provenance.json")
+    sidecar = json.loads(sidecar_path.read_text())
+    assert rows[0]["scenario_id"] == _SCENARIO_IDS[0]
+    rows[0]["scenario_params"]["map_file"] = "maps/substituted.svg"
+    digest = _config_hash(rows[0]["scenario_params"])
+    rows[0]["config_hash"] = rows[0]["result_provenance"]["config_hash"] = digest
+    sidecar["rows"][0]["config_hash"] = digest
+    episode_path.write_text("".join(json.dumps(row) + "\n" for row in rows))
+    sidecar["raw_artifacts"][0]["sha256"] = sha256_file(episode_path)
+    sidecar_path.write_text(json.dumps(sidecar))
+
+    report = validate()
+    assert report["status"] == "invalid"
+    assert any("canonical scenario map differs" in message for message in report["blockers"])

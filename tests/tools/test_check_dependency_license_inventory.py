@@ -802,7 +802,8 @@ def test_policy_pending_package_count_counts_rows_not_failure_messages() -> None
     # wandb 0.31.0: cwevals, distro, sniffio, anyio, httpx, httpcore, and h11.
     # Regenerated with build_inventory(..., distributions=[], selected_profile_ids=["all"]);
     # these rows remain policy-pending rather than gaining a license approval.
-    assert expected == 131
+    # Setuptools 84.2.1 adds one review-required row because the disposition is version-specific.
+    assert expected == 132
     assert inventory["summary"]["policy_pending_package_count"] == expected
     assert inventory["summary"]["policy_pending_package_count"] != 155
 
@@ -828,10 +829,10 @@ def test_policy_pending_count_excludes_pending_external_policy_rows() -> None:
             row.get("policy_disposition") == "external_dependency_not_redistributed"
             for row in selected_rows
         )
-        == 37
+        == 36
     )
-    assert selected_policy_pending_package_count(selected_rows) == 131
-    # wandb 0.31.0 adds seven selected rows; policy rows (36/37) are unchanged.
+    assert selected_policy_pending_package_count(selected_rows) == 132
+    # The setuptools 83.0.0 external disposition remains on file for that version.
 
 
 def test_v2_receipt_summary_separates_findings_and_pending_rows() -> None:

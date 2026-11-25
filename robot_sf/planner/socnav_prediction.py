@@ -68,6 +68,7 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         self._prediction_drive_settings: DifferentialDriveSettings | None = None
         self._obstacle_feature_extractor = LocalObstacleFeatureExtractor()
         self._baseline_predictor: Any | None = None
+        self._prediction_robot_radius: float | None = None
         self._forecast_variant_execution_mode = self._init_forecast_variant()
         # Issue #6190: structured foresight-model-load provenance so a silent
         # constant-velocity fallback is observable and checker-actionable. The
@@ -290,6 +291,8 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         simulator = getattr(env, "simulator", None)
         robots = getattr(simulator, "robots", None)
         settings = getattr(robots[0], "config", None) if robots else None
+        radius = getattr(settings, "radius", None)
+        self._prediction_robot_radius = float(radius) if radius is not None else None
         self._prediction_drive_settings = (
             settings if isinstance(settings, DifferentialDriveSettings) else None
         )
@@ -302,6 +305,13 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             if callable(iter_segments):
                 lines = normalize_obstacle_lines(iter_segments())
         self.bind_obstacle_lines(lines)
+
+    @property
+    def _robot_radius(self) -> float:
+        """Use the live physical disc radius, retaining unbound config fallback."""
+        if self._prediction_robot_radius is not None:
+            return self._prediction_robot_radius
+        return float(self.config.predictive_robot_radius)
 
     def _resolve_device(self) -> str:
         """Resolve runtime device string for predictive model inference.
@@ -808,7 +818,7 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             dist = pedestrian_clearance(
                 dist,
                 model=self.config.predictive_clearance_model,
-                robot_radius=self.config.predictive_robot_radius,
+                robot_radius=self._robot_radius,
                 pedestrian_radius=self.config.predictive_pedestrian_radius,
             )
             assert isinstance(dist, np.ndarray)
@@ -1078,8 +1088,7 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             1, int(steps if steps is not None else self.config.predictive_horizon_steps)
         )
         radius_margin = (
-            float(self.config.predictive_robot_radius)
-            + float(self.config.predictive_pedestrian_radius)
+            float(self._robot_radius) + float(self.config.predictive_pedestrian_radius)
             if self.config.predictive_clearance_model == CENTER_CLEARANCE_V1
             else 0.0
         )
@@ -1098,7 +1107,7 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
                 distances = pedestrian_clearance(
                     distances,
                     model=self.config.predictive_clearance_model,
-                    robot_radius=self.config.predictive_robot_radius,
+                    robot_radius=self._robot_radius,
                     pedestrian_radius=self.config.predictive_pedestrian_radius,
                 )
                 assert isinstance(distances, np.ndarray)
@@ -1126,7 +1135,7 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             dist = pedestrian_clearance(
                 dist,
                 model=self.config.predictive_clearance_model,
-                robot_radius=self.config.predictive_robot_radius,
+                robot_radius=self._robot_radius,
                 pedestrian_radius=self.config.predictive_pedestrian_radius,
             )
             assert isinstance(dist, np.ndarray)
@@ -1157,7 +1166,7 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
                 distances = pedestrian_clearance(
                     distances,
                     model=self.config.predictive_clearance_model,
-                    robot_radius=self.config.predictive_robot_radius,
+                    robot_radius=self._robot_radius,
                     pedestrian_radius=self.config.predictive_pedestrian_radius,
                 )
                 assert isinstance(distances, np.ndarray)
@@ -1177,7 +1186,7 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             dist = pedestrian_clearance(
                 dist,
                 model=self.config.predictive_clearance_model,
-                robot_radius=self.config.predictive_robot_radius,
+                robot_radius=self._robot_radius,
                 pedestrian_radius=self.config.predictive_pedestrian_radius,
             )
             assert isinstance(dist, np.ndarray)
@@ -1199,8 +1208,7 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             float: Penalty that increases for earlier/closer predicted encounters.
         """
         radius_margin = (
-            float(self.config.predictive_robot_radius)
-            + float(self.config.predictive_pedestrian_radius)
+            float(self._robot_radius) + float(self.config.predictive_pedestrian_radius)
             if self.config.predictive_clearance_model == CENTER_CLEARANCE_V1
             else 0.0
         )
@@ -1222,7 +1230,7 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
                 valid_slice = pedestrian_clearance(
                     valid_slice,
                     model=self.config.predictive_clearance_model,
-                    robot_radius=self.config.predictive_robot_radius,
+                    robot_radius=self._robot_radius,
                     pedestrian_radius=self.config.predictive_pedestrian_radius,
                 )
                 assert isinstance(valid_slice, np.ndarray)
@@ -1251,7 +1259,7 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             dist = pedestrian_clearance(
                 dist,
                 model=self.config.predictive_clearance_model,
-                robot_radius=self.config.predictive_robot_radius,
+                robot_radius=self._robot_radius,
                 pedestrian_radius=self.config.predictive_pedestrian_radius,
             )
             assert isinstance(dist, np.ndarray)
@@ -1446,8 +1454,7 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             return float("inf")
 
         radius_margin = (
-            float(self.config.predictive_robot_radius)
-            + float(self.config.predictive_pedestrian_radius)
+            float(self._robot_radius) + float(self.config.predictive_pedestrian_radius)
             if self.config.predictive_clearance_model == CENTER_CLEARANCE_V1
             else 0.0
         )
@@ -1469,7 +1476,7 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
                     dist = pedestrian_clearance(
                         dist,
                         model=self.config.predictive_clearance_model,
-                        robot_radius=self.config.predictive_robot_radius,
+                        robot_radius=self._robot_radius,
                         pedestrian_radius=self.config.predictive_pedestrian_radius,
                     )
                     assert isinstance(dist, np.ndarray)

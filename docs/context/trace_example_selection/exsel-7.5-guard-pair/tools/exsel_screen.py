@@ -6,11 +6,12 @@ classify the collision kind from ped_collision_count then obstacle_collision_cou
 time_to_goal_s = round(steps * dt_s, 6) for successes only, dt_s = 0.1 (protocol
 sources.guard_replication.dt_s); bands inclusive; null bands are not checked.
 """
+
 from __future__ import annotations
 
 import hashlib
 import json
-from pathlib import Path
+from pathlib import Path  # noqa: TC003 - Keep Path available when resolving annotations at runtime.
 
 CLAIM_ID = "EXSEL-7.5-GUARD-PAIR"
 CELL = "classic_cross_trap_high"
@@ -19,25 +20,56 @@ ARMS = ("G0E1", "G1E1")
 CLASSES = {"G0E1": {"outcome": "C", "collision_kind": "obstacle"}, "G1E1": {"outcome": "S"}}
 BANDS = {  # frozen block, protocol claims[EXSEL-7.5-GUARD-PAIR].frozen.bands
     "G0E1": {"min_surface_clearance_m": None, "exposure_steps": None, "time_to_goal_s": None},
-    "G1E1": {"min_surface_clearance_m": None, "exposure_steps": None, "time_to_goal_s": [33.2, 41.6]},
+    "G1E1": {
+        "min_surface_clearance_m": None,
+        "exposure_steps": None,
+        "time_to_goal_s": [33.2, 41.6],
+    },
 }
 MEASURES = ("min_surface_clearance_m", "exposure_steps", "time_to_goal_s")
 ENVELOPE_RADIUS_SUM_M = 1.4
 FALLBACK_KEYS = ("planner_runtime.fallback_count",)
 
 LEDGER_FIELDS = [
-    "claim_id", "screening_index", "seed", "arm", "scenario_id", "execution_commit",
-    "config_hash", "algo_config_hash", "episode_row_sha256", "metrics_success",
-    "collision_event", "timeout_event", "termination_reason", "steps", "run_dt",
-    "ped_collision_count", "obstacle_collision_count", "wall_collisions", "near_misses",
-    "min_ped_separation_m", "min_surface_clearance_m", "time_to_goal_s", "outcome_class",
-    "collision_kind", "class_verdict", "band_min_surface_clearance_m", "band_exposure_steps",
-    "band_time_to_goal_s", "arm_pass", "accepted", "mode", "fallback_count",
-    "fallback_or_degraded_marker", "status",
+    "claim_id",
+    "screening_index",
+    "seed",
+    "arm",
+    "scenario_id",
+    "execution_commit",
+    "config_hash",
+    "algo_config_hash",
+    "episode_row_sha256",
+    "metrics_success",
+    "collision_event",
+    "timeout_event",
+    "termination_reason",
+    "steps",
+    "run_dt",
+    "ped_collision_count",
+    "obstacle_collision_count",
+    "wall_collisions",
+    "near_misses",
+    "min_ped_separation_m",
+    "min_surface_clearance_m",
+    "time_to_goal_s",
+    "outcome_class",
+    "collision_kind",
+    "class_verdict",
+    "band_min_surface_clearance_m",
+    "band_exposure_steps",
+    "band_time_to_goal_s",
+    "arm_pass",
+    "accepted",
+    "mode",
+    "fallback_count",
+    "fallback_or_degraded_marker",
+    "status",
 ]
 
 
 def classify(m: dict, out: dict) -> tuple[str, str | None]:
+    """Classify the outcome and collision kind using protocol precedence."""
     if m.get("success"):
         outcome = "S"
     elif out.get("collision_event"):
@@ -56,6 +88,7 @@ def classify(m: dict, out: dict) -> tuple[str, str | None]:
 
 
 def class_ok(outcome: str, kind: str | None, cls: dict) -> bool:
+    """Check the outcome and any required collision kind."""
     if outcome != cls["outcome"]:
         return False
     if "collision_kind" in cls and kind != cls["collision_kind"]:
@@ -64,12 +97,15 @@ def class_ok(outcome: str, kind: str | None, cls: dict) -> bool:
 
 
 def fallback_marker(meta: dict):
+    """Check runtime metadata for fallback or degraded execution."""
     from robot_sf.benchmark.fallback_policy import runtime_fallback_or_degraded_marker
 
     runtime_meta = dict(meta)
     runtime_meta.pop("simulation_step_trace", None)
     runtime_meta.pop("paired_effect_metric_producer", None)
-    return runtime_fallback_or_degraded_marker(runtime_meta, expected_algorithm="hybrid_rule_local_planner")
+    return runtime_fallback_or_degraded_marker(
+        runtime_meta, expected_algorithm="hybrid_rule_local_planner"
+    )
 
 
 def project(raw_line: bytes, arm: str) -> dict:
@@ -79,23 +115,32 @@ def project(raw_line: bytes, arm: str) -> dict:
     meta = raw["algorithm_metadata"]
     outcome, kind = classify(m, out)
     sep = m.get("min_distance")
-    has_ped = sep is not None and sep == sep and sep != float("inf")
+    has_ped = sep is not None and sep == sep and sep != float("inf")  # noqa: PLR0124 - Preserve the NaN test without numeric coercion.
     steps = raw["steps"]
     return {
-        "claim_id": CLAIM_ID, "seed": raw["seed"], "arm": arm, "scenario_id": raw["scenario_id"],
-        "execution_commit": raw["git_hash"], "config_hash": raw.get("config_hash"),
+        "claim_id": CLAIM_ID,
+        "seed": raw["seed"],
+        "arm": arm,
+        "scenario_id": raw["scenario_id"],
+        "execution_commit": raw["git_hash"],
+        "config_hash": raw.get("config_hash"),
         "algo_config_hash": meta.get("config_hash"),
         "episode_row_sha256": hashlib.sha256(raw_line.rstrip(b"\n")).hexdigest(),
-        "metrics_success": bool(m.get("success")), "collision_event": bool(out.get("collision_event")),
-        "timeout_event": bool(out.get("timeout_event")), "termination_reason": raw["termination_reason"],
-        "steps": steps, "run_dt": DT_S,
+        "metrics_success": bool(m.get("success")),
+        "collision_event": bool(out.get("collision_event")),
+        "timeout_event": bool(out.get("timeout_event")),
+        "termination_reason": raw["termination_reason"],
+        "steps": steps,
+        "run_dt": DT_S,
         "ped_collision_count": m.get("ped_collision_count"),
         "obstacle_collision_count": m.get("obstacle_collision_count"),
-        "wall_collisions": m.get("wall_collisions"), "near_misses": m.get("near_misses"),
+        "wall_collisions": m.get("wall_collisions"),
+        "near_misses": m.get("near_misses"),
         "min_ped_separation_m": sep if has_ped else None,
         "min_surface_clearance_m": round(sep - ENVELOPE_RADIUS_SUM_M, 6) if has_ped else None,
         "time_to_goal_s": round(steps * DT_S, 6) if outcome == "S" else None,
-        "outcome_class": outcome, "collision_kind": kind,
+        "outcome_class": outcome,
+        "collision_kind": kind,
         "mode": meta["planner_kinematics"]["execution_mode"],
         "fallback_count": meta["planner_runtime"]["fallback_count"],
         "fallback_or_degraded_marker": fallback_marker(meta),
@@ -109,7 +154,11 @@ def verdicts(rows: dict[str, dict]) -> bool:
     accepted = True
     for arm in ARMS:
         r = rows[arm]
-        r["class_verdict"] = "match" if class_ok(r["outcome_class"], r["collision_kind"], CLASSES[arm]) else "no_match"
+        r["class_verdict"] = (
+            "match"
+            if class_ok(r["outcome_class"], r["collision_kind"], CLASSES[arm])
+            else "no_match"
+        )
         arm_pass = r["class_verdict"] == "match"
         for measure in MEASURES:
             band = BANDS[arm][measure]
@@ -129,6 +178,7 @@ def verdicts(rows: dict[str, dict]) -> bool:
 
 
 def find_episodes(run_root: Path, arm: str) -> Path:
+    """Find the unique episode file for an arm."""
     hits = sorted(run_root.glob(f"*/runs/{arm.lower()}__differential_drive/episodes.jsonl"))
     if len(hits) != 1:
         raise SystemExit(f"expected one producer file for {arm} under {run_root}, got {len(hits)}")
@@ -136,6 +186,7 @@ def find_episodes(run_root: Path, arm: str) -> Path:
 
 
 def load_run(run_root: Path) -> dict[tuple[str, int], dict]:
+    """Load projected episode rows indexed by arm and seed."""
     rows = {}
     for arm in ARMS:
         for line in find_episodes(run_root, arm).read_bytes().splitlines():

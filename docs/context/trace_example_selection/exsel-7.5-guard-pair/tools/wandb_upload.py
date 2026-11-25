@@ -5,8 +5,8 @@ usage: wandb_upload.py <run_dir> <artifact_name> <metadata_json>
 """
 
 import base64
-import importlib
 import hashlib
+import importlib
 import json
 import os
 import sys
@@ -18,8 +18,14 @@ run_dir = Path(sys.argv[1]).resolve()
 name = sys.argv[2]
 meta = json.loads(Path(sys.argv[3]).read_text())
 os.environ.setdefault("WANDB_SILENT", "true")
-run = wandb.init(entity="ll7", project="robot_sf", job_type="campaign-preservation", name=name,
-                 config=meta, dir="/tmp")
+run = wandb.init(
+    entity="ll7",
+    project="robot_sf",
+    job_type="campaign-preservation",
+    name=name,
+    config=meta,
+    dir="/tmp",
+)
 art = wandb.Artifact(name=name, type="campaign", metadata=meta)
 art.add_dir(str(run_dir))
 logged = run.log_artifact(art)
@@ -37,7 +43,12 @@ for rel, p in local.items():
     md5 = base64.b64encode(hashlib.md5(p.read_bytes()).digest()).decode()
     if e is None or int(e.size) != p.stat().st_size or e.digest != md5:
         bad.append(rel)
-result = {"uri": uri, "local_files": len(local), "remote_entries": len(entries),
-          "mismatches": bad[:10], "mismatch_count": len(bad),
-          "method": "remote entry table re-fetched; paths, sizes and MD5 compared; no full remote download"}
+result = {
+    "uri": uri,
+    "local_files": len(local),
+    "remote_entries": len(entries),
+    "mismatches": bad[:10],
+    "mismatch_count": len(bad),
+    "method": "remote entry table re-fetched; paths, sizes and MD5 compared; no full remote download",
+}
 print(json.dumps(result, indent=2))

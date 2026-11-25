@@ -1,0 +1,5 @@
+# Legacy reference robot: explicit 1.0 m disc with unchanged default drivetrain.
+# Opt-in named config for continuity; does not alter frozen 0.0.8 artifacts.
+robot_config:
+  type: differential_drive
+  radius: 1.0

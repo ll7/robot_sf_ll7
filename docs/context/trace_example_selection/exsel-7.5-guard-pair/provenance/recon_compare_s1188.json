@@ -1,0 +1,35 @@
+{
+  "arms": {
+    "G0E1": {
+      "diffs": {},
+      "fallback_count": 0,
+      "fallback_or_degraded_marker": null,
+      "full_row_identical": false,
+      "match": true,
+      "mode": "adapter",
+      "rerun_row_sha256": "70f71156ec9077ebbb15f01d4b9a0370e8fc168ed6f50798e30abf3041993d50",
+      "screening_row_sha256": "f259255c2267043788e1cd539caa360fa8518b13ae167fdeb7c67259f737d2cd"
+    },
+    "G1E1": {
+      "diffs": {},
+      "fallback_count": 0,
+      "fallback_or_degraded_marker": null,
+      "full_row_identical": false,
+      "match": true,
+      "mode": "adapter",
+      "rerun_row_sha256": "d4231467fb1e094aea76610d07872a1efcfffc8994c0d83be9350061a7a25dfd",
+      "screening_row_sha256": "909d6320e1b4b6636668e93831f1931ff057a33ed26bdc5b77e2a76a9e56f31a"
+    }
+  },
+  "fields": [
+    "outcome_class",
+    "termination_reason",
+    "steps",
+    "ped_collision_count",
+    "obstacle_collision_count",
+    "near_misses",
+    "min_ped_separation_m"
+  ],
+  "seed": 1188,
+  "trace_accepted": true
+}

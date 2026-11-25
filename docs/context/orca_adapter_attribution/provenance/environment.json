@@ -1,0 +1,10 @@
+{
+  "env_sync": "uv sync --frozen (default groups) into a worktree-local .venv",
+  "harness_commit": "a4a31e3575a130bbc0dfccec7fbc173ff114fa42",
+  "nproc": 20,
+  "numpy": "2.4.6",
+  "python": "3.13.14",
+  "robot_sf_source_commit": "373dbfde4f39667cf9e8732dabe7df5118bdeab1",
+  "uv_lock_sha256": "def82098b23281e7c49f1f05e052e412c2de54ae2da53f1708bc0ddc2a30d023",
+  "uv_version": "uv 0.13.4 (x86_64-unknown-linux-gnu)"
+}

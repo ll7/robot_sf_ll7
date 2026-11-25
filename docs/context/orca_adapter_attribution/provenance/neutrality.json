@@ -1,0 +1,16 @@
+{
+ "schema": "xorca-neutrality.v1",
+ "check": "same job with and without the runtime wrappers",
+ "cell": "doorway_matched_2p60",
+ "seeds": "1001-1003 (pilot band)",
+ "configurations": [
+  "orca_dd",
+  "orca_holo",
+  "sf_dd",
+  "sf_holo",
+  "hybrid_v4c_dd"
+ ],
+ "episodes_compared": 15,
+ "identical_outcome_and_metrics": 15,
+ "identical_per_step_position_heading_and_selected_command": 15
+}

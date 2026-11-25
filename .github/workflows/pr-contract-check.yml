@@ -60,6 +60,7 @@ jobs:
       - if: github.event_name == 'pull_request'
         name: Collect changed files
         env:
+          NODE_OPTIONS: --use-openssl-ca
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           REPO: ${{ github.repository }}
@@ -80,6 +81,7 @@ jobs:
       - if: github.event_name == 'pull_request'
         name: Validate dependency update policy
         env:
+          NODE_OPTIONS: --use-openssl-ca
           BASE_REF: origin/${{ github.base_ref }}
         run: |
           set -euo pipefail
@@ -90,6 +92,8 @@ jobs:
 
       - if: github.event_name == 'pull_request'
         name: Enforce evaluation seed holdout
+        env:
+          NODE_OPTIONS: --use-openssl-ca
         run: |
           set -euo pipefail
           uv run python scripts/validation/check_seed_holdout_diff.py \
@@ -98,6 +102,7 @@ jobs:
       - if: github.event_name == 'pull_request'
         name: Validate PR body contracts (advisory)
         env:
+          NODE_OPTIONS: --use-openssl-ca
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
@@ -112,6 +117,7 @@ jobs:
       - if: github.event_name == 'pull_request'
         name: Validate behaviour receipt with base policy
         env:
+          NODE_OPTIONS: --use-openssl-ca
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           BEHAVIOUR_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
@@ -135,6 +141,7 @@ jobs:
       - if: github.event_name == 'pull_request'
         name: Run PR Contract Check
         env:
+          NODE_OPTIONS: --use-openssl-ca
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |

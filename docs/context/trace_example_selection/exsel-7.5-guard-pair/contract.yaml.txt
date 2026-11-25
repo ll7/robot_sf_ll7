@@ -1,0 +1,385 @@
+# EXSEL-7.5-GUARD-PAIR trace-example screening: execution contract. [AI-GENERATED]
+#
+# Committed before the first screening episode. Everything from `schema:` to the end
+# of `acquisition_spec_markdown` is copied byte-for-byte from the frozen protocol
+# ll7/diss docs/context/trace_example_selection_protocol.yaml at commit
+# b95d41b524f1a12655ecf5722ee980d745861350 (decision EXSEL-TRACE-SELECTION-PROTOCOL-2026-10-28):
+# lines 23-96 (identity, seeds, rules, outcome predicates, sources), the
+# EXSEL-7.5-GUARD-PAIR claim entry (lines 131-177) and the acquisition spec's common
+# steps plus its EXSEL-7.5-GUARD-PAIR section (lines 250-281, 292-319). That protocol is
+# the preregistration; `execution:` at the end only records how this lane runs it.
+schema: exsel.protocol.v1
+frozen_on: "2026-10-28"
+decision_id: EXSEL-TRACE-SELECTION-PROTOCOL-2026-10-28
+
+# Seeds. Screening uses development seeds 1001-1200 only; the tool refuses 111-140 (the
+# retired 0.0.7 evaluation band) and every seed of a sealed release list
+# (scripts/dev/diss_release_pins.py EXPECTED_SEEDS and RELEASES). Release seeds are never
+# printed. All screening below draws from 1161-1200: 1001-1090 carry the guard ablation,
+# replication and second-configuration outcomes, 1091-1120 the confinement trace, and
+# 1131-1160 the release-attribution study, so a screened seed there could already have a
+# known outcome for the same controller.
+dev_seed_band: [1001, 1200]
+
+band_percentiles: [25, 75]
+min_matching_pairs: 5
+
+rules:
+  no_match: >-
+    "No qualifying example" is a valid result: when no group cell has at least
+    min_matching_pairs matching source pairs, or when the screening budget runs out
+    without an accepted seed, the claim gets no trace example and the text uses the
+    aggregate evidence alone.
+  never_replace: >-
+    An example is never replaced because its picture disappoints. The first accepted
+    seed in the committed screening order is the example; a rerun that differs from its
+    screening row is reported as it is and not swapped for another seed.
+  cell_rule: >-
+    Among the claim's group cells, the eligible cells are those with at least
+    min_matching_pairs source pairs that match every arm's class on the same seed. The
+    chosen cell is the eligible cell whose paired-pattern frequency (matching pairs over
+    complete pairs) is closest to the group frequency (all matching pairs over all
+    complete pairs of the group); ties go to the smaller cell id in byte order.
+  bands: >-
+    Frozen per arm over the chosen cell's matching source pairs, 25th to 75th percentile
+    with linear interpolation: minimum clearance (minimum robot-pedestrian separation
+    minus the 1.4 m envelope radius sum; absent when no pedestrian was present), exposure
+    steps (metrics.near_misses, the close-clearance exposure-step count) and time to goal
+    (steps times the run time step, successes only). A measure the source does not
+    record has no band and is not checked.
+  acceptance: >-
+    A screened seed is accepted when every arm's episode matches its class and, for a
+    typical claim, every banded measure lies inside its band (inclusive). A boundary
+    claim checks the class only and prints the bands as context.
+  screening_order: >-
+    The seed band sorted by SHA-256 of "<selection_rng_seed>:<seed>"; screening runs take
+    the seeds in this order and stop at the first accepted one or at the budget.
+
+# Outcome-class predicates on per-episode fields (exact):
+#   outcome S: metrics.success is true.
+#   outcome C: not S and outcome.collision_event is true.
+#   outcome T: not S, not C and outcome.timeout_event is true.
+#   collision_kind pedestrian: C and metrics.ped_collision_count > 0.
+#   collision_kind obstacle: C, no pedestrian collision, and obstacle_collision_count > 0
+#     (release rows: or metrics.wall_collisions > 0).
+#   min_exposure_steps k: metrics.near_misses >= k (never matches a source without it).
+sources:
+  release:
+    kind: release_bundle
+    note: >-
+      Benchmark-data release 0.0.8 publication bundle at source 373dbfde, read from
+      DISS_RELEASE_BUNDLE_DIR; identity checked against scripts/dev/diss_release_pins.py.
+  guard_replication:
+    kind: guard_packet
+    pin: guard-escape-replication-10426
+    commit: 11984012349ca29c69de90321c6062cc28744f22
+    packet_dir: docs/context/guard_escape_replication
+    dt_s: 0.1
+    note: >-
+      Preregistered replication of the guard/escape ablation: hybrid v4 (continuous),
+      18 cells, four arms G0E0/G0E1/G1E0/G1E1 (G = hard guard, E = escape bundle),
+      development seeds 1031-1060, execution 0035fba05c9b. Compact rows
+      evidence/episodes.jsonl.gz, checked against the packet SHA256SUMS. dt_s from the
+      packet's inputs/full.yaml (dt: 0.1). The rows record no clearance or exposure.
+
+claims:
+  - id: EXSEL-7.5-GUARD-PAIR
+    section: "7.5 (sec:rq3_guard_escape_ablation)"
+    claim: >-
+      Within hybrid v4 (continuous) with the escape bundle on, switching the hard guard
+      off and on turns a wall collision into a completion on the same seed.
+    kind: typical
+    source: guard_replication
+    why: >-
+      The guard effect is reported per cell group; the static-constriction group carries
+      the largest effect. The scan candidate (classic_bottleneck_low, seed 1029 of the
+      first ablation) matches this pattern in 1 of 30 replication pairs and in 1 of 30
+      first-ablation pairs, so the cell rule does not admit it; it was also chosen after
+      seeing outcomes. The protocol is applied instead of adopting it. Cross-check, not
+      used for selection: the same rule on the first ablation's rows (seeds 1001-1030)
+      gives group frequency 87/240 and chooses classic_cross_trap_medium (26/30); the
+      three cross-trap cells are the only eligible cells in both packets.
+    group_cells:
+      - classic_bottleneck_high
+      - classic_bottleneck_low
+      - classic_bottleneck_medium
+      - classic_cross_trap_high
+      - classic_cross_trap_low
+      - classic_cross_trap_medium
+      - classic_realworld_double_bottleneck_high
+      - francis2023_narrow_hallway
+    arms:
+      - arm: G0E1
+        role: guard off, escape on
+        class: {outcome: C, collision_kind: obstacle}
+      - arm: G1E1
+        role: guard on, escape on
+        class: {outcome: S}
+    banded_measures: [min_surface_clearance_m, exposure_steps, time_to_goal_s]
+    screening:
+      seed_band: [1161, 1200]
+      budget: 40
+      selection_rng_seed: exsel-7.5-guard-pair-2026-10-28
+    frozen:
+      cell: classic_cross_trap_high
+      pattern: 27/30
+      bands:
+        G0E1: {min_surface_clearance_m: null, exposure_steps: null, time_to_goal_s: null}
+        G1E1:
+          min_surface_clearance_m: null
+          exposure_steps: null
+          time_to_goal_s: [33.2, 41.6]
+
+acquisition_spec_markdown: |
+  # Acquisition spec for robot_sf_ll7 (not an execution order)
+
+  This section says what an upstream lane runs to turn a claim above into a trace
+  example. Nothing here has been run. Every run uses development seeds from the claim's
+  screening order only; never 111-140, never a sealed release seed.
+
+  ## Common steps
+
+  1. **Screening runs.** For the claim's chosen cell, run every listed arm on the seeds
+     of the printed screening order, one seed at a time, in that order. Stop at the first
+     accepted seed (rules.acceptance) or when the budget is spent. Screening runs record
+     episode rows only; no trace is needed.
+  2. **Screening ledger, kept in full.** One row per screened (seed, arm), including the
+     rejected ones: claim id, screening index, seed, arm, scenario id, execution commit,
+     config hash, episode row SHA-256, metrics.success, outcome.collision_event,
+     outcome.timeout_event, termination_reason, steps, run_dt, ped_collision_count,
+     obstacle_collision_count, wall_collisions, near_misses, the minimum pedestrian
+     separation, the verdict per class predicate and per band, and the accepted flag.
+     The ledger is committed with the packet; a seed with no row was not screened.
+  3. **Trace-capable rerun.** Rerun the accepted seed for every arm with
+     record_simulation_step_trace on (and the planner decision trace only where it does
+     not change behaviour). Accept the trace only if its episode row equals the
+     screening row on outcome, termination reason, steps, collision counts, near_misses
+     and the minimum separation; otherwise report the rerun as it is (rules.never_replace).
+  4. **Reproduction and pinning.** Commit a tracked packet in robot_sf_ll7 with the
+     protocol claim id, the screening ledger, configs, the trace files and SHA256SUMS;
+     add a docs/context/evidence_pins.yaml entry (commit and paths verified against the
+     clone); route the figure through the figure-brief and admission workflow. Captions
+     quote the base rates printed by the claim-keyed report for the chosen cell, never
+     a rate read off the trace.
+
+  ## EXSEL-7.5-GUARD-PAIR
+
+  - Execution context: the replication and ablation ran at 0035fba05c9b679e39f58ec286f5d57b96bb9a0a,
+    an experimental modification of release source 373dbfde4f39667cf9e8732dabe7df5118bdeab1
+    that adds the opt-in switch ablation_disable_hard_guard; it is not the unmodified
+    release. That commit object is not in the robot_sf_ll7 object store.
+  - Reconstruction: the first-ablation packet (pin guard-escape-ablation-10416, commit
+    acd878b4028341846e1fc1c8b0bf0c3ef9923dad) records
+    docs/context/guard_escape_ablation/provenance/acquisition-source.patch.gz. Verify it
+    before any run: (a) its SHA-256 equals the packet SHA256SUMS entry
+    (1314f3c896c2cb6f45180ba5ffa0c062ab597e329a1b4d6cd58148989a1dfca2 at that commit);
+    (b) in a fresh worktree at 373dbfde, `git apply --check` succeeds and the patch
+    touches only robot_sf/planner/hybrid_rule_local_planner.py and
+    tests/planner/test_guardesc_ablation.py; (c) the controller config has SHA-256
+    044931a38f31a7b7c01ba8a750a1d34a79a58200309806e538761a94eff94888 (inputs/study.yaml);
+    (d) the environment matches the replication's provenance/environment.json; (e) a
+    parity run reproduces the replication's compact rows exactly (outcome, steps,
+    termination) for G0E1 and G1E1 on the chosen cell at five replication seeds, the
+    first five of 1031-1060. Only then screen.
+  - Screening: arms G0E1 and G1E1 (escape bundle on in both; all other settings as in
+    the replication inputs G0E1.yaml and G1E1.yaml), chosen cell, screening order.
+  - Rerun: both arms on the accepted seed with step traces; record map, robot pose and
+    speed per step, the obstacle-envelope distance and the terminal event; record the
+    guard's rejected commands only if that does not change behaviour.
+  - Pinning additionally records the patch digest, the parity-run rows and the
+    environment; the claim ceiling stays that of the replication (within-controller
+    development evidence, PROVISIONAL grade in spine/claims.yaml).
+
+execution:
+  protocol_source:
+    repository: ll7/diss
+    commit: b95d41b524f1a12655ecf5722ee980d745861350
+    path: docs/context/trace_example_selection_protocol.yaml
+    sha256: c2aaffa2305119c10ce425258c2ca90649ab1829b9853365c0c59b295692763b
+  claim_id: EXSEL-7.5-GUARD-PAIR
+  evidence_tier: development-seed diagnostic on an experimental rebuild of the 0.0.8 release code; new
+    current-version execution; never release evidence
+  claim_ceiling: 'that of the guard/escape replication: within-controller development evidence (PROVISIONAL)'
+  repository: ll7/robot_sf_ll7
+  release_base_commit: 373dbfde4f39667cf9e8732dabe7df5118bdeab1
+  execution_commit: 011c24045d6703a4a1e8b4428d6a9e931d220310
+  execution_branch: exscr2-guardpair-exec
+  execution_tree: 7fa66da1a99db35c194dc99a2ab63ee68ecdf915
+  execution_tree_note: tree identical to the replication's execution commit 0035fba05c9b679e39f58ec286f5d57b96bb9a0a
+  code_change: acquisition-source.patch from packet acd878b4 applied unchanged (opt-in ablation_disable_hard_guard,
+    default False); no other change
+  rebuild_checks: provenance/rebuild_checks.json (a-e all pass; e = provenance/parity_e.json)
+  cell: classic_cross_trap_high
+  arms:
+    G0E1: inputs/G0E1.yaml (byte-identical to replication inputs/G0E1.yaml)
+    G1E1: inputs/G1E1.yaml (byte-identical to replication inputs/G1E1.yaml)
+  campaign_template: replication inputs/full.yaml with planners restricted to G0E1, G1E1; scenario matrix
+    restricted to the cell; seed_policy fixed-list [seed]; workers 2; name per seed; trace flags off for
+    screening
+  screening_configs: inputs/exsel75_screen_s<seed>.yaml + inputs/exsel75_screen_s<seed>_scenarios.yaml,
+    one campaign per seed
+  input_sha256:
+    G0E1.yaml: 4c2de4927a7181b71a6d0f1327b125e651973dd1e2775ddf53b4760fe1202002
+    G1E1.yaml: 7de5ff05990548382592d4276256ef11519e924cadbc4aeb32d872a855ae719f
+    exscr2_parity.yaml: 04a2153d199c0148a1a3b8ee1628d10e17cc9d96c6c44740c01a344a75646e18
+    exscr2_parity_scenarios.yaml: 81f361eab38490c5d5c7affa8dc0cd6b797502caf6b3ff112f209cdb7ca5e79e
+    exsel75_screen_s1161.yaml: 273ff81a1c0661b14811f72e6822d9bd1b57e10e48dad06ecf567eed3f206f20
+    exsel75_screen_s1161_scenarios.yaml: 8728e33cb32f75dd74fb2fda18fbc73c317d0af8ad4958ec5e47eb76353a6a01
+    exsel75_screen_s1162.yaml: 11de7118a5c9fea8d1f749205d497fbc7d5461904c05f3c59015290555423564
+    exsel75_screen_s1162_scenarios.yaml: dc18a3f1cf7a5e33039bdfc8c907fd5c24c009154c4ca4d5b704f1d87432f665
+    exsel75_screen_s1163.yaml: c39add013b71ebd9891e4240183e7c9210b1622a07b8052a55b5800167015812
+    exsel75_screen_s1163_scenarios.yaml: 72c4885e1a903c563e9d7423b54744264498cc696156f6e856a5118e54f0e624
+    exsel75_screen_s1164.yaml: 822a0caa290914dea0a3cf7d146349cc6db290560e3a0a0f20ef072a369983dc
+    exsel75_screen_s1164_scenarios.yaml: 6149677f360a3a51ee16668a8a181de967fa79989a3ae6932772d0f109d6006d
+    exsel75_screen_s1165.yaml: d7dd3cbfb1606ec6c9663cbd2be141e24af4febcf822f4b370c3a1dfb18c0425
+    exsel75_screen_s1165_scenarios.yaml: c1b57fdfca109c1296dd168778e952b119a67431b3141db5be87c50b8559f1f9
+    exsel75_screen_s1166.yaml: 23931138fe704080138e4db08e0a6dad1ed1872522aaa2d539432551211faa19
+    exsel75_screen_s1166_scenarios.yaml: 664efc2a15b1e110ec781662a856d8ca1862a26ac325d4617461d5009e4e0de6
+    exsel75_screen_s1167.yaml: cca780abf1441d0b64876a16d7ff63ff001fca0f0cbf2e7f3c1d57f463a69842
+    exsel75_screen_s1167_scenarios.yaml: bba545293b24a3eacbb459726a853c3d9de4ca0612bbbcf1988c3c0aedaa33cf
+    exsel75_screen_s1168.yaml: faa2028130584c2fb16ca02077b73508bf60d06e7f419eedbcba125ceffbb7a5
+    exsel75_screen_s1168_scenarios.yaml: 6c869de3c30117f5fb5c1372b552e84d6e5ba8de131363bfad95c40f1732db0c
+    exsel75_screen_s1169.yaml: 59cdf77eb2c96f7c8f0dad27efe321529a8a7cd0760019c6d354d66ed080ea32
+    exsel75_screen_s1169_scenarios.yaml: ed042a529465f43be0e06e96ad00b005d426d58601020bbaaa20fbe5cea99b38
+    exsel75_screen_s1170.yaml: 8065ce2fb9d89c2ec8a9a08271809dac3749f17d8e5dd5ef9d1e3d1ce9b19b95
+    exsel75_screen_s1170_scenarios.yaml: c895c7b4fa6f2b11095da76746d1202506f9284cbe15bd7df96a55ef7994efd1
+    exsel75_screen_s1171.yaml: da77589249f748bcf38cfe6c7a12d27b0cdeaa57206ca491059d7f66038ed624
+    exsel75_screen_s1171_scenarios.yaml: 322eabbde72f89c3ea10f79b668de3bbbf1558bb2c7a58e27ef38318c2dedf61
+    exsel75_screen_s1172.yaml: c2f71c960e1d8808769dd6ff31026a7919ad787e3e76430aedf24e6e6c9660ce
+    exsel75_screen_s1172_scenarios.yaml: 7eb80f4ad758e81a4ca7af382defbdad79bd37abdae981b51fd322b1c3e89604
+    exsel75_screen_s1173.yaml: 366c5fcbb066d211ecc010ecf2c4bd8c07b704ac169016282431481597d4db60
+    exsel75_screen_s1173_scenarios.yaml: 182458d5f74b62c9ee60051beaccd29d87f5e09cde1dd3ce744392f9501f70a5
+    exsel75_screen_s1174.yaml: 2c79adffff3b58f0fa8c01b4de09470c41b96085c05ab0ef5970a9064713d26c
+    exsel75_screen_s1174_scenarios.yaml: 1a17068d8c52b9f5f7d8f3627f7fae663e5c8d53ef5159b013b509b04cac69ea
+    exsel75_screen_s1175.yaml: a8ddf6450f748c4110731ad97eda78f5acd0ed44a38b341ea5deb7c542d7d1b6
+    exsel75_screen_s1175_scenarios.yaml: e9916132c840a165c279067655725ece0b6fb872e3755fbde6ed9957de019a3d
+    exsel75_screen_s1176.yaml: ef6bc1224a311eccfdc766f7ca21bb2906bc5ccae78905abf7678b00a88f9ffc
+    exsel75_screen_s1176_scenarios.yaml: d1454a3bc95912e314e6541e636baf80aaeec791bb3ecf7f83784dcbf8fadfff
+    exsel75_screen_s1177.yaml: a15d7f94d2ca4f9efbbbdc1f21a7cb4bd7c0685ed41d8fba5f9ddbc263fce442
+    exsel75_screen_s1177_scenarios.yaml: b1ac248a056dd4d0a9c4dbf9506a76eb059cbeebfbefe77179edfe33a3afe886
+    exsel75_screen_s1178.yaml: 36520c2d4bb4bf646b7145cf23b425864d3a358b8cf636edda2e1a187c3524d2
+    exsel75_screen_s1178_scenarios.yaml: 3afd3dea034bb7641e4870f4454459c3ee039582f89157ed6155b8fafae81cf2
+    exsel75_screen_s1179.yaml: 99542e371154d5b0c4277d7f4247401e28ec9d5ffd94dcc660fa45be1e4b253a
+    exsel75_screen_s1179_scenarios.yaml: bc98d04fe9640721ce7e0b5c174ccaf2e8b58320640f127a2eccd7ad08c7a173
+    exsel75_screen_s1180.yaml: b49f03560324e945e7f55571fab200ace8df68b50f9c5998180ef0aeb8082034
+    exsel75_screen_s1180_scenarios.yaml: b0763047a80ed28628386265471e91c2a6a81e9d17fa3d89ae6054177f161b72
+    exsel75_screen_s1181.yaml: 574cef5dc6c4be9cfcc848ac7b95588ae7a9e81573ff8a8f154961f0808f5ea5
+    exsel75_screen_s1181_scenarios.yaml: 5d4896d79f6e68d851d90eeec1d316dd8e22a856163b001034e7677c1180a527
+    exsel75_screen_s1182.yaml: 2b85714740b1f64c04752fd85adf424cbd14f982a68031db47132a3f8c6a5f4e
+    exsel75_screen_s1182_scenarios.yaml: 46f5a15c8e34307d6435e2438028d195cc40d929cf97bb1ea070190c27633c72
+    exsel75_screen_s1183.yaml: b55b6cb9b6e5bab3618a3b40465bd972eb9364050e3492d5791ca970a91ec98b
+    exsel75_screen_s1183_scenarios.yaml: ab61d24909eaed04e230de9baca5653ebf9d9f3520df6c5998b9e57e51b7d0e7
+    exsel75_screen_s1184.yaml: 1cbae536531abaedfea01342bc36c0e3bebb49b03e8c8b420728742fd1dc0377
+    exsel75_screen_s1184_scenarios.yaml: d2edc1a3c6a9bdbc5e064c04d78f24801a58f81a9a691843825e70849296a658
+    exsel75_screen_s1185.yaml: a13c10f2cf98c6fc1e8a43dac8e75e1d2ba8540281b28e146637e460238c4ab8
+    exsel75_screen_s1185_scenarios.yaml: a1e044d366110a447cd38197f56b14b1822f0c3719738b5238d77258e358427d
+    exsel75_screen_s1186.yaml: c93340123a2a2733ba76da4217faea045b177543fba37e4de56728655a308699
+    exsel75_screen_s1186_scenarios.yaml: 77134d5983eb095dc796a01a9bc6eb1782afbfeec09c065eeeaf7aa84e75ca0c
+    exsel75_screen_s1187.yaml: 22e739d3698bddcdc6a527d95ca28214e33ac366fcc9c38858ca61ac88580a93
+    exsel75_screen_s1187_scenarios.yaml: 79ec5d062bdf91b0c77a4c8cbb3e6ac166597b0d02e6327832b8988be5035817
+    exsel75_screen_s1188.yaml: 4531320ab225925d6446c1f08d4f011d7d332d0bcae0c5c5c9f7a51148e2023d
+    exsel75_screen_s1188_scenarios.yaml: 32d55f809136ffcf8cac5ec2ece8c9aa3aef27386a2f1d0a08698a8a6e5b1d58
+    exsel75_screen_s1189.yaml: 421517fbefc516fe940574c96f0177db862b65ec77a83a5cf8d0b4f97e97a775
+    exsel75_screen_s1189_scenarios.yaml: db1a55c69b22d4a07a5577cd07c26d22bc09da446cf7cdfce0bbe016188487ad
+    exsel75_screen_s1190.yaml: 3030cce14bdbc2ac0603a5af991700a9c07bade4186f73409b2f3dcd8239f291
+    exsel75_screen_s1190_scenarios.yaml: b4c63122ea0ccfede41722d54ce812df6590b5e0ec5cbf74e2b5eedc01503791
+    exsel75_screen_s1191.yaml: cdd2dedf49c53620bbef08fe827a55d723a8751c7fb49e6f94b2d9ea55feb53e
+    exsel75_screen_s1191_scenarios.yaml: b8e67982c4a45cb5a8bd03a8bd1b0efdd61545bebd0ada4d4f1548c72217e33a
+    exsel75_screen_s1192.yaml: ea5716a38a61fb56f684573e7d5a9fceb9ce87aab3043bf7ac6b77694074a2d7
+    exsel75_screen_s1192_scenarios.yaml: 95039116eaf74feeca5f8653d5c0928faea8db6018dd7b02bc6711b2e1de3b8f
+    exsel75_screen_s1193.yaml: d83fb19e1c372b7ecd87a456f8c06d4538fb19ecd490b073d17adc635b89e897
+    exsel75_screen_s1193_scenarios.yaml: 84d748c27308db77a0f1991024eae125a766e6cb94dd374b1047ff74477dfdc3
+    exsel75_screen_s1194.yaml: ee3752d753788d6a90478dc61fb872ddcae4b33ea5d3258556fede07b19ad012
+    exsel75_screen_s1194_scenarios.yaml: 5ac8c6e4615666c850ccc5c8caef114c471cf1f3153da79212b6e765173d2f8b
+    exsel75_screen_s1195.yaml: 0a132b91554d6cdc2e0302156f30d2f934e7c5cb7c23ab8835e5efe8e4dc451e
+    exsel75_screen_s1195_scenarios.yaml: eecd5904e39f06722b36c979eae3188c5065f4a9ebe4c560aece7a1f0789a308
+    exsel75_screen_s1196.yaml: 182708da065a1c43c734025926ae5a27f3757323c0b5112a611728dbda28dc3d
+    exsel75_screen_s1196_scenarios.yaml: 7ed35419e972c6eafb6dc69a7b5d8e55fdd076f21c7508b527b48ac01224a082
+    exsel75_screen_s1197.yaml: 031a742829fae25ca2834d684b7cfc7ea36d2a536bb0e01060803c37f6533e5f
+    exsel75_screen_s1197_scenarios.yaml: c0bf1a522f42188b9bc88807d95dd50c1bf5c78d389c94345e7ec5d4f6d85c32
+    exsel75_screen_s1198.yaml: 8fb1a5a9ce0e02e3bb6fedb623ca4f1c058d0c0b3985f19ae259405f646293d6
+    exsel75_screen_s1198_scenarios.yaml: 4836246965f7bab46c1816fb1d87066a5267d1d08183483eb770b5fe81662c31
+    exsel75_screen_s1199.yaml: d083cecd88604b0f3e4d2c2af64f1e8fe5061a6a5cab4898a7552c7ad332be65
+    exsel75_screen_s1199_scenarios.yaml: 6f299c3fb73e322f5f5edc87f9da6cc6efd65beb67506191388670f165161d95
+    exsel75_screen_s1200.yaml: 03ffb1accf26fcbece782704d9e5a1f3609bf75a60b56096d5b94aa7ab490c6a
+    exsel75_screen_s1200_scenarios.yaml: 4d0e6678c15cc64dbed71ccf94166409b81dc63183b4a8d212ef04b9a92cc0de
+  runner: tools/run.sh <config> <output-root> <label> = OMP/OPENBLAS/MKL/NUMBA threads 1, CUDA_VISIBLE_DEVICES
+    empty, SDL_VIDEODRIVER=dummy, MPLBACKEND=Agg, PYTHONPATH=<wt>:<wt>/fast-pysf, python scripts/tools/run_camera_ready_benchmark.py
+    --config <config> --output-root <out> --label <label> --log-level INFO
+  horizon: authored schedule configs/benchmarks/horizon_schedules/release_0_0_8_authored_v1.yaml (cell
+    max_episode_steps 600), dt 0.1
+  screening_order_source: 'diss_worked_example_nomination.py --claims-protocol (exit 0, Frozen record:
+    MATCH); recomputed independently as sorted(range(1161,1201), key=sha256(''exsel-7.5-guard-pair-2026-10-28:<seed>'').hexdigest())'
+  screening_order:
+  - 1188
+  - 1196
+  - 1170
+  - 1168
+  - 1199
+  - 1175
+  - 1162
+  - 1183
+  - 1164
+  - 1161
+  - 1174
+  - 1180
+  - 1167
+  - 1200
+  - 1173
+  - 1177
+  - 1171
+  - 1182
+  - 1184
+  - 1178
+  - 1187
+  - 1163
+  - 1166
+  - 1186
+  - 1194
+  - 1169
+  - 1165
+  - 1181
+  - 1193
+  - 1195
+  - 1198
+  - 1172
+  - 1176
+  - 1185
+  - 1179
+  - 1190
+  - 1189
+  - 1192
+  - 1197
+  - 1191
+  budget: 40
+  stop_rule: run seeds one at a time in screening_order; after each seed apply rules.acceptance; stop
+    at the first accepted seed or after 40 seeds
+  acceptance_as_applied:
+    G0E1: 'class {outcome: C, collision_kind: obstacle} using the guard-row projection of diss_worked_example_nomination.guard_record:
+      outcome S if metrics.success; else C if outcome.collision_event; else T if outcome.timeout_event;
+      collision_kind pedestrian if metrics.ped_collision_count > 0, else obstacle if metrics.obstacle_collision_count
+      > 0; all G0E1 bands null, none checked'
+    G1E1: 'class {outcome: S}; time_to_goal_s = round(steps * 0.1, 6) must lie in [33.2, 41.6] inclusive;
+      clearance and exposure bands null, not checked'
+    seed: accepted iff both arms pass
+    secondary_reading: metrics.wall_collisions is recorded per row; the release-row variant of the obstacle
+      predicate (obstacle_collision_count > 0 or wall_collisions > 0) is reported as a secondary reading
+      only
+  validity_guard: every row must have mode == adapter, planner_runtime.fallback_count == 0 and no runtime
+    fallback/degraded marker (robot_sf.benchmark.fallback_policy.runtime_fallback_or_degraded_marker,
+    as in the replication project.py); a violating row is recorded in the ledger and stops the screening
+    with the claim reported as BLOCKED; it is never skipped or replaced
+  trace_rerun: accepted seed only, both arms, same config with record_simulation_step_trace true and record_planner_decision_trace
+    false; accept the trace iff each arm's rerun row equals its screening row on outcome class, termination_reason,
+    steps, ped_collision_count, obstacle_collision_count, near_misses and min_ped_separation_m (exact);
+    otherwise report as is (rules.never_replace)
+  outcome_rule_for_thesis:
+    ACCEPTED: the accepted seed is the EXSEL-7.5-GUARD-PAIR trace example candidate; captions quote the
+      chosen-cell base rates (joint pattern 27/30 replication pairs); whether a figure is made is decided
+      on the dissertation side
+    NO_QUALIFYING_EXAMPLE: per rules.no_match the claim gets no trace example and Section 7.5 uses the
+      aggregate guard/escape evidence alone
+    TRACE_MISMATCH: the rerun is reported as it is; the seed is not swapped (rules.never_replace); the
+      trace is not admitted as the example without a dissertation-side decision
+  seed_hygiene: screening seeds 1161-1200 only; parity seeds 1031-1035 (replication seeds, required by
+    check e); never 111-140; no sealed release seed

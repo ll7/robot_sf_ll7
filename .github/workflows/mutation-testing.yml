@@ -55,6 +55,8 @@ jobs:
       # they fail the job as a setup/tooling problem, not a mutation regression.
       - name: Run mutation ratchet
         id: mutation
+        env:
+          NODE_OPTIONS: --use-openssl-ca
         run: |
           mkdir -p output/mutation
           set -o pipefail
@@ -71,6 +73,8 @@ jobs:
 
       - name: Render text mutation report
         if: always()
+        env:
+          NODE_OPTIONS: --use-openssl-ca
         run: |
           mkdir -p output/mutation
           {
@@ -98,6 +102,8 @@ jobs:
 
       - name: Summarize ratchet outcome
         if: always()
+        env:
+          NODE_OPTIONS: --use-openssl-ca
         run: |
           printf 'mutation ratchet exit: %s\n' "${{ steps.mutation.outcome }}"
           printf 'Committed baseline survivors: '
@@ -105,6 +111,8 @@ jobs:
 
       - name: Upload mutation report
         if: always()
+        env:
+          NODE_OPTIONS: --use-openssl-ca
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: mutation-testing-report
@@ -122,6 +130,8 @@ jobs:
       # mutation step directly).
       - name: Fail on new surviving mutants
         if: steps.mutation.outputs.ratchet_result == 'failed'
+        env:
+          NODE_OPTIONS: --use-openssl-ca
         run: |
           echo "mutation ratchet reported new, un-baselined surviving mutants (exit ${{ steps.mutation.outputs.ratchet_exit }})." >&2
           echo "See output/mutation/mutation_report.md and mutation_testing_triage.md." >&2

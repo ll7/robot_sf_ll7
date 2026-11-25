@@ -655,7 +655,7 @@ jobs:
 
       - name: Install pinned uv for the clean-install probe
         env:
-          UV_VERSION: "0.11.21"
+          UV_VERSION: "0.13.4"
           UV_INSTALL_MAX_ATTEMPTS: "3"
           UV_INSTALL_BACKOFF_BASE: "5"
           UV_INSTALL_BACKOFF_CAP: "30"
@@ -780,6 +780,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "${INDEX_ROOT}"
+          python -m pip install --disable-pip-version-check --no-input --no-deps --only-binary=:all: --upgrade "pip @ https://files.pythonhosted.org/packages/3f/06/3e4420302363fbb71be3c7f35ce042f54bfca330e3e66b3a2e3c4cca579f/pip-26.2.2-py3-none-any.whl#sha256=fd7f4dfa8190e014013b9f08f3e973f4e4c26ffd179a204895533a7254813a70"
           python -m pip download --disable-pip-version-check --no-cache-dir --no-deps \
             --only-binary=:all: --index-url https://test.pypi.org/simple \
             --dest "${INDEX_ROOT}" "robot-sf==${VERSION}"
@@ -1263,6 +1264,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "${INDEX_ROOT}"
+          python -m pip install --disable-pip-version-check --no-input --no-deps --only-binary=:all: --upgrade "pip @ https://files.pythonhosted.org/packages/3f/06/3e4420302363fbb71be3c7f35ce042f54bfca330e3e66b3a2e3c4cca579f/pip-26.2.2-py3-none-any.whl#sha256=fd7f4dfa8190e014013b9f08f3e973f4e4c26ffd179a204895533a7254813a70"
           python -m pip download --disable-pip-version-check --no-cache-dir --no-deps \
             --only-binary=:all: --index-url https://pypi.org/simple \
             --dest "${INDEX_ROOT}" "robot-sf==${VERSION}"

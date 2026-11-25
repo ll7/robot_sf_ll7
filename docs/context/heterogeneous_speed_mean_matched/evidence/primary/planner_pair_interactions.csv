@@ -1,0 +1,13 @@
+endpoint,planner_a,planner_b,diff_uniform_pp,diff_uniform_lo,diff_uniform_hi,diff_mixed_pp,diff_mixed_lo,diff_mixed_hi,interaction_pp,interaction_lo,interaction_hi
+success,hybrid_v4_continuous,orca,13.5,7.0,20.5,26.0,21.0,31.5,12.5,4.5,20.5
+success,hybrid_v4_continuous,social_force,58.5,53.5,63.5,65.5,59.0,72.0,7.0,-1.0,15.0
+success,hybrid_v4_continuous,ppo_release,62.0,56.0,67.5,63.5,57.5,69.5,1.5,-4.5,8.0
+success,orca,social_force,45.0,36.5,53.0,39.5,30.5,48.0,-5.5,-17.5,5.5
+success,orca,ppo_release,48.5,41.5,55.5,37.5,29.0,45.51249999999982,-11.0,-20.0,-2.5
+success,social_force,ppo_release,3.5,-2.5,9.5,-2.0,-10.0,6.0,-5.5,-13.5,2.5
+collision,hybrid_v4_continuous,orca,-17.0,-22.5,-11.5,-28.5,-33.5,-23.5,-11.5,-18.5,-4.5
+collision,hybrid_v4_continuous,social_force,-0.5,-1.5,0.0,-1.0,-2.5,0.0,-0.5,-2.0,1.0
+collision,hybrid_v4_continuous,ppo_release,-65.0,-70.5,-59.5,-66.5,-73.0,-60.0,-1.5,-7.5,4.5
+collision,orca,social_force,16.5,10.5,22.5,27.5,22.5,33.0,11.0,3.9875000000000114,18.5
+collision,orca,ppo_release,-48.0,-54.5,-41.0,-38.0,-46.0,-29.5,10.0,1.5,19.0
+collision,social_force,ppo_release,-64.5,-70.0,-59.0,-65.5,-72.0,-59.0,-1.0,-7.0,5.0

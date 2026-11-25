@@ -1,0 +1,66 @@
+{
+  "arms": {
+    "goal": {
+      "consistent": true,
+      "file": "goal_seed1179_step_trace.json.gz",
+      "near_miss_distance_m": 0.5,
+      "row_collision_kind": "obstacle",
+      "row_min_surface_clearance_m": 4.293682062908456,
+      "row_near_misses": 0,
+      "row_outcome": "C",
+      "row_steps": 110,
+      "trace_dt_s": 0.1,
+      "trace_last_step_collision": {
+        "obstacle": true,
+        "pedestrian": false,
+        "robot": false
+      },
+      "trace_min_surface_clearance_m": 4.293682062908455,
+      "trace_schema": "simulation-step-trace.v2",
+      "trace_steps": 110,
+      "trace_steps_with_clearance_below_near_miss_distance": 0
+    },
+    "orca": {
+      "consistent": true,
+      "file": "orca_seed1179_step_trace.json.gz",
+      "near_miss_distance_m": 0.5,
+      "row_collision_kind": null,
+      "row_min_surface_clearance_m": 2.98321374500595,
+      "row_near_misses": 0,
+      "row_outcome": "T",
+      "row_steps": 400,
+      "trace_dt_s": 0.1,
+      "trace_last_step_collision": {
+        "obstacle": false,
+        "pedestrian": false,
+        "robot": false
+      },
+      "trace_min_surface_clearance_m": 2.98321374500595,
+      "trace_schema": "simulation-step-trace.v2",
+      "trace_steps": 400,
+      "trace_steps_with_clearance_below_near_miss_distance": 0
+    }
+  },
+  "claim_id": "EXSEL-7.2-NARROW-DOORWAY",
+  "screening_index": 4,
+  "seed": 1179,
+  "trace_rerun": {
+    "arms": {
+      "goal": {
+        "match": true,
+        "mismatches": {},
+        "rerun_row_sha256": "e65b4ef3fe78bf74a09dbf737b4cb337e5ac8b6c2f3deef5d50b15b8aedd413a",
+        "step_trace_recorded": true
+      },
+      "orca": {
+        "match": true,
+        "mismatches": {},
+        "rerun_row_sha256": "d782c75a1d2d619b6728e43e096f87c1f3229a98ee08decab7d02efccd140799",
+        "step_trace_recorded": true
+      }
+    },
+    "screening_index": 4,
+    "seed": 1179,
+    "trace_accepted": true
+  }
+}

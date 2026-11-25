@@ -1,0 +1,372 @@
+{
+  "episodes": 4800,
+  "by_planner_condition": {
+    "orca|oracle": {
+      "episodes": 300,
+      "modes": {
+        "adapter": 300
+      },
+      "fallback_or_degraded": 0,
+      "fallback_count_recorded": 0,
+      "fallback_count_missing": 300,
+      "fallback_count_zero": 0,
+      "status_not_ok": 0,
+      "checkpoint_not_loaded": null,
+      "effective_view_degraded": 0,
+      "channel_not_consumed_every_step": 0,
+      "episodes_with_pedestrians": 300,
+      "treatment_never_differs_from_truth": null,
+      "oracle_differs_from_truth": 0,
+      "mean_abs_position_error_m": 0.0
+    },
+    "orca|position_noise": {
+      "episodes": 300,
+      "modes": {
+        "adapter": 300
+      },
+      "fallback_or_degraded": 0,
+      "fallback_count_recorded": 0,
+      "fallback_count_missing": 300,
+      "fallback_count_zero": 0,
+      "status_not_ok": 0,
+      "checkpoint_not_loaded": null,
+      "effective_view_degraded": 0,
+      "channel_not_consumed_every_step": 0,
+      "episodes_with_pedestrians": 300,
+      "treatment_never_differs_from_truth": 0,
+      "oracle_differs_from_truth": null,
+      "mean_abs_position_error_m": 0.06255175308945726
+    },
+    "orca|delay": {
+      "episodes": 300,
+      "modes": {
+        "adapter": 300
+      },
+      "fallback_or_degraded": 0,
+      "fallback_count_recorded": 0,
+      "fallback_count_missing": 300,
+      "fallback_count_zero": 0,
+      "status_not_ok": 0,
+      "checkpoint_not_loaded": null,
+      "effective_view_degraded": 0,
+      "channel_not_consumed_every_step": 0,
+      "episodes_with_pedestrians": 300,
+      "treatment_never_differs_from_truth": 0,
+      "oracle_differs_from_truth": null,
+      "mean_abs_position_error_m": 0.18771267317604337
+    },
+    "orca|static_occlusion": {
+      "episodes": 300,
+      "modes": {
+        "adapter": 300
+      },
+      "fallback_or_degraded": 0,
+      "fallback_count_recorded": 0,
+      "fallback_count_missing": 300,
+      "fallback_count_zero": 0,
+      "status_not_ok": 0,
+      "checkpoint_not_loaded": null,
+      "effective_view_degraded": 0,
+      "channel_not_consumed_every_step": 0,
+      "episodes_with_pedestrians": 300,
+      "treatment_never_differs_from_truth": 100,
+      "oracle_differs_from_truth": null,
+      "mean_abs_position_error_m": 0.0
+    },
+    "hybrid_v4_continuous_guard_on|oracle": {
+      "episodes": 300,
+      "modes": {
+        "adapter": 300
+      },
+      "fallback_or_degraded": 0,
+      "fallback_count_recorded": 300,
+      "fallback_count_missing": 0,
+      "fallback_count_zero": 300,
+      "status_not_ok": 0,
+      "checkpoint_not_loaded": null,
+      "effective_view_degraded": 0,
+      "channel_not_consumed_every_step": 0,
+      "episodes_with_pedestrians": 300,
+      "treatment_never_differs_from_truth": null,
+      "oracle_differs_from_truth": 0,
+      "mean_abs_position_error_m": 0.0
+    },
+    "hybrid_v4_continuous_guard_on|position_noise": {
+      "episodes": 300,
+      "modes": {
+        "adapter": 300
+      },
+      "fallback_or_degraded": 0,
+      "fallback_count_recorded": 300,
+      "fallback_count_missing": 0,
+      "fallback_count_zero": 300,
+      "status_not_ok": 0,
+      "checkpoint_not_loaded": null,
+      "effective_view_degraded": 0,
+      "channel_not_consumed_every_step": 0,
+      "episodes_with_pedestrians": 300,
+      "treatment_never_differs_from_truth": 0,
+      "oracle_differs_from_truth": null,
+      "mean_abs_position_error_m": 0.06260497984274577
+    },
+    "hybrid_v4_continuous_guard_on|delay": {
+      "episodes": 300,
+      "modes": {
+        "adapter": 300
+      },
+      "fallback_or_degraded": 0,
+      "fallback_count_recorded": 300,
+      "fallback_count_missing": 0,
+      "fallback_count_zero": 300,
+      "status_not_ok": 0,
+      "checkpoint_not_loaded": null,
+      "effective_view_degraded": 0,
+      "channel_not_consumed_every_step": 0,
+      "episodes_with_pedestrians": 300,
+      "treatment_never_differs_from_truth": 0,
+      "oracle_differs_from_truth": null,
+      "mean_abs_position_error_m": 0.18182447357940335
+    },
+    "hybrid_v4_continuous_guard_on|static_occlusion": {
+      "episodes": 300,
+      "modes": {
+        "adapter": 300
+      },
+      "fallback_or_degraded": 0,
+      "fallback_count_recorded": 300,
+      "fallback_count_missing": 0,
+      "fallback_count_zero": 300,
+      "status_not_ok": 0,
+      "checkpoint_not_loaded": null,
+      "effective_view_degraded": 0,
+      "channel_not_consumed_every_step": 0,
+      "episodes_with_pedestrians": 300,
+      "treatment_never_differs_from_truth": 100,
+      "oracle_differs_from_truth": null,
+      "mean_abs_position_error_m": 0.0
+    },
+    "hybrid_v4_continuous_guard_off|oracle": {
+      "episodes": 300,
+      "modes": {
+        "adapter": 300
+      },
+      "fallback_or_degraded": 0,
+      "fallback_count_recorded": 300,
+      "fallback_count_missing": 0,
+      "fallback_count_zero": 300,
+      "status_not_ok": 0,
+      "checkpoint_not_loaded": null,
+      "effective_view_degraded": 0,
+      "channel_not_consumed_every_step": 0,
+      "episodes_with_pedestrians": 300,
+      "treatment_never_differs_from_truth": null,
+      "oracle_differs_from_truth": 0,
+      "mean_abs_position_error_m": 0.0
+    },
+    "hybrid_v4_continuous_guard_off|position_noise": {
+      "episodes": 300,
+      "modes": {
+        "adapter": 300
+      },
+      "fallback_or_degraded": 0,
+      "fallback_count_recorded": 300,
+      "fallback_count_missing": 0,
+      "fallback_count_zero": 300,
+      "status_not_ok": 0,
+      "checkpoint_not_loaded": null,
+      "effective_view_degraded": 0,
+      "channel_not_consumed_every_step": 0,
+      "episodes_with_pedestrians": 300,
+      "treatment_never_differs_from_truth": 0,
+      "oracle_differs_from_truth": null,
+      "mean_abs_position_error_m": 0.06261048836660738
+    },
+    "hybrid_v4_continuous_guard_off|delay": {
+      "episodes": 300,
+      "modes": {
+        "adapter": 300
+      },
+      "fallback_or_degraded": 0,
+      "fallback_count_recorded": 300,
+      "fallback_count_missing": 0,
+      "fallback_count_zero": 300,
+      "status_not_ok": 0,
+      "checkpoint_not_loaded": null,
+      "effective_view_degraded": 0,
+      "channel_not_consumed_every_step": 0,
+      "episodes_with_pedestrians": 300,
+      "treatment_never_differs_from_truth": 0,
+      "oracle_differs_from_truth": null,
+      "mean_abs_position_error_m": 0.19449396418387851
+    },
+    "hybrid_v4_continuous_guard_off|static_occlusion": {
+      "episodes": 300,
+      "modes": {
+        "adapter": 300
+      },
+      "fallback_or_degraded": 0,
+      "fallback_count_recorded": 300,
+      "fallback_count_missing": 0,
+      "fallback_count_zero": 300,
+      "status_not_ok": 0,
+      "checkpoint_not_loaded": null,
+      "effective_view_degraded": 0,
+      "channel_not_consumed_every_step": 0,
+      "episodes_with_pedestrians": 300,
+      "treatment_never_differs_from_truth": 102,
+      "oracle_differs_from_truth": null,
+      "mean_abs_position_error_m": 0.0
+    },
+    "ppo|oracle": {
+      "episodes": 300,
+      "modes": {
+        "native": 300
+      },
+      "fallback_or_degraded": 0,
+      "fallback_count_recorded": 0,
+      "fallback_count_missing": 300,
+      "fallback_count_zero": 0,
+      "status_not_ok": 0,
+      "checkpoint_not_loaded": 0,
+      "effective_view_degraded": 0,
+      "channel_not_consumed_every_step": 0,
+      "episodes_with_pedestrians": 300,
+      "treatment_never_differs_from_truth": null,
+      "oracle_differs_from_truth": 0,
+      "mean_abs_position_error_m": 0.0
+    },
+    "ppo|position_noise": {
+      "episodes": 300,
+      "modes": {
+        "native": 300
+      },
+      "fallback_or_degraded": 0,
+      "fallback_count_recorded": 0,
+      "fallback_count_missing": 300,
+      "fallback_count_zero": 0,
+      "status_not_ok": 0,
+      "checkpoint_not_loaded": 0,
+      "effective_view_degraded": 0,
+      "channel_not_consumed_every_step": 0,
+      "episodes_with_pedestrians": 300,
+      "treatment_never_differs_from_truth": 0,
+      "oracle_differs_from_truth": null,
+      "mean_abs_position_error_m": 0.06261410388343314
+    },
+    "ppo|delay": {
+      "episodes": 300,
+      "modes": {
+        "native": 300
+      },
+      "fallback_or_degraded": 0,
+      "fallback_count_recorded": 0,
+      "fallback_count_missing": 300,
+      "fallback_count_zero": 0,
+      "status_not_ok": 0,
+      "checkpoint_not_loaded": 0,
+      "effective_view_degraded": 0,
+      "channel_not_consumed_every_step": 0,
+      "episodes_with_pedestrians": 300,
+      "treatment_never_differs_from_truth": 0,
+      "oracle_differs_from_truth": null,
+      "mean_abs_position_error_m": 0.19683722277739746
+    },
+    "ppo|static_occlusion": {
+      "episodes": 300,
+      "modes": {
+        "native": 300
+      },
+      "fallback_or_degraded": 0,
+      "fallback_count_recorded": 0,
+      "fallback_count_missing": 300,
+      "fallback_count_zero": 0,
+      "status_not_ok": 0,
+      "checkpoint_not_loaded": 0,
+      "effective_view_degraded": 0,
+      "channel_not_consumed_every_step": 0,
+      "episodes_with_pedestrians": 300,
+      "treatment_never_differs_from_truth": 101,
+      "oracle_differs_from_truth": null,
+      "mean_abs_position_error_m": 0.0
+    }
+  },
+  "occlusion_exercise": {
+    "francis2023_blind_corner": {
+      "episodes": 200,
+      "episodes_with_any_occlusion": 200,
+      "share_of_steps_occluded": 0.42849776896380765,
+      "exercised": true
+    },
+    "classic_cross_trap_medium": {
+      "episodes": 200,
+      "episodes_with_any_occlusion": 198,
+      "share_of_steps_occluded": 0.8319673793970869,
+      "exercised": true
+    },
+    "classic_head_on_corridor_medium": {
+      "episodes": 200,
+      "episodes_with_any_occlusion": 0,
+      "share_of_steps_occluded": 0.0,
+      "exercised": false
+    },
+    "classic_overtaking_medium": {
+      "episodes": 200,
+      "episodes_with_any_occlusion": 199,
+      "share_of_steps_occluded": 0.40065325090972864,
+      "exercised": true
+    },
+    "classic_doorway_medium": {
+      "episodes": 200,
+      "episodes_with_any_occlusion": 200,
+      "share_of_steps_occluded": 0.5924546122363312,
+      "exercised": true
+    },
+    "classic_bottleneck_high": {
+      "episodes": 200,
+      "episodes_with_any_occlusion": 0,
+      "share_of_steps_occluded": 0.0,
+      "exercised": false
+    }
+  },
+  "intervention_failures": {
+    "classic_cross_trap_medium|static_occlusion": {
+      "treatment_never_differs_from_truth": 2,
+      "undisturbed_by_planner": {
+        "hybrid_v4_continuous_guard_off": 2
+      },
+      "channel_not_consumed_every_step": 0,
+      "occlusion_not_exercised": false
+    },
+    "classic_head_on_corridor_medium|static_occlusion": {
+      "treatment_never_differs_from_truth": 200,
+      "undisturbed_by_planner": {
+        "orca": 50,
+        "hybrid_v4_continuous_guard_on": 50,
+        "hybrid_v4_continuous_guard_off": 50,
+        "ppo": 50
+      },
+      "channel_not_consumed_every_step": 0,
+      "occlusion_not_exercised": true
+    },
+    "classic_overtaking_medium|static_occlusion": {
+      "treatment_never_differs_from_truth": 1,
+      "undisturbed_by_planner": {
+        "ppo": 1
+      },
+      "channel_not_consumed_every_step": 0,
+      "occlusion_not_exercised": false
+    },
+    "classic_bottleneck_high|static_occlusion": {
+      "treatment_never_differs_from_truth": 200,
+      "undisturbed_by_planner": {
+        "orca": 50,
+        "hybrid_v4_continuous_guard_on": 50,
+        "hybrid_v4_continuous_guard_off": 50,
+        "ppo": 50
+      },
+      "channel_not_consumed_every_step": 0,
+      "occlusion_not_exercised": true
+    }
+  },
+  "failures": []
+}

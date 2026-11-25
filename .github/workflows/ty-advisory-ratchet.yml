@@ -47,12 +47,16 @@ jobs:
       - name: Run ty advisory ratchet
         id: ty_ratchet
         shell: bash
+        env:
+          NODE_OPTIONS: --use-openssl-ca
         run: |
           mkdir -p output/ty
           uv run python scripts/dev/ty_advisory_ratchet.py --check 2>&1 | tee output/ty/ratchet.log
 
       - name: Summarize ty ratchet outcome
         if: always()
+        env:
+          NODE_OPTIONS: --use-openssl-ca
         run: |
           printf 'ty advisory ratchet exit: %s\n' "${{ steps.ty_ratchet.outcome }}"
           printf 'Committed baseline general findings: '
@@ -60,6 +64,8 @@ jobs:
 
       - name: Upload ty ratchet log
         if: always()
+        env:
+          NODE_OPTIONS: --use-openssl-ca
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ty-advisory-ratchet-log

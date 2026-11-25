@@ -1,0 +1,19 @@
+{
+  "archived_projection_sha256": "87017b55fe0f903b76273617be0445ff2b1ec50014a27e2802e68e9db137f05d",
+  "command": "tools/run_campaign.sh <execution-venv-python> <raw> 1121 8; analyze.py project; tools/compare_replay.py --seed 1121",
+  "differences": [],
+  "environment": "Python 3.13.14; uv sync --frozen --all-extras at execution commit; CPU",
+  "excluded_from_normalized_comparison": [
+    "source_line_sha256"
+  ],
+  "execution_commit": "d0e2aa1d9363c7fe6e1eb62e225c4721e7fa7271",
+  "execution_lock_sha256": "def82098b23281e7c49f1f05e052e412c2de54ae2da53f1708bc0ddc2a30d023",
+  "expected_rows": 32,
+  "full_rows_equal": 8,
+  "normalized_rows_equal": 32,
+  "raw_hashes_equal": 8,
+  "replay_projection_sha256": "44aed4348288bdf2b4a3b91fb7fb37c31dc33cfef20e1117d139565d6c611e2d",
+  "schema": "xped.normalized-replay.v1",
+  "scope": "32 rows; all projected fields except raw custody hash compared exactly",
+  "seed": 1121
+}

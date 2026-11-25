@@ -1,0 +1,7577 @@
+{
+ "description": "Pilot true vs perceived pedestrian state, ORCA, francis2023_blind_corner, development seed 1001, first 60 steps per condition (world frame, metres).",
+ "episodes": {
+  "position_noise": {
+   "summary": {
+    "all_channels_consumed_every_snapshot": true,
+    "condition": "position_noise",
+    "consumed_steps": {
+     "occupancy_grid_pedestrians": 235,
+     "socnav_pedestrian_rows": 235
+    },
+    "delay_steps": 0,
+    "episode_key": "14460191426909710644",
+    "expected_channels": [
+     "socnav_pedestrian_rows",
+     "occupancy_grid_pedestrians"
+    ],
+    "interpretation": "declared_synthetic_pedestrian_perception_stressor_not_a_sensor_model",
+    "position_noise_std_m": 0.05,
+    "stats": {
+     "abs_position_error_sum_m": 14.543013967249925,
+     "delay_held_initial_steps": 0,
+     "max_position_error_m": 0.1577548420705575,
+     "mean_abs_position_error_m": 0.061885165818084786,
+     "perceived_rows": 235,
+     "rows_occluded": 0,
+     "rows_position_differs": 235,
+     "snapshots": 235,
+     "steps_perceived_differs": 235,
+     "steps_with_occlusion": 0,
+     "true_rows": 235
+    }
+   },
+   "trace": [
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       0.0,
+       0.5
+      ]
+     ],
+     "perceived_xy": [
+      [
+       27.0124,
+       3.9993
+      ]
+     ],
+     "robot_xy": [
+      5.4699,
+      25.3916
+     ],
+     "step": 0,
+     "true_vel": [
+      [
+       0.0,
+       0.5
+      ]
+     ],
+     "true_xy": [
+      [
+       27.0,
+       4.0
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.0696,
+       0.5824
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.9428,
+       4.0038
+      ]
+     ],
+     "robot_xy": [
+      5.4749,
+      25.3916
+     ],
+     "step": 1,
+     "true_vel": [
+      [
+       -0.0696,
+       0.5824
+      ]
+     ],
+     "true_xy": [
+      [
+       26.993,
+       4.0582
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1228,
+       0.6383
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.8957,
+       4.1441
+      ]
+     ],
+     "robot_xy": [
+      5.4899,
+      25.3918
+     ],
+     "step": 2,
+     "true_vel": [
+      [
+       -0.1228,
+       0.6383
+      ]
+     ],
+     "true_xy": [
+      [
+       26.9808,
+       4.1221
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1517,
+       0.632
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.9904,
+       4.1802
+      ]
+     ],
+     "robot_xy": [
+      5.5149,
+      25.3926
+     ],
+     "step": 3,
+     "true_vel": [
+      [
+       -0.1517,
+       0.632
+      ]
+     ],
+     "true_xy": [
+      [
+       26.9656,
+       4.1853
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1717,
+       0.6269
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.9948,
+       4.2734
+      ]
+     ],
+     "robot_xy": [
+      5.5498,
+      25.3948
+     ],
+     "step": 4,
+     "true_vel": [
+      [
+       -0.1717,
+       0.6269
+      ]
+     ],
+     "true_xy": [
+      [
+       26.9484,
+       4.248
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1852,
+       0.6231
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.995,
+       4.3242
+      ]
+     ],
+     "robot_xy": [
+      5.5946,
+      25.3994
+     ],
+     "step": 5,
+     "true_vel": [
+      [
+       -0.1852,
+       0.6231
+      ]
+     ],
+     "true_xy": [
+      [
+       26.9299,
+       4.3103
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1939,
+       0.6204
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.861,
+       4.4036
+      ]
+     ],
+     "robot_xy": [
+      5.6489,
+      25.4077
+     ],
+     "step": 6,
+     "true_vel": [
+      [
+       -0.1939,
+       0.6204
+      ]
+     ],
+     "true_xy": [
+      [
+       26.9105,
+       4.3723
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.199,
+       0.6188
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.9027,
+       4.2931
+      ]
+     ],
+     "robot_xy": [
+      5.7125,
+      25.4213
+     ],
+     "step": 7,
+     "true_vel": [
+      [
+       -0.199,
+       0.6188
+      ]
+     ],
+     "true_xy": [
+      [
+       26.8906,
+       4.4342
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.2016,
+       0.618
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.838,
+       4.4577
+      ]
+     ],
+     "robot_xy": [
+      5.7848,
+      25.4413
+     ],
+     "step": 8,
+     "true_vel": [
+      [
+       -0.2016,
+       0.618
+      ]
+     ],
+     "true_xy": [
+      [
+       26.8705,
+       4.496
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.2022,
+       0.6177
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.776,
+       4.6482
+      ]
+     ],
+     "robot_xy": [
+      5.8653,
+      25.4685
+     ],
+     "step": 9,
+     "true_vel": [
+      [
+       -0.2022,
+       0.6177
+      ]
+     ],
+     "true_xy": [
+      [
+       26.8502,
+       4.5578
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.2014,
+       0.618
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.8405,
+       4.6431
+      ]
+     ],
+     "robot_xy": [
+      5.9538,
+      25.503
+     ],
+     "step": 10,
+     "true_vel": [
+      [
+       -0.2014,
+       0.618
+      ]
+     ],
+     "true_xy": [
+      [
+       26.8301,
+       4.6196
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1996,
+       0.6186
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.8276,
+       4.7097
+      ]
+     ],
+     "robot_xy": [
+      6.05,
+      25.5452
+     ],
+     "step": 11,
+     "true_vel": [
+      [
+       -0.1996,
+       0.6186
+      ]
+     ],
+     "true_xy": [
+      [
+       26.8101,
+       4.6814
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1969,
+       0.6195
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.8151,
+       4.7846
+      ]
+     ],
+     "robot_xy": [
+      6.1536,
+      25.5951
+     ],
+     "step": 12,
+     "true_vel": [
+      [
+       -0.1969,
+       0.6195
+      ]
+     ],
+     "true_xy": [
+      [
+       26.7904,
+       4.7434
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1937,
+       0.6205
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.7357,
+       4.7876
+      ]
+     ],
+     "robot_xy": [
+      6.2644,
+      25.6529
+     ],
+     "step": 13,
+     "true_vel": [
+      [
+       -0.1937,
+       0.6205
+      ]
+     ],
+     "true_xy": [
+      [
+       26.7711,
+       4.8054
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1901,
+       0.6216
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.7556,
+       4.8217
+      ]
+     ],
+     "robot_xy": [
+      6.3823,
+      25.7186
+     ],
+     "step": 14,
+     "true_vel": [
+      [
+       -0.1901,
+       0.6216
+      ]
+     ],
+     "true_xy": [
+      [
+       26.7521,
+       4.8676
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1861,
+       0.6228
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.6465,
+       4.9125
+      ]
+     ],
+     "robot_xy": [
+      6.5072,
+      25.7923
+     ],
+     "step": 15,
+     "true_vel": [
+      [
+       -0.1861,
+       0.6228
+      ]
+     ],
+     "true_xy": [
+      [
+       26.7335,
+       4.9298
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.182,
+       0.624
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.7215,
+       4.9864
+      ]
+     ],
+     "robot_xy": [
+      6.639,
+      25.8738
+     ],
+     "step": 16,
+     "true_vel": [
+      [
+       -0.182,
+       0.624
+      ]
+     ],
+     "true_xy": [
+      [
+       26.7153,
+       4.9922
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1777,
+       0.6252
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.6646,
+       4.9935
+      ]
+     ],
+     "robot_xy": [
+      6.7783,
+      25.9623
+     ],
+     "step": 17,
+     "true_vel": [
+      [
+       -0.1777,
+       0.6252
+      ]
+     ],
+     "true_xy": [
+      [
+       26.6975,
+       5.0548
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1733,
+       0.6265
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.7306,
+       5.1512
+      ]
+     ],
+     "robot_xy": [
+      6.9235,
+      26.055
+     ],
+     "step": 18,
+     "true_vel": [
+      [
+       -0.1733,
+       0.6265
+      ]
+     ],
+     "true_xy": [
+      [
+       26.6802,
+       5.1174
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1688,
+       0.6277
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.6207,
+       5.1616
+      ]
+     ],
+     "robot_xy": [
+      7.0712,
+      26.1476
+     ],
+     "step": 19,
+     "true_vel": [
+      [
+       -0.1688,
+       0.6277
+      ]
+     ],
+     "true_xy": [
+      [
+       26.6633,
+       5.1802
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1644,
+       0.6289
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.7034,
+       5.3433
+      ]
+     ],
+     "robot_xy": [
+      7.2207,
+      26.2378
+     ],
+     "step": 20,
+     "true_vel": [
+      [
+       -0.1644,
+       0.6289
+      ]
+     ],
+     "true_xy": [
+      [
+       26.6468,
+       5.2431
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1599,
+       0.63
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.603,
+       5.223
+      ]
+     ],
+     "robot_xy": [
+      7.3738,
+      26.3244
+     ],
+     "step": 21,
+     "true_vel": [
+      [
+       -0.1599,
+       0.63
+      ]
+     ],
+     "true_xy": [
+      [
+       26.6309,
+       5.3061
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1554,
+       0.6311
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.641,
+       5.3678
+      ]
+     ],
+     "robot_xy": [
+      7.5319,
+      26.4062
+     ],
+     "step": 22,
+     "true_vel": [
+      [
+       -0.1554,
+       0.6311
+      ]
+     ],
+     "true_xy": [
+      [
+       26.6153,
+       5.3692
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.151,
+       0.6322
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.5742,
+       5.4859
+      ]
+     ],
+     "robot_xy": [
+      7.6964,
+      26.4815
+     ],
+     "step": 23,
+     "true_vel": [
+      [
+       -0.151,
+       0.6322
+      ]
+     ],
+     "true_xy": [
+      [
+       26.6002,
+       5.4324
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1466,
+       0.6332
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.5549,
+       5.4566
+      ]
+     ],
+     "robot_xy": [
+      7.868,
+      26.549
+     ],
+     "step": 24,
+     "true_vel": [
+      [
+       -0.1466,
+       0.6332
+      ]
+     ],
+     "true_xy": [
+      [
+       26.5855,
+       5.4957
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1423,
+       0.6342
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.5244,
+       5.5457
+      ]
+     ],
+     "robot_xy": [
+      8.0466,
+      26.6083
+     ],
+     "step": 25,
+     "true_vel": [
+      [
+       -0.1423,
+       0.6342
+      ]
+     ],
+     "true_xy": [
+      [
+       26.5713,
+       5.5592
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.138,
+       0.6352
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.6524,
+       5.5652
+      ]
+     ],
+     "robot_xy": [
+      8.2308,
+      26.6597
+     ],
+     "step": 26,
+     "true_vel": [
+      [
+       -0.138,
+       0.6352
+      ]
+     ],
+     "true_xy": [
+      [
+       26.5575,
+       5.6227
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1338,
+       0.6361
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.5285,
+       5.6599
+      ]
+     ],
+     "robot_xy": [
+      8.4191,
+      26.7041
+     ],
+     "step": 27,
+     "true_vel": [
+      [
+       -0.1338,
+       0.6361
+      ]
+     ],
+     "true_xy": [
+      [
+       26.5441,
+       5.6863
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1297,
+       0.6369
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.6055,
+       5.7503
+      ]
+     ],
+     "robot_xy": [
+      8.6099,
+      26.7421
+     ],
+     "step": 28,
+     "true_vel": [
+      [
+       -0.1297,
+       0.6369
+      ]
+     ],
+     "true_xy": [
+      [
+       26.5312,
+       5.75
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1257,
+       0.6377
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.5777,
+       5.8442
+      ]
+     ],
+     "robot_xy": [
+      8.8026,
+      26.7747
+     ],
+     "step": 29,
+     "true_vel": [
+      [
+       -0.1257,
+       0.6377
+      ]
+     ],
+     "true_xy": [
+      [
+       26.5186,
+       5.8138
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1217,
+       0.6385
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.5609,
+       5.8962
+      ]
+     ],
+     "robot_xy": [
+      8.9968,
+      26.8026
+     ],
+     "step": 30,
+     "true_vel": [
+      [
+       -0.1217,
+       0.6385
+      ]
+     ],
+     "true_xy": [
+      [
+       26.5064,
+       5.8776
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1178,
+       0.6392
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.5645,
+       6.0503
+      ]
+     ],
+     "robot_xy": [
+      9.192,
+      26.8264
+     ],
+     "step": 31,
+     "true_vel": [
+      [
+       -0.1178,
+       0.6392
+      ]
+     ],
+     "true_xy": [
+      [
+       26.4946,
+       5.9415
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1139,
+       0.6399
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.4661,
+       6.0705
+      ]
+     ],
+     "robot_xy": [
+      9.3882,
+      26.8468
+     ],
+     "step": 32,
+     "true_vel": [
+      [
+       -0.1139,
+       0.6399
+      ]
+     ],
+     "true_xy": [
+      [
+       26.4832,
+       6.0055
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1102,
+       0.6406
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.3932,
+       5.9578
+      ]
+     ],
+     "robot_xy": [
+      9.5851,
+      26.8643
+     ],
+     "step": 33,
+     "true_vel": [
+      [
+       -0.1102,
+       0.6406
+      ]
+     ],
+     "true_xy": [
+      [
+       26.4722,
+       6.0696
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1065,
+       0.6412
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.5551,
+       6.0066
+      ]
+     ],
+     "robot_xy": [
+      9.7825,
+      26.8792
+     ],
+     "step": 34,
+     "true_vel": [
+      [
+       -0.1065,
+       0.6412
+      ]
+     ],
+     "true_xy": [
+      [
+       26.4616,
+       6.1337
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1029,
+       0.6418
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.4824,
+       6.2318
+      ]
+     ],
+     "robot_xy": [
+      9.9804,
+      26.892
+     ],
+     "step": 35,
+     "true_vel": [
+      [
+       -0.1029,
+       0.6418
+      ]
+     ],
+     "true_xy": [
+      [
+       26.4513,
+       6.1979
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.0994,
+       0.6423
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.3738,
+       6.2856
+      ]
+     ],
+     "robot_xy": [
+      10.1786,
+      26.903
+     ],
+     "step": 36,
+     "true_vel": [
+      [
+       -0.0994,
+       0.6423
+      ]
+     ],
+     "true_xy": [
+      [
+       26.4413,
+       6.2621
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.096,
+       0.6429
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.434,
+       6.3462
+      ]
+     ],
+     "robot_xy": [
+      10.3772,
+      26.9124
+     ],
+     "step": 37,
+     "true_vel": [
+      [
+       -0.096,
+       0.6429
+      ]
+     ],
+     "true_xy": [
+      [
+       26.4317,
+       6.3264
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.0927,
+       0.6434
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.4604,
+       6.408
+      ]
+     ],
+     "robot_xy": [
+      10.576,
+      26.9206
+     ],
+     "step": 38,
+     "true_vel": [
+      [
+       -0.0927,
+       0.6434
+      ]
+     ],
+     "true_xy": [
+      [
+       26.4225,
+       6.3907
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.0894,
+       0.6438
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.4287,
+       6.4148
+      ]
+     ],
+     "robot_xy": [
+      10.7749,
+      26.9275
+     ],
+     "step": 39,
+     "true_vel": [
+      [
+       -0.0894,
+       0.6438
+      ]
+     ],
+     "true_xy": [
+      [
+       26.4135,
+       6.4551
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.0862,
+       0.6443
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.2843,
+       6.5423
+      ]
+     ],
+     "robot_xy": [
+      10.9741,
+      26.9336
+     ],
+     "step": 40,
+     "true_vel": [
+      [
+       -0.0862,
+       0.6443
+      ]
+     ],
+     "true_xy": [
+      [
+       26.4049,
+       6.5195
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.0831,
+       0.6447
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.3992,
+       6.5646
+      ]
+     ],
+     "robot_xy": [
+      11.1734,
+      26.9388
+     ],
+     "step": 41,
+     "true_vel": [
+      [
+       -0.0831,
+       0.6447
+      ]
+     ],
+     "true_xy": [
+      [
+       26.3966,
+       6.584
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.0801,
+       0.645
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.3515,
+       6.6638
+      ]
+     ],
+     "robot_xy": [
+      11.3728,
+      26.9433
+     ],
+     "step": 42,
+     "true_vel": [
+      [
+       -0.0801,
+       0.645
+      ]
+     ],
+     "true_xy": [
+      [
+       26.3886,
+       6.6485
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.0772,
+       0.6454
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.2939,
+       6.6283
+      ]
+     ],
+     "robot_xy": [
+      11.5723,
+      26.9472
+     ],
+     "step": 43,
+     "true_vel": [
+      [
+       -0.0772,
+       0.6454
+      ]
+     ],
+     "true_xy": [
+      [
+       26.3809,
+       6.7131
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.0743,
+       0.6457
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.3299,
+       6.7381
+      ]
+     ],
+     "robot_xy": [
+      11.7719,
+      26.9507
+     ],
+     "step": 44,
+     "true_vel": [
+      [
+       -0.0743,
+       0.6457
+      ]
+     ],
+     "true_xy": [
+      [
+       26.3734,
+       6.7776
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.0715,
+       0.6461
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.4033,
+       6.8585
+      ]
+     ],
+     "robot_xy": [
+      11.9715,
+      26.9537
+     ],
+     "step": 45,
+     "true_vel": [
+      [
+       -0.0715,
+       0.6461
+      ]
+     ],
+     "true_xy": [
+      [
+       26.3663,
+       6.8422
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.0688,
+       0.6463
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.4163,
+       6.8563
+      ]
+     ],
+     "robot_xy": [
+      12.1712,
+      26.9563
+     ],
+     "step": 46,
+     "true_vel": [
+      [
+       -0.0688,
+       0.6463
+      ]
+     ],
+     "true_xy": [
+      [
+       26.3594,
+       6.9069
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.0662,
+       0.6466
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.3357,
+       6.9658
+      ]
+     ],
+     "robot_xy": [
+      12.371,
+      26.9586
+     ],
+     "step": 47,
+     "true_vel": [
+      [
+       -0.0662,
+       0.6466
+      ]
+     ],
+     "true_xy": [
+      [
+       26.3528,
+       6.9715
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.0636,
+       0.6469
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.3816,
+       7.0857
+      ]
+     ],
+     "robot_xy": [
+      12.5707,
+      26.9607
+     ],
+     "step": 48,
+     "true_vel": [
+      [
+       -0.0636,
+       0.6469
+      ]
+     ],
+     "true_xy": [
+      [
+       26.3464,
+       7.0362
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.0612,
+       0.6471
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.4144,
+       7.1002
+      ]
+     ],
+     "robot_xy": [
+      12.7705,
+      26.9625
+     ],
+     "step": 49,
+     "true_vel": [
+      [
+       -0.0612,
+       0.6471
+      ]
+     ],
+     "true_xy": [
+      [
+       26.3403,
+       7.1009
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.0588,
+       0.6473
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.3207,
+       7.1457
+      ]
+     ],
+     "robot_xy": [
+      12.9704,
+      26.9641
+     ],
+     "step": 50,
+     "true_vel": [
+      [
+       -0.0588,
+       0.6473
+      ]
+     ],
+     "true_xy": [
+      [
+       26.3344,
+       7.1657
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.0564,
+       0.6475
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.3131,
+       7.2799
+      ]
+     ],
+     "robot_xy": [
+      13.1703,
+      26.9656
+     ],
+     "step": 51,
+     "true_vel": [
+      [
+       -0.0564,
+       0.6475
+      ]
+     ],
+     "true_xy": [
+      [
+       26.3288,
+       7.2304
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.0542,
+       0.6477
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.3582,
+       7.3525
+      ]
+     ],
+     "robot_xy": [
+      13.3701,
+      26.9669
+     ],
+     "step": 52,
+     "true_vel": [
+      [
+       -0.0542,
+       0.6477
+      ]
+     ],
+     "true_xy": [
+      [
+       26.3233,
+       7.2952
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.052,
+       0.6479
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.3242,
+       7.4341
+      ]
+     ],
+     "robot_xy": [
+      13.57,
+      26.9682
+     ],
+     "step": 53,
+     "true_vel": [
+      [
+       -0.052,
+       0.6479
+      ]
+     ],
+     "true_xy": [
+      [
+       26.3182,
+       7.36
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.0498,
+       0.6481
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.3492,
+       7.4268
+      ]
+     ],
+     "robot_xy": [
+      13.77,
+      26.9693
+     ],
+     "step": 54,
+     "true_vel": [
+      [
+       -0.0498,
+       0.6481
+      ]
+     ],
+     "true_xy": [
+      [
+       26.3132,
+       7.4248
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.0478,
+       0.6482
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.3097,
+       7.4245
+      ]
+     ],
+     "robot_xy": [
+      13.9699,
+      26.9703
+     ],
+     "step": 55,
+     "true_vel": [
+      [
+       -0.0478,
+       0.6482
+      ]
+     ],
+     "true_xy": [
+      [
+       26.3084,
+       7.4896
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.0458,
+       0.6484
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.275,
+       7.5086
+      ]
+     ],
+     "robot_xy": [
+      14.1698,
+      26.9712
+     ],
+     "step": 56,
+     "true_vel": [
+      [
+       -0.0458,
+       0.6484
+      ]
+     ],
+     "true_xy": [
+      [
+       26.3038,
+       7.5545
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.0439,
+       0.6485
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.3373,
+       7.6075
+      ]
+     ],
+     "robot_xy": [
+      14.3698,
+      26.9721
+     ],
+     "step": 57,
+     "true_vel": [
+      [
+       -0.0439,
+       0.6485
+      ]
+     ],
+     "true_xy": [
+      [
+       26.2994,
+       7.6193
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.042,
+       0.6486
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.2619,
+       7.668
+      ]
+     ],
+     "robot_xy": [
+      14.5697,
+      26.973
+     ],
+     "step": 58,
+     "true_vel": [
+      [
+       -0.042,
+       0.6486
+      ]
+     ],
+     "true_xy": [
+      [
+       26.2952,
+       7.6842
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.0402,
+       0.6488
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.2066,
+       7.7937
+      ]
+     ],
+     "robot_xy": [
+      14.7697,
+      26.9738
+     ],
+     "step": 59,
+     "true_vel": [
+      [
+       -0.0402,
+       0.6488
+      ]
+     ],
+     "true_xy": [
+      [
+       26.2912,
+       7.749
+      ]
+     ]
+    }
+   ]
+  },
+  "oracle": {
+   "summary": {
+    "all_channels_consumed_every_snapshot": true,
+    "condition": "oracle",
+    "consumed_steps": {
+     "occupancy_grid_pedestrians": 234,
+     "socnav_pedestrian_rows": 234
+    },
+    "delay_steps": 0,
+    "episode_key": "7374667128389410421",
+    "expected_channels": [
+     "socnav_pedestrian_rows",
+     "occupancy_grid_pedestrians"
+    ],
+    "interpretation": "declared_synthetic_pedestrian_perception_stressor_not_a_sensor_model",
+    "position_noise_std_m": 0.0,
+    "stats": {
+     "abs_position_error_sum_m": 0.0,
+     "delay_held_initial_steps": 0,
+     "max_position_error_m": 0.0,
+     "mean_abs_position_error_m": 0.0,
+     "perceived_rows": 234,
+     "rows_occluded": 0,
+     "rows_position_differs": 0,
+     "snapshots": 234,
+     "steps_perceived_differs": 0,
+     "steps_with_occlusion": 0,
+     "true_rows": 234
+    }
+   },
+   "trace": [
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       0.0,
+       0.5
+      ]
+     ],
+     "perceived_xy": [
+      [
+       27.0,
+       4.0
+      ]
+     ],
+     "robot_xy": [
+      5.4699,
+      25.3916
+     ],
+     "step": 0,
+     "true_vel": [
+      [
+       0.0,
+       0.5
+      ]
+     ],
+     "true_xy": [
+      [
+       27.0,
+       4.0
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.0696,
+       0.5824
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.993,
+       4.0582
+      ]
+     ],
+     "robot_xy": [
+      5.4749,
+      25.3916
+     ],
+     "step": 1,
+     "true_vel": [
+      [
+       -0.0696,
+       0.5824
+      ]
+     ],
+     "true_xy": [
+      [
+       26.993,
+       4.0582
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1228,
+       0.6383
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.9808,
+       4.1221
+      ]
+     ],
+     "robot_xy": [
+      5.4899,
+      25.3918
+     ],
+     "step": 2,
+     "true_vel": [
+      [
+       -0.1228,
+       0.6383
+      ]
+     ],
+     "true_xy": [
+      [
+       26.9808,
+       4.1221
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1517,
+       0.632
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.9656,
+       4.1853
+      ]
+     ],
+     "robot_xy": [
+      5.5149,
+      25.3926
+     ],
+     "step": 3,
+     "true_vel": [
+      [
+       -0.1517,
+       0.632
+      ]
+     ],
+     "true_xy": [
+      [
+       26.9656,
+       4.1853
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1717,
+       0.6269
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.9484,
+       4.248
+      ]
+     ],
+     "robot_xy": [
+      5.5498,
+      25.3948
+     ],
+     "step": 4,
+     "true_vel": [
+      [
+       -0.1717,
+       0.6269
+      ]
+     ],
+     "true_xy": [
+      [
+       26.9484,
+       4.248
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1852,
+       0.6231
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.9299,
+       4.3103
+      ]
+     ],
+     "robot_xy": [
+      5.5946,
+      25.3994
+     ],
+     "step": 5,
+     "true_vel": [
+      [
+       -0.1852,
+       0.6231
+      ]
+     ],
+     "true_xy": [
+      [
+       26.9299,
+       4.3103
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1939,
+       0.6204
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.9105,
+       4.3723
+      ]
+     ],
+     "robot_xy": [
+      5.6489,
+      25.4077
+     ],
+     "step": 6,
+     "true_vel": [
+      [
+       -0.1939,
+       0.6204
+      ]
+     ],
+     "true_xy": [
+      [
+       26.9105,
+       4.3723
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.199,
+       0.6188
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.8906,
+       4.4342
+      ]
+     ],
+     "robot_xy": [
+      5.7125,
+      25.4213
+     ],
+     "step": 7,
+     "true_vel": [
+      [
+       -0.199,
+       0.6188
+      ]
+     ],
+     "true_xy": [
+      [
+       26.8906,
+       4.4342
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.2016,
+       0.618
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.8705,
+       4.496
+      ]
+     ],
+     "robot_xy": [
+      5.7848,
+      25.4413
+     ],
+     "step": 8,
+     "true_vel": [
+      [
+       -0.2016,
+       0.618
+      ]
+     ],
+     "true_xy": [
+      [
+       26.8705,
+       4.496
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.2022,
+       0.6177
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.8502,
+       4.5578
+      ]
+     ],
+     "robot_xy": [
+      5.8653,
+      25.4685
+     ],
+     "step": 9,
+     "true_vel": [
+      [
+       -0.2022,
+       0.6177
+      ]
+     ],
+     "true_xy": [
+      [
+       26.8502,
+       4.5578
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.2014,
+       0.618
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.8301,
+       4.6196
+      ]
+     ],
+     "robot_xy": [
+      5.9538,
+      25.503
+     ],
+     "step": 10,
+     "true_vel": [
+      [
+       -0.2014,
+       0.618
+      ]
+     ],
+     "true_xy": [
+      [
+       26.8301,
+       4.6196
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1996,
+       0.6186
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.8101,
+       4.6814
+      ]
+     ],
+     "robot_xy": [
+      6.05,
+      25.5452
+     ],
+     "step": 11,
+     "true_vel": [
+      [
+       -0.1996,
+       0.6186
+      ]
+     ],
+     "true_xy": [
+      [
+       26.8101,
+       4.6814
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1969,
+       0.6195
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.7904,
+       4.7434
+      ]
+     ],
+     "robot_xy": [
+      6.1536,
+      25.5951
+     ],
+     "step": 12,
+     "true_vel": [
+      [
+       -0.1969,
+       0.6195
+      ]
+     ],
+     "true_xy": [
+      [
+       26.7904,
+       4.7434
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1937,
+       0.6205
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.7711,
+       4.8054
+      ]
+     ],
+     "robot_xy": [
+      6.2644,
+      25.6529
+     ],
+     "step": 13,
+     "true_vel": [
+      [
+       -0.1937,
+       0.6205
+      ]
+     ],
+     "true_xy": [
+      [
+       26.7711,
+       4.8054
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1901,
+       0.6216
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.7521,
+       4.8676
+      ]
+     ],
+     "robot_xy": [
+      6.3823,
+      25.7186
+     ],
+     "step": 14,
+     "true_vel": [
+      [
+       -0.1901,
+       0.6216
+      ]
+     ],
+     "true_xy": [
+      [
+       26.7521,
+       4.8676
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1861,
+       0.6228
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.7335,
+       4.9298
+      ]
+     ],
+     "robot_xy": [
+      6.5072,
+      25.7923
+     ],
+     "step": 15,
+     "true_vel": [
+      [
+       -0.1861,
+       0.6228
+      ]
+     ],
+     "true_xy": [
+      [
+       26.7335,
+       4.9298
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.182,
+       0.624
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.7153,
+       4.9922
+      ]
+     ],
+     "robot_xy": [
+      6.639,
+      25.8738
+     ],
+     "step": 16,
+     "true_vel": [
+      [
+       -0.182,
+       0.624
+      ]
+     ],
+     "true_xy": [
+      [
+       26.7153,
+       4.9922
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1777,
+       0.6252
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.6975,
+       5.0548
+      ]
+     ],
+     "robot_xy": [
+      6.7783,
+      25.9623
+     ],
+     "step": 17,
+     "true_vel": [
+      [
+       -0.1777,
+       0.6252
+      ]
+     ],
+     "true_xy": [
+      [
+       26.6975,
+       5.0548
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1733,
+       0.6265
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.6802,
+       5.1174
+      ]
+     ],
+     "robot_xy": [
+      6.9235,
+      26.055
+     ],
+     "step": 18,
+     "true_vel": [
+      [
+       -0.1733,
+       0.6265
+      ]
+     ],
+     "true_xy": [
+      [
+       26.6802,
+       5.1174
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1688,
+       0.6277
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.6633,
+       5.1802
+      ]
+     ],
+     "robot_xy": [
+      7.0712,
+      26.1476
+     ],
+     "step": 19,
+     "true_vel": [
+      [
+       -0.1688,
+       0.6277
+      ]
+     ],
+     "true_xy": [
+      [
+       26.6633,
+       5.1802
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1644,
+       0.6289
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.6468,
+       5.2431
+      ]
+     ],
+     "robot_xy": [
+      7.2207,
+      26.2378
+     ],
+     "step": 20,
+     "true_vel": [
+      [
+       -0.1644,
+       0.6289
+      ]
+     ],
+     "true_xy": [
+      [
+       26.6468,
+       5.2431
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1599,
+       0.63
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.6309,
+       5.3061
+      ]
+     ],
+     "robot_xy": [
+      7.3738,
+      26.3244
+     ],
+     "step": 21,
+     "true_vel": [
+      [
+       -0.1599,
+       0.63
+      ]
+     ],
+     "true_xy": [
+      [
+       26.6309,
+       5.3061
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1554,
+       0.6311
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.6153,
+       5.3692
+      ]
+     ],
+     "robot_xy": [
+      7.5319,
+      26.4062
+     ],
+     "step": 22,
+     "true_vel": [
+      [
+       -0.1554,
+       0.6311
+      ]
+     ],
+     "true_xy": [
+      [
+       26.6153,
+       5.3692
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.151,
+       0.6322
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.6002,
+       5.4324
+      ]
+     ],
+     "robot_xy": [
+      7.6964,
+      26.4815
+     ],
+     "step": 23,
+     "true_vel": [
+      [
+       -0.151,
+       0.6322
+      ]
+     ],
+     "true_xy": [
+      [
+       26.6002,
+       5.4324
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1466,
+       0.6332
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.5855,
+       5.4957
+      ]
+     ],
+     "robot_xy": [
+      7.868,
+      26.549
+     ],
+     "step": 24,
+     "true_vel": [
+      [
+       -0.1466,
+       0.6332
+      ]
+     ],
+     "true_xy": [
+      [
+       26.5855,
+       5.4957
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1423,
+       0.6342
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.5713,
+       5.5592
+      ]
+     ],
+     "robot_xy": [
+      8.0466,
+      26.6083
+     ],
+     "step": 25,
+     "true_vel": [
+      [
+       -0.1423,
+       0.6342
+      ]
+     ],
+     "true_xy": [
+      [
+       26.5713,
+       5.5592
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.138,
+       0.6352
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.5575,
+       5.6227
+      ]
+     ],
+     "robot_xy": [
+      8.2308,
+      26.6597
+     ],
+     "step": 26,
+     "true_vel": [
+      [
+       -0.138,
+       0.6352
+      ]
+     ],
+     "true_xy": [
+      [
+       26.5575,
+       5.6227
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1338,
+       0.6361
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.5441,
+       5.6863
+      ]
+     ],
+     "robot_xy": [
+      8.4191,
+      26.7041
+     ],
+     "step": 27,
+     "true_vel": [
+      [
+       -0.1338,
+       0.6361
+      ]
+     ],
+     "true_xy": [
+      [
+       26.5441,
+       5.6863
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1297,
+       0.6369
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.5312,
+       5.75
+      ]
+     ],
+     "robot_xy": [
+      8.6099,
+      26.7421
+     ],
+     "step": 28,
+     "true_vel": [
+      [
+       -0.1297,
+       0.6369
+      ]
+     ],
+     "true_xy": [
+      [
+       26.5312,
+       5.75
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1257,
+       0.6377
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.5186,
+       5.8138
+      ]
+     ],
+     "robot_xy": [
+      8.8026,
+      26.7747
+     ],
+     "step": 29,
+     "true_vel": [
+      [
+       -0.1257,
+       0.6377
+      ]
+     ],
+     "true_xy": [
+      [
+       26.5186,
+       5.8138
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1217,
+       0.6385
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.5064,
+       5.8776
+      ]
+     ],
+     "robot_xy": [
+      8.9968,
+      26.8026
+     ],
+     "step": 30,
+     "true_vel": [
+      [
+       -0.1217,
+       0.6385
+      ]
+     ],
+     "true_xy": [
+      [
+       26.5064,
+       5.8776
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1178,
+       0.6392
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.4946,
+       5.9415
+      ]
+     ],
+     "robot_xy": [
+      9.192,
+      26.8264
+     ],
+     "step": 31,
+     "true_vel": [
+      [
+       -0.1178,
+       0.6392
+      ]
+     ],
+     "true_xy": [
+      [
+       26.4946,
+       5.9415
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1139,
+       0.6399
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.4832,
+       6.0055
+      ]
+     ],
+     "robot_xy": [
+      9.3882,
+      26.8468
+     ],
+     "step": 32,
+     "true_vel": [
+      [
+       -0.1139,
+       0.6399
+      ]
+     ],
+     "true_xy": [
+      [
+       26.4832,
+       6.0055
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1102,
+       0.6406
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.4722,
+       6.0696
+      ]
+     ],
+     "robot_xy": [
+      9.5851,
+      26.8643
+     ],
+     "step": 33,
+     "true_vel": [
+      [
+       -0.1102,
+       0.6406
+      ]
+     ],
+     "true_xy": [
+      [
+       26.4722,
+       6.0696
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1065,
+       0.6412
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.4616,
+       6.1337
+      ]
+     ],
+     "robot_xy": [
+      9.7825,
+      26.8792
+     ],
+     "step": 34,
+     "true_vel": [
+      [
+       -0.1065,
+       0.6412
+      ]
+     ],
+     "true_xy": [
+      [
+       26.4616,
+       6.1337
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1029,
+       0.6418
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.4513,
+       6.1979
+      ]
+     ],
+     "robot_xy": [
+      9.9804,
+      26.892
+     ],
+     "step": 35,
+     "true_vel": [
+      [
+       -0.1029,
+       0.6418
+      ]
+     ],
+     "true_xy": [
+      [
+       26.4513,
+       6.1979
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.0994,
+       0.6423
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.4413,
+       6.2621
+      ]
+     ],
+     "robot_xy": [
+      10.1786,
+      26.903
+     ],
+     "step": 36,
+     "true_vel": [
+      [
+       -0.0994,
+       0.6423
+      ]
+     ],
+     "true_xy": [
+      [
+       26.4413,
+       6.2621
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.096,
+       0.6429
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.4317,
+       6.3264
+      ]
+     ],
+     "robot_xy": [
+      10.3772,
+      26.9124
+     ],
+     "step": 37,
+     "true_vel": [
+      [
+       -0.096,
+       0.6429
+      ]
+     ],
+     "true_xy": [
+      [
+       26.4317,
+       6.3264
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.0927,
+       0.6434
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.4225,
+       6.3907
+      ]
+     ],
+     "robot_xy": [
+      10.576,
+      26.9206
+     ],
+     "step": 38,
+     "true_vel": [
+      [
+       -0.0927,
+       0.6434
+      ]
+     ],
+     "true_xy": [
+      [
+       26.4225,
+       6.3907
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.0894,
+       0.6438
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.4135,
+       6.4551
+      ]
+     ],
+     "robot_xy": [
+      10.7749,
+      26.9275
+     ],
+     "step": 39,
+     "true_vel": [
+      [
+       -0.0894,
+       0.6438
+      ]
+     ],
+     "true_xy": [
+      [
+       26.4135,
+       6.4551
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.0862,
+       0.6443
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.4049,
+       6.5195
+      ]
+     ],
+     "robot_xy": [
+      10.9741,
+      26.9336
+     ],
+     "step": 40,
+     "true_vel": [
+      [
+       -0.0862,
+       0.6443
+      ]
+     ],
+     "true_xy": [
+      [
+       26.4049,
+       6.5195
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.0831,
+       0.6447
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.3966,
+       6.584
+      ]
+     ],
+     "robot_xy": [
+      11.1734,
+      26.9388
+     ],
+     "step": 41,
+     "true_vel": [
+      [
+       -0.0831,
+       0.6447
+      ]
+     ],
+     "true_xy": [
+      [
+       26.3966,
+       6.584
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.0801,
+       0.645
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.3886,
+       6.6485
+      ]
+     ],
+     "robot_xy": [
+      11.3728,
+      26.9433
+     ],
+     "step": 42,
+     "true_vel": [
+      [
+       -0.0801,
+       0.645
+      ]
+     ],
+     "true_xy": [
+      [
+       26.3886,
+       6.6485
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.0772,
+       0.6454
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.3809,
+       6.7131
+      ]
+     ],
+     "robot_xy": [
+      11.5723,
+      26.9472
+     ],
+     "step": 43,
+     "true_vel": [
+      [
+       -0.0772,
+       0.6454
+      ]
+     ],
+     "true_xy": [
+      [
+       26.3809,
+       6.7131
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.0743,
+       0.6457
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.3734,
+       6.7776
+      ]
+     ],
+     "robot_xy": [
+      11.7719,
+      26.9507
+     ],
+     "step": 44,
+     "true_vel": [
+      [
+       -0.0743,
+       0.6457
+      ]
+     ],
+     "true_xy": [
+      [
+       26.3734,
+       6.7776
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.0715,
+       0.6461
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.3663,
+       6.8422
+      ]
+     ],
+     "robot_xy": [
+      11.9715,
+      26.9537
+     ],
+     "step": 45,
+     "true_vel": [
+      [
+       -0.0715,
+       0.6461
+      ]
+     ],
+     "true_xy": [
+      [
+       26.3663,
+       6.8422
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.0688,
+       0.6463
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.3594,
+       6.9069
+      ]
+     ],
+     "robot_xy": [
+      12.1712,
+      26.9563
+     ],
+     "step": 46,
+     "true_vel": [
+      [
+       -0.0688,
+       0.6463
+      ]
+     ],
+     "true_xy": [
+      [
+       26.3594,
+       6.9069
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.0662,
+       0.6466
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.3528,
+       6.9715
+      ]
+     ],
+     "robot_xy": [
+      12.371,
+      26.9586
+     ],
+     "step": 47,
+     "true_vel": [
+      [
+       -0.0662,
+       0.6466
+      ]
+     ],
+     "true_xy": [
+      [
+       26.3528,
+       6.9715
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.0636,
+       0.6469
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.3464,
+       7.0362
+      ]
+     ],
+     "robot_xy": [
+      12.5707,
+      26.9607
+     ],
+     "step": 48,
+     "true_vel": [
+      [
+       -0.0636,
+       0.6469
+      ]
+     ],
+     "true_xy": [
+      [
+       26.3464,
+       7.0362
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.0612,
+       0.6471
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.3403,
+       7.1009
+      ]
+     ],
+     "robot_xy": [
+      12.7705,
+      26.9625
+     ],
+     "step": 49,
+     "true_vel": [
+      [
+       -0.0612,
+       0.6471
+      ]
+     ],
+     "true_xy": [
+      [
+       26.3403,
+       7.1009
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.0588,
+       0.6473
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.3344,
+       7.1657
+      ]
+     ],
+     "robot_xy": [
+      12.9704,
+      26.9641
+     ],
+     "step": 50,
+     "true_vel": [
+      [
+       -0.0588,
+       0.6473
+      ]
+     ],
+     "true_xy": [
+      [
+       26.3344,
+       7.1657
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.0564,
+       0.6475
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.3288,
+       7.2304
+      ]
+     ],
+     "robot_xy": [
+      13.1703,
+      26.9656
+     ],
+     "step": 51,
+     "true_vel": [
+      [
+       -0.0564,
+       0.6475
+      ]
+     ],
+     "true_xy": [
+      [
+       26.3288,
+       7.2304
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.0542,
+       0.6477
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.3233,
+       7.2952
+      ]
+     ],
+     "robot_xy": [
+      13.3701,
+      26.9669
+     ],
+     "step": 52,
+     "true_vel": [
+      [
+       -0.0542,
+       0.6477
+      ]
+     ],
+     "true_xy": [
+      [
+       26.3233,
+       7.2952
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.052,
+       0.6479
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.3182,
+       7.36
+      ]
+     ],
+     "robot_xy": [
+      13.57,
+      26.9682
+     ],
+     "step": 53,
+     "true_vel": [
+      [
+       -0.052,
+       0.6479
+      ]
+     ],
+     "true_xy": [
+      [
+       26.3182,
+       7.36
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.0498,
+       0.6481
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.3132,
+       7.4248
+      ]
+     ],
+     "robot_xy": [
+      13.77,
+      26.9693
+     ],
+     "step": 54,
+     "true_vel": [
+      [
+       -0.0498,
+       0.6481
+      ]
+     ],
+     "true_xy": [
+      [
+       26.3132,
+       7.4248
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.0478,
+       0.6482
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.3084,
+       7.4896
+      ]
+     ],
+     "robot_xy": [
+      13.9699,
+      26.9703
+     ],
+     "step": 55,
+     "true_vel": [
+      [
+       -0.0478,
+       0.6482
+      ]
+     ],
+     "true_xy": [
+      [
+       26.3084,
+       7.4896
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.0458,
+       0.6484
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.3038,
+       7.5545
+      ]
+     ],
+     "robot_xy": [
+      14.1698,
+      26.9712
+     ],
+     "step": 56,
+     "true_vel": [
+      [
+       -0.0458,
+       0.6484
+      ]
+     ],
+     "true_xy": [
+      [
+       26.3038,
+       7.5545
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.0439,
+       0.6485
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.2994,
+       7.6193
+      ]
+     ],
+     "robot_xy": [
+      14.3698,
+      26.9721
+     ],
+     "step": 57,
+     "true_vel": [
+      [
+       -0.0439,
+       0.6485
+      ]
+     ],
+     "true_xy": [
+      [
+       26.2994,
+       7.6193
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.042,
+       0.6486
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.2952,
+       7.6842
+      ]
+     ],
+     "robot_xy": [
+      14.5697,
+      26.973
+     ],
+     "step": 58,
+     "true_vel": [
+      [
+       -0.042,
+       0.6486
+      ]
+     ],
+     "true_xy": [
+      [
+       26.2952,
+       7.6842
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.0402,
+       0.6488
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.2912,
+       7.749
+      ]
+     ],
+     "robot_xy": [
+      14.7697,
+      26.9738
+     ],
+     "step": 59,
+     "true_vel": [
+      [
+       -0.0402,
+       0.6488
+      ]
+     ],
+     "true_xy": [
+      [
+       26.2912,
+       7.749
+      ]
+     ]
+    }
+   ]
+  },
+  "delay": {
+   "summary": {
+    "all_channels_consumed_every_snapshot": true,
+    "condition": "delay",
+    "consumed_steps": {
+     "occupancy_grid_pedestrians": 238,
+     "socnav_pedestrian_rows": 238
+    },
+    "delay_steps": 2,
+    "episode_key": "9905796754585817335",
+    "expected_channels": [
+     "socnav_pedestrian_rows",
+     "occupancy_grid_pedestrians"
+    ],
+    "interpretation": "declared_synthetic_pedestrian_perception_stressor_not_a_sensor_model",
+    "position_noise_std_m": 0.0,
+    "stats": {
+     "abs_position_error_sum_m": 30.243736552108512,
+     "delay_held_initial_steps": 2,
+     "max_position_error_m": 0.12999999984486013,
+     "mean_abs_position_error_m": 0.12707452332818703,
+     "perceived_rows": 238,
+     "rows_occluded": 0,
+     "rows_position_differs": 237,
+     "snapshots": 238,
+     "steps_perceived_differs": 237,
+     "steps_with_occlusion": 0,
+     "true_rows": 238
+    }
+   },
+   "trace": [
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       0.0,
+       0.5
+      ]
+     ],
+     "perceived_xy": [
+      [
+       27.0,
+       4.0
+      ]
+     ],
+     "robot_xy": [
+      5.4699,
+      25.3916
+     ],
+     "step": 0,
+     "true_vel": [
+      [
+       0.0,
+       0.5
+      ]
+     ],
+     "true_xy": [
+      [
+       27.0,
+       4.0
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       0.0,
+       0.5
+      ]
+     ],
+     "perceived_xy": [
+      [
+       27.0,
+       4.0
+      ]
+     ],
+     "robot_xy": [
+      5.4749,
+      25.3916
+     ],
+     "step": 1,
+     "true_vel": [
+      [
+       -0.0696,
+       0.5824
+      ]
+     ],
+     "true_xy": [
+      [
+       26.993,
+       4.0582
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       0.0,
+       0.5
+      ]
+     ],
+     "perceived_xy": [
+      [
+       27.0,
+       4.0
+      ]
+     ],
+     "robot_xy": [
+      5.4899,
+      25.3918
+     ],
+     "step": 2,
+     "true_vel": [
+      [
+       -0.1228,
+       0.6383
+      ]
+     ],
+     "true_xy": [
+      [
+       26.9808,
+       4.1221
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.0696,
+       0.5824
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.993,
+       4.0582
+      ]
+     ],
+     "robot_xy": [
+      5.5149,
+      25.3926
+     ],
+     "step": 3,
+     "true_vel": [
+      [
+       -0.1517,
+       0.632
+      ]
+     ],
+     "true_xy": [
+      [
+       26.9656,
+       4.1853
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1228,
+       0.6383
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.9808,
+       4.1221
+      ]
+     ],
+     "robot_xy": [
+      5.5498,
+      25.3948
+     ],
+     "step": 4,
+     "true_vel": [
+      [
+       -0.1717,
+       0.6269
+      ]
+     ],
+     "true_xy": [
+      [
+       26.9484,
+       4.248
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1517,
+       0.632
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.9656,
+       4.1853
+      ]
+     ],
+     "robot_xy": [
+      5.5946,
+      25.3994
+     ],
+     "step": 5,
+     "true_vel": [
+      [
+       -0.1852,
+       0.6231
+      ]
+     ],
+     "true_xy": [
+      [
+       26.9299,
+       4.3103
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1717,
+       0.6269
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.9484,
+       4.248
+      ]
+     ],
+     "robot_xy": [
+      5.6489,
+      25.4077
+     ],
+     "step": 6,
+     "true_vel": [
+      [
+       -0.1939,
+       0.6204
+      ]
+     ],
+     "true_xy": [
+      [
+       26.9105,
+       4.3723
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1852,
+       0.6231
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.9299,
+       4.3103
+      ]
+     ],
+     "robot_xy": [
+      5.7125,
+      25.4213
+     ],
+     "step": 7,
+     "true_vel": [
+      [
+       -0.199,
+       0.6188
+      ]
+     ],
+     "true_xy": [
+      [
+       26.8906,
+       4.4342
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1939,
+       0.6204
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.9105,
+       4.3723
+      ]
+     ],
+     "robot_xy": [
+      5.7848,
+      25.4413
+     ],
+     "step": 8,
+     "true_vel": [
+      [
+       -0.2016,
+       0.618
+      ]
+     ],
+     "true_xy": [
+      [
+       26.8705,
+       4.496
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.199,
+       0.6188
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.8906,
+       4.4342
+      ]
+     ],
+     "robot_xy": [
+      5.8653,
+      25.4685
+     ],
+     "step": 9,
+     "true_vel": [
+      [
+       -0.2022,
+       0.6177
+      ]
+     ],
+     "true_xy": [
+      [
+       26.8502,
+       4.5578
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.2016,
+       0.618
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.8705,
+       4.496
+      ]
+     ],
+     "robot_xy": [
+      5.9538,
+      25.503
+     ],
+     "step": 10,
+     "true_vel": [
+      [
+       -0.2014,
+       0.618
+      ]
+     ],
+     "true_xy": [
+      [
+       26.8301,
+       4.6196
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.2022,
+       0.6177
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.8502,
+       4.5578
+      ]
+     ],
+     "robot_xy": [
+      6.05,
+      25.5452
+     ],
+     "step": 11,
+     "true_vel": [
+      [
+       -0.1996,
+       0.6186
+      ]
+     ],
+     "true_xy": [
+      [
+       26.8101,
+       4.6814
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.2014,
+       0.618
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.8301,
+       4.6196
+      ]
+     ],
+     "robot_xy": [
+      6.1536,
+      25.5951
+     ],
+     "step": 12,
+     "true_vel": [
+      [
+       -0.1969,
+       0.6195
+      ]
+     ],
+     "true_xy": [
+      [
+       26.7904,
+       4.7434
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1996,
+       0.6186
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.8101,
+       4.6814
+      ]
+     ],
+     "robot_xy": [
+      6.2644,
+      25.6529
+     ],
+     "step": 13,
+     "true_vel": [
+      [
+       -0.1937,
+       0.6205
+      ]
+     ],
+     "true_xy": [
+      [
+       26.7711,
+       4.8054
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1969,
+       0.6195
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.7904,
+       4.7434
+      ]
+     ],
+     "robot_xy": [
+      6.3823,
+      25.7186
+     ],
+     "step": 14,
+     "true_vel": [
+      [
+       -0.1901,
+       0.6216
+      ]
+     ],
+     "true_xy": [
+      [
+       26.7521,
+       4.8676
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1937,
+       0.6205
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.7711,
+       4.8054
+      ]
+     ],
+     "robot_xy": [
+      6.5072,
+      25.7923
+     ],
+     "step": 15,
+     "true_vel": [
+      [
+       -0.1861,
+       0.6228
+      ]
+     ],
+     "true_xy": [
+      [
+       26.7335,
+       4.9298
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1901,
+       0.6216
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.7521,
+       4.8676
+      ]
+     ],
+     "robot_xy": [
+      6.639,
+      25.8738
+     ],
+     "step": 16,
+     "true_vel": [
+      [
+       -0.182,
+       0.624
+      ]
+     ],
+     "true_xy": [
+      [
+       26.7153,
+       4.9922
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1861,
+       0.6228
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.7335,
+       4.9298
+      ]
+     ],
+     "robot_xy": [
+      6.7783,
+      25.9623
+     ],
+     "step": 17,
+     "true_vel": [
+      [
+       -0.1777,
+       0.6252
+      ]
+     ],
+     "true_xy": [
+      [
+       26.6975,
+       5.0548
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.182,
+       0.624
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.7153,
+       4.9922
+      ]
+     ],
+     "robot_xy": [
+      6.9235,
+      26.055
+     ],
+     "step": 18,
+     "true_vel": [
+      [
+       -0.1733,
+       0.6265
+      ]
+     ],
+     "true_xy": [
+      [
+       26.6802,
+       5.1174
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1777,
+       0.6252
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.6975,
+       5.0548
+      ]
+     ],
+     "robot_xy": [
+      7.0712,
+      26.1476
+     ],
+     "step": 19,
+     "true_vel": [
+      [
+       -0.1688,
+       0.6277
+      ]
+     ],
+     "true_xy": [
+      [
+       26.6633,
+       5.1802
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1733,
+       0.6265
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.6802,
+       5.1174
+      ]
+     ],
+     "robot_xy": [
+      7.2207,
+      26.2378
+     ],
+     "step": 20,
+     "true_vel": [
+      [
+       -0.1644,
+       0.6289
+      ]
+     ],
+     "true_xy": [
+      [
+       26.6468,
+       5.2431
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1688,
+       0.6277
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.6633,
+       5.1802
+      ]
+     ],
+     "robot_xy": [
+      7.3738,
+      26.3244
+     ],
+     "step": 21,
+     "true_vel": [
+      [
+       -0.1599,
+       0.63
+      ]
+     ],
+     "true_xy": [
+      [
+       26.6309,
+       5.3061
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1644,
+       0.6289
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.6468,
+       5.2431
+      ]
+     ],
+     "robot_xy": [
+      7.5319,
+      26.4062
+     ],
+     "step": 22,
+     "true_vel": [
+      [
+       -0.1554,
+       0.6311
+      ]
+     ],
+     "true_xy": [
+      [
+       26.6153,
+       5.3692
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1599,
+       0.63
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.6309,
+       5.3061
+      ]
+     ],
+     "robot_xy": [
+      7.6964,
+      26.4815
+     ],
+     "step": 23,
+     "true_vel": [
+      [
+       -0.151,
+       0.6322
+      ]
+     ],
+     "true_xy": [
+      [
+       26.6002,
+       5.4324
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1554,
+       0.6311
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.6153,
+       5.3692
+      ]
+     ],
+     "robot_xy": [
+      7.868,
+      26.549
+     ],
+     "step": 24,
+     "true_vel": [
+      [
+       -0.1466,
+       0.6332
+      ]
+     ],
+     "true_xy": [
+      [
+       26.5855,
+       5.4957
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.151,
+       0.6322
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.6002,
+       5.4324
+      ]
+     ],
+     "robot_xy": [
+      8.0466,
+      26.6083
+     ],
+     "step": 25,
+     "true_vel": [
+      [
+       -0.1423,
+       0.6342
+      ]
+     ],
+     "true_xy": [
+      [
+       26.5713,
+       5.5592
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1466,
+       0.6332
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.5855,
+       5.4957
+      ]
+     ],
+     "robot_xy": [
+      8.2308,
+      26.6597
+     ],
+     "step": 26,
+     "true_vel": [
+      [
+       -0.138,
+       0.6352
+      ]
+     ],
+     "true_xy": [
+      [
+       26.5575,
+       5.6227
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1423,
+       0.6342
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.5713,
+       5.5592
+      ]
+     ],
+     "robot_xy": [
+      8.4191,
+      26.7041
+     ],
+     "step": 27,
+     "true_vel": [
+      [
+       -0.1338,
+       0.6361
+      ]
+     ],
+     "true_xy": [
+      [
+       26.5441,
+       5.6863
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.138,
+       0.6352
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.5575,
+       5.6227
+      ]
+     ],
+     "robot_xy": [
+      8.6099,
+      26.7421
+     ],
+     "step": 28,
+     "true_vel": [
+      [
+       -0.1297,
+       0.6369
+      ]
+     ],
+     "true_xy": [
+      [
+       26.5312,
+       5.75
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1338,
+       0.6361
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.5441,
+       5.6863
+      ]
+     ],
+     "robot_xy": [
+      8.8026,
+      26.7747
+     ],
+     "step": 29,
+     "true_vel": [
+      [
+       -0.1257,
+       0.6377
+      ]
+     ],
+     "true_xy": [
+      [
+       26.5186,
+       5.8138
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1297,
+       0.6369
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.5312,
+       5.75
+      ]
+     ],
+     "robot_xy": [
+      8.9968,
+      26.8026
+     ],
+     "step": 30,
+     "true_vel": [
+      [
+       -0.1217,
+       0.6385
+      ]
+     ],
+     "true_xy": [
+      [
+       26.5064,
+       5.8776
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1257,
+       0.6377
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.5186,
+       5.8138
+      ]
+     ],
+     "robot_xy": [
+      9.192,
+      26.8264
+     ],
+     "step": 31,
+     "true_vel": [
+      [
+       -0.1178,
+       0.6392
+      ]
+     ],
+     "true_xy": [
+      [
+       26.4946,
+       5.9415
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1217,
+       0.6385
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.5064,
+       5.8776
+      ]
+     ],
+     "robot_xy": [
+      9.3882,
+      26.8468
+     ],
+     "step": 32,
+     "true_vel": [
+      [
+       -0.1139,
+       0.6399
+      ]
+     ],
+     "true_xy": [
+      [
+       26.4832,
+       6.0055
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1178,
+       0.6392
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.4946,
+       5.9415
+      ]
+     ],
+     "robot_xy": [
+      9.5851,
+      26.8643
+     ],
+     "step": 33,
+     "true_vel": [
+      [
+       -0.1102,
+       0.6406
+      ]
+     ],
+     "true_xy": [
+      [
+       26.4722,
+       6.0696
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1139,
+       0.6399
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.4832,
+       6.0055
+      ]
+     ],
+     "robot_xy": [
+      9.7825,
+      26.8792
+     ],
+     "step": 34,
+     "true_vel": [
+      [
+       -0.1065,
+       0.6412
+      ]
+     ],
+     "true_xy": [
+      [
+       26.4616,
+       6.1337
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1102,
+       0.6406
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.4722,
+       6.0696
+      ]
+     ],
+     "robot_xy": [
+      9.9804,
+      26.892
+     ],
+     "step": 35,
+     "true_vel": [
+      [
+       -0.1029,
+       0.6418
+      ]
+     ],
+     "true_xy": [
+      [
+       26.4513,
+       6.1979
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1065,
+       0.6412
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.4616,
+       6.1337
+      ]
+     ],
+     "robot_xy": [
+      10.1786,
+      26.903
+     ],
+     "step": 36,
+     "true_vel": [
+      [
+       -0.0994,
+       0.6423
+      ]
+     ],
+     "true_xy": [
+      [
+       26.4413,
+       6.2621
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.1029,
+       0.6418
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.4513,
+       6.1979
+      ]
+     ],
+     "robot_xy": [
+      10.3772,
+      26.9124
+     ],
+     "step": 37,
+     "true_vel": [
+      [
+       -0.096,
+       0.6429
+      ]
+     ],
+     "true_xy": [
+      [
+       26.4317,
+       6.3264
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.0994,
+       0.6423
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.4413,
+       6.2621
+      ]
+     ],
+     "robot_xy": [
+      10.576,
+      26.9206
+     ],
+     "step": 38,
+     "true_vel": [
+      [
+       -0.0927,
+       0.6434
+      ]
+     ],
+     "true_xy": [
+      [
+       26.4225,
+       6.3907
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.096,
+       0.6429
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.4317,
+       6.3264
+      ]
+     ],
+     "robot_xy": [
+      10.7749,
+      26.9275
+     ],
+     "step": 39,
+     "true_vel": [
+      [
+       -0.0894,
+       0.6438
+      ]
+     ],
+     "true_xy": [
+      [
+       26.4135,
+       6.4551
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.0927,
+       0.6434
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.4225,
+       6.3907
+      ]
+     ],
+     "robot_xy": [
+      10.9741,
+      26.9336
+     ],
+     "step": 40,
+     "true_vel": [
+      [
+       -0.0862,
+       0.6443
+      ]
+     ],
+     "true_xy": [
+      [
+       26.4049,
+       6.5195
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.0894,
+       0.6438
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.4135,
+       6.4551
+      ]
+     ],
+     "robot_xy": [
+      11.1734,
+      26.9388
+     ],
+     "step": 41,
+     "true_vel": [
+      [
+       -0.0831,
+       0.6447
+      ]
+     ],
+     "true_xy": [
+      [
+       26.3966,
+       6.584
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.0862,
+       0.6443
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.4049,
+       6.5195
+      ]
+     ],
+     "robot_xy": [
+      11.3728,
+      26.9433
+     ],
+     "step": 42,
+     "true_vel": [
+      [
+       -0.0801,
+       0.645
+      ]
+     ],
+     "true_xy": [
+      [
+       26.3886,
+       6.6485
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.0831,
+       0.6447
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.3966,
+       6.584
+      ]
+     ],
+     "robot_xy": [
+      11.5723,
+      26.9472
+     ],
+     "step": 43,
+     "true_vel": [
+      [
+       -0.0772,
+       0.6454
+      ]
+     ],
+     "true_xy": [
+      [
+       26.3809,
+       6.7131
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.0801,
+       0.645
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.3886,
+       6.6485
+      ]
+     ],
+     "robot_xy": [
+      11.7719,
+      26.9507
+     ],
+     "step": 44,
+     "true_vel": [
+      [
+       -0.0743,
+       0.6457
+      ]
+     ],
+     "true_xy": [
+      [
+       26.3734,
+       6.7776
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.0772,
+       0.6454
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.3809,
+       6.7131
+      ]
+     ],
+     "robot_xy": [
+      11.9715,
+      26.9537
+     ],
+     "step": 45,
+     "true_vel": [
+      [
+       -0.0715,
+       0.6461
+      ]
+     ],
+     "true_xy": [
+      [
+       26.3663,
+       6.8422
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.0743,
+       0.6457
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.3734,
+       6.7776
+      ]
+     ],
+     "robot_xy": [
+      12.1712,
+      26.9563
+     ],
+     "step": 46,
+     "true_vel": [
+      [
+       -0.0688,
+       0.6463
+      ]
+     ],
+     "true_xy": [
+      [
+       26.3594,
+       6.9069
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.0715,
+       0.6461
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.3663,
+       6.8422
+      ]
+     ],
+     "robot_xy": [
+      12.371,
+      26.9586
+     ],
+     "step": 47,
+     "true_vel": [
+      [
+       -0.0662,
+       0.6466
+      ]
+     ],
+     "true_xy": [
+      [
+       26.3528,
+       6.9715
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.0688,
+       0.6463
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.3594,
+       6.9069
+      ]
+     ],
+     "robot_xy": [
+      12.5707,
+      26.9607
+     ],
+     "step": 48,
+     "true_vel": [
+      [
+       -0.0636,
+       0.6469
+      ]
+     ],
+     "true_xy": [
+      [
+       26.3464,
+       7.0362
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.0662,
+       0.6466
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.3528,
+       6.9715
+      ]
+     ],
+     "robot_xy": [
+      12.7705,
+      26.9625
+     ],
+     "step": 49,
+     "true_vel": [
+      [
+       -0.0612,
+       0.6471
+      ]
+     ],
+     "true_xy": [
+      [
+       26.3403,
+       7.1009
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.0636,
+       0.6469
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.3464,
+       7.0362
+      ]
+     ],
+     "robot_xy": [
+      12.9704,
+      26.9641
+     ],
+     "step": 50,
+     "true_vel": [
+      [
+       -0.0588,
+       0.6473
+      ]
+     ],
+     "true_xy": [
+      [
+       26.3344,
+       7.1657
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.0612,
+       0.6471
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.3403,
+       7.1009
+      ]
+     ],
+     "robot_xy": [
+      13.1703,
+      26.9656
+     ],
+     "step": 51,
+     "true_vel": [
+      [
+       -0.0564,
+       0.6475
+      ]
+     ],
+     "true_xy": [
+      [
+       26.3288,
+       7.2304
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.0588,
+       0.6473
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.3344,
+       7.1657
+      ]
+     ],
+     "robot_xy": [
+      13.3701,
+      26.9669
+     ],
+     "step": 52,
+     "true_vel": [
+      [
+       -0.0542,
+       0.6477
+      ]
+     ],
+     "true_xy": [
+      [
+       26.3233,
+       7.2952
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.0564,
+       0.6475
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.3288,
+       7.2304
+      ]
+     ],
+     "robot_xy": [
+      13.57,
+      26.9682
+     ],
+     "step": 53,
+     "true_vel": [
+      [
+       -0.052,
+       0.6479
+      ]
+     ],
+     "true_xy": [
+      [
+       26.3182,
+       7.36
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.0542,
+       0.6477
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.3233,
+       7.2952
+      ]
+     ],
+     "robot_xy": [
+      13.77,
+      26.9693
+     ],
+     "step": 54,
+     "true_vel": [
+      [
+       -0.0498,
+       0.6481
+      ]
+     ],
+     "true_xy": [
+      [
+       26.3132,
+       7.4248
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.052,
+       0.6479
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.3182,
+       7.36
+      ]
+     ],
+     "robot_xy": [
+      13.9699,
+      26.9703
+     ],
+     "step": 55,
+     "true_vel": [
+      [
+       -0.0478,
+       0.6482
+      ]
+     ],
+     "true_xy": [
+      [
+       26.3084,
+       7.4896
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.0498,
+       0.6481
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.3132,
+       7.4248
+      ]
+     ],
+     "robot_xy": [
+      14.1698,
+      26.9712
+     ],
+     "step": 56,
+     "true_vel": [
+      [
+       -0.0458,
+       0.6484
+      ]
+     ],
+     "true_xy": [
+      [
+       26.3038,
+       7.5545
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.0478,
+       0.6482
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.3084,
+       7.4896
+      ]
+     ],
+     "robot_xy": [
+      14.3698,
+      26.9721
+     ],
+     "step": 57,
+     "true_vel": [
+      [
+       -0.0439,
+       0.6485
+      ]
+     ],
+     "true_xy": [
+      [
+       26.2994,
+       7.6193
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.0458,
+       0.6484
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.3038,
+       7.5545
+      ]
+     ],
+     "robot_xy": [
+      14.5697,
+      26.973
+     ],
+     "step": 58,
+     "true_vel": [
+      [
+       -0.042,
+       0.6486
+      ]
+     ],
+     "true_xy": [
+      [
+       26.2952,
+       7.6842
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [
+      0
+     ],
+     "perceived_vel": [
+      [
+       -0.0439,
+       0.6485
+      ]
+     ],
+     "perceived_xy": [
+      [
+       26.2994,
+       7.6193
+      ]
+     ],
+     "robot_xy": [
+      14.7697,
+      26.9738
+     ],
+     "step": 59,
+     "true_vel": [
+      [
+       -0.0402,
+       0.6488
+      ]
+     ],
+     "true_xy": [
+      [
+       26.2912,
+       7.749
+      ]
+     ]
+    }
+   ]
+  },
+  "static_occlusion": {
+   "summary": {
+    "all_channels_consumed_every_snapshot": true,
+    "condition": "static_occlusion",
+    "consumed_steps": {
+     "occupancy_grid_pedestrians": 234,
+     "socnav_pedestrian_rows": 234
+    },
+    "delay_steps": 0,
+    "episode_key": "10560353983212775877",
+    "expected_channels": [
+     "socnav_pedestrian_rows",
+     "occupancy_grid_pedestrians"
+    ],
+    "interpretation": "declared_synthetic_pedestrian_perception_stressor_not_a_sensor_model",
+    "position_noise_std_m": 0.0,
+    "stats": {
+     "abs_position_error_sum_m": 0.0,
+     "delay_held_initial_steps": 0,
+     "max_position_error_m": 0.0,
+     "mean_abs_position_error_m": 0.0,
+     "perceived_rows": 130,
+     "rows_occluded": 104,
+     "rows_position_differs": 0,
+     "snapshots": 234,
+     "steps_perceived_differs": 104,
+     "steps_with_occlusion": 104,
+     "true_rows": 234
+    }
+   },
+   "trace": [
+    {
+     "perceived_slots": [],
+     "perceived_vel": [],
+     "perceived_xy": [],
+     "robot_xy": [
+      5.4699,
+      25.3916
+     ],
+     "step": 0,
+     "true_vel": [
+      [
+       0.0,
+       0.5
+      ]
+     ],
+     "true_xy": [
+      [
+       27.0,
+       4.0
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [],
+     "perceived_vel": [],
+     "perceived_xy": [],
+     "robot_xy": [
+      5.4749,
+      25.3916
+     ],
+     "step": 1,
+     "true_vel": [
+      [
+       -0.0696,
+       0.5824
+      ]
+     ],
+     "true_xy": [
+      [
+       26.993,
+       4.0582
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [],
+     "perceived_vel": [],
+     "perceived_xy": [],
+     "robot_xy": [
+      5.4899,
+      25.3918
+     ],
+     "step": 2,
+     "true_vel": [
+      [
+       -0.1228,
+       0.6383
+      ]
+     ],
+     "true_xy": [
+      [
+       26.9808,
+       4.1221
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [],
+     "perceived_vel": [],
+     "perceived_xy": [],
+     "robot_xy": [
+      5.5149,
+      25.3926
+     ],
+     "step": 3,
+     "true_vel": [
+      [
+       -0.1517,
+       0.632
+      ]
+     ],
+     "true_xy": [
+      [
+       26.9656,
+       4.1853
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [],
+     "perceived_vel": [],
+     "perceived_xy": [],
+     "robot_xy": [
+      5.5498,
+      25.3948
+     ],
+     "step": 4,
+     "true_vel": [
+      [
+       -0.1717,
+       0.6269
+      ]
+     ],
+     "true_xy": [
+      [
+       26.9484,
+       4.248
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [],
+     "perceived_vel": [],
+     "perceived_xy": [],
+     "robot_xy": [
+      5.5946,
+      25.3994
+     ],
+     "step": 5,
+     "true_vel": [
+      [
+       -0.1852,
+       0.6231
+      ]
+     ],
+     "true_xy": [
+      [
+       26.9299,
+       4.3103
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [],
+     "perceived_vel": [],
+     "perceived_xy": [],
+     "robot_xy": [
+      5.6489,
+      25.4077
+     ],
+     "step": 6,
+     "true_vel": [
+      [
+       -0.1939,
+       0.6204
+      ]
+     ],
+     "true_xy": [
+      [
+       26.9105,
+       4.3723
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [],
+     "perceived_vel": [],
+     "perceived_xy": [],
+     "robot_xy": [
+      5.7125,
+      25.4213
+     ],
+     "step": 7,
+     "true_vel": [
+      [
+       -0.199,
+       0.6188
+      ]
+     ],
+     "true_xy": [
+      [
+       26.8906,
+       4.4342
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [],
+     "perceived_vel": [],
+     "perceived_xy": [],
+     "robot_xy": [
+      5.7848,
+      25.4413
+     ],
+     "step": 8,
+     "true_vel": [
+      [
+       -0.2016,
+       0.618
+      ]
+     ],
+     "true_xy": [
+      [
+       26.8705,
+       4.496
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [],
+     "perceived_vel": [],
+     "perceived_xy": [],
+     "robot_xy": [
+      5.8653,
+      25.4685
+     ],
+     "step": 9,
+     "true_vel": [
+      [
+       -0.2022,
+       0.6177
+      ]
+     ],
+     "true_xy": [
+      [
+       26.8502,
+       4.5578
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [],
+     "perceived_vel": [],
+     "perceived_xy": [],
+     "robot_xy": [
+      5.9538,
+      25.503
+     ],
+     "step": 10,
+     "true_vel": [
+      [
+       -0.2014,
+       0.618
+      ]
+     ],
+     "true_xy": [
+      [
+       26.8301,
+       4.6196
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [],
+     "perceived_vel": [],
+     "perceived_xy": [],
+     "robot_xy": [
+      6.05,
+      25.5452
+     ],
+     "step": 11,
+     "true_vel": [
+      [
+       -0.1996,
+       0.6186
+      ]
+     ],
+     "true_xy": [
+      [
+       26.8101,
+       4.6814
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [],
+     "perceived_vel": [],
+     "perceived_xy": [],
+     "robot_xy": [
+      6.1536,
+      25.5951
+     ],
+     "step": 12,
+     "true_vel": [
+      [
+       -0.1969,
+       0.6195
+      ]
+     ],
+     "true_xy": [
+      [
+       26.7904,
+       4.7434
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [],
+     "perceived_vel": [],
+     "perceived_xy": [],
+     "robot_xy": [
+      6.2644,
+      25.6529
+     ],
+     "step": 13,
+     "true_vel": [
+      [
+       -0.1937,
+       0.6205
+      ]
+     ],
+     "true_xy": [
+      [
+       26.7711,
+       4.8054
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [],
+     "perceived_vel": [],
+     "perceived_xy": [],
+     "robot_xy": [
+      6.3823,
+      25.7186
+     ],
+     "step": 14,
+     "true_vel": [
+      [
+       -0.1901,
+       0.6216
+      ]
+     ],
+     "true_xy": [
+      [
+       26.7521,
+       4.8676
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [],
+     "perceived_vel": [],
+     "perceived_xy": [],
+     "robot_xy": [
+      6.5072,
+      25.7923
+     ],
+     "step": 15,
+     "true_vel": [
+      [
+       -0.1861,
+       0.6228
+      ]
+     ],
+     "true_xy": [
+      [
+       26.7335,
+       4.9298
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [],
+     "perceived_vel": [],
+     "perceived_xy": [],
+     "robot_xy": [
+      6.639,
+      25.8738
+     ],
+     "step": 16,
+     "true_vel": [
+      [
+       -0.182,
+       0.624
+      ]
+     ],
+     "true_xy": [
+      [
+       26.7153,
+       4.9922
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [],
+     "perceived_vel": [],
+     "perceived_xy": [],
+     "robot_xy": [
+      6.7783,
+      25.9623
+     ],
+     "step": 17,
+     "true_vel": [
+      [
+       -0.1777,
+       0.6252
+      ]
+     ],
+     "true_xy": [
+      [
+       26.6975,
+       5.0548
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [],
+     "perceived_vel": [],
+     "perceived_xy": [],
+     "robot_xy": [
+      6.9235,
+      26.055
+     ],
+     "step": 18,
+     "true_vel": [
+      [
+       -0.1733,
+       0.6265
+      ]
+     ],
+     "true_xy": [
+      [
+       26.6802,
+       5.1174
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [],
+     "perceived_vel": [],
+     "perceived_xy": [],
+     "robot_xy": [
+      7.0712,
+      26.1476
+     ],
+     "step": 19,
+     "true_vel": [
+      [
+       -0.1688,
+       0.6277
+      ]
+     ],
+     "true_xy": [
+      [
+       26.6633,
+       5.1802
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [],
+     "perceived_vel": [],
+     "perceived_xy": [],
+     "robot_xy": [
+      7.2207,
+      26.2378
+     ],
+     "step": 20,
+     "true_vel": [
+      [
+       -0.1644,
+       0.6289
+      ]
+     ],
+     "true_xy": [
+      [
+       26.6468,
+       5.2431
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [],
+     "perceived_vel": [],
+     "perceived_xy": [],
+     "robot_xy": [
+      7.3738,
+      26.3244
+     ],
+     "step": 21,
+     "true_vel": [
+      [
+       -0.1599,
+       0.63
+      ]
+     ],
+     "true_xy": [
+      [
+       26.6309,
+       5.3061
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [],
+     "perceived_vel": [],
+     "perceived_xy": [],
+     "robot_xy": [
+      7.5319,
+      26.4062
+     ],
+     "step": 22,
+     "true_vel": [
+      [
+       -0.1554,
+       0.6311
+      ]
+     ],
+     "true_xy": [
+      [
+       26.6153,
+       5.3692
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [],
+     "perceived_vel": [],
+     "perceived_xy": [],
+     "robot_xy": [
+      7.6964,
+      26.4815
+     ],
+     "step": 23,
+     "true_vel": [
+      [
+       -0.151,
+       0.6322
+      ]
+     ],
+     "true_xy": [
+      [
+       26.6002,
+       5.4324
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [],
+     "perceived_vel": [],
+     "perceived_xy": [],
+     "robot_xy": [
+      7.868,
+      26.549
+     ],
+     "step": 24,
+     "true_vel": [
+      [
+       -0.1466,
+       0.6332
+      ]
+     ],
+     "true_xy": [
+      [
+       26.5855,
+       5.4957
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [],
+     "perceived_vel": [],
+     "perceived_xy": [],
+     "robot_xy": [
+      8.0466,
+      26.6083
+     ],
+     "step": 25,
+     "true_vel": [
+      [
+       -0.1423,
+       0.6342
+      ]
+     ],
+     "true_xy": [
+      [
+       26.5713,
+       5.5592
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [],
+     "perceived_vel": [],
+     "perceived_xy": [],
+     "robot_xy": [
+      8.2308,
+      26.6597
+     ],
+     "step": 26,
+     "true_vel": [
+      [
+       -0.138,
+       0.6352
+      ]
+     ],
+     "true_xy": [
+      [
+       26.5575,
+       5.6227
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [],
+     "perceived_vel": [],
+     "perceived_xy": [],
+     "robot_xy": [
+      8.4191,
+      26.7041
+     ],
+     "step": 27,
+     "true_vel": [
+      [
+       -0.1338,
+       0.6361
+      ]
+     ],
+     "true_xy": [
+      [
+       26.5441,
+       5.6863
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [],
+     "perceived_vel": [],
+     "perceived_xy": [],
+     "robot_xy": [
+      8.6099,
+      26.7421
+     ],
+     "step": 28,
+     "true_vel": [
+      [
+       -0.1297,
+       0.6369
+      ]
+     ],
+     "true_xy": [
+      [
+       26.5312,
+       5.75
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [],
+     "perceived_vel": [],
+     "perceived_xy": [],
+     "robot_xy": [
+      8.8026,
+      26.7747
+     ],
+     "step": 29,
+     "true_vel": [
+      [
+       -0.1257,
+       0.6377
+      ]
+     ],
+     "true_xy": [
+      [
+       26.5186,
+       5.8138
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [],
+     "perceived_vel": [],
+     "perceived_xy": [],
+     "robot_xy": [
+      8.9968,
+      26.8026
+     ],
+     "step": 30,
+     "true_vel": [
+      [
+       -0.1217,
+       0.6385
+      ]
+     ],
+     "true_xy": [
+      [
+       26.5064,
+       5.8776
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [],
+     "perceived_vel": [],
+     "perceived_xy": [],
+     "robot_xy": [
+      9.192,
+      26.8264
+     ],
+     "step": 31,
+     "true_vel": [
+      [
+       -0.1178,
+       0.6392
+      ]
+     ],
+     "true_xy": [
+      [
+       26.4946,
+       5.9415
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [],
+     "perceived_vel": [],
+     "perceived_xy": [],
+     "robot_xy": [
+      9.3882,
+      26.8468
+     ],
+     "step": 32,
+     "true_vel": [
+      [
+       -0.1139,
+       0.6399
+      ]
+     ],
+     "true_xy": [
+      [
+       26.4832,
+       6.0055
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [],
+     "perceived_vel": [],
+     "perceived_xy": [],
+     "robot_xy": [
+      9.5851,
+      26.8643
+     ],
+     "step": 33,
+     "true_vel": [
+      [
+       -0.1102,
+       0.6406
+      ]
+     ],
+     "true_xy": [
+      [
+       26.4722,
+       6.0696
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [],
+     "perceived_vel": [],
+     "perceived_xy": [],
+     "robot_xy": [
+      9.7825,
+      26.8792
+     ],
+     "step": 34,
+     "true_vel": [
+      [
+       -0.1065,
+       0.6412
+      ]
+     ],
+     "true_xy": [
+      [
+       26.4616,
+       6.1337
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [],
+     "perceived_vel": [],
+     "perceived_xy": [],
+     "robot_xy": [
+      9.9804,
+      26.892
+     ],
+     "step": 35,
+     "true_vel": [
+      [
+       -0.1029,
+       0.6418
+      ]
+     ],
+     "true_xy": [
+      [
+       26.4513,
+       6.1979
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [],
+     "perceived_vel": [],
+     "perceived_xy": [],
+     "robot_xy": [
+      10.1786,
+      26.903
+     ],
+     "step": 36,
+     "true_vel": [
+      [
+       -0.0994,
+       0.6423
+      ]
+     ],
+     "true_xy": [
+      [
+       26.4413,
+       6.2621
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [],
+     "perceived_vel": [],
+     "perceived_xy": [],
+     "robot_xy": [
+      10.3772,
+      26.9124
+     ],
+     "step": 37,
+     "true_vel": [
+      [
+       -0.096,
+       0.6429
+      ]
+     ],
+     "true_xy": [
+      [
+       26.4317,
+       6.3264
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [],
+     "perceived_vel": [],
+     "perceived_xy": [],
+     "robot_xy": [
+      10.576,
+      26.9206
+     ],
+     "step": 38,
+     "true_vel": [
+      [
+       -0.0927,
+       0.6434
+      ]
+     ],
+     "true_xy": [
+      [
+       26.4225,
+       6.3907
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [],
+     "perceived_vel": [],
+     "perceived_xy": [],
+     "robot_xy": [
+      10.7749,
+      26.9275
+     ],
+     "step": 39,
+     "true_vel": [
+      [
+       -0.0894,
+       0.6438
+      ]
+     ],
+     "true_xy": [
+      [
+       26.4135,
+       6.4551
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [],
+     "perceived_vel": [],
+     "perceived_xy": [],
+     "robot_xy": [
+      10.9741,
+      26.9336
+     ],
+     "step": 40,
+     "true_vel": [
+      [
+       -0.0862,
+       0.6443
+      ]
+     ],
+     "true_xy": [
+      [
+       26.4049,
+       6.5195
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [],
+     "perceived_vel": [],
+     "perceived_xy": [],
+     "robot_xy": [
+      11.1734,
+      26.9388
+     ],
+     "step": 41,
+     "true_vel": [
+      [
+       -0.0831,
+       0.6447
+      ]
+     ],
+     "true_xy": [
+      [
+       26.3966,
+       6.584
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [],
+     "perceived_vel": [],
+     "perceived_xy": [],
+     "robot_xy": [
+      11.3728,
+      26.9433
+     ],
+     "step": 42,
+     "true_vel": [
+      [
+       -0.0801,
+       0.645
+      ]
+     ],
+     "true_xy": [
+      [
+       26.3886,
+       6.6485
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [],
+     "perceived_vel": [],
+     "perceived_xy": [],
+     "robot_xy": [
+      11.5723,
+      26.9472
+     ],
+     "step": 43,
+     "true_vel": [
+      [
+       -0.0772,
+       0.6454
+      ]
+     ],
+     "true_xy": [
+      [
+       26.3809,
+       6.7131
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [],
+     "perceived_vel": [],
+     "perceived_xy": [],
+     "robot_xy": [
+      11.7719,
+      26.9507
+     ],
+     "step": 44,
+     "true_vel": [
+      [
+       -0.0743,
+       0.6457
+      ]
+     ],
+     "true_xy": [
+      [
+       26.3734,
+       6.7776
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [],
+     "perceived_vel": [],
+     "perceived_xy": [],
+     "robot_xy": [
+      11.9715,
+      26.9537
+     ],
+     "step": 45,
+     "true_vel": [
+      [
+       -0.0715,
+       0.6461
+      ]
+     ],
+     "true_xy": [
+      [
+       26.3663,
+       6.8422
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [],
+     "perceived_vel": [],
+     "perceived_xy": [],
+     "robot_xy": [
+      12.1712,
+      26.9563
+     ],
+     "step": 46,
+     "true_vel": [
+      [
+       -0.0688,
+       0.6463
+      ]
+     ],
+     "true_xy": [
+      [
+       26.3594,
+       6.9069
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [],
+     "perceived_vel": [],
+     "perceived_xy": [],
+     "robot_xy": [
+      12.371,
+      26.9586
+     ],
+     "step": 47,
+     "true_vel": [
+      [
+       -0.0662,
+       0.6466
+      ]
+     ],
+     "true_xy": [
+      [
+       26.3528,
+       6.9715
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [],
+     "perceived_vel": [],
+     "perceived_xy": [],
+     "robot_xy": [
+      12.5707,
+      26.9607
+     ],
+     "step": 48,
+     "true_vel": [
+      [
+       -0.0636,
+       0.6469
+      ]
+     ],
+     "true_xy": [
+      [
+       26.3464,
+       7.0362
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [],
+     "perceived_vel": [],
+     "perceived_xy": [],
+     "robot_xy": [
+      12.7705,
+      26.9625
+     ],
+     "step": 49,
+     "true_vel": [
+      [
+       -0.0612,
+       0.6471
+      ]
+     ],
+     "true_xy": [
+      [
+       26.3403,
+       7.1009
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [],
+     "perceived_vel": [],
+     "perceived_xy": [],
+     "robot_xy": [
+      12.9704,
+      26.9641
+     ],
+     "step": 50,
+     "true_vel": [
+      [
+       -0.0588,
+       0.6473
+      ]
+     ],
+     "true_xy": [
+      [
+       26.3344,
+       7.1657
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [],
+     "perceived_vel": [],
+     "perceived_xy": [],
+     "robot_xy": [
+      13.1703,
+      26.9656
+     ],
+     "step": 51,
+     "true_vel": [
+      [
+       -0.0564,
+       0.6475
+      ]
+     ],
+     "true_xy": [
+      [
+       26.3288,
+       7.2304
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [],
+     "perceived_vel": [],
+     "perceived_xy": [],
+     "robot_xy": [
+      13.3701,
+      26.9669
+     ],
+     "step": 52,
+     "true_vel": [
+      [
+       -0.0542,
+       0.6477
+      ]
+     ],
+     "true_xy": [
+      [
+       26.3233,
+       7.2952
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [],
+     "perceived_vel": [],
+     "perceived_xy": [],
+     "robot_xy": [
+      13.57,
+      26.9682
+     ],
+     "step": 53,
+     "true_vel": [
+      [
+       -0.052,
+       0.6479
+      ]
+     ],
+     "true_xy": [
+      [
+       26.3182,
+       7.36
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [],
+     "perceived_vel": [],
+     "perceived_xy": [],
+     "robot_xy": [
+      13.77,
+      26.9693
+     ],
+     "step": 54,
+     "true_vel": [
+      [
+       -0.0498,
+       0.6481
+      ]
+     ],
+     "true_xy": [
+      [
+       26.3132,
+       7.4248
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [],
+     "perceived_vel": [],
+     "perceived_xy": [],
+     "robot_xy": [
+      13.9699,
+      26.9703
+     ],
+     "step": 55,
+     "true_vel": [
+      [
+       -0.0478,
+       0.6482
+      ]
+     ],
+     "true_xy": [
+      [
+       26.3084,
+       7.4896
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [],
+     "perceived_vel": [],
+     "perceived_xy": [],
+     "robot_xy": [
+      14.1698,
+      26.9712
+     ],
+     "step": 56,
+     "true_vel": [
+      [
+       -0.0458,
+       0.6484
+      ]
+     ],
+     "true_xy": [
+      [
+       26.3038,
+       7.5545
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [],
+     "perceived_vel": [],
+     "perceived_xy": [],
+     "robot_xy": [
+      14.3698,
+      26.9721
+     ],
+     "step": 57,
+     "true_vel": [
+      [
+       -0.0439,
+       0.6485
+      ]
+     ],
+     "true_xy": [
+      [
+       26.2994,
+       7.6193
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [],
+     "perceived_vel": [],
+     "perceived_xy": [],
+     "robot_xy": [
+      14.5697,
+      26.973
+     ],
+     "step": 58,
+     "true_vel": [
+      [
+       -0.042,
+       0.6486
+      ]
+     ],
+     "true_xy": [
+      [
+       26.2952,
+       7.6842
+      ]
+     ]
+    },
+    {
+     "perceived_slots": [],
+     "perceived_vel": [],
+     "perceived_xy": [],
+     "robot_xy": [
+      14.7697,
+      26.9738
+     ],
+     "step": 59,
+     "true_vel": [
+      [
+       -0.0402,
+       0.6488
+      ]
+     ],
+     "true_xy": [
+      [
+       26.2912,
+       7.749
+      ]
+     ]
+    }
+   ]
+  }
+ }
+}

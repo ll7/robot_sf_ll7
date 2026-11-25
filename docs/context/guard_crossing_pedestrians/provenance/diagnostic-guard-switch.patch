@@ -1,0 +1,31 @@
+diff --git a/robot_sf/planner/hybrid_rule_local_planner.py b/robot_sf/planner/hybrid_rule_local_planner.py
+index 5614c5b99..4a1180c6f 100644
+--- a/robot_sf/planner/hybrid_rule_local_planner.py
++++ b/robot_sf/planner/hybrid_rule_local_planner.py
+@@ -316,0 +317,4 @@ class HybridRuleLocalPlannerConfig:
++    # Diagnostic ablation only: keep speed limits, forecast, rollout and soft
++    # scores intact while removing collision/clearance/braking rejection.
++    # False preserves the release execution path; never enable for release use.
++    ablation_disable_hard_guard: bool = False
+@@ -491,0 +496,2 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
++        if self.config.ablation_disable_hard_guard and not self._v4_clearance_braking:
++            raise ValueError("Hard-guard ablation is restricted to the v4 diagnostic controller.")
+@@ -2834 +2840 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
+-        if static_rejection is not None:
++        if static_rejection is not None and not self.config.ablation_disable_hard_guard:
+@@ -2894 +2900 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
+-                if (
++                if not self.config.ablation_disable_hard_guard and (
+@@ -2935 +2941 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
+-            if static_result is not None:
++            if static_result is not None and not self.config.ablation_disable_hard_guard:
+@@ -2949 +2955 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
+-            if dynamic_rejection is not None:
++            if dynamic_rejection is not None and not self.config.ablation_disable_hard_guard:
+@@ -3522 +3528,5 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
+-        if self._v4_clearance_braking and bool(self.config.v4_braking_check_enabled):
++        if (
++            self._v4_clearance_braking
++            and bool(self.config.v4_braking_check_enabled)
++            and not self.config.ablation_disable_hard_guard
++        ):

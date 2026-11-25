@@ -4,6 +4,10 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
+
+import pytest
+import yaml
 
 from robot_sf.benchmark.map_runner.map_runner import run_map_batch
 from robot_sf.nav.geojson_map_provenance import validate_import_provenance
@@ -19,14 +23,35 @@ SCENARIO = REPO_ROOT / "configs/scenarios/single/ovgu_campus_walk.yaml"
 EPISODE_SCHEMA = REPO_ROOT / "robot_sf/benchmark/schemas/episode.schema.v1.json"
 
 
+def _assert_map_matches(actual: Any, expected: Any) -> None:
+    """Compare the exact map structure with a one-nanometre coordinate tolerance."""
+    assert type(actual) is type(expected)
+    if isinstance(expected, dict):
+        assert actual.keys() == expected.keys()
+        for key, value in expected.items():
+            _assert_map_matches(actual[key], value)
+    elif isinstance(expected, list):
+        assert len(actual) == len(expected)
+        for item, value in zip(actual, expected, strict=True):
+            _assert_map_matches(item, value)
+    elif isinstance(expected, float):
+        assert actual == pytest.approx(expected, abs=1e-9, rel=0)
+    else:
+        assert actual == expected
+
+
 def test_real_extract_round_trips_to_the_tracked_scenario_map(tmp_path: Path) -> None:
     """The reviewed public input reproduces the committed loadable segment map."""
     manifest = validate_import_provenance(PROVENANCE, SOURCE)
     generated_map = tmp_path / "ovgu_campus_walk.yaml"
+    repeated_map = tmp_path / "ovgu_campus_walk_repeat.yaml"
 
     assert manifest["classification"] == "exploratory_only"
     assert check_geojson_import([str(SOURCE), str(PROVENANCE), str(generated_map)]) == 0
-    assert generated_map.read_bytes() == SEGMENT_MAP.read_bytes()
+    generated_bytes = generated_map.read_bytes()
+    _assert_map_matches(yaml.safe_load(generated_bytes), yaml.safe_load(SEGMENT_MAP.read_bytes()))
+    assert check_geojson_import([str(SOURCE), str(PROVENANCE), str(repeated_map)]) == 0
+    assert generated_bytes == repeated_map.read_bytes()
 
     scenarios = load_scenarios(SCENARIO)
     assert [scenario["name"] for scenario in scenarios] == ["ovgu_campus_walk_exploratory"]

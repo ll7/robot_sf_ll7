@@ -53,6 +53,7 @@ jobs:
 
       - name: Strict curated Sphinx build
         env:
+          NODE_OPTIONS: --use-openssl-ca
           # The build script parses Sphinx warning lines; force plain output so
           # ANSI color codes can never leak into parsed file paths (issue #9085).
           NO_COLOR: "1"
@@ -62,12 +63,16 @@ jobs:
           scripts/dev/sphinx_strict_build.sh --output-dir site/docs
 
       - name: Stage landing page
+        env:
+          NODE_OPTIONS: --use-openssl-ca
         run: |
           set -euo pipefail
           test -f site/index.html
           touch site/.nojekyll
 
       - name: Redaction scan
+        env:
+          NODE_OPTIONS: --use-openssl-ca
         run: |
           set -euo pipefail
           # Fail closed on private infrastructure data in the staged bundle
@@ -90,6 +95,8 @@ jobs:
           echo "publish-docs-site: redaction scan clean"
 
       - name: Verify staged landing links
+        env:
+          NODE_OPTIONS: --use-openssl-ca
         run: |
           set -euo pipefail
           # Every relative docs/ link on the landing page must resolve inside
@@ -104,6 +111,8 @@ jobs:
           exit "$missing"
 
       - name: Upload Pages artifact
+        env:
+          NODE_OPTIONS: --use-openssl-ca
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5
         with:
           path: site/

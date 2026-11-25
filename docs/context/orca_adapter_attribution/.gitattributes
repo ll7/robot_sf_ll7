@@ -1,0 +1,2 @@
+# Python's CSV writer emits CRLF. Preserve the evidence bytes and treat CR as EOL.
+*.csv whitespace=cr-at-eol

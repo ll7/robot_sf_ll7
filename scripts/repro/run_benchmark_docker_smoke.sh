@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 
-IMAGE_TAG="${ROBOT_SF_REPRO_IMAGE:-robot-sf-benchmark-repro:py312.3-uv0.11.9}"
+IMAGE_TAG="${ROBOT_SF_REPRO_IMAGE:-robot-sf-benchmark-repro:py312.3-uv0.13.4}"
 OUTPUT_ROOT="${ROBOT_SF_REPRO_OUTPUT_ROOT:-output/docker_repro/benchmark_bundle_smoke}"
 GIT_COMMIT="$(git rev-parse HEAD 2>/dev/null || true)"
 

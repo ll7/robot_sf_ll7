@@ -1,0 +1,301 @@
+scenarios:
+- name: classic_doorway_medium__traverse
+  map_file: maps/successor_svg_maps/issue_9762_classic_doorway_goal_zone_entry_v2.svg
+  simulation_config:
+    max_episode_steps: 500
+    ped_density: 0.05
+    route_spawn_distribution: spread
+    route_spawn_jitter_frac: 0.2
+    max_peds_per_group: 1
+    goal_completion_policy: goal_zone_entry_v1
+    social_force_kernel_version: wrapped_v2
+    robot_goal_sampling_policy: footprint_clearance_v1
+  robot_config: {}
+  metadata:
+    archetype: doorway
+    density: medium
+    flow: bi
+    groups: 0.0
+    plausibility:
+      status: unverified
+      verified_on: null
+      verified_by: null
+      method: null
+      notes: null
+      metrics:
+        min_distance: 2.0678184908531962
+        mean_distance: 3.8315920323061348
+        robot_ped_within_5m_frac: 0.7868823705030602
+        ped_force_mean: 0.3252101197691243
+        force_q95: 1.3760223536317078
+      metrics_updated_on: '2026-01-30T14:19:28.225110+01:00'
+    xped_base_cell: classic_doorway_medium
+    xped_route_condition: traverse
+- name: classic_doorway_medium__outside
+  map_file: maps/successor_svg_maps/issue_9762_classic_doorway_goal_zone_entry_v2.svg
+  simulation_config:
+    max_episode_steps: 500
+    ped_density: 0.05
+    route_spawn_distribution: spread
+    route_spawn_jitter_frac: 0.2
+    max_peds_per_group: 1
+    goal_completion_policy: goal_zone_entry_v1
+    social_force_kernel_version: wrapped_v2
+    robot_goal_sampling_policy: footprint_clearance_v1
+  robot_config: {}
+  metadata:
+    archetype: doorway
+    density: medium
+    flow: bi
+    groups: 0.0
+    plausibility:
+      status: unverified
+      verified_on: null
+      verified_by: null
+      method: null
+      notes: null
+      metrics:
+        min_distance: 2.0678184908531962
+        mean_distance: 3.8315920323061348
+        robot_ped_within_5m_frac: 0.7868823705030602
+        ped_force_mean: 0.3252101197691243
+        force_q95: 1.3760223536317078
+      metrics_updated_on: '2026-01-30T14:19:28.225110+01:00'
+    xped_base_cell: classic_doorway_medium
+    xped_route_condition: outside
+  route_overrides_file: docs/context/guard_crossing_pedestrians/inputs/doorway_outside_routes.yaml
+- name: classic_doorway_high__traverse
+  map_file: maps/successor_svg_maps/issue_9762_classic_doorway_goal_zone_entry_v2.svg
+  simulation_config:
+    max_episode_steps: 500
+    ped_density: 0.08
+    route_spawn_distribution: spread
+    route_spawn_jitter_frac: 0.2
+    max_peds_per_group: 1
+    goal_completion_policy: goal_zone_entry_v1
+    social_force_kernel_version: wrapped_v2
+    robot_goal_sampling_policy: footprint_clearance_v1
+  robot_config: {}
+  metadata:
+    archetype: doorway
+    density: high
+    flow: bi
+    groups: 0.0
+    plausibility:
+      status: unverified
+      verified_on: null
+      verified_by: null
+      method: null
+      notes: null
+      metrics:
+        min_distance: 1.5266752306601346
+        mean_distance: 3.6800348987218063
+        robot_ped_within_5m_frac: 0.8078135977219347
+        ped_force_mean: 0.2870675192361372
+        force_q95: 1.1067593700206833
+      metrics_updated_on: '2026-01-30T14:19:28.225110+01:00'
+    xped_base_cell: classic_doorway_high
+    xped_route_condition: traverse
+- name: classic_doorway_high__outside
+  map_file: maps/successor_svg_maps/issue_9762_classic_doorway_goal_zone_entry_v2.svg
+  simulation_config:
+    max_episode_steps: 500
+    ped_density: 0.08
+    route_spawn_distribution: spread
+    route_spawn_jitter_frac: 0.2
+    max_peds_per_group: 1
+    goal_completion_policy: goal_zone_entry_v1
+    social_force_kernel_version: wrapped_v2
+    robot_goal_sampling_policy: footprint_clearance_v1
+  robot_config: {}
+  metadata:
+    archetype: doorway
+    density: high
+    flow: bi
+    groups: 0.0
+    plausibility:
+      status: unverified
+      verified_on: null
+      verified_by: null
+      method: null
+      notes: null
+      metrics:
+        min_distance: 1.5266752306601346
+        mean_distance: 3.6800348987218063
+        robot_ped_within_5m_frac: 0.8078135977219347
+        ped_force_mean: 0.2870675192361372
+        force_q95: 1.1067593700206833
+      metrics_updated_on: '2026-01-30T14:19:28.225110+01:00'
+    xped_base_cell: classic_doorway_high
+    xped_route_condition: outside
+  route_overrides_file: docs/context/guard_crossing_pedestrians/inputs/doorway_outside_routes.yaml
+- name: classic_bottleneck_medium__traverse
+  map_file: maps/successor_svg_maps/issue_9762_classic_bottleneck_medium_goal_zone_entry_v2.svg
+  simulation_config:
+    max_episode_steps: 500
+    ped_density: 0.0
+    goal_completion_policy: goal_zone_entry_v1
+    social_force_kernel_version: wrapped_v2
+    robot_goal_sampling_policy: footprint_clearance_v1
+  robot_config: {}
+  metadata:
+    archetype: bottleneck
+    density: medium
+    spawn_mode: markers
+    density_advisory: zero_baseline_route_spawn
+    flow: bi
+    groups: 0.0
+    plausibility:
+      status: verified
+      verified_on: '2026-01-29'
+      verified_by: ll7
+      method: null
+      notes: ped_density=0.0; use map single_ped markers to control count.
+      metrics:
+        min_distance: 1.3568504232890768
+        mean_distance: 10.304393328176037
+        robot_ped_within_5m_frac: 0.20673702551886897
+        ped_force_mean: 0.0977117812274009
+        force_q95: 0.36515309739568574
+      metrics_updated_on: '2026-01-30T14:19:28.225110+01:00'
+    xped_base_cell: classic_bottleneck_medium
+    xped_route_condition: traverse
+- name: classic_bottleneck_medium__outside
+  map_file: maps/successor_svg_maps/issue_9762_classic_bottleneck_medium_goal_zone_entry_v2.svg
+  simulation_config:
+    max_episode_steps: 500
+    ped_density: 0.0
+    goal_completion_policy: goal_zone_entry_v1
+    social_force_kernel_version: wrapped_v2
+    robot_goal_sampling_policy: footprint_clearance_v1
+  robot_config: {}
+  metadata:
+    archetype: bottleneck
+    density: medium
+    spawn_mode: markers
+    density_advisory: zero_baseline_route_spawn
+    flow: bi
+    groups: 0.0
+    plausibility:
+      status: verified
+      verified_on: '2026-01-29'
+      verified_by: ll7
+      method: null
+      notes: ped_density=0.0; use map single_ped markers to control count.
+      metrics:
+        min_distance: 1.3568504232890768
+        mean_distance: 10.304393328176037
+        robot_ped_within_5m_frac: 0.20673702551886897
+        ped_force_mean: 0.0977117812274009
+        force_q95: 0.36515309739568574
+      metrics_updated_on: '2026-01-30T14:19:28.225110+01:00'
+    xped_base_cell: classic_bottleneck_medium
+    xped_route_condition: outside
+  single_pedestrians:
+  - id: h1
+    goal: null
+    trajectory:
+    - - 20.0
+      - 3.0
+    - - 15.5
+      - 3.0
+    - - 24.5
+      - 3.0
+    - - 15.5
+      - 3.0
+- name: classic_bottleneck_high__traverse
+  map_file: maps/successor_svg_maps/issue_9762_classic_bottleneck_high_goal_zone_entry_v2.svg
+  simulation_config:
+    max_episode_steps: 500
+    ped_density: 0.0
+    goal_completion_policy: goal_zone_entry_v1
+    social_force_kernel_version: wrapped_v2
+    robot_goal_sampling_policy: footprint_clearance_v1
+  robot_config: {}
+  metadata:
+    archetype: bottleneck
+    density: high
+    spawn_mode: markers
+    density_advisory: zero_baseline_route_spawn
+    flow: bi
+    groups: 0.0
+    plausibility:
+      status: verified
+      verified_on: '2026-01-29'
+      verified_by: ll7
+      method: null
+      notes: ped_density=0.0; use map single_ped markers to control count.
+      metrics:
+        min_distance: 1.3151934686291786
+        mean_distance: 10.098522314775332
+        robot_ped_within_5m_frac: 0.21322846692018266
+        ped_force_mean: 0.08291461806394115
+        force_q95: 0.21743377704570035
+      metrics_updated_on: '2026-01-30T14:19:28.225110+01:00'
+    xped_base_cell: classic_bottleneck_high
+    xped_route_condition: traverse
+- name: classic_bottleneck_high__outside
+  map_file: maps/successor_svg_maps/issue_9762_classic_bottleneck_high_goal_zone_entry_v2.svg
+  simulation_config:
+    max_episode_steps: 500
+    ped_density: 0.0
+    goal_completion_policy: goal_zone_entry_v1
+    social_force_kernel_version: wrapped_v2
+    robot_goal_sampling_policy: footprint_clearance_v1
+  robot_config: {}
+  metadata:
+    archetype: bottleneck
+    density: high
+    spawn_mode: markers
+    density_advisory: zero_baseline_route_spawn
+    flow: bi
+    groups: 0.0
+    plausibility:
+      status: verified
+      verified_on: '2026-01-29'
+      verified_by: ll7
+      method: null
+      notes: ped_density=0.0; use map single_ped markers to control count.
+      metrics:
+        min_distance: 1.3151934686291786
+        mean_distance: 10.098522314775332
+        robot_ped_within_5m_frac: 0.21322846692018266
+        ped_force_mean: 0.08291461806394115
+        force_q95: 0.21743377704570035
+      metrics_updated_on: '2026-01-30T14:19:28.225110+01:00'
+    xped_base_cell: classic_bottleneck_high
+    xped_route_condition: outside
+  single_pedestrians:
+  - id: h1
+    goal: null
+    trajectory:
+    - - 19.0
+      - 3.0
+    - - 15.5
+      - 3.0
+    - - 24.5
+      - 3.0
+    - - 15.5
+      - 3.0
+  - id: h2
+    goal: null
+    trajectory:
+    - - 20.0
+      - 3.0
+    - - 15.5
+      - 3.0
+    - - 24.5
+      - 3.0
+    - - 15.5
+      - 3.0
+  - id: h3
+    goal: null
+    trajectory:
+    - - 21.0
+      - 3.0
+    - - 15.5
+      - 3.0
+    - - 24.5
+      - 3.0
+    - - 15.5
+      - 3.0

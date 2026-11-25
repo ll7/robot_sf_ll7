@@ -62,7 +62,7 @@ jobs:
 
       - name: Install pinned uv with bounded retry
         env:
-          UV_VERSION: "0.11.21"
+          UV_VERSION: "0.13.4"
           UV_INSTALL_MAX_ATTEMPTS: "3"
           UV_INSTALL_BACKOFF_BASE: "5"
           UV_INSTALL_BACKOFF_CAP: "30"

@@ -1,0 +1,149 @@
+{
+ "description": "Robot-to-pedestrian centre distance (m) of every occluded pedestrian row in the occlusion pilot (dev seeds 1001-1010). Contact is at 1.4 m. Cells without any occluded row are listed with occluded_rows 0.",
+ "by_planner_cell": {
+  "hybrid_v4_continuous_guard_off|classic_bottleneck_high": {
+   "occluded_rows": 0
+  },
+  "hybrid_v4_continuous_guard_off|classic_cross_trap_medium": {
+   "occluded_rows": 4388,
+   "min_m": 9.756,
+   "p01_m": 12.305,
+   "median_m": 24.653
+  },
+  "hybrid_v4_continuous_guard_off|classic_doorway_medium": {
+   "occluded_rows": 1223,
+   "min_m": 6.388,
+   "p01_m": 7.223,
+   "median_m": 15.187
+  },
+  "hybrid_v4_continuous_guard_off|classic_head_on_corridor_medium": {
+   "occluded_rows": 0
+  },
+  "hybrid_v4_continuous_guard_off|classic_overtaking_medium": {
+   "occluded_rows": 2543,
+   "min_m": 7.385,
+   "p01_m": 7.926,
+   "median_m": 21.739
+  },
+  "hybrid_v4_continuous_guard_off|classic_urban_crossing_medium": {
+   "occluded_rows": 4160,
+   "min_m": 7.577,
+   "p01_m": 8.733,
+   "median_m": 14.43
+  },
+  "hybrid_v4_continuous_guard_off|francis2023_blind_corner": {
+   "occluded_rows": 1103,
+   "min_m": 15.811,
+   "p01_m": 16.118,
+   "median_m": 23.485
+  },
+  "hybrid_v4_continuous_guard_on|classic_bottleneck_high": {
+   "occluded_rows": 0
+  },
+  "hybrid_v4_continuous_guard_on|classic_cross_trap_medium": {
+   "occluded_rows": 10644,
+   "min_m": 5.9,
+   "p01_m": 10.832,
+   "median_m": 22.469
+  },
+  "hybrid_v4_continuous_guard_on|classic_doorway_medium": {
+   "occluded_rows": 1626,
+   "min_m": 6.39,
+   "p01_m": 7.406,
+   "median_m": 15.109
+  },
+  "hybrid_v4_continuous_guard_on|classic_head_on_corridor_medium": {
+   "occluded_rows": 0
+  },
+  "hybrid_v4_continuous_guard_on|classic_overtaking_medium": {
+   "occluded_rows": 2828,
+   "min_m": 7.303,
+   "p01_m": 7.833,
+   "median_m": 21.434
+  },
+  "hybrid_v4_continuous_guard_on|classic_urban_crossing_medium": {
+   "occluded_rows": 4160,
+   "min_m": 7.577,
+   "p01_m": 8.733,
+   "median_m": 14.43
+  },
+  "hybrid_v4_continuous_guard_on|francis2023_blind_corner": {
+   "occluded_rows": 1103,
+   "min_m": 15.811,
+   "p01_m": 16.118,
+   "median_m": 23.485
+  },
+  "orca|classic_bottleneck_high": {
+   "occluded_rows": 0
+  },
+  "orca|classic_cross_trap_medium": {
+   "occluded_rows": 8110,
+   "min_m": 9.513,
+   "p01_m": 11.173,
+   "median_m": 24.588
+  },
+  "orca|classic_doorway_medium": {
+   "occluded_rows": 1195,
+   "min_m": 6.749,
+   "p01_m": 7.666,
+   "median_m": 15.517
+  },
+  "orca|classic_head_on_corridor_medium": {
+   "occluded_rows": 0
+  },
+  "orca|classic_overtaking_medium": {
+   "occluded_rows": 2292,
+   "min_m": 7.644,
+   "p01_m": 8.322,
+   "median_m": 21.329
+  },
+  "orca|classic_urban_crossing_medium": {
+   "occluded_rows": 3753,
+   "min_m": 7.084,
+   "p01_m": 8.349,
+   "median_m": 14.109
+  },
+  "orca|francis2023_blind_corner": {
+   "occluded_rows": 1044,
+   "min_m": 16.424,
+   "p01_m": 16.6,
+   "median_m": 23.639
+  },
+  "ppo|classic_bottleneck_high": {
+   "occluded_rows": 0
+  },
+  "ppo|classic_cross_trap_medium": {
+   "occluded_rows": 4094,
+   "min_m": 6.391,
+   "p01_m": 7.922,
+   "median_m": 24.355
+  },
+  "ppo|classic_doorway_medium": {
+   "occluded_rows": 893,
+   "min_m": 6.196,
+   "p01_m": 7.221,
+   "median_m": 14.651
+  },
+  "ppo|classic_head_on_corridor_medium": {
+   "occluded_rows": 0
+  },
+  "ppo|classic_overtaking_medium": {
+   "occluded_rows": 1851,
+   "min_m": 5.936,
+   "p01_m": 7.534,
+   "median_m": 21.842
+  },
+  "ppo|classic_urban_crossing_medium": {
+   "occluded_rows": 3212,
+   "min_m": 6.171,
+   "p01_m": 7.928,
+   "median_m": 14.172
+  },
+  "ppo|francis2023_blind_corner": {
+   "occluded_rows": 1026,
+   "min_m": 14.497,
+   "p01_m": 14.818,
+   "median_m": 22.697
+  }
+ }
+}

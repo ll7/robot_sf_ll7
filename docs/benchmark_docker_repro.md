@@ -20,7 +20,7 @@ The wrapper builds `docker/benchmark-repro.Dockerfile` and runs
 Default image tag:
 
 ```text
-robot-sf-benchmark-repro:py312.3-uv0.11.9
+robot-sf-benchmark-repro:py312.3-uv0.13.4
 ```
 
 ## GitHub Actions Runner Smoke
@@ -89,7 +89,7 @@ regenerate these artifacts from the tracked Dockerfile, scripts, configs, and so
 The container recipe pins the main reproduction surfaces:
 
 * base image tag: `python:3.12.3-slim-bookworm`
-* uv package: `0.11.9`
+* uv package: `0.13.4`
 * Python dependencies: `uv.lock` with `uv sync --all-extras --frozen`
 * benchmark source: the checked-out repository commit copied into the image
 * benchmark matrix: `configs/scenarios/planner_sanity_matrix_v1.yaml`
@@ -107,3 +107,6 @@ This path is a smoke verification path, not a full campaign runner.
 * It runs headless CPU execution only.
 * It is expected to verify that the canonical small slice runs and writes inspectable artifacts,
   not that every floating-point metric is bit-identical across host CPUs.
+
+The image uses the patched OS CA store for Node, including Playwright's private
+Node driver, and checks that driver during the certificate trust gate.

@@ -27,7 +27,7 @@ jobs:
     timeout-minutes: 60
     env:
       PYTHONUNBUFFERED: "1"
-      ROBOT_SF_REPRO_IMAGE: robot-sf-benchmark-repro:py312.3-uv0.11.9
+      ROBOT_SF_REPRO_IMAGE: robot-sf-benchmark-repro:py312.3-uv0.13.4
       ROBOT_SF_REPRO_OUTPUT_ROOT: output/docker_repro/benchmark_bundle_smoke
     steps:
       - name: Checkout

@@ -1,0 +1,120 @@
+{
+  "contract": {
+    "branch": "exscr1-trace-example-selection",
+    "commit": "3e60a0924303eaa639b1871fb9bd71743306a80e",
+    "first_screening_episode_start_utc": "2026-10-29T07:45:11.623097+00:00",
+    "note": "the remote held the contract commit before the first screening episode started (receipt and episode times read from the same host clock)",
+    "pre_screening_push_receipt": {
+      "ls_remote": {
+        "refs/heads/exscr1-exec-373dbfde": "373dbfde4f39667cf9e8732dabe7df5118bdeab1",
+        "refs/heads/exscr1-trace-example-selection": "3e60a0924303eaa639b1871fb9bd71743306a80e"
+      },
+      "observed_utc": "2026-10-29T07:45:04Z"
+    }
+  },
+  "derived_config": "tools/make_config.py: release campaign config with seed_policy, scenario_candidates, planners, export_publication_bundle, workers and snqi_v2_spec changed; see each contract.yaml execution.derived_config_changes",
+  "determinism": {
+    "screening_ledger.csv, screening_summary.json, trace/*": "byte-identical under PYTHONHASHSEED 0 and 1"
+  },
+  "diss_function_crosscheck": {
+    "mismatches": 0,
+    "rows_checked": {
+      "EXSEL-6.4-MEASURE-WALKTHROUGH": 4,
+      "EXSEL-7.2-NARROW-DOORWAY": 8
+    },
+    "what": "ll7/diss nomination functions episode_record, claim_record_from_release, class_matches and the frozen band test applied to every screened raw row"
+  },
+  "environment": {
+    "host": "one lab workstation, 20 logical CPUs; two claims ran in parallel, one campaign at a time each",
+    "install": "uv sync --frozen at the execution commit",
+    "python": "3.13.14",
+    "rvo2": "importable (compiled module in the project environment)",
+    "screening_driver_PYTHONHASHSEED": 0,
+    "thread_env": "OMP/MKL/OPENBLAS/NUMEXPR_NUM_THREADS=1",
+    "uv_lock_sha256": "def82098b23281e7c49f1f05e052e412c2de54ae2da53f1708bc0ddc2a30d023"
+  },
+  "execution": {
+    "branch": "exscr1-exec-373dbfde",
+    "code_change": "none (unmodified 0.0.8 release commit; no runtime patch)",
+    "commit": "373dbfde4f39667cf9e8732dabe7df5118bdeab1",
+    "repository": "ll7/robot_sf_ll7",
+    "worktree_clean_during_runs": true
+  },
+  "non_screening_runs": {
+    "qualification_parity": {
+      "arm": "goal",
+      "cell": "classic_doorway_medium",
+      "reference": "independent earlier re-execution at the same commit (pin trace-doorway-seedflip-release008, other runner entry point)",
+      "result": "steps, termination, success, ped_collision_count, near_misses and minimum pedestrian separation equal to full float precision on both seeds",
+      "rows": [
+        {
+          "min_ped_separation_m": 1.6752085905575687,
+          "near_misses": 24,
+          "seed": 1004,
+          "steps": 134,
+          "termination_reason": "success"
+        },
+        {
+          "min_ped_separation_m": 1.376553886894883,
+          "near_misses": 3,
+          "ped_collision_count": 1,
+          "seed": 1005,
+          "steps": 33,
+          "termination_reason": "collision"
+        }
+      ],
+      "seeds": [
+        1004,
+        1005
+      ]
+    },
+    "smoke": {
+      "arm": "social_force",
+      "cell": "classic_doorway_high",
+      "result": "rc 0; row fields present; not a screening row",
+      "seed": 1001
+    }
+  },
+  "protocol": {
+    "claim_keyed_report": {
+      "exit_code": 0,
+      "frozen_record": "MATCH for EXSEL-6.4-MEASURE-WALKTHROUGH, EXSEL-7.5-GUARD-PAIR and EXSEL-7.2-NARROW-DOORWAY",
+      "printed_orders_equal_recomputed": true,
+      "release_source": "0.0.8 publication bundle issue9850_release_snqi_v2_0_0_8_373dbfde4f_r39_20261008"
+    },
+    "file_sha256": "c2aaffa2305119c10ce425258c2ca90649ab1829b9853365c0c59b295692763b",
+    "read_at_commit": "77233341637569dae1fbf04e36741c190007a4bc",
+    "repository": "ll7/diss"
+  },
+  "schema": "exsel.screening_provenance.v1",
+  "timing": {
+    "episode_wall_s_range": {
+      "orca_and_goal": [
+        0.19,
+        6.74
+      ],
+      "social_force": [
+        6.44,
+        6.95
+      ]
+    },
+    "screening_campaign_wall_s": {
+      "exsel-6.4-measure-walkthrough": [
+        10.09,
+        10.55,
+        10.09,
+        10.2
+      ],
+      "exsel-7.2-narrow-doorway": [
+        11.48,
+        11.69,
+        11.4,
+        11.32
+      ]
+    },
+    "trace_rerun_campaign_wall_s": {
+      "exsel-6.4-measure-walkthrough": 10.16,
+      "exsel-7.2-narrow-doorway": 11.27
+    }
+  }
+}

@@ -170,7 +170,7 @@ run_smoke_phase() {
   fi
 
   local perf_cmd=(
-    uv run python -m robot_sf.benchmark.perf_cold_warm
+    env PYTHONSAFEPATH=1 uv run python -m robot_sf.benchmark.perf_cold_warm
     --scenario-config configs/scenarios/archetypes/classic_crossing.yaml
     --scenario-name classic_crossing_low
     --episode-steps 48

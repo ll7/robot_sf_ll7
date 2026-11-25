@@ -1,0 +1,2 @@
+# CSV writer output uses CRLF; the carriage return is part of the line ending.
+*.csv whitespace=cr-at-eol

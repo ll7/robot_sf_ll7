@@ -1,0 +1,22 @@
+{
+  "schema": "xped.preservation.v1",
+  "raw_bundle": "xped_guard_crossing_20261028 (main, pilot, sens_remove, environment.json, main_seeds.txt)",
+  "files": 2554,
+  "manifest": "MANIFEST.sha256 (sha256 of every other file)",
+  "manifest_sha256": "f192b24caba9b8dec0511561b1bdf4ce3263cd94dde75a63a4bd0a2ec74e8132",
+  "size": "131 MB (logs gzip -9 compressed, lossless)",
+  "locations": [
+    {
+      "kind": "wandb_artifact",
+      "uri": "wandb://ll7/robot_sf/campaign-xped_guard_crossing_d0e2aa1d9_20261028:v0",
+      "verification": "remote entry table re-fetched; 2555/2555 paths, sizes and MD5 match (2554 files + manifest); no full remote download",
+      "uploads": 1
+    },
+    {
+      "kind": "private_host_archive",
+      "locator": "<host-archive>/experiments/xped/xped_guard_crossing_20261028/",
+      "verification": "sha256sum -c MANIFEST.sha256 passed on the copy (2554 files)"
+    }
+  ],
+  "not_in_git": "raw JSONL, trajectory sidecars and logs; this packet holds the compact projection"
+}

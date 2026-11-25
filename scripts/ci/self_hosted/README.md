@@ -85,7 +85,7 @@ policy and supplemental groups, and stores the runner program under
 the image sets `ACTIONS_RUNNER_HOOK_JOB_STARTED` to its path. Refresh and review
 the digest and package set when the runner version changes; `--disableupdate`
 makes image updates explicit.
-The image pins Node.js 22.23.2 from the official archive and checks its SHA-256;
+The image pins Node.js 22.23.4 from the official archive and checks its SHA-256;
 Ubuntu's Node 18 package cannot parse the browser-runtime test modules.
 
 Each job gets a new container with a read-only root, a 2 GiB tmpfs at
@@ -203,3 +203,29 @@ documents ephemeral registration and version updates. Its
 explains why a public repository's self-hosted runner needs a strict trust
 boundary. GitHub's [runner-group guidance](https://docs.github.com/en/actions/how-tos/manage-runners/self-hosted-runners/manage-access)
 describes repository access restrictions.
+
+### Certificate security updates
+
+The image installs the current distribution `ca-certificates` package and pins
+Node 22.23.4. `NODE_OPTIONS=--use-openssl-ca` also directs the runner's embedded
+Node action runtimes to the patched OS trust store. This matters because updating
+`node` on PATH does not update the runner's private Node executables.
+
+Build a candidate before replacing the production image:
+
+```bash
+ROBOT_SF_CI_IMAGE=robot-sf-ci-runner:emudhra-candidate bash scripts/ci/self_hosted/setup.sh build
+```
+
+Run `scripts/ci/check_tls_trust.py` inside the candidate (mounted read-only if
+needed), using the same environment as jobs. Both disclosed compromised chains
+must fail certificate validation; the GitHub control must succeed. The check also
+covers embedded Node runtimes when present. A DNS failure or timeout is a failed
+check, not proof of protection. Preserve the old image under a dated backup tag
+before promoting the candidate. Rebuilding does not start stopped supervisors.
+
+The shared CI action repeats the TLS check in the synchronized Python environment
+so restored caches cannot silently reintroduce an older certificate bundle.
+It also gives ordinary job curl commands a separate `CURL_HOME` configuration
+with the fixed bundle and an explicit empty `capath`. Setting `SSL_CERT_DIR`
+alongside `CURL_CA_BUNDLE` alone can leave curl's compiled CA directory active.

@@ -260,6 +260,18 @@ from a written summary. Missing controller evidence fails the audit; fallback
 or degraded evidence produces a failed or degraded audit. Both head and baseline
 are audited, and unsuccessful audits prevent receipt emission.
 
+The guarded PPO emitter (`GuardedPPOAdapter._shield_decision`) defaults to
+`{"status": "not_calibrated"}` when calibration metadata is absent.
+`ShieldDecision.to_metadata` transports this as
+`algorithm_metadata.planner_runtime.last_decision.prediction.calibration.status`.
+The raw-row audit classifies only that value at that exact path, bound to guarded
+PPO identity and `shield-decision.v1`, as calibration provenance. It establishes
+neither calibrated safety nor controller fallback. Other status values, sibling
+fields and transports remain fail-closed; actual fallback/degradation, mixed
+command evidence, source identity, complete paired coverage and independent
+refute requirements remain separate admission gates. No receipt is accepted
+from partial acquisitions or from this classification alone.
+
 Receipt assembly decodes each linked raw campaign file once per invocation and
 indexes its scenario/seed identities. Duplicate matches, wrong arms, summary/raw
 outcome disagreements and escaping source paths retain their existing rejection

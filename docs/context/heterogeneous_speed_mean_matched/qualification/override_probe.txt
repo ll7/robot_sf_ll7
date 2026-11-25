@@ -1,0 +1,32 @@
+  File "robot_sf/benchmark/map_runner/map_runner_env.py", line 32, in build_env_config
+    config = build_robot_config_from_scenario(
+             └ <function build_robot_config_from_scenario at 0x7c0557d6eca0>
+
+  File "robot_sf/training/scenario_loader.py", line 1731, in build_robot_config_from_scenario
+    _apply_simulation_overrides(config, scenario.get("simulation_config", {}))
+    │                           │       │        └ <method 'get' of 'dict' objects>
+    │                           │       └ {'name': 'mixed_with_desired_speed_mean_0.65', 'map_file': '../../maps/successor_svg_maps/issue_9762_classic_overtaking_goal_...
+    │                           └ RobotSimulationConfig(enable_telemetry_panel=False, telemetry_record=False, telemetry_metrics=['reward', 'collisions', 'min_p...
+    └ <function _apply_simulation_overrides at 0x7c0557d7c900>
+
+  File "robot_sf/training/scenario_loader.py", line 3015, in _apply_simulation_overrides
+    raise ValueError(f"simulation_config contains unknown keys: {', '.join(unknown)}")
+                                                                           └ ['desired_speed_mean']
+
+ValueError: simulation_config contains unknown keys: desired_speed_mean
+{
+ "mixed_no_override": [
+  0.325,
+  0.325,
+  0.325,
+  0.65,
+  0.65,
+  0.65,
+  0.65,
+  0.65,
+  0.65,
+  0.975,
+  0.975,
+  0.975
+ ]
+}

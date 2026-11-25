@@ -1,0 +1,709 @@
+{
+  "bootstrap": {
+    "draws": 10000,
+    "rng": "numpy default_rng(1001)",
+    "unit": "seed block"
+  },
+  "cell_feasibility": [
+    {
+      "O4_candidate_feasibility_problem": false,
+      "best_dd_success": 1.0,
+      "bi_successes_all_planners": 38,
+      "cell": "widened_doorway",
+      "seeds_with_bicycle_witness": 30
+    },
+    {
+      "O4_candidate_feasibility_problem": false,
+      "best_dd_success": 0.9667,
+      "bi_successes_all_planners": 55,
+      "cell": "ordinary_doorway",
+      "seeds_with_bicycle_witness": 29
+    },
+    {
+      "O4_candidate_feasibility_problem": false,
+      "best_dd_success": 1.0,
+      "bi_successes_all_planners": 30,
+      "cell": "bottleneck",
+      "seeds_with_bicycle_witness": 30
+    },
+    {
+      "O4_candidate_feasibility_problem": false,
+      "best_dd_success": 0.9667,
+      "bi_successes_all_planners": 68,
+      "cell": "head_on_corridor",
+      "seeds_with_bicycle_witness": 30
+    },
+    {
+      "O4_candidate_feasibility_problem": false,
+      "best_dd_success": 0.9333,
+      "bi_successes_all_planners": 34,
+      "cell": "cross_trap",
+      "seeds_with_bicycle_witness": 28
+    },
+    {
+      "O4_candidate_feasibility_problem": false,
+      "best_dd_success": 1.0,
+      "bi_successes_all_planners": 30,
+      "cell": "blind_corner",
+      "seeds_with_bicycle_witness": 30
+    }
+  ],
+  "counts": {
+    "goal|BI|blind_corner": {
+      "collision": 30,
+      "n": 30,
+      "other": 0,
+      "success": 0,
+      "timeout": 0
+    },
+    "goal|BI|bottleneck": {
+      "collision": 30,
+      "n": 30,
+      "other": 0,
+      "success": 0,
+      "timeout": 0
+    },
+    "goal|BI|cross_trap": {
+      "collision": 30,
+      "n": 30,
+      "other": 0,
+      "success": 0,
+      "timeout": 0
+    },
+    "goal|BI|head_on_corridor": {
+      "collision": 19,
+      "n": 30,
+      "other": 0,
+      "success": 11,
+      "timeout": 0
+    },
+    "goal|BI|ordinary_doorway": {
+      "collision": 14,
+      "n": 30,
+      "other": 0,
+      "success": 16,
+      "timeout": 0
+    },
+    "goal|BI|widened_doorway": {
+      "collision": 30,
+      "n": 30,
+      "other": 0,
+      "success": 0,
+      "timeout": 0
+    },
+    "goal|DD|blind_corner": {
+      "collision": 30,
+      "n": 30,
+      "other": 0,
+      "success": 0,
+      "timeout": 0
+    },
+    "goal|DD|bottleneck": {
+      "collision": 30,
+      "n": 30,
+      "other": 0,
+      "success": 0,
+      "timeout": 0
+    },
+    "goal|DD|cross_trap": {
+      "collision": 30,
+      "n": 30,
+      "other": 0,
+      "success": 0,
+      "timeout": 0
+    },
+    "goal|DD|head_on_corridor": {
+      "collision": 19,
+      "n": 30,
+      "other": 0,
+      "success": 11,
+      "timeout": 0
+    },
+    "goal|DD|ordinary_doorway": {
+      "collision": 12,
+      "n": 30,
+      "other": 0,
+      "success": 18,
+      "timeout": 0
+    },
+    "goal|DD|widened_doorway": {
+      "collision": 30,
+      "n": 30,
+      "other": 0,
+      "success": 0,
+      "timeout": 0
+    },
+    "orca|BI|blind_corner": {
+      "collision": 0,
+      "n": 30,
+      "other": 0,
+      "success": 30,
+      "timeout": 0
+    },
+    "orca|BI|bottleneck": {
+      "collision": 0,
+      "n": 30,
+      "other": 0,
+      "success": 30,
+      "timeout": 0
+    },
+    "orca|BI|cross_trap": {
+      "collision": 2,
+      "n": 30,
+      "other": 0,
+      "success": 28,
+      "timeout": 0
+    },
+    "orca|BI|head_on_corridor": {
+      "collision": 2,
+      "n": 30,
+      "other": 0,
+      "success": 28,
+      "timeout": 0
+    },
+    "orca|BI|ordinary_doorway": {
+      "collision": 1,
+      "n": 30,
+      "other": 0,
+      "success": 29,
+      "timeout": 0
+    },
+    "orca|BI|widened_doorway": {
+      "collision": 0,
+      "n": 30,
+      "other": 0,
+      "success": 30,
+      "timeout": 0
+    },
+    "orca|DD|blind_corner": {
+      "collision": 0,
+      "n": 30,
+      "other": 0,
+      "success": 30,
+      "timeout": 0
+    },
+    "orca|DD|bottleneck": {
+      "collision": 0,
+      "n": 30,
+      "other": 0,
+      "success": 30,
+      "timeout": 0
+    },
+    "orca|DD|cross_trap": {
+      "collision": 2,
+      "n": 30,
+      "other": 0,
+      "success": 28,
+      "timeout": 0
+    },
+    "orca|DD|head_on_corridor": {
+      "collision": 1,
+      "n": 30,
+      "other": 0,
+      "success": 29,
+      "timeout": 0
+    },
+    "orca|DD|ordinary_doorway": {
+      "collision": 1,
+      "n": 30,
+      "other": 0,
+      "success": 29,
+      "timeout": 0
+    },
+    "orca|DD|widened_doorway": {
+      "collision": 0,
+      "n": 30,
+      "other": 0,
+      "success": 30,
+      "timeout": 0
+    },
+    "social_force|BI|blind_corner": {
+      "collision": 0,
+      "n": 30,
+      "other": 0,
+      "success": 0,
+      "timeout": 30
+    },
+    "social_force|BI|bottleneck": {
+      "collision": 0,
+      "n": 30,
+      "other": 0,
+      "success": 0,
+      "timeout": 30
+    },
+    "social_force|BI|cross_trap": {
+      "collision": 0,
+      "n": 30,
+      "other": 0,
+      "success": 6,
+      "timeout": 24
+    },
+    "social_force|BI|head_on_corridor": {
+      "collision": 0,
+      "n": 30,
+      "other": 0,
+      "success": 29,
+      "timeout": 1
+    },
+    "social_force|BI|ordinary_doorway": {
+      "collision": 0,
+      "n": 30,
+      "other": 0,
+      "success": 10,
+      "timeout": 20
+    },
+    "social_force|BI|widened_doorway": {
+      "collision": 0,
+      "n": 30,
+      "other": 0,
+      "success": 8,
+      "timeout": 22
+    },
+    "social_force|DD|blind_corner": {
+      "collision": 0,
+      "n": 30,
+      "other": 0,
+      "success": 0,
+      "timeout": 30
+    },
+    "social_force|DD|bottleneck": {
+      "collision": 0,
+      "n": 30,
+      "other": 0,
+      "success": 0,
+      "timeout": 30
+    },
+    "social_force|DD|cross_trap": {
+      "collision": 1,
+      "n": 30,
+      "other": 0,
+      "success": 6,
+      "timeout": 23
+    },
+    "social_force|DD|head_on_corridor": {
+      "collision": 0,
+      "n": 30,
+      "other": 0,
+      "success": 28,
+      "timeout": 2
+    },
+    "social_force|DD|ordinary_doorway": {
+      "collision": 0,
+      "n": 30,
+      "other": 0,
+      "success": 26,
+      "timeout": 4
+    },
+    "social_force|DD|widened_doorway": {
+      "collision": 0,
+      "n": 30,
+      "other": 0,
+      "success": 5,
+      "timeout": 25
+    }
+  },
+  "creep_steps_total": 0,
+  "empty_probe": {
+    "goal|BI|0": {
+      "collision": 0,
+      "mean_success_time_s": 4.6,
+      "n": 5,
+      "stuck_windows": 0,
+      "success": 5,
+      "timeout": 0
+    },
+    "goal|BI|135": {
+      "collision": 0,
+      "mean_success_time_s": 8.2,
+      "n": 5,
+      "stuck_windows": 0,
+      "success": 5,
+      "timeout": 0
+    },
+    "goal|BI|180": {
+      "collision": 0,
+      "mean_success_time_s": null,
+      "n": 5,
+      "stuck_windows": 2905,
+      "success": 0,
+      "timeout": 5
+    },
+    "goal|BI|45": {
+      "collision": 0,
+      "mean_success_time_s": 4.9,
+      "n": 5,
+      "stuck_windows": 0,
+      "success": 5,
+      "timeout": 0
+    },
+    "goal|BI|90": {
+      "collision": 0,
+      "mean_success_time_s": 5.8,
+      "n": 5,
+      "stuck_windows": 0,
+      "success": 5,
+      "timeout": 0
+    },
+    "goal|DD|0": {
+      "collision": 0,
+      "mean_success_time_s": 4.6,
+      "n": 5,
+      "stuck_windows": 0,
+      "success": 5,
+      "timeout": 0
+    },
+    "goal|DD|135": {
+      "collision": 0,
+      "mean_success_time_s": 6.6,
+      "n": 5,
+      "stuck_windows": 0,
+      "success": 5,
+      "timeout": 0
+    },
+    "goal|DD|180": {
+      "collision": 0,
+      "mean_success_time_s": 7.4,
+      "n": 5,
+      "stuck_windows": 0,
+      "success": 5,
+      "timeout": 0
+    },
+    "goal|DD|45": {
+      "collision": 0,
+      "mean_success_time_s": 4.9,
+      "n": 5,
+      "stuck_windows": 0,
+      "success": 5,
+      "timeout": 0
+    },
+    "goal|DD|90": {
+      "collision": 0,
+      "mean_success_time_s": 5.6,
+      "n": 5,
+      "stuck_windows": 0,
+      "success": 5,
+      "timeout": 0
+    },
+    "orca|BI|0": {
+      "collision": 0,
+      "mean_success_time_s": 3.1,
+      "n": 5,
+      "stuck_windows": 0,
+      "success": 5,
+      "timeout": 0
+    },
+    "orca|BI|135": {
+      "collision": 0,
+      "mean_success_time_s": null,
+      "n": 5,
+      "stuck_windows": 2905,
+      "success": 0,
+      "timeout": 5
+    },
+    "orca|BI|180": {
+      "collision": 0,
+      "mean_success_time_s": null,
+      "n": 5,
+      "stuck_windows": 2905,
+      "success": 0,
+      "timeout": 5
+    },
+    "orca|BI|45": {
+      "collision": 0,
+      "mean_success_time_s": 3.2,
+      "n": 5,
+      "stuck_windows": 0,
+      "success": 5,
+      "timeout": 0
+    },
+    "orca|BI|90": {
+      "collision": 0,
+      "mean_success_time_s": null,
+      "n": 5,
+      "stuck_windows": 2905,
+      "success": 0,
+      "timeout": 5
+    },
+    "orca|DD|0": {
+      "collision": 0,
+      "mean_success_time_s": 3.1,
+      "n": 5,
+      "stuck_windows": 0,
+      "success": 5,
+      "timeout": 0
+    },
+    "orca|DD|135": {
+      "collision": 0,
+      "mean_success_time_s": 4.8,
+      "n": 5,
+      "stuck_windows": 5,
+      "success": 5,
+      "timeout": 0
+    },
+    "orca|DD|180": {
+      "collision": 0,
+      "mean_success_time_s": 5.8,
+      "n": 5,
+      "stuck_windows": 40,
+      "success": 5,
+      "timeout": 0
+    },
+    "orca|DD|45": {
+      "collision": 0,
+      "mean_success_time_s": 3.1,
+      "n": 5,
+      "stuck_windows": 0,
+      "success": 5,
+      "timeout": 0
+    },
+    "orca|DD|90": {
+      "collision": 0,
+      "mean_success_time_s": 4.0,
+      "n": 5,
+      "stuck_windows": 0,
+      "success": 5,
+      "timeout": 0
+    },
+    "social_force|BI|0": {
+      "collision": 0,
+      "mean_success_time_s": 4.7,
+      "n": 5,
+      "stuck_windows": 0,
+      "success": 5,
+      "timeout": 0
+    },
+    "social_force|BI|135": {
+      "collision": 0,
+      "mean_success_time_s": null,
+      "n": 5,
+      "stuck_windows": 2905,
+      "success": 0,
+      "timeout": 5
+    },
+    "social_force|BI|180": {
+      "collision": 0,
+      "mean_success_time_s": null,
+      "n": 5,
+      "stuck_windows": 2905,
+      "success": 0,
+      "timeout": 5
+    },
+    "social_force|BI|45": {
+      "collision": 0,
+      "mean_success_time_s": 5.4,
+      "n": 5,
+      "stuck_windows": 0,
+      "success": 5,
+      "timeout": 0
+    },
+    "social_force|BI|90": {
+      "collision": 0,
+      "mean_success_time_s": null,
+      "n": 5,
+      "stuck_windows": 2905,
+      "success": 0,
+      "timeout": 5
+    },
+    "social_force|DD|0": {
+      "collision": 0,
+      "mean_success_time_s": 4.6,
+      "n": 5,
+      "stuck_windows": 0,
+      "success": 5,
+      "timeout": 0
+    },
+    "social_force|DD|135": {
+      "collision": 0,
+      "mean_success_time_s": 7.0,
+      "n": 5,
+      "stuck_windows": 5,
+      "success": 5,
+      "timeout": 0
+    },
+    "social_force|DD|180": {
+      "collision": 0,
+      "mean_success_time_s": 7.8,
+      "n": 5,
+      "stuck_windows": 45,
+      "success": 5,
+      "timeout": 0
+    },
+    "social_force|DD|45": {
+      "collision": 0,
+      "mean_success_time_s": 5.3,
+      "n": 5,
+      "stuck_windows": 0,
+      "success": 5,
+      "timeout": 0
+    },
+    "social_force|DD|90": {
+      "collision": 0,
+      "mean_success_time_s": 6.2,
+      "n": 5,
+      "stuck_windows": 0,
+      "success": 5,
+      "timeout": 0
+    }
+  },
+  "episodes": 1230,
+  "missing_pairs": 0,
+  "mode_counts": {
+    "native": 1230
+  },
+  "ordering": [
+    {
+      "BI": {
+        "ci_pp": [
+          -19.4444,
+          -9.4444
+        ],
+        "pp": -14.4444
+      },
+      "DD": {
+        "ci_pp": [
+          -25.0,
+          -15.0
+        ],
+        "pp": -20.0
+      },
+      "dd_resolved_bi_unresolved": false,
+      "pair": "goal-minus-social_force",
+      "reversal": false
+    },
+    {
+      "BI": {
+        "ci_pp": [
+          -86.1111,
+          -78.3333
+        ],
+        "pp": -82.2222
+      },
+      "DD": {
+        "ci_pp": [
+          -85.0,
+          -78.3333
+        ],
+        "pp": -81.6667
+      },
+      "dd_resolved_bi_unresolved": false,
+      "pair": "goal-minus-orca",
+      "reversal": false
+    },
+    {
+      "BI": {
+        "ci_pp": [
+          -71.6667,
+          -63.8889
+        ],
+        "pp": -67.7778
+      },
+      "DD": {
+        "ci_pp": [
+          -65.5556,
+          -57.7778
+        ],
+        "pp": -61.6667
+      },
+      "dd_resolved_bi_unresolved": false,
+      "pair": "social_force-minus-orca",
+      "reversal": false
+    }
+  ],
+  "ordering_reversal": false,
+  "per_planner_outcome": {
+    "goal": {
+      "O1_comparable": true,
+      "O2_cells_with_bicycle_deficit": [],
+      "O2_no_transfer": false,
+      "O3_empty_world_incompatible_bearings": [
+        180
+      ],
+      "O5_open": false
+    },
+    "orca": {
+      "O1_comparable": true,
+      "O2_cells_with_bicycle_deficit": [],
+      "O2_no_transfer": false,
+      "O3_empty_world_incompatible_bearings": [
+        90,
+        135,
+        180
+      ],
+      "O5_open": false
+    },
+    "social_force": {
+      "O1_comparable": false,
+      "O2_cells_with_bicycle_deficit": [
+        "ordinary_doorway"
+      ],
+      "O2_no_transfer": false,
+      "O3_empty_world_incompatible_bearings": [
+        90,
+        135,
+        180
+      ],
+      "O5_open": true
+    }
+  },
+  "probe_episodes": 150,
+  "probe_seeds": [
+    1121,
+    1122,
+    1123,
+    1124,
+    1125
+  ],
+  "scenario_episodes": 1080,
+  "seeds": [
+    1161,
+    1162,
+    1163,
+    1164,
+    1165,
+    1166,
+    1167,
+    1168,
+    1169,
+    1170,
+    1171,
+    1172,
+    1173,
+    1174,
+    1175,
+    1176,
+    1177,
+    1178,
+    1179,
+    1180,
+    1181,
+    1182,
+    1183,
+    1184,
+    1185,
+    1186,
+    1187,
+    1188,
+    1189,
+    1190
+  ],
+  "source_shas": [
+    "3cf7d7c3b0d0d8d72e7755e74e448b0d983413a2"
+  ],
+  "time_to_goal_paired_successes": [
+    {
+      "mean_bi_minus_dd_s": 0.0259,
+      "paired_successes": 27,
+      "planner": "goal"
+    },
+    {
+      "mean_bi_minus_dd_s": 0.7761,
+      "paired_successes": 46,
+      "planner": "social_force"
+    },
+    {
+      "mean_bi_minus_dd_s": -0.0345,
+      "paired_successes": 174,
+      "planner": "orca"
+    }
+  ]
+}

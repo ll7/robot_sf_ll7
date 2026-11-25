@@ -1,0 +1,28 @@
+{
+  "acquired": "2026-10-28",
+  "artifact_custody": {
+    "durable_uri": "wandb://ll7/robot_sf/xhet-hetspeed-raw-20261028:v0",
+    "host_archive": "lab host archive",
+    "readback_checks": "paths, sizes and file MD5 digests match; artifact digest matches local and remote manifests",
+    "readback_file_count": 4124,
+    "readback_state": "COMMITTED",
+    "wandb_artifact_digest": "cacc7e8dc9d2c4200f5ab71d51a344f9"
+  },
+  "contract_commit": "94081a52ef8a7fddd9cf163a75a0d73a5bb7cf65",
+  "evidence_commit": "95d39f91b6afa36f4d3deff801e5047d210689b6",
+  "host_class": "x86_64 Linux (WSL2) workstation, 12 logical CPUs, 8 worker processes",
+  "main_wall_clock": "17:07-~18:00 CET",
+  "numpy": "2.4.6",
+  "ppo_checkpoint_sha256": "764a7d88f5b608237641d973634899e05a67b25e65f8b1607cfca025459824bc",
+  "python": "3.13.17",
+  "raw_bytes_main_approx": "148M",
+  "raw_files_main": 3280,
+  "run_commit": "94081a52ef8a7fddd9cf163a75a0d73a5bb7cf65",
+  "runtime_base_commit": "373dbfde4f39667cf9e8732dabe7df5118bdeab1",
+  "runtime_patch_reason": "The acquisition commit differs from the runtime base only within this packet; release runtime and configuration were unmodified.",
+  "runtime_patch_required": false,
+  "source_commit": "373dbfde4f39667cf9e8732dabe7df5118bdeab1",
+  "sync": "uv sync --frozen --extra benchmark --extra training",
+  "uv": "0.13.5",
+  "uv_lock_sha256": "def82098b23281e7c49f1f05e052e412c2de54ae2da53f1708bc0ddc2a30d023"
+}

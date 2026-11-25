@@ -1,0 +1,25 @@
+{
+  "outcome": "ROUTE",
+  "n_records": 450,
+  "n_seeds": 30,
+  "no_exclusions": true,
+  "complete_blocks": true,
+  "mode_counts": {
+    "native_backend_adapter": 300,
+    "native": 150
+  },
+  "fallback_count": 0,
+  "degraded_count": 0,
+  "error_count": 0,
+  "baseline_terminal_changes": [],
+  "smallest_common_passing_width_m": null,
+  "from_width_monotonic_on_tested_grid": true,
+  "bootstrap_resamples": 100000,
+  "bootstrap_rng": 20261015,
+  "numpy_version": "2.4.6",
+  "all_matched_reset_inputs_verified": true,
+  "moving_displacement_range_m": [
+    8.9238937130606,
+    22.865031311178537
+  ]
+}

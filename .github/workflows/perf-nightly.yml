@@ -30,15 +30,19 @@ jobs:
 
       - name: Sync dependencies (locked)
         env:
+          NODE_OPTIONS: --use-openssl-ca
           CI_STEP_TIMEOUT_SECONDS: "1200"
         run: bash scripts/dev/ci_step_timer.sh "Sync dependencies (locked)" uv sync --all-extras --frozen
 
       - name: Report uv cache state after sync
         if: always()
+        env:
+          NODE_OPTIONS: --use-openssl-ca
         run: bash scripts/dev/ci_uv_sync_diag.sh "uv-cache-post-sync"
 
       - name: Run xdist race validation
         env:
+          NODE_OPTIONS: --use-openssl-ca
           XDIST_RACE_WORKERS: "auto"
           XDIST_RACE_TIMEOUT_SECONDS: "7200"
           PYTEST_XDIST_DIST: worksteal
@@ -46,6 +50,8 @@ jobs:
 
       - name: Upload xdist race validation artifacts
         if: always()
+        env:
+          NODE_OPTIONS: --use-openssl-ca
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: xdist-race-validation
@@ -60,6 +66,8 @@ jobs:
       # stays far under the ceiling that the old 32-worker setting crossed.
       - name: Measure xdist worker-memory scaling (issue #4942 evidence)
         continue-on-error: true
+        env:
+          NODE_OPTIONS: --use-openssl-ca
         run: |
           uv run python scripts/dev/measure_xdist_worker_memory.py \
             --workers 1 2 4 \
@@ -71,6 +79,8 @@ jobs:
 
       - name: Upload xdist worker-memory diagnostic
         if: always()
+        env:
+          NODE_OPTIONS: --use-openssl-ca
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: xdist-worker-memory-diagnostic
@@ -78,6 +88,8 @@ jobs:
           if-no-files-found: warn
 
       - name: Restore trend history cache
+        env:
+          NODE_OPTIONS: --use-openssl-ca
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: output/benchmarks/perf/trend/history
@@ -88,6 +100,8 @@ jobs:
 
       - name: Run nightly trend benchmark matrix
         id: nightly_trend
+        env:
+          NODE_OPTIONS: --use-openssl-ca
         run: |
           mkdir -p output/benchmarks/perf/trend/history
           uv run python -m robot_sf.benchmark.perf_trend \
@@ -102,6 +116,8 @@ jobs:
 
       - name: Store latest report in trend history cache path
         if: always()
+        env:
+          NODE_OPTIONS: --use-openssl-ca
         run: |
           mkdir -p output/benchmarks/perf/trend/history
           if [ -f output/benchmarks/perf/trend/latest.json ]; then
@@ -110,6 +126,8 @@ jobs:
 
       - name: Upload nightly perf artifacts
         if: always()
+        env:
+          NODE_OPTIONS: --use-openssl-ca
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: nightly-perf-artifacts

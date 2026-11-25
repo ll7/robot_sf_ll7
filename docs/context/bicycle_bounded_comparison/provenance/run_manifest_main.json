@@ -1,0 +1,25 @@
+{
+  "files_sha256": {
+    "configs/algos/orca_release_v0_0_8.yaml": "5840b9e47088a3da14d684091ad0880a6480340fd274fbf88d3ab5b9a1bda5e4",
+    "configs/algos/social_force_release_v0_0_8.yaml": "9a7015a5f66b5d9ddb5d96c706d33ac8fe027bc0aee256e9ab87d2e89804f773",
+    "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml": "5d805909643f1b6c5e919a891657ec86e6800f2ab602b7cfd70f1af1aec94462",
+    "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml": "af4e9a7a22f9d5f373eb4a3323984e0de6d79edd4263f1c023e9efddff2fd25f",
+    "configs/scenarios/francis2023_narrow_doorway_three_width_release_0_0_8_v1.yaml": "9de1d058c6a9145f76c84be63787d5c704be1db288b47fd9c1d31f3f56367778",
+    "docs/context/bicycle_bounded_comparison/contract.yaml": "62c1d2e6c60bc6297896835ee8b230f66fe6ca44afbf9e36f457d6286385bfdd",
+    "docs/context/bicycle_bounded_comparison/run_bounded.py": "4544569b404a00606991d248cff575960d622d37cabb67003ae9ad265082c309",
+    "robot_sf/benchmark/map_runner/map_runner_episode.py": "e12c22cbcdb31ccc69f4d54f2f7ac646de2b8851a742ed69decb90d3c2dc5d52",
+    "robot_sf/benchmark/map_runner_policies/map_runner_actions.py": "a17b3ad094ab63fd79f9c7a48d7899cf33c6dbd76e5bbfa62703e06c64c9c89a",
+    "robot_sf/planner/classic_planner_adapter.py": "c7e4d59870962bd04cf21f79481b28c8bf379386863aca136ad1706e1b13b8ff",
+    "robot_sf/planner/kinematics_model.py": "f7edde06e07f157667eb0a1a6fa463b6e99df3af69d68088498b15e350b577ec",
+    "robot_sf/robot/bicycle_drive.py": "b77d6708ee4aec623cc3bd778e85145c09715b60e5e7f7e45b7a7f9290392ca4",
+    "robot_sf/robot/differential_drive.py": "b8519115c9cc41b8d6450df8412d3999a34b805c8c26fb6782d11ca3c89e7814",
+    "scripts/validation/bicycle_probe_metrics.py": "c381eef4475f002866b8972b556f8a6c4ef9304d31c00eda84c0a3d2f175569b",
+    "uv.lock": "def82098b23281e7c49f1f05e052e412c2de54ae2da53f1708bc0ddc2a30d023"
+  },
+  "git_dirty": "",
+  "numpy": "2.4.6",
+  "platform": "Linux-7.0.0-38-generic-x86_64-with-glibc2.39",
+  "python": "3.13.14",
+  "robot_sf_file_under_root": true,
+  "source_sha": "3cf7d7c3b0d0d8d72e7755e74e448b0d983413a2"
+}

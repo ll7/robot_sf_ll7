@@ -41,6 +41,7 @@ jobs:
 
       - name: Run delta-only actionable-change monitor
         env:
+          NODE_OPTIONS: --use-openssl-ca
           GH_TOKEN: ${{ github.token }}
         run: >-
           uv run python scripts/tools/check_actionable_change_monitor.py

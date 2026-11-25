@@ -1,0 +1,673 @@
+{
+  "conditions": {
+    "delay": {
+      "episodes": 280,
+      "trace_steps": 58898,
+      "trace_violations": 0,
+      "channels_ok": 280
+    },
+    "position_noise": {
+      "episodes": 280,
+      "trace_steps": 58387,
+      "trace_violations": 0,
+      "channels_ok": 280
+    },
+    "static_occlusion": {
+      "episodes": 280,
+      "trace_steps": 56736,
+      "trace_violations": 0,
+      "channels_ok": 280
+    },
+    "oracle": {
+      "episodes": 280,
+      "trace_steps": 57896,
+      "trace_violations": 0,
+      "channels_ok": 280
+    }
+  },
+  "cells": {
+    "classic_bottleneck_high|delay": {
+      "min_distance_m": {
+        "n": 40,
+        "mean": 1.6212303092064395,
+        "min": 1.4256145036101062
+      },
+      "true_rows_per_step": {
+        "n": 40,
+        "mean": 3.0,
+        "min": 3.0
+      },
+      "occluded_step_share": {
+        "n": 40,
+        "mean": 0.0,
+        "min": 0.0
+      },
+      "interaction_exposure_steps": {
+        "n": 40,
+        "mean": 93.15,
+        "min": 2.0
+      }
+    },
+    "classic_bottleneck_high|oracle": {
+      "min_distance_m": {
+        "n": 40,
+        "mean": 1.6221966677721724,
+        "min": 1.3900136479046625
+      },
+      "true_rows_per_step": {
+        "n": 40,
+        "mean": 3.0,
+        "min": 3.0
+      },
+      "occluded_step_share": {
+        "n": 40,
+        "mean": 0.0,
+        "min": 0.0
+      },
+      "interaction_exposure_steps": {
+        "n": 40,
+        "mean": 87.45,
+        "min": 1.0
+      }
+    },
+    "classic_bottleneck_high|position_noise": {
+      "min_distance_m": {
+        "n": 40,
+        "mean": 1.6244283968012385,
+        "min": 1.385367151388378
+      },
+      "true_rows_per_step": {
+        "n": 40,
+        "mean": 3.0,
+        "min": 3.0
+      },
+      "occluded_step_share": {
+        "n": 40,
+        "mean": 0.0,
+        "min": 0.0
+      },
+      "interaction_exposure_steps": {
+        "n": 40,
+        "mean": 91.15,
+        "min": 1.0
+      }
+    },
+    "classic_bottleneck_high|static_occlusion": {
+      "min_distance_m": {
+        "n": 40,
+        "mean": 1.6221966677721724,
+        "min": 1.3900136479046625
+      },
+      "true_rows_per_step": {
+        "n": 40,
+        "mean": 3.0,
+        "min": 3.0
+      },
+      "occluded_step_share": {
+        "n": 40,
+        "mean": 0.0,
+        "min": 0.0
+      },
+      "interaction_exposure_steps": {
+        "n": 40,
+        "mean": 87.45,
+        "min": 1.0
+      }
+    },
+    "classic_cross_trap_medium|delay": {
+      "min_distance_m": {
+        "n": 40,
+        "mean": 1.9367395125220088,
+        "min": 1.4247010214546518
+      },
+      "true_rows_per_step": {
+        "n": 40,
+        "mean": 8.0,
+        "min": 8.0
+      },
+      "occluded_step_share": {
+        "n": 40,
+        "mean": 0.0,
+        "min": 0.0
+      },
+      "interaction_exposure_steps": {
+        "n": 40,
+        "mean": 26.525,
+        "min": 0.0
+      }
+    },
+    "classic_cross_trap_medium|oracle": {
+      "min_distance_m": {
+        "n": 40,
+        "mean": 1.9045340331658571,
+        "min": 1.4089131909258643
+      },
+      "true_rows_per_step": {
+        "n": 40,
+        "mean": 8.0,
+        "min": 8.0
+      },
+      "occluded_step_share": {
+        "n": 40,
+        "mean": 0.0,
+        "min": 0.0
+      },
+      "interaction_exposure_steps": {
+        "n": 40,
+        "mean": 41.625,
+        "min": 0.0
+      }
+    },
+    "classic_cross_trap_medium|position_noise": {
+      "min_distance_m": {
+        "n": 40,
+        "mean": 1.8967324028939516,
+        "min": 1.387669850404147
+      },
+      "true_rows_per_step": {
+        "n": 40,
+        "mean": 8.0,
+        "min": 8.0
+      },
+      "occluded_step_share": {
+        "n": 40,
+        "mean": 0.0,
+        "min": 0.0
+      },
+      "interaction_exposure_steps": {
+        "n": 40,
+        "mean": 43.775,
+        "min": 0.0
+      }
+    },
+    "classic_cross_trap_medium|static_occlusion": {
+      "min_distance_m": {
+        "n": 40,
+        "mean": 1.880240354763663,
+        "min": 1.4089131909258643
+      },
+      "true_rows_per_step": {
+        "n": 40,
+        "mean": 8.0,
+        "min": 8.0
+      },
+      "occluded_step_share": {
+        "n": 40,
+        "mean": 0.8945103554507803,
+        "min": 0.3224489795918367
+      },
+      "interaction_exposure_steps": {
+        "n": 40,
+        "mean": 42.475,
+        "min": 0.0
+      }
+    },
+    "classic_doorway_medium|delay": {
+      "min_distance_m": {
+        "n": 40,
+        "mean": 2.1206761778309007,
+        "min": 1.2757930471999093
+      },
+      "true_rows_per_step": {
+        "n": 40,
+        "mean": 6.0,
+        "min": 6.0
+      },
+      "occluded_step_share": {
+        "n": 40,
+        "mean": 0.0,
+        "min": 0.0
+      },
+      "interaction_exposure_steps": {
+        "n": 40,
+        "mean": 12.175,
+        "min": 0.0
+      }
+    },
+    "classic_doorway_medium|oracle": {
+      "min_distance_m": {
+        "n": 40,
+        "mean": 2.0796787270958013,
+        "min": 1.2754633543953584
+      },
+      "true_rows_per_step": {
+        "n": 40,
+        "mean": 6.0,
+        "min": 6.0
+      },
+      "occluded_step_share": {
+        "n": 40,
+        "mean": 0.0,
+        "min": 0.0
+      },
+      "interaction_exposure_steps": {
+        "n": 40,
+        "mean": 12.55,
+        "min": 0.0
+      }
+    },
+    "classic_doorway_medium|position_noise": {
+      "min_distance_m": {
+        "n": 40,
+        "mean": 2.0866236224981964,
+        "min": 1.294595813559668
+      },
+      "true_rows_per_step": {
+        "n": 40,
+        "mean": 6.0,
+        "min": 6.0
+      },
+      "occluded_step_share": {
+        "n": 40,
+        "mean": 0.0,
+        "min": 0.0
+      },
+      "interaction_exposure_steps": {
+        "n": 40,
+        "mean": 11.55,
+        "min": 0.0
+      }
+    },
+    "classic_doorway_medium|static_occlusion": {
+      "min_distance_m": {
+        "n": 40,
+        "mean": 2.086861247818831,
+        "min": 1.2622223580499818
+      },
+      "true_rows_per_step": {
+        "n": 40,
+        "mean": 6.0,
+        "min": 6.0
+      },
+      "occluded_step_share": {
+        "n": 40,
+        "mean": 0.6874522565215859,
+        "min": 0.27472527472527475
+      },
+      "interaction_exposure_steps": {
+        "n": 40,
+        "mean": 12.475,
+        "min": 0.0
+      }
+    },
+    "classic_head_on_corridor_medium|delay": {
+      "min_distance_m": {
+        "n": 40,
+        "mean": 1.8528041221141582,
+        "min": 1.4837828709013121
+      },
+      "true_rows_per_step": {
+        "n": 40,
+        "mean": 4.0,
+        "min": 4.0
+      },
+      "occluded_step_share": {
+        "n": 40,
+        "mean": 0.0,
+        "min": 0.0
+      },
+      "interaction_exposure_steps": {
+        "n": 40,
+        "mean": 15.85,
+        "min": 0.0
+      }
+    },
+    "classic_head_on_corridor_medium|oracle": {
+      "min_distance_m": {
+        "n": 40,
+        "mean": 1.8375012437357114,
+        "min": 1.3643332770476782
+      },
+      "true_rows_per_step": {
+        "n": 40,
+        "mean": 4.0,
+        "min": 4.0
+      },
+      "occluded_step_share": {
+        "n": 40,
+        "mean": 0.0,
+        "min": 0.0
+      },
+      "interaction_exposure_steps": {
+        "n": 40,
+        "mean": 14.15,
+        "min": 0.0
+      }
+    },
+    "classic_head_on_corridor_medium|position_noise": {
+      "min_distance_m": {
+        "n": 40,
+        "mean": 1.835067875046382,
+        "min": 1.3840880384490295
+      },
+      "true_rows_per_step": {
+        "n": 40,
+        "mean": 4.0,
+        "min": 4.0
+      },
+      "occluded_step_share": {
+        "n": 40,
+        "mean": 0.0,
+        "min": 0.0
+      },
+      "interaction_exposure_steps": {
+        "n": 40,
+        "mean": 18.375,
+        "min": 0.0
+      }
+    },
+    "classic_head_on_corridor_medium|static_occlusion": {
+      "min_distance_m": {
+        "n": 40,
+        "mean": 1.8375012437357114,
+        "min": 1.3643332770476782
+      },
+      "true_rows_per_step": {
+        "n": 40,
+        "mean": 4.0,
+        "min": 4.0
+      },
+      "occluded_step_share": {
+        "n": 40,
+        "mean": 0.0,
+        "min": 0.0
+      },
+      "interaction_exposure_steps": {
+        "n": 40,
+        "mean": 14.15,
+        "min": 0.0
+      }
+    },
+    "classic_overtaking_medium|delay": {
+      "min_distance_m": {
+        "n": 40,
+        "mean": 1.9852659266470958,
+        "min": 1.4736651682540771
+      },
+      "true_rows_per_step": {
+        "n": 40,
+        "mean": 6.0,
+        "min": 6.0
+      },
+      "occluded_step_share": {
+        "n": 40,
+        "mean": 0.0,
+        "min": 0.0
+      },
+      "interaction_exposure_steps": {
+        "n": 40,
+        "mean": 23.725,
+        "min": 0.0
+      }
+    },
+    "classic_overtaking_medium|oracle": {
+      "min_distance_m": {
+        "n": 40,
+        "mean": 1.9427252455211517,
+        "min": 1.3718709768968296
+      },
+      "true_rows_per_step": {
+        "n": 40,
+        "mean": 6.0,
+        "min": 6.0
+      },
+      "occluded_step_share": {
+        "n": 40,
+        "mean": 0.0,
+        "min": 0.0
+      },
+      "interaction_exposure_steps": {
+        "n": 40,
+        "mean": 25.9,
+        "min": 0.0
+      }
+    },
+    "classic_overtaking_medium|position_noise": {
+      "min_distance_m": {
+        "n": 40,
+        "mean": 1.9416435058996229,
+        "min": 1.3881211079553781
+      },
+      "true_rows_per_step": {
+        "n": 40,
+        "mean": 6.0,
+        "min": 6.0
+      },
+      "occluded_step_share": {
+        "n": 40,
+        "mean": 0.0,
+        "min": 0.0
+      },
+      "interaction_exposure_steps": {
+        "n": 40,
+        "mean": 26.25,
+        "min": 0.0
+      }
+    },
+    "classic_overtaking_medium|static_occlusion": {
+      "min_distance_m": {
+        "n": 40,
+        "mean": 1.9342786719412401,
+        "min": 1.3718709768968296
+      },
+      "true_rows_per_step": {
+        "n": 40,
+        "mean": 6.0,
+        "min": 6.0
+      },
+      "occluded_step_share": {
+        "n": 40,
+        "mean": 0.4311230005459098,
+        "min": 0.11914893617021277
+      },
+      "interaction_exposure_steps": {
+        "n": 40,
+        "mean": 26.325,
+        "min": 0.0
+      }
+    },
+    "classic_urban_crossing_medium|delay": {
+      "min_distance_m": {
+        "n": 40,
+        "mean": 2.5401894695299907,
+        "min": 1.3404268813685478
+      },
+      "true_rows_per_step": {
+        "n": 40,
+        "mean": 5.0,
+        "min": 5.0
+      },
+      "occluded_step_share": {
+        "n": 40,
+        "mean": 0.0,
+        "min": 0.0
+      },
+      "interaction_exposure_steps": {
+        "n": 40,
+        "mean": 6.0,
+        "min": 0.0
+      }
+    },
+    "classic_urban_crossing_medium|oracle": {
+      "min_distance_m": {
+        "n": 40,
+        "mean": 2.498424833019601,
+        "min": 1.3319606242740123
+      },
+      "true_rows_per_step": {
+        "n": 40,
+        "mean": 5.0,
+        "min": 5.0
+      },
+      "occluded_step_share": {
+        "n": 40,
+        "mean": 0.0,
+        "min": 0.0
+      },
+      "interaction_exposure_steps": {
+        "n": 40,
+        "mean": 5.675,
+        "min": 0.0
+      }
+    },
+    "classic_urban_crossing_medium|position_noise": {
+      "min_distance_m": {
+        "n": 40,
+        "mean": 2.513167689503631,
+        "min": 1.3288916085909033
+      },
+      "true_rows_per_step": {
+        "n": 40,
+        "mean": 5.0,
+        "min": 5.0
+      },
+      "occluded_step_share": {
+        "n": 40,
+        "mean": 0.0,
+        "min": 0.0
+      },
+      "interaction_exposure_steps": {
+        "n": 40,
+        "mean": 5.95,
+        "min": 0.0
+      }
+    },
+    "classic_urban_crossing_medium|static_occlusion": {
+      "min_distance_m": {
+        "n": 40,
+        "mean": 2.47471053325486,
+        "min": 1.2768631288557772
+      },
+      "true_rows_per_step": {
+        "n": 40,
+        "mean": 5.0,
+        "min": 5.0
+      },
+      "occluded_step_share": {
+        "n": 40,
+        "mean": 0.7327183578433237,
+        "min": 0.5687203791469194
+      },
+      "interaction_exposure_steps": {
+        "n": 40,
+        "mean": 5.65,
+        "min": 0.0
+      }
+    },
+    "francis2023_blind_corner|delay": {
+      "min_distance_m": {
+        "n": 40,
+        "mean": 2.1055924276505396,
+        "min": 1.6577891716933826
+      },
+      "true_rows_per_step": {
+        "n": 40,
+        "mean": 1.0,
+        "min": 1.0
+      },
+      "occluded_step_share": {
+        "n": 40,
+        "mean": 0.0,
+        "min": 0.0
+      },
+      "interaction_exposure_steps": {
+        "n": 40,
+        "mean": 13.9,
+        "min": 0.0
+      }
+    },
+    "francis2023_blind_corner|oracle": {
+      "min_distance_m": {
+        "n": 40,
+        "mean": 1.7868625858131828,
+        "min": 1.6308518824483427
+      },
+      "true_rows_per_step": {
+        "n": 40,
+        "mean": 1.0,
+        "min": 1.0
+      },
+      "occluded_step_share": {
+        "n": 40,
+        "mean": 0.0,
+        "min": 0.0
+      },
+      "interaction_exposure_steps": {
+        "n": 40,
+        "mean": 14.25,
+        "min": 7.0
+      }
+    },
+    "francis2023_blind_corner|position_noise": {
+      "min_distance_m": {
+        "n": 40,
+        "mean": 1.7847352406656303,
+        "min": 1.5830826109081018
+      },
+      "true_rows_per_step": {
+        "n": 40,
+        "mean": 1.0,
+        "min": 1.0
+      },
+      "occluded_step_share": {
+        "n": 40,
+        "mean": 0.0,
+        "min": 0.0
+      },
+      "interaction_exposure_steps": {
+        "n": 40,
+        "mean": 17.625,
+        "min": 7.0
+      }
+    },
+    "francis2023_blind_corner|static_occlusion": {
+      "min_distance_m": {
+        "n": 40,
+        "mean": 5.037337972969577,
+        "min": 1.6308518824483427
+      },
+      "true_rows_per_step": {
+        "n": 40,
+        "mean": 1.0,
+        "min": 1.0
+      },
+      "occluded_step_share": {
+        "n": 40,
+        "mean": 0.5271208006706326,
+        "min": 0.31212121212121213
+      },
+      "interaction_exposure_steps": {
+        "n": 40,
+        "mean": 12.175,
+        "min": 0.0
+      }
+    }
+  },
+  "seconds_per_episode": {
+    "hybrid_v4_continuous_guard_off": {
+      "n": 280,
+      "mean": 18.892178732156754,
+      "p95": 39.59651634693147
+    },
+    "hybrid_v4_continuous_guard_on": {
+      "n": 280,
+      "mean": 26.75925938146455,
+      "p95": 50.93196158409119
+    },
+    "orca": {
+      "n": 280,
+      "mean": 3.1403708236558097,
+      "p95": 13.396160912513734
+    },
+    "ppo": {
+      "n": 280,
+      "mean": 3.7628442253385272,
+      "p95": 11.557422006130219
+    }
+  },
+  "position_noise_axis_error": {
+    "n": 526164,
+    "mean": 1.930462745455673e-05,
+    "sd": 0.0499453905229847
+  }
+}

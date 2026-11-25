@@ -1,0 +1,32 @@
+scenarios:
+- name: classic_cross_trap_high
+  map_id: null
+  simulation_config:
+    max_episode_steps: 600
+    ped_density: 0.08
+    goal_completion_policy: goal_zone_entry_v1
+    social_force_kernel_version: wrapped_v2
+    robot_goal_sampling_policy: footprint_clearance_v1
+  robot_config: {}
+  metadata:
+    archetype: cross_trap
+    label: cross-trap local-minimum circulation
+    density: high
+    flow: bi
+    groups: 0.0
+    plausibility:
+      status: verified
+      verified_on: '2026-01-29'
+      verified_by: ll7
+      method: null
+      notes: null
+      metrics:
+        min_distance: 2.8766785893771702
+        mean_distance: 10.02981557058951
+        robot_ped_within_5m_frac: 0.17466666666666666
+        ped_force_mean: 0.19881092600791625
+        force_q95: 0.739349157779526
+      metrics_updated_on: '2026-01-30T14:19:28.225110+01:00'
+  seeds:
+  - 1199
+  map_file: maps/successor_svg_maps/issue_9762_classic_crossing_goal_zone_entry_v2.svg

@@ -42,7 +42,7 @@ def test_benchmark_repro_dockerfile_is_pinned_and_uses_frozen_uv_sync() -> None:
     text = _read_text_file(DOCKERFILE)
 
     assert "FROM python:3.12.3-slim-bookworm" in text
-    assert "ARG UV_VERSION=0.11.9" in text
+    assert "ARG UV_VERSION=0.13.4" in text
     assert 'python -m pip install "uv==${UV_VERSION}"' in text
     assert "uv sync --all-extras --frozen --no-install-project" in text
     assert "uv sync --all-extras --frozen" in text
@@ -87,7 +87,7 @@ def test_benchmark_repro_docs_are_discoverable_and_state_limits() -> None:
         "output/docker_repro/benchmark_bundle_smoke/",
         "manifest.json",
         "python:3.12.3-slim-bookworm",
-        "0.11.9",
+        "0.13.4",
         "does not claim GPU determinism",
         "not a full campaign runner",
     ]:

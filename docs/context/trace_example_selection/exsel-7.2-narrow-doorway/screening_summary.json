@@ -1,0 +1,18 @@
+{
+  "accepted_screening_index": 4,
+  "accepted_seed": 1179,
+  "budget": 40,
+  "claim_id": "EXSEL-7.2-NARROW-DOORWAY",
+  "frozen_cell": "francis2023_narrow_doorway",
+  "frozen_pattern": "30/30",
+  "mode_counts": {
+    "goal": {
+      "native": 4
+    },
+    "orca": {
+      "native": 4
+    }
+  },
+  "result": "ACCEPTED seed 1179 at screening index 4 of 40",
+  "seeds_screened": 4
+}

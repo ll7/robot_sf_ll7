@@ -1,0 +1,75 @@
+name: exsel75_screen_s1188
+protocol_version: 0.0.8
+paper_facing: false
+paper_profile_version: paper-matrix-v1
+scenario_matrix: docs/context/trace_example_selection/exsel-7.5-guard-pair/inputs/exsel75_screen_s1188_scenarios.yaml
+comparability_mapping: configs/benchmarks/alyassi_comparability_map_v2.yaml
+route_clearance_certifications: configs/benchmarks/route_clearance_certifications_v1.yaml
+amv_profile:
+  name: amv-paper-v1
+  contract_version: '1'
+  coverage_enforcement: warn
+  required_dimensions:
+    use_case:
+    - delivery_robot
+    - shared_space_micromobility
+    context:
+    - sidewalk
+    - shared_space
+    speed_regime:
+    - walking_speed
+    - scooter_speed
+    maneuver_type:
+    - overtake
+    - crossing
+    - bottleneck
+seed_policy:
+  mode: fixed-list
+  seeds:
+  - 1188
+snqi_weights: null
+snqi_baseline: null
+snqi_contract:
+  enabled: false
+  enforcement: warn
+  rank_alignment_warn_threshold: 0.5
+  rank_alignment_fail_threshold: 0.3
+  outcome_separation_warn_threshold: 0.05
+  outcome_separation_fail_threshold: 0.0
+  max_component_dominance_warn_threshold: 0.24
+  max_component_dominance_fail_threshold: 0.27
+  calibration_seed: 123
+  calibration_trials: 6000
+workers: 2
+scenario_horizons: configs/benchmarks/horizon_schedules/release_0_0_8_authored_v1.yaml
+scenario_horizons_sha256: 032bbf8ad354ea9394492659aa50188e2bc40078930975ef30cd3ba77208675e
+dt: 0.1
+record_forces: true
+checkpoint_provenance_enforcement: error
+resume: false
+stop_on_failure: true
+bootstrap_samples: 10000
+bootstrap_confidence: 0.95
+bootstrap_seed: 123
+kinematics_matrix:
+- differential_drive
+export_publication_bundle: false
+include_videos_in_publication: false
+overwrite_publication_bundle: false
+repository_url: https://github.com/ll7/robot_sf_ll7
+release_tag: exp-guardesc-unpublished
+doi: unpublished-diagnostic
+paper_interpretation_profile: baseline-ready-core
+planners:
+- key: G0E1
+  algo: hybrid_rule_local_planner
+  planner_group: experimental
+  algo_config: docs/context/trace_example_selection/exsel-7.5-guard-pair/inputs/G0E1.yaml
+  benchmark_profile: experimental
+- key: G1E1
+  algo: hybrid_rule_local_planner
+  planner_group: experimental
+  algo_config: docs/context/trace_example_selection/exsel-7.5-guard-pair/inputs/G1E1.yaml
+  benchmark_profile: experimental
+record_simulation_step_trace: false
+record_planner_decision_trace: false

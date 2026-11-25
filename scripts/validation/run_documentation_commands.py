@@ -103,6 +103,7 @@ SAFE_UTILITY_ARGV = frozenset(
         ("yes",),
     }
 )
+_COREUTILS_UTILITY_NAMES = frozenset(argv[0] for argv in SAFE_UTILITY_ARGV) | {"sleep"}
 APPROVED_UV_ARGV = frozenset(
     {
         ("uv", "run", "--offline", "--no-sync", "robot-sf", "--help"),
@@ -143,15 +144,13 @@ def _account_home() -> Path:
     return Path(sys.executable).resolve().parent
 
 
-TRUSTED_EXECUTABLE_DIRS = tuple(
-    Path(directory)
-    for directory in (
-        "/usr/local/bin",
-        "/usr/bin",
-        "/bin",
-        _account_home() / ".local" / "bin",
-        Path(sys.prefix) / "bin",
-    )
+_SYSTEM_BIN_DIRS = (Path("/usr/bin"), Path("/bin"))
+_UBUNTU_COREUTILS_DIR = Path("/usr/lib/cargo/bin/coreutils")
+TRUSTED_EXECUTABLE_DIRS = (
+    Path("/usr/local/bin"),
+    *_SYSTEM_BIN_DIRS,
+    _account_home() / ".local" / "bin",
+    Path(sys.prefix) / "bin",
 )
 TRUSTED_PATH = os.pathsep.join(str(directory) for directory in TRUSTED_EXECUTABLE_DIRS)
 
@@ -441,7 +440,15 @@ def _resolve_executable(name: str) -> str | None:
             executable = candidate_path.resolve(strict=True)
         except (FileNotFoundError, OSError, RuntimeError, ValueError):
             continue
-        if not any(_path_is_within(executable, directory) for directory in TRUSTED_EXECUTABLE_DIRS):
+        # Ubuntu's system utilities can be links to same-named uutils entry points.
+        system_coreutils_alias = (
+            candidate_path.parent in _SYSTEM_BIN_DIRS
+            and candidate_path.name in _COREUTILS_UTILITY_NAMES
+            and executable == _UBUNTU_COREUTILS_DIR / candidate_path.name
+        )
+        if not system_coreutils_alias and not any(
+            _path_is_within(executable, directory) for directory in TRUSTED_EXECUTABLE_DIRS
+        ):
             continue
         if executable.is_file() and os.access(executable, os.X_OK):
             return str(executable)

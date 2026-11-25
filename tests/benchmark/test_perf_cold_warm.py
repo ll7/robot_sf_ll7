@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 from argparse import Namespace
 from pathlib import Path
 
@@ -317,7 +318,6 @@ def test_run_suite_uses_warmup_then_warm_samples(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setattr(perf_cold_warm, "measure_once", _fake_measure_once)
     cold, warm = perf_cold_warm.run_suite(
         config=object(),  # type: ignore[arg-type]
-        script_path=Path("robot_sf/benchmark/perf_cold_warm.py"),
         scenario_config=Path("configs/scenarios/archetypes/classic_cross_trap.yaml"),
         scenario_name="classic_cross_trap_low",
         seed=10,
@@ -413,6 +413,31 @@ def test_load_scenario_config_and_not_found(monkeypatch: pytest.MonkeyPatch) -> 
         perf_cold_warm._load_scenario_config(Path("x.yaml"), "missing", 10)
 
 
+def test_measure_cold_subprocess_real_child(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A fresh interpreter must complete a sample without stdlib shadowing."""
+    real_run = perf_cold_warm.subprocess.run
+
+    def _run_module(command, **kwargs):
+        """Check dispatch before the test seed guard rewrites child startup."""
+        assert command[:3] == [
+            perf_cold_warm.sys.executable,
+            "-m",
+            "robot_sf.benchmark.perf_cold_warm",
+        ]
+        return real_run(command, **kwargs)
+
+    monkeypatch.setattr(perf_cold_warm.subprocess, "run", _run_module)
+    sample = perf_cold_warm._measure_cold_subprocess(
+        scenario_config=Path("configs/scenarios/archetypes/classic_cross_trap.yaml"),
+        scenario_name="classic_cross_trap_low",
+        seed=perf_cold_warm.parse_args([]).seed,
+        episode_steps=1,
+    )
+
+    assert all(math.isfinite(value) and value > 0 for value in sample.to_dict().values())
+    assert sample.steps_per_sec * sample.episode_sec == pytest.approx(1.0)
+
+
 def test_measure_cold_subprocess_success_and_failures(monkeypatch: pytest.MonkeyPatch) -> None:
     """Subprocess helper should parse JSON payloads and raise on failure modes."""
 
@@ -434,7 +459,6 @@ def test_measure_cold_subprocess_success_and_failures(monkeypatch: pytest.Monkey
         ),
     )
     sample = perf_cold_warm._measure_cold_subprocess(
-        script_path=Path("robot_sf/benchmark/perf_cold_warm.py"),
         scenario_config=Path("configs/scenarios/archetypes/classic_cross_trap.yaml"),
         scenario_name="classic_cross_trap_low",
         seed=1,
@@ -449,7 +473,6 @@ def test_measure_cold_subprocess_success_and_failures(monkeypatch: pytest.Monkey
     )
     with pytest.raises(RuntimeError, match="failed"):
         perf_cold_warm._measure_cold_subprocess(
-            script_path=Path("robot_sf/benchmark/perf_cold_warm.py"),
             scenario_config=Path("configs/scenarios/archetypes/classic_cross_trap.yaml"),
             scenario_name="classic_cross_trap_low",
             seed=1,
@@ -463,7 +486,6 @@ def test_measure_cold_subprocess_success_and_failures(monkeypatch: pytest.Monkey
     )
     with pytest.raises(RuntimeError, match="did not return JSON"):
         perf_cold_warm._measure_cold_subprocess(
-            script_path=Path("robot_sf/benchmark/perf_cold_warm.py"),
             scenario_config=Path("configs/scenarios/archetypes/classic_cross_trap.yaml"),
             scenario_name="classic_cross_trap_low",
             seed=1,
@@ -481,7 +503,6 @@ def test_measure_cold_subprocess_success_and_failures(monkeypatch: pytest.Monkey
     )
     with pytest.raises(RuntimeError, match="timed out"):
         perf_cold_warm._measure_cold_subprocess(
-            script_path=Path("robot_sf/benchmark/perf_cold_warm.py"),
             scenario_config=Path("configs/scenarios/archetypes/classic_cross_trap.yaml"),
             scenario_name="classic_cross_trap_low",
             seed=1,

@@ -435,7 +435,6 @@ def measure_once(
 def run_suite(
     *,
     config: RobotSimulationConfig,
-    script_path: Path,
     scenario_config: Path,
     scenario_name: str,
     seed: int,
@@ -447,7 +446,6 @@ def run_suite(
 
     Args:
         config: Resolved scenario configuration.
-        script_path: Path to this module file for subprocess cold runs.
         scenario_config: Scenario YAML path.
         scenario_name: Scenario identifier.
         seed: Base random seed.
@@ -460,7 +458,6 @@ def run_suite(
     """
     cold_samples = [
         _measure_cold_subprocess(
-            script_path=script_path,
             scenario_config=scenario_config,
             scenario_name=scenario_name,
             seed=seed + idx,
@@ -634,7 +631,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     cold_samples, warm_samples = run_suite(
         config=config,
-        script_path=Path(__file__),
         scenario_config=args.scenario_config,
         scenario_name=args.scenario_name,
         seed=args.seed,
@@ -813,7 +809,6 @@ def _load_scenario_config(
 
 def _measure_cold_subprocess(
     *,
-    script_path: Path,
     scenario_config: Path,
     scenario_name: str,
     seed: int,
@@ -822,7 +817,6 @@ def _measure_cold_subprocess(
     """Measure one cold sample in a fresh subprocess.
 
     Args:
-        script_path: Path to this module file.
         scenario_config: Scenario YAML path.
         scenario_name: Scenario identifier.
         seed: Random seed for deterministic replay.
@@ -836,7 +830,8 @@ def _measure_cold_subprocess(
         md_out = Path(tmpdir) / "internal_cold.md"
         command = [
             sys.executable,
-            str(script_path),
+            "-m",
+            "robot_sf.benchmark.perf_cold_warm",
             "--scenario-config",
             str(scenario_config),
             "--scenario-name",

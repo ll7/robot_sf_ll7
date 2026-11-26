@@ -18,22 +18,27 @@ host-specific policy into the repository.
 - Prefer the repository wrappers under `scripts/dev/` over raw `sbatch`. For long jobs, prefer
   `scripts/dev/sbatch_use_max_time.sh` unless fixed wall time is required.
 - Keep artifact output rooted in the configured artifact root and confirm synchronization on exit.
-  Set `#SBATCH --output=output/slurm/%j-<description>.out` so job logs sort chronologically and stay
-  ignored via the root `output/` rule. Never write `.out` files to the repository root.
-- Before submitting jobs, prepare one checkout and its virtual environment per commit under
-  the evidence root on the shared home, at `$EVIDENCE_ROOT/checkouts/<full-commit-sha>` with
-  the virtual environment in `.venv`. All jobs for that commit use both read-only. Before
-  using either, each job runs `git -C "$CHECKOUT" rev-parse --verify HEAD` with `CHECKOUT`
-  set to that directory. Stop the job if the command fails or the full SHA differs from
-  the commit recorded for the job in the submit receipt. Jobs must never modify the
-  checkout or virtual environment. Put caches and other temporary writes in scratch.
+  Set `#SBATCH --output` to an absolute path in the job's results directory, such as
+  `/path/to/job-results/%j-<description>.out`. Create the log directory before submission.
+- Before submitting jobs, prepare one checkout per commit at
+  `$EVIDENCE_ROOT/checkouts/<full-commit-sha>` on the shared home. Build its shared
+  `.venv` once per commit with every extra the campaign needs, such as `orca`.
+  Jobs use the checkout and virtual environment read-only and never run `uv sync`
+  against the shared environment. Before using either, each job runs
+  `git -C "$CHECKOUT" rev-parse --verify HEAD` with `CHECKOUT` set to that directory.
+  Stop the job if the command fails or the full SHA differs from the commit in its
+  submit receipt. Direct logs and outputs to the job's results path or `WORKDIR`,
+  never into the checkout. Put caches and other temporary writes in `WORKDIR`.
+  Before submission, verify that the launcher uses the prebuilt environment
+  without syncing and routes its writes to these paths.
 
-  Write results directly to a durable path on the shared home. Use each job's node-local
-  `WORKDIR` only for short-lived scratch. Initialize the verification flag and install
-  this cleanup trap before doing work.
+  Write results directly to a durable path on the shared home. Use a dedicated job-owned
+  node-local `WORKDIR` for short-lived scratch. The job creates this directory and
+  installs the cleanup trap before doing work.
 
   ```bash
-  WORKDIR=${SLURM_TMPDIR:-/tmp/$USER/$SLURM_JOB_ID}
+  WORKDIR="${SLURM_TMPDIR:-/tmp/$USER}/job-${SLURM_JOB_ID}"
+  mkdir -p -- "$WORKDIR" || exit 1
   RESULTS_VERIFIED=0
   trap '
     if [[ "$RESULTS_VERIFIED" == 1 ]]; then
@@ -57,8 +62,9 @@ host-specific policy into the repository.
   RESULTS_VERIFIED=1
   ```
 
-  After a verified transfer, confirm that `WORKDIR` is gone and record that in the submit
-  receipt. If the job log reports that cleanup kept the directory, record
+  The trap and submit receipt cover only the job-owned `WORKDIR`. After successful result
+  verification, confirm that `WORKDIR` is gone and record that in the submit receipt.
+  If the job log reports that cleanup kept the directory, record
   `WORKDIR kept: <path>` with the logged path in the private submit receipt. Use that path to
   recover the results while scratch is still available. Scheduler-managed scratch may be
   reclaimed by the site after the job exits.

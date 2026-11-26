@@ -261,6 +261,10 @@ def _parallel_execute_map_jobs(  # noqa: PLR0913
                     adapter_native_steps=adapter_native_steps,
                     adapter_adapted_steps=adapter_adapted_steps,
                 )
+                # Publish immediately: an interrupted arm must retain finished futures.
+                from robot_sf.benchmark.receipt_stages import publish_episode  # noqa: PLC0415
+
+                publish_episode(out_path, schema, rec)
                 results_by_idx[idx] = rec
             except Exception as exc:  # pragma: no cover  # noqa: BLE001 - batch job isolation
                 logger.exception(

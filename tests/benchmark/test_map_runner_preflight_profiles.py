@@ -66,6 +66,7 @@ def _isolated_torch_stub_import() -> Iterator[types.ModuleType | None]:
 _TORCH_IMPORT_STUB: types.ModuleType | None = None
 with _isolated_torch_stub_import() as _installed_stub:
     from robot_sf.benchmark.map_runner import map_runner
+    from robot_sf.benchmark.seed_bands import DEV_SEEDS
     from robot_sf.benchmark.types import MapBatchConfig
 
     _TORCH_IMPORT_STUB = _installed_stub
@@ -122,10 +123,17 @@ def test_baseline_safe_blocks_experimental_algo(tmp_path: Path, monkeypatch) -> 
         )
 
 
-def test_batch_config_forwards_scenario_path(tmp_path: Path, monkeypatch) -> None:
-    """The grouped batch config must carry every existing keyword-only input."""
+@pytest.mark.parametrize("positional", [False, True], ids=["keyword", "positional"])
+def test_batch_config_forwards_scenario_path(tmp_path: Path, monkeypatch, positional: bool) -> None:
+    """Both constructor forms must pass the scenario path and dispatch the batch."""
     _patch_lightweight_batch(monkeypatch)
     scenario_path = tmp_path / "scenario-matrix.yaml"
+    scenario = {**_scenario(), "seeds": list(DEV_SEEDS[:1])}
+    config = (
+        MapBatchConfig(scenario_path, resume=False)
+        if positional
+        else MapBatchConfig(scenario_path=scenario_path, resume=False)
+    )
     observed_paths: list[Path] = []
     monkeypatch.setattr(
         map_runner,
@@ -134,14 +142,14 @@ def test_batch_config_forwards_scenario_path(tmp_path: Path, monkeypatch) -> Non
     )
 
     summary = map_runner.run_map_batch(
-        [_scenario()],
+        [scenario],
         tmp_path / "episodes.jsonl",
         schema_path=SCHEMA_PATH,
-        batch_config=MapBatchConfig(scenario_path=scenario_path, resume=False),
+        batch_config=config,
     )
 
+    assert observed_paths == [scenario_path], "batch did not forward the scenario path"
     assert summary["written"] == 1
-    assert observed_paths == [scenario_path]
 
 
 def test_batch_config_matches_run_map_batch_keyword_surface() -> None:

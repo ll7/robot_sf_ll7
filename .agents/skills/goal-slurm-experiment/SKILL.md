@@ -135,6 +135,16 @@ duplicate variant risk, claim-boundary movement, dissertation or paper synthesis
 about what the repository believes now rather than what to submit next.
 
 7. Submit exactly one training job.
+   - Every job must work in `WORKDIR=${SLURM_TMPDIR:-/tmp/$USER/$SLURM_JOB_ID}`. Keep checkouts
+     and venvs inside `WORKDIR`. Install this cleanup trap before doing work.
+
+     ```bash
+     trap 'cd /; rm -rf -- "$WORKDIR"' EXIT
+     ```
+
+     Before the job ends, copy results to the durable evidence path or the shared home and verify
+     the copies with a byte comparison or checksum. After the job exits, verify that its `WORKDIR`
+     is gone and record that in the submit receipt.
    - When the selected candidate has or should have a queue entry, update
      `experiments/submission_queue.yaml` and run
      `uv run python scripts/dev/submit_training_jobs.py --dry-run` before submission.

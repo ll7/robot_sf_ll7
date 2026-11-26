@@ -61,6 +61,16 @@ provenance result, not benchmark evidence.
    - `scripts/dev/auxme_partition_status.sh --recommend`
    - Use free GPUs, pending depth, and per-user running slots only from the live output.
 4. Submit with explicit config:
+   - Every job must work in `WORKDIR=${SLURM_TMPDIR:-/tmp/$USER/$SLURM_JOB_ID}`. Keep checkouts
+     and venvs inside `WORKDIR`. Install this cleanup trap before doing work.
+
+     ```bash
+     trap 'cd /; rm -rf -- "$WORKDIR"' EXIT
+     ```
+
+     Before the job ends, copy results to the durable evidence path or the shared home and verify
+     the copies with a byte comparison or checksum. After the job exits, verify that its `WORKDIR`
+     is gone and record that in the submit receipt.
    - `scripts/dev/sbatch_auxme_issue791.sh --config <path> --job-name <name> SLURM/Auxme/<script>.sl`
 5. Verify startup:
    - Inspect stdout for exact config path and policy ID.

@@ -20,6 +20,16 @@ host-specific policy into the repository.
 - Keep artifact output rooted in the configured artifact root and confirm synchronization on exit.
   Set `#SBATCH --output=output/slurm/%j-<description>.out` so job logs sort chronologically and stay
   ignored via the root `output/` rule. Never write `.out` files to the repository root.
+- Every job must work in `WORKDIR=${SLURM_TMPDIR:-/tmp/$USER/$SLURM_JOB_ID}`. Keep checkouts
+  and venvs inside `WORKDIR`. Install this cleanup trap before doing work.
+
+  ```bash
+  trap 'cd /; rm -rf -- "$WORKDIR"' EXIT
+  ```
+
+  Before the job ends, copy results to the durable evidence path or the shared home and verify
+  the copies with a byte comparison or checksum. After the job exits, verify that its `WORKDIR`
+  is gone and record that in the submit receipt.
 
 ## Custody And Identity
 

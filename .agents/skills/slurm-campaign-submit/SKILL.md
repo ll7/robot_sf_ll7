@@ -22,6 +22,16 @@ Use this skill for generic SLURM campaign submission: learned-risk, shielded PPO
 ## Workflow
 
 1. Read local cluster guidance (`local.machine.md` if present, then `SLURM/AGENTS.md` and `docs/dev/slurm_submission.md`).
+   - Every job must work in `WORKDIR=${SLURM_TMPDIR:-/tmp/$USER/$SLURM_JOB_ID}`. Keep checkouts
+     and venvs inside `WORKDIR`. Install this cleanup trap before doing work.
+
+     ```bash
+     trap 'cd /; rm -rf -- "$WORKDIR"' EXIT
+     ```
+
+     Before the job ends, copy results to the durable evidence path or the shared home and verify
+     the copies with a byte comparison or checksum. After the job exits, verify that its `WORKDIR`
+     is gone and record that in the submit receipt.
 2. Before choosing a job, run the discovery gate:
    - refresh live user jobs with `squeue --me` and recent outcomes with `sacct`;
    - query open GitHub issues with `resource:slurm` or `slurm` labels, including comments when an

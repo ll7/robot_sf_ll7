@@ -136,6 +136,7 @@ class AlgoMeta(TypedDict, total=False):
     planner_decision_trace: PlannerDecisionTrace
     topology_guided_episode: dict[str, Any]
     simulation_step_trace: dict[str, Any]
+    reference_population: dict[str, Any]
     safety_wrapper: dict[str, Any]
     cbf_safety_filter: dict[str, Any]
     intent_conditioned_behavior: dict[str, Any]

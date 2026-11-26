@@ -1,0 +1,33 @@
+# Development-only successor for the VV-2 oracle over the pinned 48-scenario matrix.
+# Historical v1 YAML remains unchanged; this contract never consumes its evaluation seeds.
+# This does not change the canonical release manifest or admit publication evidence.
+schema_version: reference-planner-oracles.v2
+seed_policy: development_v1
+release_manifest: configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml
+expected_scenarios: 48
+expected_seeds: [1001, 1002, 1003, 1004, 1005, 1006, 1007, 1008, 1009, 1010, 1011, 1012, 1013, 1014, 1015, 1016, 1017, 1018, 1019, 1020, 1021, 1022, 1023, 1024, 1025, 1026, 1027, 1028, 1029, 1030]
+horizon: 600
+dt: 0.1
+workers: 16
+
+# Probe exemptions require an explicit issue decision. None are established yet;
+# even an infeasible or stress scenario is reported as a finding until declared.
+probe_scenario_ids: []
+# This release cell is deliberately empty in the source matrix (density zero,
+# no fixed actors). Keep it in coverage, but exclude it from the conditional
+# stationary-with-pedestrians contact denominator.
+stationary_no_pedestrian_scenario_ids: [classic_bottleneck_low]
+
+goal_key: goal_ped_free
+stationary_key: stand_still_peds
+aware_keys: [social_force_ped_free, orca_ped_free]
+runs:
+  - {key: goal_ped_free, algo: goal, population: pedestrian_free_v1, benchmark_profile: baseline-safe}
+  - {key: stand_still_peds, algo: stand_still, population: original, benchmark_profile: baseline-safe}
+  - {key: social_force_ped_free, algo: social_force, population: pedestrian_free_v1, benchmark_profile: baseline-safe}
+  - {key: orca_ped_free, algo: orca, population: pedestrian_free_v1, benchmark_profile: baseline-safe}
+
+thresholds:
+  max_goal_failure_count: 0
+  max_stationary_contact_rate: 0.0
+  max_dominance_regressions: 0

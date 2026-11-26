@@ -147,6 +147,17 @@ def validate_planner_contract(
             algo_key,
             observation_mode=observation_mode,
             observation_level=observation_level,
+            # The stand-still oracle is declared beside its runner policy so
+            # historical campaigns' pinned algorithm_metadata.py stays frozen.
+            planner_kinematics=(
+                {
+                    "planner_command_space": "unicycle_vw",
+                    "supports_native_commands": True,
+                    "supports_adapter_commands": False,
+                }
+                if algo_key == "stand_still"
+                else None
+            ),
             robot_kinematics=robot_kinematics,
         )
     except ValueError as exc:
@@ -165,6 +176,11 @@ def validate_planner_contract(
         )
 
     payload = contract.to_metadata()
+    if algo_key == "stand_still":
+        payload["observation_contract"]["required_inputs"] = []
+        payload["observation_contract"]["notes"] = (
+            "Stationary reference ignores all observation content."
+        )
     compatible, reason = planner_kinematics_compatibility(
         algo=algo_key,
         robot_kinematics=robot_kinematics,

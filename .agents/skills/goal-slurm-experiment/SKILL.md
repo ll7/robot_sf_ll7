@@ -135,8 +135,17 @@ duplicate variant risk, claim-boundary movement, dissertation or paper synthesis
 about what the repository believes now rather than what to submit next.
 
 7. Submit exactly one training job.
-   - Every job must work in its per-job `WORKDIR`. Keep checkouts and venvs inside `WORKDIR`.
-     Initialize the verification flag and install this cleanup trap before doing work.
+   - Before submitting jobs, prepare one checkout and its virtual environment per commit under
+     the evidence root on the shared home, at `$EVIDENCE_ROOT/checkouts/<full-commit-sha>` with
+     the virtual environment in `.venv`. All jobs for that commit use both read-only. Before
+     using either, each job runs `git -C "$CHECKOUT" rev-parse --verify HEAD` with `CHECKOUT`
+     set to that directory. Stop the job if the command fails or the full SHA differs from
+     the commit recorded for the job in the submit receipt. Jobs must never modify the
+     checkout or virtual environment. Put caches and other temporary writes in scratch.
+
+     Write results directly to a durable path on the shared home. Use each job's node-local
+     `WORKDIR` only for short-lived scratch. Initialize the verification flag and install
+     this cleanup trap before doing work.
 
      ```bash
      WORKDIR=${SLURM_TMPDIR:-/tmp/$USER/$SLURM_JOB_ID}
@@ -150,10 +159,12 @@ about what the repository believes now rather than what to submit next.
      ' EXIT
      ```
 
-     Before the job ends, copy results to the durable evidence path or the shared home.
-     Set `RESULTS_VERIFIED=1` only after every result copy and its byte comparison or checksum
-     verification succeed. For a job that packages all results in one archive, with
-     `RESULTS_DEST` set to the durable destination directory, use:
+     Verify that all expected results are present and readable at the durable destination
+     before setting `RESULTS_VERIFIED=1`, even when no copy is needed. If a result was
+     created in scratch, copy it to the durable evidence path or the shared home before
+     the job ends. Set `RESULTS_VERIFIED=1` only after every result copy and its byte
+     comparison or checksum verification succeed. This example packages all results in one
+     temporary archive and sets `RESULTS_DEST` to the durable destination directory.
 
      ```bash
      cp -- "$WORKDIR/results.tar" "$RESULTS_DEST/results.tar" || exit 1
@@ -166,6 +177,10 @@ about what the repository believes now rather than what to submit next.
      `WORKDIR kept: <path>` with the logged path in the private submit receipt. Use that path to
      recover the results while scratch is still available. Scheduler-managed scratch may be
      reclaimed by the site after the job exits.
+
+     After the campaign, the campaign owner removes old shared checkouts and their virtual
+     environments once all jobs using them have finished. List this cleanup step in the
+     submit receipt and record which versions it removed.
    - When the selected candidate has or should have a queue entry, update
      `experiments/submission_queue.yaml` and run
      `uv run python scripts/dev/submit_training_jobs.py --dry-run` before submission.

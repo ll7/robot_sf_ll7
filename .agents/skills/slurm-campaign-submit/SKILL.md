@@ -22,6 +22,58 @@ Use this skill for generic SLURM campaign submission: learned-risk, shielded PPO
 ## Workflow
 
 1. Read local cluster guidance (`local.machine.md` if present, then `SLURM/AGENTS.md` and `docs/dev/slurm_submission.md`).
+   - Before submitting jobs, prepare one checkout per commit at
+     `$EVIDENCE_ROOT/checkouts/<full-commit-sha>` on the shared home. Build its shared
+     `.venv` once per commit with every extra the campaign needs, such as `orca`.
+     Jobs use the checkout and virtual environment read-only and never run `uv sync`
+     against the shared environment. Before using either, each job runs
+     `git -C "$CHECKOUT" rev-parse --verify HEAD` with `CHECKOUT` set to that directory.
+     Stop the job if the command fails or the full SHA differs from the commit in its
+     submit receipt. Direct logs and outputs to the job's results path or `WORKDIR`,
+     never into the checkout. Put caches and other temporary writes in `WORKDIR`.
+     Before submission, verify that the launcher uses the prebuilt environment
+     without syncing and routes its writes to these paths.
+
+     Write results directly to a durable path on the shared home. Use a dedicated job-owned
+     node-local `WORKDIR` for short-lived scratch. The job creates this directory and
+     installs the cleanup trap before doing work.
+
+     ```bash
+     WORKDIR="${SLURM_TMPDIR:-/tmp/$USER}/job-${SLURM_JOB_ID}"
+     mkdir -p -- "$WORKDIR" || exit 1
+     RESULTS_VERIFIED=0
+     trap '
+       if [[ "$RESULTS_VERIFIED" == 1 ]]; then
+         cd / && rm -rf -- "$WORKDIR"
+       else
+         printf "WORKDIR kept: %s\nReason: result copy and verification did not both succeed.\n" "$WORKDIR" >&2
+       fi
+     ' EXIT
+     ```
+
+     Verify that all expected results are present and readable at the durable destination
+     before setting `RESULTS_VERIFIED=1`, even when no copy is needed. If a result was
+     created in scratch, copy it to the durable evidence path or the shared home before
+     the job ends. Set `RESULTS_VERIFIED=1` only after every result copy and its byte
+     comparison or checksum verification succeed. This example packages all results in one
+     temporary archive and sets `RESULTS_DEST` to the durable destination directory.
+
+     ```bash
+     cp -- "$WORKDIR/results.tar" "$RESULTS_DEST/results.tar" || exit 1
+     cmp -- "$WORKDIR/results.tar" "$RESULTS_DEST/results.tar" || exit 1
+     RESULTS_VERIFIED=1
+     ```
+
+     The trap and submit receipt cover only the job-owned `WORKDIR`. After successful result
+     verification, confirm that `WORKDIR` is gone and record that in the submit receipt.
+     If the job log reports that cleanup kept the directory, record
+     `WORKDIR kept: <path>` with the logged path in the private submit receipt. Use that path to
+     recover the results while scratch is still available. Scheduler-managed scratch may be
+     reclaimed by the site after the job exits.
+
+     After the campaign, the campaign owner removes old shared checkouts and their virtual
+     environments once all jobs using them have finished. List this cleanup step in the
+     submit receipt and record which versions it removed.
 2. Before choosing a job, run the discovery gate:
    - refresh live user jobs with `squeue --me` and recent outcomes with `sacct`;
    - query open GitHub issues with `resource:slurm` or `slurm` labels, including comments when an

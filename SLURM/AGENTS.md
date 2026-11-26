@@ -20,16 +20,37 @@ host-specific policy into the repository.
 - Keep artifact output rooted in the configured artifact root and confirm synchronization on exit.
   Set `#SBATCH --output=output/slurm/%j-<description>.out` so job logs sort chronologically and stay
   ignored via the root `output/` rule. Never write `.out` files to the repository root.
-- Every job must work in `WORKDIR=${SLURM_TMPDIR:-/tmp/$USER/$SLURM_JOB_ID}`. Keep checkouts
-  and venvs inside `WORKDIR`. Install this cleanup trap before doing work.
+- Every job must work in its per-job `WORKDIR`. Keep checkouts and venvs inside `WORKDIR`.
+  Initialize the verification flag and install this cleanup trap before doing work.
 
   ```bash
-  trap 'cd /; rm -rf -- "$WORKDIR"' EXIT
+  WORKDIR=${SLURM_TMPDIR:-/tmp/$USER/$SLURM_JOB_ID}
+  RESULTS_VERIFIED=0
+  trap '
+    if [[ "$RESULTS_VERIFIED" == 1 ]]; then
+      cd / && rm -rf -- "$WORKDIR"
+    else
+      printf "WORKDIR kept: %s\nReason: result copy and verification did not both succeed.\n" "$WORKDIR" >&2
+    fi
+  ' EXIT
   ```
 
-  Before the job ends, copy results to the durable evidence path or the shared home and verify
-  the copies with a byte comparison or checksum. After the job exits, verify that its `WORKDIR`
-  is gone and record that in the submit receipt.
+  Before the job ends, copy results to the durable evidence path or the shared home.
+  Set `RESULTS_VERIFIED=1` only after every result copy and its byte comparison or checksum
+  verification succeed. For a job that packages all results in one archive, with
+  `RESULTS_DEST` set to the durable destination directory, use:
+
+  ```bash
+  cp -- "$WORKDIR/results.tar" "$RESULTS_DEST/results.tar" || exit 1
+  cmp -- "$WORKDIR/results.tar" "$RESULTS_DEST/results.tar" || exit 1
+  RESULTS_VERIFIED=1
+  ```
+
+  After a verified transfer, confirm that `WORKDIR` is gone and record that in the submit
+  receipt. If the job log reports that cleanup kept the directory, record
+  `WORKDIR kept: <path>` with the logged path in the private submit receipt. Use that path to
+  recover the results while scratch is still available. Scheduler-managed scratch may be
+  reclaimed by the site after the job exits.
 
 ## Custody And Identity
 

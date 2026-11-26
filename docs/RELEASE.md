@@ -99,6 +99,124 @@ Use the resolved identity as `--manifest` for future runner and doctor checks. S
 for the template slots and fail-closed rules. These commands do not reserve a
 DOI, create a tag, publish a release, or submit a campaign.
 
+### 0.0.8 post-run bundle finalization
+
+The 0.0.8 campaign template
+`configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_template.yaml`
+sets `export_publication_bundle: false`. Issue #9668 has an explicit
+publication-free candidate route so the 20,160-row campaign, 0.0.7
+old-metric equivalence, robot-force validation, and strict full-matrix
+acceptance can finish before the author's publication approval. It requires
+the exact clean source, the frozen 0.0.7 archive, an enforced-staged
+checkpoint receipt, and an exact-source runtime-smoke receipt. Submit this
+command through the repository Slurm entry point with a durable output root;
+the runner itself does not submit a job:
+
+```bash
+uv run python scripts/tools/run_camera_ready_benchmark.py \
+  --scientific-candidate \
+  --mode run \
+  --config configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_template.yaml \
+  --source-commit <exact_0.0.8_source_sha> \
+  --baseline-archive <frozen_0.0.7_archive_path> \
+  --checkpoint-receipt <staged_checkpoint_receipt_path> \
+  --runtime-smoke-receipt <exact_source_runtime_smoke_result_path> \
+  --output-root <durable_campaign_output_root>
+```
+
+The candidate's `release/scientific_candidate.json` omits DOI and tag keys;
+it binds source, campaign-template and algorithm-config bytes, checkpoint
+identities, scenarios, seeds, raw `episodes.jsonl` files, and producer
+sidecars. `release/scientific_candidate_result.json` records the three
+passing gates. Missing, changed, or degraded rows leave the candidate
+unaccepted. The candidate also compares every checkpoint-bearing arm to the
+frozen 0.0.7 campaign manifest before execution and checks observed runtime
+bundle digests and their hash sources afterward. Do not launch until the
+#9667 SNQI-v2 parser and assets have landed and the exact-source launch
+admissions pass. The default runner and existing DOI-bound release semantics
+are unchanged.
+
+After the raw campaign and its producer gates pass, the runner writes
+`release/candidate_identity.json` and `reports/attribution_ledger.json` as
+Stage-3 input scaffolds. The identity binds the exact source commit, tracked
+campaign and scenario-matrix paths and hashes, canonical scenario/seed axes,
+and every raw episode-file hash. Its `scaffold_status` is
+`requires_author_review`; its arm map, versioned changes, and attribution
+entries are empty. The comparator rejects this state. It is a custody scaffold,
+not an acceptance receipt.
+
+Before Stage 3, the release owner must complete the historical-to-candidate
+arm mapping, declare each versioned source/config/map/planner change using a
+source-bound identity, and prepare checksummed causal receipts for every
+changed outcome or metric. A domain reviewer records an accepted decision in
+each receipt after inspecting the mechanism and evidence. Set
+`scaffold_status` to `author_reviewed_ready` only after the identity and its
+change declarations have been reviewed; retain the candidate source/config/
+matrix and raw-row hashes exactly. The ledger begins empty and cannot admit
+changed results until it contains one valid, reviewed receipt per finding.
+Detailed fields and comparator invocation are in
+[`issue_9668_stage3_comparator_contract.md`](./analysis/issue_9668_stage3_comparator_contract.md).
+
+Stage 3 reconstructs each row's H600 horizon, 0.1-second step, runtime
+algorithm, robot configuration, scenario payload, planner configuration hash,
+force-recording setting, and other declared run controls from that clean,
+source-bound campaign. It also checks row algorithm metadata and run provenance
+against scoped hashes reconstructed by the detached, exact-source runner.
+Row-file hashes alone cannot admit substituted controls. The post-run finalizer
+keeps the candidate pending while metric equivalence, robot-force validation,
+and full release acceptance run; only then does it revalidate and promote the
+scientific candidate to `accepted_pre_publication`. Its post-run gate reports
+are separate from the runner's original candidate-gate receipts. No runner or
+finalizer step authorizes a tag, Zenodo upload, or DOI.
+
+After the author approves the publication steps and real concept/version DOI
+coordinates are bound in a clean-source resolved identity, create a derivative
+bundle from the accepted candidate:
+
+```bash
+uv run python scripts/tools/finalize_benchmark_data_v008.py \
+  --pre-doi-producer \
+  --producer-root <durable_accepted_campaign_root> \
+  --candidate-root output/benchmarks/camera_ready/<new_publication_candidate_id> \
+  --resolved-identity output/release/release_identity.resolved.json \
+  --baseline-archive <frozen_0.0.7_archive_path> \
+  --expected-source-sha <exact_0.0.8_source_sha>
+```
+
+The candidate finalizer checks the frozen 0.0.7 archive SHA-256 and verifies
+the accepted pre-publication identity, gate reports, and every raw and sidecar
+checksum. It copies the producer, binds DOI metadata only in the derivative,
+repeats full release acceptance, then exports and preflights the bundle. It
+checks every raw episode digest before and after the derivative work.
+Release-provenance injection may change only `campaign_manifest.json`,
+`manifest.json`, `run_meta.json`, and `reports/campaign_summary.json` among the
+identity-bound producer sidecars. Their post-acceptance hashes are rechecked at
+promotion; all remaining sidecars must still match the producer identity.
+Failed gates leave the candidate marked invalid and preserve the producer.
+Its sibling `*.finalization_receipt.json` records the source and output hashes.
+The receipt is written through a pending file and renamed only after the
+archive and cold preflight pass.
+The exported archive stays in a candidate-owned `*.publication_candidate/`
+directory. An archive without the matching finalization receipt is incomplete
+and must not be published, even when an interrupted export left files behind.
+The finalizer refuses an existing candidate publication directory and removes
+only its own export after a caught validation or receipt failure. Promote
+the archive, both gate reports, gate logs, and receipt to durable
+storage before any publication decision. Bundle creation is a reviewable
+candidate step; tagging, Zenodo publication, and DOI creation require the
+author's explicit go recorded on issue #9668. The publication-free 0.0.8
+campaign and its release-candidate verification precede that go.
+The source candidate already carries `CITATION.cff` version `0.0.8` and
+`configs/releases/release_0_0_8_preparation.yaml` with
+`publication_authorized: false`. The alignment guard accepts this explicit
+untagged preparation state; it is not authorization to tag or publish.
+The 0.0.8 Zenodo metadata template is
+`configs/benchmarks/releases/benchmark_data_release_0_0_8_zenodo_metadata.template.json`.
+Do not reuse the generic template's historical SNQI-calibration wording. The
+0.0.8 resolved manifest must bind this metadata file, the 0.0.8 campaign
+template, and the frozen SNQI-v2 asset hashes after calibration; until then,
+the manifest and canonical campaign are not launch-ready.
+
 ## Preflight
 
 Run:

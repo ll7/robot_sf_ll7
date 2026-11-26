@@ -1,0 +1,6 @@
+# This marker permits the planned citation target on an untagged source tree.
+# It does not authorize a tag, GitHub Release, Zenodo publication, or DOI.
+schema_version: release_preparation.v1
+release_tag: "0.0.8"
+status: awaiting_maintainer_approval
+publication_authorized: false

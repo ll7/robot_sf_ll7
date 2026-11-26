@@ -35,7 +35,7 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CITATION = REPO_ROOT / "CITATION.cff"
-DEFAULT_RELEASE_PREPARATION = REPO_ROOT / "configs/releases/release_0_0_6_preparation.yaml"
+DEFAULT_RELEASE_PREPARATION = REPO_ROOT / "configs/releases/release_0_0_8_preparation.yaml"
 RELEASE_PREPARATION_SCHEMA_VERSION = "release_preparation.v1"
 
 # Release-line version tags only: plain X.Y.Z, vX.Y.Z, or rcX.Y.Z. This is

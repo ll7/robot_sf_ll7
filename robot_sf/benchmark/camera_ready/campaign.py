@@ -2879,6 +2879,17 @@ def _build_campaign_metadata_section(
         f"{repository_url}/releases/download/{release_tag_value}/{expected_archive_name}"
     )
     doi_url = f"https://doi.org/{cfg.doi}"
+    publication_fields = (
+        {}
+        if cfg.publication_identity_mode == "scientific_candidate"
+        else {
+            "release_tag": release_tag_value,
+            "doi": cfg.doi,
+            "release_url": release_url,
+            "release_asset_url": release_asset_url,
+            "doi_url": doi_url,
+        }
+    )
     payload = {
         **_build_campaign_execution_metadata(
             cfg,
@@ -2904,14 +2915,10 @@ def _build_campaign_metadata_section(
         ),
         "comparability_mapping_hash": paths.manifest_payload.get("comparability_mapping_hash"),
         "repository_url": cfg.repository_url,
-        "release_tag": release_tag_value,
-        "doi": cfg.doi,
-        "release_url": release_url,
-        "release_asset_url": release_asset_url,
-        "doi_url": doi_url,
+        **publication_fields,
         **(
             cfg.snqi_v2_spec.provenance()
-            if getattr(cfg, "snqi_v2_spec", None)
+            if cfg.snqi_v2_spec is not None
             else {"snqi_v2": "pending_calibration"}
             if getattr(cfg, "snqi_v2_binding", None) is not None
             else {}
@@ -2959,7 +2966,12 @@ def _build_campaign_summary_dict(  # noqa: PLR0913
         "campaign_integrity": campaign_integrity,
         "warnings": warnings,
         "soft_contract_warning": (snqi.soft_contract_warning if snqi is not None else False),
-        "artifacts": _build_campaign_artifacts_section(paths, snqi, table_paths),
+        "artifacts": _build_campaign_artifacts_section(
+            paths,
+            snqi,
+            table_paths,
+            publication_identity_mode=cfg.publication_identity_mode,
+        ),
     }
     return _snqi_public_payload(payload, snqi)
 
@@ -2998,10 +3010,31 @@ def _legacy_snqi_artifacts(snqi: _SnqiSectionResult | None) -> dict[str, str]:
     }
 
 
+def _candidate_publication_artifacts(
+    mode: str, paths: _CampaignPreflightPaths, table_paths: dict[str, Any]
+) -> dict[str, str]:
+    """Exclude publication coordinates while a scientific candidate is unaccepted.
+
+    Returns:
+        The bound publication artifact locations, or an empty candidate mapping.
+    """
+    if mode == "scientific_candidate":
+        return {}
+    archive, release_url, asset_url, doi_url = _build_release_artifact_urls(paths, table_paths)
+    return {
+        "expected_release_archive": archive,
+        "release_url": release_url,
+        "release_asset_url": asset_url,
+        "doi_url": doi_url,
+    }
+
+
 def _build_campaign_artifacts_section(
     paths: _CampaignPreflightPaths,
     snqi: _SnqiSectionResult | None,
     table_paths: dict[str, Any],
+    *,
+    publication_identity_mode: str = "bound",
 ) -> dict[str, Any]:
     """Build the artifacts sub-dict for the campaign summary.
 
@@ -3010,9 +3043,6 @@ def _build_campaign_artifacts_section(
     """
     reports_dir = paths.reports_dir
     campaign_root = paths.campaign_root
-    expected_archive_name, release_url, release_asset_url, doi_url = _build_release_artifact_urls(
-        paths, table_paths
-    )
     payload = {
         "campaign_manifest": _repo_relative(campaign_root / "campaign_manifest.json"),
         "campaign_summary_json": _repo_relative(table_paths["summary_json_path"]),
@@ -3065,10 +3095,7 @@ def _build_campaign_artifacts_section(
         "scenario_family_breakdown_md": _repo_relative(table_paths["family_md_path"]),
         "campaign_report_md": _repo_relative(table_paths["report_md_path"]),
         "campaign_integrity_json": _repo_relative(reports_dir / "campaign_integrity.json"),
-        "expected_release_archive": expected_archive_name,
-        "release_url": release_url,
-        "release_asset_url": release_asset_url,
-        "doi_url": doi_url,
+        **_candidate_publication_artifacts(publication_identity_mode, paths, table_paths),
         **_legacy_snqi_artifacts(snqi),
         "assurance_fragment_json": _repo_relative(reports_dir / "assurance_fragment.json"),
         "assurance_fragment_md": _repo_relative(reports_dir / "assurance_fragment.md"),

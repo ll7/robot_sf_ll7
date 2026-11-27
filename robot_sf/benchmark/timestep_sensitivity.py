@@ -35,6 +35,7 @@ from robot_sf.planner.hybrid_rule_local_planner import (
 )
 from robot_sf.planner.predictive_mppi import build_predictive_mppi_config
 from robot_sf.planner.risk_dwa import build_risk_dwa_config
+from robot_sf.planner.socnav_prediction import bound_drive_substep_durations
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -42,8 +43,14 @@ if TYPE_CHECKING:
     from robot_sf.benchmark.algorithm_readiness import BenchmarkProfile
     from robot_sf.benchmark.camera_ready._config_types import CampaignConfig, PlannerSpec
 
-CONFIG_PATTERN = "configs/benchmarks/issue_10516_timestep_dev_v1_{ms:03d}ms.yaml"
-STEP_SIZES_MS = (50, 100, 200)
+CAMPAIGN_NAME_PATTERN = "issue_10516_timestep_dev_v1_{ms:03d}ms"
+CONFIG_PATTERN = f"configs/benchmarks/{CAMPAIGN_NAME_PATTERN}.yaml"
+STEP_LIMITS_BY_MS = {50: 1200, 100: 600, 200: 300}
+STEP_SIZES_MS = tuple(STEP_LIMITS_BY_MS)
+FROZEN_CAMPAIGN_GRIDS = {
+    CAMPAIGN_NAME_PATTERN.format(ms=ms): (ms / 1000, limit)
+    for ms, limit in STEP_LIMITS_BY_MS.items()
+}
 WITNESS_SCENARIO = "classic_urban_crossing_medium"
 WITNESS_SECONDS = 0.4
 CAMPAIGN_SECONDS = 60.0
@@ -71,8 +78,10 @@ def _dwa_timing(raw: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _predictive_timing(algo: str, raw: dict[str, Any]) -> dict[str, Any]:
-    """Report the forecast and control grids for the two learned predictors.
+def _predictive_timing(
+    algo: str, raw: dict[str, Any], dt: float, kinematics: str
+) -> dict[str, Any]:
+    """Report forecast, sampled controls and bound-drive integration where used.
 
     Returns:
         Forecast model and planned grids.
@@ -96,17 +105,23 @@ def _predictive_timing(algo: str, raw: dict[str, Any]) -> dict[str, Any]:
         timing["full_sequence_segment"] = segment
     if mppi is not None:
         timing["first_step_clearance_check"] = _grid(mppi.rollout_dt, 1)
+    elif kinematics == "differential_drive":
+        substeps = bound_drive_substep_durations(dt, cfg.predictive_rollout_dt)
+        timing["robot_integration"] = {
+            "substeps_per_sample_s": substeps,
+            "rollout_steps": len(substeps) * cfg.predictive_horizon_steps,
+        }
     return timing
 
 
-def _planner_timing(algo: str, raw: dict[str, Any], dt: float) -> dict[str, Any]:
+def _planner_timing(algo: str, raw: dict[str, Any], dt: float, kinematics: str) -> dict[str, Any]:
     """Describe the timing used by each resolved planner in the reference roster.
 
     Returns:
         Planner-specific timing and model bindings.
     """
     if algo in {"prediction_planner", "predictive_mppi"}:
-        return _predictive_timing(algo, raw)
+        return _predictive_timing(algo, raw, dt, kinematics)
     if algo == "risk_dwa":
         return _dwa_timing(raw)
     if algo == "guarded_ppo":
@@ -214,7 +229,7 @@ def _resolved_arm(
     steps = scenario["simulation_config"]["max_episode_steps"]
     if planner.horizon_override is not None:
         steps = planner.horizon_override
-    timing = _planner_timing(algo, raw, dt)
+    timing = _planner_timing(algo, raw, dt, kinematics)
     timing.setdefault("step_timers", {})
     return {
         "planner": planner.key,
@@ -238,7 +253,19 @@ def expand_timestep_campaign(
 
     Returns:
         Campaign identity, episode count and expanded arm bindings.
+
+    Raises:
+        ValueError: The campaign or an enabled planner differs from the frozen timing.
     """
+    scenario_path = get_repository_root() / "scoped_scenarios.json"
+    mismatch = _campaign_timing_mismatch(cfg, scenarios, scenario_path)
+    if mismatch is not None:
+        raise ValueError(mismatch)
+    for planner in (p for p in cfg.planners if p.enabled):
+        mismatch = _planner_timing_mismatch(cfg, planner)
+        if mismatch is not None:
+            raise ValueError(mismatch)
+
     jobs = build_seed_jobs(scenarios, suite_seeds={}, suite_key="default")
     arms = [
         _resolved_arm(planner, scenario, cfg, kinematics)
@@ -339,14 +366,22 @@ def _witness_result(
 def _campaign_timing_mismatch(
     cfg: CampaignConfig, scenarios: list[dict[str, Any]], scenario_path: Path
 ) -> str | None:
-    """Check the full runner and simulator limits before shortening the witness.
+    """Check campaign identity and the full runner and simulator limits.
 
     Returns:
         The first inconsistent scenario binding, or None if all match.
     """
-    dt, horizon = cfg.dt, cfg.horizon
-    if dt is None or dt <= 0 or horizon is None or not math.isclose(dt * horizon, CAMPAIGN_SECONDS):
-        return "Campaign cap differs from the expected 60 s"
+    frozen_grid = FROZEN_CAMPAIGN_GRIDS.get(cfg.name)
+    if frozen_grid is None:
+        return f"Unknown time-step campaign {cfg.name!r}"
+    if cfg.dt is None:
+        return "The time-step study requires an explicit campaign dt"
+    dt, horizon = frozen_grid
+    if (cfg.dt, cfg.horizon) != frozen_grid:
+        return (
+            f"Campaign {cfg.name} declares {cfg.dt} s and {cfg.horizon} steps, "
+            f"expected {dt} s and {horizon} steps"
+        )
 
     for kinematics in cfg.kinematics_matrix:
         for scenario in scenarios:
@@ -367,14 +402,26 @@ def _campaign_timing_mismatch(
             except ValueError as exc:
                 return f"Scenario {scenario['name']} could not bind the expected limit: {exc}"
             if not (
-                sim.time_per_step_in_secs == cfg.dt
-                and sim.episode_step_limit == sim.max_sim_steps == runner_cap == cfg.horizon
+                sim.time_per_step_in_secs == dt
+                and sim.episode_step_limit == sim.max_sim_steps == runner_cap == horizon
                 and math.isclose(sim.sim_time_in_secs, CAMPAIGN_SECONDS)
             ):
                 return (
                     f"Scenario {scenario['name']} has an inconsistent runner or simulator limit, "
-                    f"expected {horizon} steps at {cfg.dt} s"
+                    f"expected {horizon} steps at {dt} s"
                 )
+    return None
+
+
+def _planner_timing_mismatch(cfg: CampaignConfig, planner: PlannerSpec) -> str | None:
+    """Return a reason if an enabled planner overrides the declared step or cap."""
+    dt = _step_size(cfg, planner)
+    horizon = cfg.horizon if planner.horizon_override is None else planner.horizon_override
+    if dt != cfg.dt or horizon != cfg.horizon:
+        return (
+            f"Planner {planner.key} uses {dt} s and {horizon} steps, "
+            f"expected {cfg.dt} s and {cfg.horizon} steps"
+        )
     return None
 
 
@@ -403,17 +450,11 @@ def _run_witness(
         if campaign_mismatch is not None:
             results.append({**identity, "status": "timing_mismatch", "reason": campaign_mismatch})
             continue
-        dt = _step_size(cfg, planner)
-        horizon = cfg.horizon if planner.horizon_override is None else planner.horizon_override
-        if dt != cfg.dt or horizon is None or horizon != cfg.horizon:
-            results.append(
-                {
-                    **identity,
-                    "status": "timing_mismatch",
-                    "reason": f"Planner uses {dt} s and {horizon} steps, expected {cfg.dt} s and {cfg.horizon} steps",
-                }
-            )
+        planner_mismatch = _planner_timing_mismatch(cfg, planner)
+        if planner_mismatch is not None:
+            results.append({**identity, "status": "timing_mismatch", "reason": planner_mismatch})
             continue
+        dt, horizon = FROZEN_CAMPAIGN_GRIDS[cfg.name]
         identity["campaign_grid"] = _grid(dt, horizon)
         steps = round(WITNESS_SECONDS / dt)
         scoped = _scenario_with_kinematics(
@@ -483,6 +524,9 @@ def main(argv: Sequence[str] | None = None) -> None:
     }
     for ms in STEP_SIZES_MS:
         cfg = load_campaign_config(get_repository_root() / CONFIG_PATTERN.format(ms=ms))
+        expected_name = CAMPAIGN_NAME_PATTERN.format(ms=ms)
+        if cfg.name != expected_name:
+            raise ValueError(f"Loaded campaign {cfg.name!r}, expected {expected_name!r}")
         scenarios = _load_campaign_scenarios(cfg)
         campaign = expand_timestep_campaign(cfg, scenarios)
         if args.witness:

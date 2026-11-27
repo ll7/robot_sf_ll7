@@ -54,6 +54,13 @@ interval when converting its heading increment to a command.
 | RiskDWA and the Guarded PPO alternate controller, reachable-command interval | 1 × 0.10 | 0.10 |
 | Four hybrids, nominal sampled controls | 8 × 0.20 | 1.60 |
 
+Within each 0.10 s command sample, Prediction Planner advances its robot model by the
+campaign step or the time left in the sample, whichever is shorter. A full eight-sample
+rollout takes 16 steps of 0.05 s in the 0.05 s campaign and eight steps of 0.10 s in the
+0.10 and 0.20 s campaigns. In `planner_timing.robot_integration`, the manifest lists the
+substep durations for one sample and the step count for the full rollout. Predictive MPPI
+advances its robot model at its fixed rollout interval.
+
 ORCA's pedestrian and obstacle horizons are 6 and 3 s. The hybrid control segment and hard and
 soft collision horizons are set in seconds. Stopping tails depend on speed and deceleration.
 Counts of sampled candidates and optimization rounds describe search work.
@@ -76,12 +83,13 @@ uv run python -m robot_sf.benchmark.timestep_sensitivity \
 
 The command writes `timestep_manifest.json`. Add `--witness` and use a fresh output directory to
 run one 0.4 s episode per planner at each step size on the same urban-crossing scenario and seed.
-Before shortening an episode, the witness checks that the effective planner step and the runner
-and simulator limits for all five scenarios match the campaign. A mismatch produces a refusal in
-the report. In the short episode, it checks the observed step and cap, the planner and model
-identity, and the learned forecast grid where used. Each witness includes the resolved planner
-timing so it can be compared with the manifest. The short run checks these bindings and records
-the timers from their settings. A timer may need a longer episode to activate.
+The command checks the campaign name, step and episode cap against the study grid before
+expansion. It checks the effective planner step and the runner and simulator limits for all five
+scenarios against the same values. A mismatch stops the expansion. The witness repeats those
+checks before shortening the episode. In the short episode, it checks the observed step and cap,
+the planner and model identity, and the learned forecast grid where used. Each witness includes
+the resolved planner timing so it can be compared with the expansion. A timer may need a longer
+episode to activate.
 
 Run the existing campaign preflight for each config before acquisition. For example:
 

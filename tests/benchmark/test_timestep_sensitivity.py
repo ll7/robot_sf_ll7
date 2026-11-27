@@ -14,6 +14,7 @@ from robot_sf.benchmark import timestep_sensitivity as study
 from robot_sf.benchmark.camera_ready._config import _load_campaign_scenarios, load_campaign_config
 from robot_sf.common.artifact_paths import get_repository_root
 from robot_sf.planner.socnav_prediction import PredictionPlannerAdapter
+from robot_sf.robot.differential_drive import DifferentialDriveRobot
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -102,9 +103,46 @@ def test_expansion_identifies_an_omitted_campaign_step() -> None:
         study.expand_timestep_campaign(cfg, _load_campaign_scenarios(cfg))
 
 
+@pytest.mark.parametrize("operation", ["expand", "witness"])
+def test_study_refuses_a_mislabeled_sixty_second_grid(tmp_path: Path, operation: str) -> None:
+    """Keeping the duration and matching scenario caps cannot replace the 200 ms arm."""
+    cfg = load_campaign_config(get_repository_root() / study.CONFIG_PATTERN.format(ms=200))
+    goal = next(planner for planner in cfg.planners if planner.key == "goal")
+    scenarios = _load_campaign_scenarios(cfg)
+    for scenario in scenarios:
+        scenario["simulation_config"]["max_episode_steps"] = 600
+    cfg = replace(cfg, dt=0.1, horizon=600, planners=(goal,))
+
+    expected = r"expected 0\.2 s and 300 steps"
+    if operation == "expand":
+        with pytest.raises(ValueError, match=expected):
+            study.expand_timestep_campaign(cfg, scenarios)
+    else:
+        (witness,) = study._run_witness(cfg, scenarios, tmp_path)
+        assert witness["status"] == "timing_mismatch"
+        assert "expected 0.2 s and 300 steps" in witness["reason"]
+        assert not list(tmp_path.rglob("episodes.jsonl"))
+
+
+def test_cli_refuses_the_wrong_campaign_for_a_frozen_slot(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A self-consistent 100 ms campaign cannot fill the CLI's 200 ms slot."""
+    root = get_repository_root()
+    wrong_path = root / study.CONFIG_PATTERN.format(ms=100)
+    monkeypatch.setattr(study, "STEP_SIZES_MS", (200,))
+    monkeypatch.setattr(
+        study, "load_campaign_config", lambda _path: load_campaign_config(wrong_path)
+    )
+
+    with pytest.raises(ValueError, match=r"expected.*_200ms"):
+        study.main(["--output-dir", str(tmp_path)])
+    assert not (tmp_path / "timestep_manifest.json").exists()
+
+
 @pytest.mark.parametrize("mismatch", ["planner_dt", "planner_limit", "other_scenario_limit"])
-def test_witness_refuses_mismatched_campaign_timing(tmp_path: Path, mismatch: str) -> None:
-    """The short witness must reject a bad full-run cap even outside the witness scenario."""
+def test_study_refuses_mismatched_effective_timing(tmp_path: Path, mismatch: str) -> None:
+    """Both paths must reject a mismatched planner or an unwitnessed scenario cap."""
     cfg = load_campaign_config(get_repository_root() / study.CONFIG_PATTERN.format(ms=200))
     goal = next(planner for planner in cfg.planners if planner.key == "goal")
     scenarios = _load_campaign_scenarios(cfg)
@@ -115,7 +153,10 @@ def test_witness_refuses_mismatched_campaign_timing(tmp_path: Path, mismatch: st
     else:
         other = next(s for s in scenarios if s["name"] != study.WITNESS_SCENARIO)
         other["simulation_config"]["max_episode_steps"] = 150
-    results = study._run_witness(replace(cfg, planners=(goal,)), scenarios, tmp_path)
+    cfg = replace(cfg, planners=(goal,))
+    with pytest.raises(ValueError, match="expected"):
+        study.expand_timestep_campaign(cfg, scenarios)
+    results = study._run_witness(cfg, scenarios, tmp_path)
     assert results[0]["status"] == "timing_mismatch"
     assert "expected" in results[0]["reason"]
     assert not list(tmp_path.rglob("episodes.jsonl"))
@@ -181,19 +222,9 @@ def test_reports_include_step_count_timers(tmp_path: Path, monkeypatch: pytest.M
             }
 
 
-@pytest.mark.parametrize(
-    ("field", "expected_status"),
-    [
-        ("canonical_algorithm", "binding_mismatch"),
-        ("requested_model_id", "binding_mismatch"),
-        ("forecast_grid", "timing_mismatch"),
-        ("effective_budget_steps", "timing_mismatch"),
-    ],
-)
-def test_witness_refuses_mismatched_runtime_binding(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, field: str, expected_status: str
-) -> None:
-    """An episode that ran on the right simulator grid can report the wrong binding."""
+@pytest.fixture
+def fixed_forecast(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Use a local forecast through the real inference and rollout paths."""
     pytest.importorskip("torch")
     checkpoint = tmp_path / "test-predictor"
     checkpoint.touch()
@@ -210,6 +241,22 @@ def test_witness_refuses_mismatched_runtime_binding(
         PredictionPlannerAdapter, "_resolve_checkpoint_path", lambda _self: checkpoint
     )
     monkeypatch.setattr(PredictionPlannerAdapter, "_build_model", lambda _self: FixedForecast())
+
+
+@pytest.mark.usefixtures("fixed_forecast")
+@pytest.mark.parametrize(
+    ("field", "expected_status"),
+    [
+        ("canonical_algorithm", "binding_mismatch"),
+        ("requested_model_id", "binding_mismatch"),
+        ("forecast_grid", "timing_mismatch"),
+        ("effective_budget_steps", "timing_mismatch"),
+    ],
+)
+def test_witness_refuses_mismatched_runtime_binding(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, field: str, expected_status: str
+) -> None:
+    """An episode that ran on the right simulator grid can report the wrong binding."""
     cfg = load_campaign_config(get_repository_root() / study.CONFIG_PATTERN.format(ms=200))
     predictor = next(planner for planner in cfg.planners if planner.key == "prediction_planner")
     original = study.run_map_batch
@@ -235,3 +282,63 @@ def test_witness_refuses_mismatched_runtime_binding(
         replace(cfg, planners=(predictor,)), _load_campaign_scenarios(cfg), tmp_path
     )
     assert results[0]["status"] == expected_status, results[0]["reason"]
+
+
+@pytest.mark.usefixtures("fixed_forecast")
+def test_manifest_reports_executed_prediction_drive_substeps(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Compare the manifest grids with calls made by the bound differential drive."""
+    observed: dict[float, set[tuple[float, ...]]] = {}
+    rollout = PredictionPlannerAdapter._bound_drive_rollout
+    apply_action = DifferentialDriveRobot.apply_action
+
+    def load_prediction_only(path: Path) -> CampaignConfig:
+        cfg = load_campaign_config(path)
+        predictor = next(p for p in cfg.planners if p.key == "prediction_planner")
+        return replace(cfg, planners=(predictor,))
+
+    def trace_rollout(
+        planner: PredictionPlannerAdapter, commands: Any, dt: float, observation: dict
+    ) -> Any:
+        durations: list[float] = []
+
+        def trace_action(robot: DifferentialDriveRobot, action: Any, step_dt: float) -> None:
+            # The planner receives the simulation clock as float32.
+            durations.append(round(step_dt, 8))
+            apply_action(robot, action, step_dt)
+
+        with monkeypatch.context() as run_patch:
+            run_patch.setattr(DifferentialDriveRobot, "apply_action", trace_action)
+            result = rollout(planner, commands, dt, observation)
+        if len(commands) == 8:
+            control_dt = round(planner._simulation_timestep(observation), 8)
+            observed.setdefault(control_dt, set()).add(tuple(durations))
+        return result
+
+    monkeypatch.setattr(study, "load_campaign_config", load_prediction_only)
+    monkeypatch.setattr(PredictionPlannerAdapter, "_bound_drive_rollout", trace_rollout)
+    study.main(["--output-dir", str(tmp_path), "--witness"])
+
+    campaigns = json.loads((tmp_path / "timestep_manifest.json").read_text())["campaigns"]
+    assert observed == {
+        0.05: {(0.05,) * 16},
+        0.1: {(0.1,) * 8},
+        0.2: {(0.1,) * 8},
+    }
+    for campaign in campaigns:
+        (witness,) = campaign["witness"]
+        assert witness["status"] == "qualified", witness["reason"]
+        assert witness["execution_mode"] == "adapter"
+        assert len(campaign["arms"]) == 5
+        for arm in campaign["arms"]:
+            timing = arm["planner_timing"]
+            integration = timing["robot_integration"]
+            samples = timing["sampled_controls"]
+            assert (
+                samples == timing["forecast"] == {"interval_s": 0.1, "steps": 8, "horizon_s": 0.8}
+            )
+            substeps = tuple(integration["substeps_per_sample_s"]) * samples["steps"]
+            assert {substeps} == observed[arm["simulation"]["interval_s"]]
+            assert integration["rollout_steps"] == len(substeps)
+            assert timing == witness["planner_timing"]

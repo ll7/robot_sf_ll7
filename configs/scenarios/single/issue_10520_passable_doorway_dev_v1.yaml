@@ -1,0 +1,28 @@
+schema_version: robot_sf.scenario_matrix.v1
+scenarios:
+- name: issue_10520_passable_doorway_dev_v1
+  map_file: ../../../maps/successor_svg_maps/issue_9728_francis2023_narrow_doorway_feasible_3p60_v1.svg
+  simulation_config:
+    max_episode_steps: 300
+    time_per_step_in_secs: 0.1
+    ped_density: 0.0
+    pedestrian_model: social_force_default
+    obstacle_force_law: {law_version: legacy_shifted_gradient_v1}
+  robot_config:
+    type: differential_drive
+    radius: 1.0
+  single_pedestrians:
+  - id: h1
+    start: [27.0, 5.0]
+    goal: [3.0, 5.0]
+    speed_m_s: 1.29
+    start_delay_s: 2.0
+  metadata:
+    archetype: narrow_doorway
+    flow: bi
+    behavior: none
+    purpose: Development fixture for a head-on doorway encounter with a reactive pedestrian.
+    authoring:
+      source_issue: https://github.com/ll7/robot_sf_ll7/issues/10520
+      benchmark_evidence: false
+  seeds: [1001, 1002, 1003]

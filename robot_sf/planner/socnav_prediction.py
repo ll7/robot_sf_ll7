@@ -591,6 +591,10 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             mask_t = runtime_torch.from_numpy(mask[None]).to(self._device)
             out = model(state_t, mask_t)
             future = out["future_positions"][0].detach().cpu().numpy().astype(np.float32)
+        self._foresight_provenance["forecast_grid"] = {
+            "interval_s": float(self.config.predictive_rollout_dt),
+            "steps": int(future.shape[1]),
+        }
         return future
 
     def _predict_with_baseline(self, state: np.ndarray, mask: np.ndarray) -> np.ndarray:

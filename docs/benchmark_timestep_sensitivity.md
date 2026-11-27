@@ -19,6 +19,47 @@ The sampled-control planner uses the simulation step for its fixed 2 s look-ahea
 records the resolved timing for each planner and scenario, including the separate rollout grids
 used by the other planners.
 
+### Planner timers
+
+The study keeps the planners' step counts. The manifest records each count and its duration on the
+grid where it advances. As the command interval grows, the hybrids remember a longer span of
+commands and native ORCA takes longer to reach its stall and side-persistence thresholds.
+
+| Planner timing tied to the command interval | Steps or samples | Seconds at 0.05 / 0.10 / 0.20 s |
+| --- | --- | --- |
+| Four hybrids, oscillation history with weight 0.5 | 6 previous commands | 0.30 / 0.60 / 1.20 |
+| Four hybrids, heading smoothness with weight 0.4 | 1 previous command | 0.05 / 0.10 / 0.20 |
+| Four hybrids, reaction before braking | 1 step | 0.05 / 0.10 / 0.20 |
+| Four hybrids, storage for goal and route progress | 256 samples spanning 255 steps | 12.75 / 25.50 / 51.00 |
+| Native ORCA, progress sample used to assess stalls | 1 step | 0.05 / 0.10 / 0.20 |
+| Native ORCA, stall count before committing to a side | 3 consecutive stalled calls | 0.15 / 0.30 / 0.60 |
+| Native ORCA, side persistence | 10 non-stalled calls | 0.50 / 1.00 / 2.00 |
+| SocNav Sampling, look-ahead | 40 / 20 / 10 | 2.00 / 2.00 / 2.00 |
+
+The hybrid progress windows use timestamps at 1, 3 and 5 s. Even the shortest buffer span covers
+all three windows. The hybrid route-trace recovery hold is disabled in this study. Its two calls
+would span 0.10, 0.20 or 0.40 s. ORCA's reverse-entry and reverse-clear thresholds each count three
+calls, or 0.15, 0.30 or 0.60 s. The selected drive settings keep both thresholds inactive.
+Social Force filters its target with a 0.5 s time constant and switches turn direction based on
+heading and speed. Goal and PPO issue commands at the campaign interval. SA-CADRL also uses that
+interval when converting its heading increment to a command.
+
+| Planner grid with a fixed interval | Steps × seconds per step | Seconds at each campaign step |
+| --- | --- | --- |
+| Prediction Planner and Predictive MPPI, forecast and sampled controls | 8 × 0.10 | 0.80 |
+| Prediction Planner, full sequence segment | 3 × 0.10 | 0.30 |
+| Predictive MPPI and Guarded PPO, first clearance check | 1 × 0.10 | 0.10 |
+| Guarded PPO, command check before its braking tail | 12 × 0.10 | 1.20 |
+| RiskDWA and the Guarded PPO alternate controller, command rollout before braking | 16 × 0.10 | 1.60 |
+| RiskDWA and the Guarded PPO alternate controller, reachable-command interval | 1 × 0.10 | 0.10 |
+| Four hybrids, nominal sampled controls | 8 × 0.20 | 1.60 |
+
+ORCA's pedestrian and obstacle horizons are 6 and 3 s. The hybrid control segment and hard and
+soft collision horizons are set in seconds. Stopping tails depend on speed and deceleration.
+Counts of sampled candidates and optimization rounds describe search work.
+
+## Compare outcomes
+
 Use route completion without collision for success and the episode collision flag for contact.
 Close-clearance time is the number of post-step samples in the benchmark's near-miss distance
 band multiplied by the simulation step in seconds. Compare by matched scenario and seed. Use
@@ -35,9 +76,12 @@ uv run python -m robot_sf.benchmark.timestep_sensitivity \
 
 The command writes `timestep_manifest.json`. Add `--witness` and use a fresh output directory to
 run one 0.4 s episode per planner at each step size on the same urban-crossing scenario and seed.
-The report includes the observed time grid, planner execution status, and any refusal or
-degradation. The native safety decisions of Guarded PPO are part of that planner's configured
-behavior. Runtime fallback or degraded execution stays visible in the report.
+Before shortening an episode, the witness checks that the effective planner step and the runner
+and simulator limits for all five scenarios match the campaign. A mismatch produces a refusal in
+the report. In the short episode, it checks the observed step and cap, the planner and model
+identity, and the learned forecast grid where used. Each witness includes the resolved planner
+timing so it can be compared with the manifest. The short run checks these bindings and records
+the timers from their settings. A timer may need a longer episode to activate.
 
 Run the existing campaign preflight for each config before acquisition. For example:
 

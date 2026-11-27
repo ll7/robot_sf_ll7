@@ -90,6 +90,8 @@ def sample_desired_pedestrian_speeds(
     high: float = PED_SPEED_TIER_HIGH,
     seed: int | None = None,
     sampling_metadata: dict | None = None,
+    *,
+    truncate: bool = False,
 ) -> np.ndarray:
     """Sample per-pedestrian desired walking speeds from a truncated normal distribution.
 
@@ -105,6 +107,8 @@ def sample_desired_pedestrian_speeds(
         high: Inclusive upper-bound clip for the distribution (m/s).
         seed: Optional RNG seed for deterministic sampling.
         sampling_metadata: Optional runtime receipt populated with the resolved sampler inputs.
+        truncate: Opt into rejection truncation on [0, high], retaining legacy clipping
+            when false.
 
     Returns:
         np.ndarray: Non-negative desired speeds, shape ``(num_peds,)``.
@@ -114,7 +118,11 @@ def sample_desired_pedestrian_speeds(
     std_eff = PED_SPEED_TIER_STD if std is None else float(std)
     if sampling_metadata is not None:
         sampling_metadata.update(
-            mean_m_s=float(mean), sd_m_s=float(std_eff), cap_m_s=float(high), seed=seed
+            mean_m_s=float(mean),
+            sd_m_s=float(std_eff),
+            cap_m_s=float(high),
+            seed=seed,
+            identity="rejection_truncated_normal_v1" if truncate else "clipped_normal_v1",
         )
     if num_peds <= 0:
         return np.zeros(0, dtype=float)
@@ -123,6 +131,13 @@ def sample_desired_pedestrian_speeds(
         speeds = rng.normal(loc=float(mean), scale=std_eff, size=num_peds)
     else:
         speeds = np.full(num_peds, float(mean), dtype=float)
+    if truncate:
+        if not np.isfinite(high) or high <= 0 or not 0 <= mean <= high:
+            raise ValueError("truncated speeds require finite high > 0 and mean in [0, high]")
+        outside = (speeds < 0) | (speeds > high)
+        while np.any(outside):
+            speeds[outside] = rng.normal(loc=float(mean), scale=std_eff, size=int(outside.sum()))
+            outside = (speeds < 0) | (speeds > high)
     return np.clip(speeds, 0.0, float(high))
 
 

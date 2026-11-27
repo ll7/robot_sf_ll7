@@ -1,0 +1,339 @@
+{
+  "schema_version": "pedsens-smoke-receipt.v1",
+  "evidence_status": "smoke evidence",
+  "base_commit": "61cc91877a159e1d08b321543bd860042520b9ed",
+  "wall_dependency_commit": "75787aaf591344ee59ec0e9c55de56ff38b486b6",
+  "planning_core_hours": 500,
+  "full_study_run": false,
+  "slurm_submitted": false,
+  "runs": [
+    {
+      "name": "main-final-smoke",
+      "status": "complete",
+      "source_commit": "d501b8b803dc60977c6c60a650996454419697d4",
+      "source_dirty": false,
+      "scenario": [
+        "classic_head_on_corridor_low"
+      ],
+      "planners": [
+        "goal",
+        "social_force"
+      ],
+      "seeds": [
+        1001,
+        1002
+      ],
+      "factors": [
+        "legacy",
+        "radius",
+        "speed",
+        "spread"
+      ],
+      "workers": 2,
+      "episode_count": 16,
+      "native_output_checksums_verified": 38,
+      "manifest_sha256": "1c63cbb5d72435e8bcae294b5c0c67260bacca3d6217b436a91e92fdfa8a0e46",
+      "runtime": {
+        "wall_seconds": 25.95893700281158,
+        "episode_core_seconds": 29.751166054047644,
+        "mean_slot_seconds": 1.8594478783779778,
+        "estimated_full_core_hours_2x": 124.9548974270001,
+        "estimate_limitations": "Only goal/social_force on one scenario measured; learned/search planners and matrix costs unmeasured. Not a resource guarantee."
+      },
+      "manipulation_checks": {
+        "legacy": {
+          "desired_mean_m_s": 0.65,
+          "desired_sd_m_s": 0.0,
+          "realized_mean_m_s": 0.6499999999999995,
+          "doorway_passages": 0,
+          "doorway_trials": 8,
+          "head_on_min_centre_distance_m": [
+            0.6419837299213259,
+            0.6419837299213259
+          ],
+          "wall_law": "legacy_shifted_gradient_v1"
+        },
+        "radius": {
+          "desired_mean_m_s": 0.65,
+          "desired_sd_m_s": 0.0,
+          "realized_mean_m_s": 0.6499999999999995,
+          "doorway_passages": 0,
+          "doorway_trials": 8,
+          "head_on_min_centre_distance_m": [
+            0.6419837299213259,
+            0.6419837299213259
+          ],
+          "wall_law": "legacy_shifted_gradient_v1"
+        },
+        "speed": {
+          "desired_mean_m_s": 1.276315252196601,
+          "desired_sd_m_s": 0.18540782224958532,
+          "realized_mean_m_s": 1.276315252196601,
+          "doorway_passages": 0,
+          "doorway_trials": 8,
+          "head_on_min_centre_distance_m": [
+            0.4674814011265611,
+            0.508915567784221
+          ],
+          "wall_law": "legacy_shifted_gradient_v1"
+        },
+        "spread": {
+          "desired_mean_m_s": 0.636315252196601,
+          "desired_sd_m_s": 0.18540782224958532,
+          "realized_mean_m_s": 0.6363152521966011,
+          "doorway_passages": 0,
+          "doorway_trials": 8,
+          "head_on_min_centre_distance_m": [
+            0.613799910701206,
+            0.749254417097805
+          ],
+          "wall_law": "legacy_shifted_gradient_v1"
+        }
+      },
+      "new_failure_classification": [
+        {
+          "factor": "speed",
+          "planner": "goal",
+          "scenario": "classic_head_on_corridor_low",
+          "seed": 1002,
+          "declared_class": "new_pedestrian_contact_with_valid_reset",
+          "mechanism_label": "dynamic_phase_or_order_sensitivity",
+          "mechanism_confidence": "supported_hypothesis",
+          "mechanism_evidence_mode": "paired_trace",
+          "caveat": "Contact is observed; altered encounter timing is a hypothesis, not a planner defect or root-cause proof.",
+          "baseline_success": 1.0,
+          "variant_success": 0.0,
+          "contact_events": [
+            {
+              "clearance_series_source": "runtime.step.pedestrian_positions",
+              "collision_partner_id": "0",
+              "collision_partner_type": "pedestrian",
+              "collision_time": 15.600000000000001,
+              "exact_event_source": "runtime.step.meta.is_pedestrian_collision",
+              "relative_speed_at_contact": 1.6354583096918258
+            }
+          ],
+          "baseline_episode": "legacy/goal/classic_head_on_corridor_low--1002.jsonl",
+          "variant_episode": "speed/goal/classic_head_on_corridor_low--1002.jsonl",
+          "gate_admitted": false
+        },
+        {
+          "factor": "spread",
+          "planner": "goal",
+          "scenario": "classic_head_on_corridor_low",
+          "seed": 1002,
+          "declared_class": "new_pedestrian_contact_with_valid_reset",
+          "mechanism_label": "dynamic_phase_or_order_sensitivity",
+          "mechanism_confidence": "supported_hypothesis",
+          "mechanism_evidence_mode": "paired_trace",
+          "caveat": "Contact is observed; altered encounter timing is a hypothesis, not a planner defect or root-cause proof.",
+          "baseline_success": 1.0,
+          "variant_success": 0.0,
+          "contact_events": [
+            {
+              "clearance_series_source": "runtime.step.pedestrian_positions",
+              "collision_partner_id": "1",
+              "collision_partner_type": "pedestrian",
+              "collision_time": 19.3,
+              "exact_event_source": "runtime.step.meta.is_pedestrian_collision",
+              "relative_speed_at_contact": 0.6872106068995797
+            }
+          ],
+          "baseline_episode": "legacy/goal/classic_head_on_corridor_low--1002.jsonl",
+          "variant_episode": "spread/goal/classic_head_on_corridor_low--1002.jsonl",
+          "gate_admitted": false
+        }
+      ]
+    },
+    {
+      "name": "wall-final-smoke",
+      "status": "complete",
+      "source_commit": "c3ca89a473d79d63d015136b15dd63c7d17ef7df",
+      "source_dirty": false,
+      "scenario": [
+        "classic_head_on_corridor_low"
+      ],
+      "planners": [
+        "goal",
+        "social_force"
+      ],
+      "seeds": [
+        1001,
+        1002
+      ],
+      "factors": [
+        "legacy",
+        "radius",
+        "speed",
+        "spread",
+        "wall",
+        "combined"
+      ],
+      "workers": 2,
+      "episode_count": 24,
+      "native_output_checksums_verified": 56,
+      "manifest_sha256": "7a9a054fbd63525ea1d0d934fd0fe403face31a1d9996e504982bb04055ff816",
+      "runtime": {
+        "wall_seconds": 33.07318116212264,
+        "episode_core_seconds": 39.68826116994023,
+        "mean_slot_seconds": 1.6536775487475097,
+        "estimated_full_core_hours_2x": 111.12713127583265,
+        "estimate_limitations": "Only goal/social_force on one scenario measured; learned/search planners and matrix costs unmeasured. Not a resource guarantee."
+      },
+      "manipulation_checks": {
+        "legacy": {
+          "desired_mean_m_s": 0.65,
+          "desired_sd_m_s": 0.0,
+          "realized_mean_m_s": 0.6499999999999995,
+          "doorway_passages": 0,
+          "doorway_trials": 8,
+          "head_on_min_centre_distance_m": [
+            0.6419837299213259,
+            0.6419837299213259
+          ],
+          "wall_law": "legacy_shifted_gradient_v1"
+        },
+        "radius": {
+          "desired_mean_m_s": 0.65,
+          "desired_sd_m_s": 0.0,
+          "realized_mean_m_s": 0.6499999999999995,
+          "doorway_passages": 0,
+          "doorway_trials": 8,
+          "head_on_min_centre_distance_m": [
+            0.6419837299213259,
+            0.6419837299213259
+          ],
+          "wall_law": "legacy_shifted_gradient_v1"
+        },
+        "speed": {
+          "desired_mean_m_s": 1.276315252196601,
+          "desired_sd_m_s": 0.18540782224958532,
+          "realized_mean_m_s": 1.276315252196601,
+          "doorway_passages": 0,
+          "doorway_trials": 8,
+          "head_on_min_centre_distance_m": [
+            0.4674814011265611,
+            0.508915567784221
+          ],
+          "wall_law": "legacy_shifted_gradient_v1"
+        },
+        "spread": {
+          "desired_mean_m_s": 0.636315252196601,
+          "desired_sd_m_s": 0.18540782224958532,
+          "realized_mean_m_s": 0.6363152521966011,
+          "doorway_passages": 0,
+          "doorway_trials": 8,
+          "head_on_min_centre_distance_m": [
+            0.613799910701206,
+            0.749254417097805
+          ],
+          "wall_law": "legacy_shifted_gradient_v1"
+        },
+        "wall": {
+          "desired_mean_m_s": 0.65,
+          "desired_sd_m_s": 0.0,
+          "realized_mean_m_s": 0.6499849206340111,
+          "doorway_passages": 6,
+          "doorway_trials": 8,
+          "head_on_min_centre_distance_m": [
+            0.7058276684743287,
+            0.7058276684743287
+          ],
+          "wall_law": "surface_distance_unit_normal_v2"
+        },
+        "combined": {
+          "desired_mean_m_s": 1.276315252196601,
+          "desired_sd_m_s": 0.18540782224958532,
+          "realized_mean_m_s": 1.2763070760864847,
+          "doorway_passages": 6,
+          "doorway_trials": 8,
+          "head_on_min_centre_distance_m": [
+            0.5040875485739771,
+            0.5419427020099447
+          ],
+          "wall_law": "surface_distance_unit_normal_v2"
+        }
+      },
+      "new_failure_classification": [
+        {
+          "factor": "combined",
+          "planner": "goal",
+          "scenario": "classic_head_on_corridor_low",
+          "seed": 1002,
+          "declared_class": "new_pedestrian_contact_with_valid_reset",
+          "mechanism_label": "dynamic_phase_or_order_sensitivity",
+          "mechanism_confidence": "supported_hypothesis",
+          "mechanism_evidence_mode": "paired_trace",
+          "caveat": "Contact is observed; altered encounter timing is a hypothesis, not a planner defect or root-cause proof.",
+          "baseline_success": 1.0,
+          "variant_success": 0.0,
+          "contact_events": [
+            {
+              "clearance_series_source": "runtime.step.pedestrian_positions",
+              "collision_partner_id": "0",
+              "collision_partner_type": "pedestrian",
+              "collision_time": 15.8,
+              "exact_event_source": "runtime.step.meta.is_pedestrian_collision",
+              "relative_speed_at_contact": 1.3552207304978898
+            }
+          ],
+          "baseline_episode": "legacy/goal/classic_head_on_corridor_low--1002.jsonl",
+          "variant_episode": "combined/goal/classic_head_on_corridor_low--1002.jsonl",
+          "gate_admitted": false
+        },
+        {
+          "factor": "speed",
+          "planner": "goal",
+          "scenario": "classic_head_on_corridor_low",
+          "seed": 1002,
+          "declared_class": "new_pedestrian_contact_with_valid_reset",
+          "mechanism_label": "dynamic_phase_or_order_sensitivity",
+          "mechanism_confidence": "supported_hypothesis",
+          "mechanism_evidence_mode": "paired_trace",
+          "caveat": "Contact is observed; altered encounter timing is a hypothesis, not a planner defect or root-cause proof.",
+          "baseline_success": 1.0,
+          "variant_success": 0.0,
+          "contact_events": [
+            {
+              "clearance_series_source": "runtime.step.pedestrian_positions",
+              "collision_partner_id": "0",
+              "collision_partner_type": "pedestrian",
+              "collision_time": 15.600000000000001,
+              "exact_event_source": "runtime.step.meta.is_pedestrian_collision",
+              "relative_speed_at_contact": 1.6354583096918258
+            }
+          ],
+          "baseline_episode": "legacy/goal/classic_head_on_corridor_low--1002.jsonl",
+          "variant_episode": "speed/goal/classic_head_on_corridor_low--1002.jsonl",
+          "gate_admitted": false
+        },
+        {
+          "factor": "spread",
+          "planner": "goal",
+          "scenario": "classic_head_on_corridor_low",
+          "seed": 1002,
+          "declared_class": "new_pedestrian_contact_with_valid_reset",
+          "mechanism_label": "dynamic_phase_or_order_sensitivity",
+          "mechanism_confidence": "supported_hypothesis",
+          "mechanism_evidence_mode": "paired_trace",
+          "caveat": "Contact is observed; altered encounter timing is a hypothesis, not a planner defect or root-cause proof.",
+          "baseline_success": 1.0,
+          "variant_success": 0.0,
+          "contact_events": [
+            {
+              "clearance_series_source": "runtime.step.pedestrian_positions",
+              "collision_partner_id": "1",
+              "collision_partner_type": "pedestrian",
+              "collision_time": 19.3,
+              "exact_event_source": "runtime.step.meta.is_pedestrian_collision",
+              "relative_speed_at_contact": 0.6872106068995797
+            }
+          ],
+          "baseline_episode": "legacy/goal/classic_head_on_corridor_low--1002.jsonl",
+          "variant_episode": "spread/goal/classic_head_on_corridor_low--1002.jsonl",
+          "gate_admitted": false
+        }
+      ]
+    }
+  ]
+}

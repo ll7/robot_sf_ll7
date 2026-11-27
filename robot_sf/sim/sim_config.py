@@ -465,11 +465,27 @@ class SimulationSettings:
     from integer steps to seconds and back. This budget takes precedence over duration.
     """
 
+    ped_force_radius: InitVar[float | None] = field(default=None, kw_only=True)
+    """Opt-in force-kernel radius; None retains fast-pysf's legacy 0.35 m."""
+
+    desired_speed_truncated: InitVar[bool] = field(default=False, kw_only=True)
+    """Opt-in rejection-truncated N(mean, std) on [0, 3]; default retains clipping."""
+
     group_allocation_mode: InitVar[str] = field(default="legacy", kw_only=True)
     """Group law: legacy (default) or opt-in exact_small_crowd_v1."""
 
-    def __setattr__(self, name: str, value: Any) -> None:
+    def __setattr__(self, name: str, value: Any) -> None:  # noqa: C901 - independent selector validation
         """Resolve law assignments immediately and retain selector provenance."""
+        if name == "ped_force_radius":
+            if value is not None and (not isfinite(value) or value <= 0):
+                raise ValueError("ped_force_radius must be finite and positive")
+            object.__setattr__(self, "_ped_force_radius", value)
+            return
+        if name == "desired_speed_truncated":
+            if not isinstance(value, bool):
+                raise TypeError("desired_speed_truncated must be a boolean")
+            object.__setattr__(self, "_desired_speed_truncated", value)
+            return
         if name == "obstacle_force_law":
             resolved, mode = resolve_obstacle_force_law_with_mode(value)
             object.__setattr__(self, name, resolved)
@@ -498,6 +514,12 @@ class SimulationSettings:
         Returns:
             The resolved selector for ``social_force_kernel_version`` or the requested attribute.
         """
+        if name in {"ped_force_radius", "desired_speed_truncated"}:
+            default = None if name == "ped_force_radius" else False
+            try:
+                return object.__getattribute__(self, "_" + name)
+            except AttributeError:
+                return default
         if name == "social_force_kernel_version":
             try:
                 return object.__getattribute__(self, "_social_force_kernel_version")
@@ -522,6 +544,10 @@ class SimulationSettings:
             Explicit runtime overrides, or an empty mapping for legacy defaults.
         """
         overrides: dict[str, Any] = {}
+        if self.ped_force_radius is not None:
+            overrides["ped_force_radius"] = self.ped_force_radius
+        if self.desired_speed_truncated:
+            overrides["desired_speed_truncated"] = True
         if self.social_force_kernel_resolution_mode != "defaulted_missing":
             overrides["social_force_kernel_version"] = str(self.social_force_kernel_version)
         if self.group_allocation_mode != "legacy":
@@ -633,11 +659,13 @@ class SimulationSettings:
         settings are valid and raises a ValueError if any of them are not.
         """
         if init_vars:
-            self.social_force_kernel_version = init_vars[0]
-        if len(init_vars) > 1:
-            self.episode_step_limit = init_vars[1]
-        if len(init_vars) > 2:
-            self.group_allocation_mode = init_vars[2]
+            init_names = [
+                name
+                for name, spec in self.__dataclass_fields__.items()
+                if isinstance(spec.type, InitVar)
+            ]
+            for name, value in zip(init_names, init_vars, strict=True):
+                setattr(self, name, value)
         # Check that the simulation time is positive
         if self.sim_time_in_secs <= 0:
             raise ValueError("Simulation length for episodes mustn't be negative or zero!")

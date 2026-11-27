@@ -17,7 +17,9 @@ from robot_sf.benchmark.map_runner.map_runner_episode import run_map_episode
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def _episode(*, radius=0.47, tier="typical", grid=False, robot_force=True, reverse_cap=None):
+def _episode(
+    *, radius=0.47, tier="typical", grid=False, robot_force=True, reverse_cap=None, profile=None
+):
     cfg = load_campaign_config(ROOT / "configs/benchmarks/camera_ready_smoke_all_planners.yaml")
     scenario = copy.deepcopy(
         next(
@@ -42,6 +44,8 @@ def _episode(*, radius=0.47, tier="typical", grid=False, robot_force=True, rever
         config.sim_config = replace(
             config.sim_config, ped_speed_tier=tier, desired_speed_mean=None, desired_speed_std=None
         )
+        if profile is not None:
+            config.sim_config = replace(config.sim_config, **profile)
         if grid:
             from robot_sf.nav.occupancy_grid import GridConfig
 
@@ -384,3 +388,35 @@ def test_capture_before_grid_regeneration_records_empty_radii():
         assert snapshot["radius_roles"]["occupancy_grid"]["radii_m"] == []
     finally:
         env.close()
+
+
+@pytest.mark.parametrize(
+    "truncated,identity,normal_rule",
+    [
+        (False, "clipped_normal_v1", "clip_normal_to_[0,high]"),
+        (True, "rejection_truncated_normal_v1", "reject_normal_outside_[0,high]"),
+    ],
+)
+def test_profile_controls_reach_native_physics_manifest(tmp_path, truncated, identity, normal_rule):
+    """Native profile witnesses must retain the sampler law and explicit force radius."""
+    row = _episode(
+        radius=0.25,
+        tier=None,
+        profile={
+            "ped_force_radius": 0.25,
+            "desired_speed_mean": 1.29,
+            "desired_speed_std": 0.19,
+            "desired_speed_seed": 1001,
+            "desired_speed_truncated": truncated,
+        },
+    )
+    manifest = _manifest(tmp_path, row)
+    physics = manifest["effective_physics_samples"][0]["physics"]
+    speed = physics["pedestrian_speed_model"]
+    assert speed["identity"] == identity
+    assert speed["cap_rule"] == normal_rule + "; velocity_norm<=per_agent_desired_speed"
+    assert (speed["mean_m_s"], speed["sd_m_s"], speed["cap_m_s"]) == (1.29, 0.19, 3.0)
+    assert manifest["release_design_parameters"]["pedestrian_force_radius_m"] == 0.25
+    assert physics["radius_roles"]["physical_contact_m"] == 0.25
+    assert physics["radius_roles"]["metric_m"] == 0.25
+    assert all(0 <= value <= 3 for value in speed["per_agent_caps_m_s"])

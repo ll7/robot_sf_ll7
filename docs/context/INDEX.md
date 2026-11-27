@@ -1,5 +1,9 @@
 # Context Retrieval Index
 
+Issue #10190 pedestrian sensitivity: opt-in measured profiles, strict dev-seed
+driver, paired summaries and bounded smoke; full study unrun:
+[pedsens study preparation](pedsens/README.md).
+
 ## Top-hybrid guard/escape follow-up
 
 Prospective 18-cell factorial on hybrid v4, development seeds 1061–1090:

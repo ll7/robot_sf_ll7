@@ -1,0 +1,881 @@
+{
+  "schema_version": "pedsens-summary.v1",
+  "evidence_status": "smoke evidence",
+  "ranking_metric": "success",
+  "tau_variant": "b",
+  "confidence": 0.95,
+  "resampling_unit": "paired seed cluster; scenarios fixed",
+  "time_to_goal_estimand": "mean paired seconds among successes in both arms",
+  "seeds": [
+    1001,
+    1002
+  ],
+  "scenarios": [
+    "classic_head_on_corridor_low"
+  ],
+  "planners": [
+    "goal",
+    "social_force"
+  ],
+  "episode_count": 24,
+  "factors": {
+    "combined": {
+      "kendall_tau": {
+        "estimate": 1.0,
+        "ci": [
+          1.0,
+          1.0
+        ],
+        "valid_draws": 971,
+        "undefined_draws": 1029
+      },
+      "deltas": {
+        "goal": {
+          "success": {
+            "estimate": 0.0,
+            "ci": [
+              -1.0,
+              1.0
+            ],
+            "valid_draws": 2000,
+            "undefined_draws": 0,
+            "paired_n": 2
+          },
+          "collision": {
+            "estimate": 0.0,
+            "ci": [
+              -1.0,
+              1.0
+            ],
+            "valid_draws": 2000,
+            "undefined_draws": 0,
+            "paired_n": 2
+          },
+          "near_miss": {
+            "estimate": 0.0,
+            "ci": [
+              0.0,
+              0.0
+            ],
+            "valid_draws": 2000,
+            "undefined_draws": 0,
+            "paired_n": 2
+          },
+          "time_to_goal": {
+            "estimate": null,
+            "ci": null,
+            "valid_draws": 0,
+            "undefined_draws": 2000,
+            "paired_n": 0
+          }
+        },
+        "social_force": {
+          "success": {
+            "estimate": 0.0,
+            "ci": [
+              0.0,
+              0.0
+            ],
+            "valid_draws": 2000,
+            "undefined_draws": 0,
+            "paired_n": 2
+          },
+          "collision": {
+            "estimate": 0.0,
+            "ci": [
+              0.0,
+              0.0
+            ],
+            "valid_draws": 2000,
+            "undefined_draws": 0,
+            "paired_n": 2
+          },
+          "near_miss": {
+            "estimate": 0.0,
+            "ci": [
+              0.0,
+              0.0
+            ],
+            "valid_draws": 2000,
+            "undefined_draws": 0,
+            "paired_n": 2
+          },
+          "time_to_goal": {
+            "estimate": 2.1499999999999986,
+            "ci": [
+              -0.10000000000000142,
+              4.399999999999999
+            ],
+            "valid_draws": 2000,
+            "undefined_draws": 0,
+            "paired_n": 2
+          }
+        }
+      }
+    },
+    "legacy": {
+      "kendall_tau": {
+        "estimate": 1.0,
+        "ci": [
+          1.0,
+          1.0
+        ],
+        "valid_draws": 1507,
+        "undefined_draws": 493
+      },
+      "deltas": {
+        "goal": {
+          "success": {
+            "estimate": 0.0,
+            "ci": [
+              0.0,
+              0.0
+            ],
+            "valid_draws": 2000,
+            "undefined_draws": 0,
+            "paired_n": 2
+          },
+          "collision": {
+            "estimate": 0.0,
+            "ci": [
+              0.0,
+              0.0
+            ],
+            "valid_draws": 2000,
+            "undefined_draws": 0,
+            "paired_n": 2
+          },
+          "near_miss": {
+            "estimate": 0.0,
+            "ci": [
+              0.0,
+              0.0
+            ],
+            "valid_draws": 2000,
+            "undefined_draws": 0,
+            "paired_n": 2
+          },
+          "time_to_goal": {
+            "estimate": 0.0,
+            "ci": [
+              0.0,
+              0.0
+            ],
+            "valid_draws": 1464,
+            "undefined_draws": 536,
+            "paired_n": 1
+          }
+        },
+        "social_force": {
+          "success": {
+            "estimate": 0.0,
+            "ci": [
+              0.0,
+              0.0
+            ],
+            "valid_draws": 2000,
+            "undefined_draws": 0,
+            "paired_n": 2
+          },
+          "collision": {
+            "estimate": 0.0,
+            "ci": [
+              0.0,
+              0.0
+            ],
+            "valid_draws": 2000,
+            "undefined_draws": 0,
+            "paired_n": 2
+          },
+          "near_miss": {
+            "estimate": 0.0,
+            "ci": [
+              0.0,
+              0.0
+            ],
+            "valid_draws": 2000,
+            "undefined_draws": 0,
+            "paired_n": 2
+          },
+          "time_to_goal": {
+            "estimate": 0.0,
+            "ci": [
+              0.0,
+              0.0
+            ],
+            "valid_draws": 2000,
+            "undefined_draws": 0,
+            "paired_n": 2
+          }
+        }
+      }
+    },
+    "radius": {
+      "kendall_tau": {
+        "estimate": 1.0,
+        "ci": [
+          1.0,
+          1.0
+        ],
+        "valid_draws": 1507,
+        "undefined_draws": 493
+      },
+      "deltas": {
+        "goal": {
+          "success": {
+            "estimate": 0.0,
+            "ci": [
+              0.0,
+              0.0
+            ],
+            "valid_draws": 2000,
+            "undefined_draws": 0,
+            "paired_n": 2
+          },
+          "collision": {
+            "estimate": 0.0,
+            "ci": [
+              0.0,
+              0.0
+            ],
+            "valid_draws": 2000,
+            "undefined_draws": 0,
+            "paired_n": 2
+          },
+          "near_miss": {
+            "estimate": 0.0,
+            "ci": [
+              0.0,
+              0.0
+            ],
+            "valid_draws": 2000,
+            "undefined_draws": 0,
+            "paired_n": 2
+          },
+          "time_to_goal": {
+            "estimate": 0.0,
+            "ci": [
+              0.0,
+              0.0
+            ],
+            "valid_draws": 1464,
+            "undefined_draws": 536,
+            "paired_n": 1
+          }
+        },
+        "social_force": {
+          "success": {
+            "estimate": 0.0,
+            "ci": [
+              0.0,
+              0.0
+            ],
+            "valid_draws": 2000,
+            "undefined_draws": 0,
+            "paired_n": 2
+          },
+          "collision": {
+            "estimate": 0.0,
+            "ci": [
+              0.0,
+              0.0
+            ],
+            "valid_draws": 2000,
+            "undefined_draws": 0,
+            "paired_n": 2
+          },
+          "near_miss": {
+            "estimate": -0.5,
+            "ci": [
+              -1.0,
+              0.0
+            ],
+            "valid_draws": 2000,
+            "undefined_draws": 0,
+            "paired_n": 2
+          },
+          "time_to_goal": {
+            "estimate": -1.2000000000000028,
+            "ci": [
+              -1.3000000000000043,
+              -1.1000000000000014
+            ],
+            "valid_draws": 2000,
+            "undefined_draws": 0,
+            "paired_n": 2
+          }
+        }
+      }
+    },
+    "speed": {
+      "kendall_tau": {
+        "estimate": 1.0,
+        "ci": [
+          1.0,
+          1.0
+        ],
+        "valid_draws": 1507,
+        "undefined_draws": 493
+      },
+      "deltas": {
+        "goal": {
+          "success": {
+            "estimate": -0.5,
+            "ci": [
+              -1.0,
+              0.0
+            ],
+            "valid_draws": 2000,
+            "undefined_draws": 0,
+            "paired_n": 2
+          },
+          "collision": {
+            "estimate": 0.5,
+            "ci": [
+              0.0,
+              1.0
+            ],
+            "valid_draws": 2000,
+            "undefined_draws": 0,
+            "paired_n": 2
+          },
+          "near_miss": {
+            "estimate": 0.0,
+            "ci": [
+              0.0,
+              0.0
+            ],
+            "valid_draws": 2000,
+            "undefined_draws": 0,
+            "paired_n": 2
+          },
+          "time_to_goal": {
+            "estimate": null,
+            "ci": null,
+            "valid_draws": 0,
+            "undefined_draws": 2000,
+            "paired_n": 0
+          }
+        },
+        "social_force": {
+          "success": {
+            "estimate": 0.0,
+            "ci": [
+              0.0,
+              0.0
+            ],
+            "valid_draws": 2000,
+            "undefined_draws": 0,
+            "paired_n": 2
+          },
+          "collision": {
+            "estimate": 0.0,
+            "ci": [
+              0.0,
+              0.0
+            ],
+            "valid_draws": 2000,
+            "undefined_draws": 0,
+            "paired_n": 2
+          },
+          "near_miss": {
+            "estimate": 0.0,
+            "ci": [
+              0.0,
+              0.0
+            ],
+            "valid_draws": 2000,
+            "undefined_draws": 0,
+            "paired_n": 2
+          },
+          "time_to_goal": {
+            "estimate": 4.899999999999999,
+            "ci": [
+              0.8999999999999986,
+              8.899999999999999
+            ],
+            "valid_draws": 2000,
+            "undefined_draws": 0,
+            "paired_n": 2
+          }
+        }
+      }
+    },
+    "spread": {
+      "kendall_tau": {
+        "estimate": 1.0,
+        "ci": [
+          1.0,
+          1.0
+        ],
+        "valid_draws": 1507,
+        "undefined_draws": 493
+      },
+      "deltas": {
+        "goal": {
+          "success": {
+            "estimate": -0.5,
+            "ci": [
+              -1.0,
+              0.0
+            ],
+            "valid_draws": 2000,
+            "undefined_draws": 0,
+            "paired_n": 2
+          },
+          "collision": {
+            "estimate": 0.5,
+            "ci": [
+              0.0,
+              1.0
+            ],
+            "valid_draws": 2000,
+            "undefined_draws": 0,
+            "paired_n": 2
+          },
+          "near_miss": {
+            "estimate": 0.0,
+            "ci": [
+              0.0,
+              0.0
+            ],
+            "valid_draws": 2000,
+            "undefined_draws": 0,
+            "paired_n": 2
+          },
+          "time_to_goal": {
+            "estimate": null,
+            "ci": null,
+            "valid_draws": 0,
+            "undefined_draws": 2000,
+            "paired_n": 0
+          }
+        },
+        "social_force": {
+          "success": {
+            "estimate": 0.0,
+            "ci": [
+              0.0,
+              0.0
+            ],
+            "valid_draws": 2000,
+            "undefined_draws": 0,
+            "paired_n": 2
+          },
+          "collision": {
+            "estimate": 0.0,
+            "ci": [
+              0.0,
+              0.0
+            ],
+            "valid_draws": 2000,
+            "undefined_draws": 0,
+            "paired_n": 2
+          },
+          "near_miss": {
+            "estimate": 0.0,
+            "ci": [
+              0.0,
+              0.0
+            ],
+            "valid_draws": 2000,
+            "undefined_draws": 0,
+            "paired_n": 2
+          },
+          "time_to_goal": {
+            "estimate": 1.8500000000000014,
+            "ci": [
+              0.7000000000000028,
+              3.0
+            ],
+            "valid_draws": 2000,
+            "undefined_draws": 0,
+            "paired_n": 2
+          }
+        }
+      }
+    },
+    "wall": {
+      "kendall_tau": {
+        "estimate": 1.0,
+        "ci": [
+          1.0,
+          1.0
+        ],
+        "valid_draws": 1507,
+        "undefined_draws": 493
+      },
+      "deltas": {
+        "goal": {
+          "success": {
+            "estimate": 0.0,
+            "ci": [
+              0.0,
+              0.0
+            ],
+            "valid_draws": 2000,
+            "undefined_draws": 0,
+            "paired_n": 2
+          },
+          "collision": {
+            "estimate": 0.0,
+            "ci": [
+              0.0,
+              0.0
+            ],
+            "valid_draws": 2000,
+            "undefined_draws": 0,
+            "paired_n": 2
+          },
+          "near_miss": {
+            "estimate": 0.0,
+            "ci": [
+              0.0,
+              0.0
+            ],
+            "valid_draws": 2000,
+            "undefined_draws": 0,
+            "paired_n": 2
+          },
+          "time_to_goal": {
+            "estimate": 0.0,
+            "ci": [
+              0.0,
+              0.0
+            ],
+            "valid_draws": 1464,
+            "undefined_draws": 536,
+            "paired_n": 1
+          }
+        },
+        "social_force": {
+          "success": {
+            "estimate": 0.0,
+            "ci": [
+              0.0,
+              0.0
+            ],
+            "valid_draws": 2000,
+            "undefined_draws": 0,
+            "paired_n": 2
+          },
+          "collision": {
+            "estimate": 0.0,
+            "ci": [
+              0.0,
+              0.0
+            ],
+            "valid_draws": 2000,
+            "undefined_draws": 0,
+            "paired_n": 2
+          },
+          "near_miss": {
+            "estimate": 0.0,
+            "ci": [
+              0.0,
+              0.0
+            ],
+            "valid_draws": 2000,
+            "undefined_draws": 0,
+            "paired_n": 2
+          },
+          "time_to_goal": {
+            "estimate": -0.05000000000000071,
+            "ci": [
+              -0.10000000000000142,
+              0.0
+            ],
+            "valid_draws": 2000,
+            "undefined_draws": 0,
+            "paired_n": 2
+          }
+        }
+      }
+    }
+  },
+  "new_failures": [
+    {
+      "factor": "combined",
+      "planner": "goal",
+      "scenario": "classic_head_on_corridor_low",
+      "seed": 1002,
+      "class": "new_contact",
+      "mechanism": "unclassified_requires_trace_review",
+      "gate_admitted": false,
+      "baseline_source": {
+        "episode_path": "legacy/goal/classic_head_on_corridor_low--1002.jsonl",
+        "failure_evidence": {
+          "termination_reason": "success",
+          "exact_events": {
+            "collision": false,
+            "goal_reached": true,
+            "invalid_run": false,
+            "timeout": false
+          },
+          "collision_events": [],
+          "spawn_validity": {
+            "invalid_reason": null,
+            "invalid_run": false,
+            "reset_clearance": {
+              "obstacle_overlap": false,
+              "overlap": false,
+              "overlapping_pedestrian_rows": [],
+              "pedestrian_overlap": false,
+              "robot_obstacle_min_surface_clearance_m": 0.5492215877491406,
+              "robot_pedestrian_min_surface_clearance_m": 8.960612498462298
+            },
+            "reset_clearance_error": null,
+            "reset_clearance_status": "available",
+            "reset_overlap": false,
+            "respawn_overlap_collisions": [],
+            "respawn_overlap_events": [],
+            "schema_version": "spawn_validity.v2"
+          }
+        }
+      },
+      "variant_source": {
+        "episode_path": "combined/goal/classic_head_on_corridor_low--1002.jsonl",
+        "failure_evidence": {
+          "termination_reason": "collision",
+          "exact_events": {
+            "collision": true,
+            "goal_reached": false,
+            "invalid_run": false,
+            "timeout": false
+          },
+          "collision_events": [
+            {
+              "clearance_series_source": "runtime.step.pedestrian_positions",
+              "collision_partner_id": "0",
+              "collision_partner_type": "pedestrian",
+              "collision_time": 15.8,
+              "exact_event_source": "runtime.step.meta.is_pedestrian_collision",
+              "relative_speed_at_contact": 1.3552207304978898
+            }
+          ],
+          "spawn_validity": {
+            "invalid_reason": null,
+            "invalid_run": false,
+            "reset_clearance": {
+              "obstacle_overlap": false,
+              "overlap": false,
+              "overlapping_pedestrian_rows": [],
+              "pedestrian_overlap": false,
+              "robot_obstacle_min_surface_clearance_m": 0.5492215877491406,
+              "robot_pedestrian_min_surface_clearance_m": 9.110612498462299
+            },
+            "reset_clearance_error": null,
+            "reset_clearance_status": "available",
+            "reset_overlap": false,
+            "respawn_overlap_collisions": [],
+            "respawn_overlap_events": [],
+            "schema_version": "spawn_validity.v2"
+          }
+        }
+      },
+      "baseline": {
+        "success": 1.0,
+        "collision": 0.0,
+        "near_miss": 1.0,
+        "time_to_goal": 30.8
+      },
+      "variant": {
+        "success": 0.0,
+        "collision": 1.0,
+        "near_miss": 1.0,
+        "time_to_goal": null
+      }
+    },
+    {
+      "factor": "speed",
+      "planner": "goal",
+      "scenario": "classic_head_on_corridor_low",
+      "seed": 1002,
+      "class": "new_contact",
+      "mechanism": "unclassified_requires_trace_review",
+      "gate_admitted": false,
+      "baseline_source": {
+        "episode_path": "legacy/goal/classic_head_on_corridor_low--1002.jsonl",
+        "failure_evidence": {
+          "termination_reason": "success",
+          "exact_events": {
+            "collision": false,
+            "goal_reached": true,
+            "invalid_run": false,
+            "timeout": false
+          },
+          "collision_events": [],
+          "spawn_validity": {
+            "invalid_reason": null,
+            "invalid_run": false,
+            "reset_clearance": {
+              "obstacle_overlap": false,
+              "overlap": false,
+              "overlapping_pedestrian_rows": [],
+              "pedestrian_overlap": false,
+              "robot_obstacle_min_surface_clearance_m": 0.5492215877491406,
+              "robot_pedestrian_min_surface_clearance_m": 8.960612498462298
+            },
+            "reset_clearance_error": null,
+            "reset_clearance_status": "available",
+            "reset_overlap": false,
+            "respawn_overlap_collisions": [],
+            "respawn_overlap_events": [],
+            "schema_version": "spawn_validity.v2"
+          }
+        }
+      },
+      "variant_source": {
+        "episode_path": "speed/goal/classic_head_on_corridor_low--1002.jsonl",
+        "failure_evidence": {
+          "termination_reason": "collision",
+          "exact_events": {
+            "collision": true,
+            "goal_reached": false,
+            "invalid_run": false,
+            "timeout": false
+          },
+          "collision_events": [
+            {
+              "clearance_series_source": "runtime.step.pedestrian_positions",
+              "collision_partner_id": "0",
+              "collision_partner_type": "pedestrian",
+              "collision_time": 15.600000000000001,
+              "exact_event_source": "runtime.step.meta.is_pedestrian_collision",
+              "relative_speed_at_contact": 1.6354583096918258
+            }
+          ],
+          "spawn_validity": {
+            "invalid_reason": null,
+            "invalid_run": false,
+            "reset_clearance": {
+              "obstacle_overlap": false,
+              "overlap": false,
+              "overlapping_pedestrian_rows": [],
+              "pedestrian_overlap": false,
+              "robot_obstacle_min_surface_clearance_m": 0.5492215877491406,
+              "robot_pedestrian_min_surface_clearance_m": 8.960612498462298
+            },
+            "reset_clearance_error": null,
+            "reset_clearance_status": "available",
+            "reset_overlap": false,
+            "respawn_overlap_collisions": [],
+            "respawn_overlap_events": [],
+            "schema_version": "spawn_validity.v2"
+          }
+        }
+      },
+      "baseline": {
+        "success": 1.0,
+        "collision": 0.0,
+        "near_miss": 1.0,
+        "time_to_goal": 30.8
+      },
+      "variant": {
+        "success": 0.0,
+        "collision": 1.0,
+        "near_miss": 1.0,
+        "time_to_goal": null
+      }
+    },
+    {
+      "factor": "spread",
+      "planner": "goal",
+      "scenario": "classic_head_on_corridor_low",
+      "seed": 1002,
+      "class": "new_contact",
+      "mechanism": "unclassified_requires_trace_review",
+      "gate_admitted": false,
+      "baseline_source": {
+        "episode_path": "legacy/goal/classic_head_on_corridor_low--1002.jsonl",
+        "failure_evidence": {
+          "termination_reason": "success",
+          "exact_events": {
+            "collision": false,
+            "goal_reached": true,
+            "invalid_run": false,
+            "timeout": false
+          },
+          "collision_events": [],
+          "spawn_validity": {
+            "invalid_reason": null,
+            "invalid_run": false,
+            "reset_clearance": {
+              "obstacle_overlap": false,
+              "overlap": false,
+              "overlapping_pedestrian_rows": [],
+              "pedestrian_overlap": false,
+              "robot_obstacle_min_surface_clearance_m": 0.5492215877491406,
+              "robot_pedestrian_min_surface_clearance_m": 8.960612498462298
+            },
+            "reset_clearance_error": null,
+            "reset_clearance_status": "available",
+            "reset_overlap": false,
+            "respawn_overlap_collisions": [],
+            "respawn_overlap_events": [],
+            "schema_version": "spawn_validity.v2"
+          }
+        }
+      },
+      "variant_source": {
+        "episode_path": "spread/goal/classic_head_on_corridor_low--1002.jsonl",
+        "failure_evidence": {
+          "termination_reason": "collision",
+          "exact_events": {
+            "collision": true,
+            "goal_reached": false,
+            "invalid_run": false,
+            "timeout": false
+          },
+          "collision_events": [
+            {
+              "clearance_series_source": "runtime.step.pedestrian_positions",
+              "collision_partner_id": "1",
+              "collision_partner_type": "pedestrian",
+              "collision_time": 19.3,
+              "exact_event_source": "runtime.step.meta.is_pedestrian_collision",
+              "relative_speed_at_contact": 0.6872106068995797
+            }
+          ],
+          "spawn_validity": {
+            "invalid_reason": null,
+            "invalid_run": false,
+            "reset_clearance": {
+              "obstacle_overlap": false,
+              "overlap": false,
+              "overlapping_pedestrian_rows": [],
+              "pedestrian_overlap": false,
+              "robot_obstacle_min_surface_clearance_m": 0.5492215877491406,
+              "robot_pedestrian_min_surface_clearance_m": 8.960612498462298
+            },
+            "reset_clearance_error": null,
+            "reset_clearance_status": "available",
+            "reset_overlap": false,
+            "respawn_overlap_collisions": [],
+            "respawn_overlap_events": [],
+            "schema_version": "spawn_validity.v2"
+          }
+        }
+      },
+      "baseline": {
+        "success": 1.0,
+        "collision": 0.0,
+        "near_miss": 1.0,
+        "time_to_goal": 30.8
+      },
+      "variant": {
+        "success": 0.0,
+        "collision": 1.0,
+        "near_miss": 1.0,
+        "time_to_goal": null
+      }
+    }
+  ],
+  "runtime": {
+    "wall_seconds": 33.07318116212264,
+    "episode_core_seconds": 39.68826116994023,
+    "mean_slot_seconds": 1.6536775487475097,
+    "estimated_full_core_hours_2x": 111.12713127583265,
+    "estimate_limitations": "Only goal/social_force on one scenario measured; learned/search planners and matrix costs unmeasured. Not a resource guarantee."
+  }
+}

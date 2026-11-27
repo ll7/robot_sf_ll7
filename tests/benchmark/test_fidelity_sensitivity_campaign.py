@@ -633,6 +633,7 @@ def test_development_campaign_binds_simulator_and_runner_to_sixty_seconds(
     cfg = load_campaign_config(
         REPO_ROOT / f"configs/benchmarks/issue_10516_timestep_dev_v1_{dt_ms:03d}ms.yaml"
     )
+    assert cfg.dt is not None
     for scenario in _load_campaign_scenarios(cfg):
         config = build_env_config(scenario, scenario_path=REPO_ROOT / "scoped_scenarios.json")
         config.sim_config.time_per_step_in_secs = cfg.dt

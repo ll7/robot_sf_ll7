@@ -6,7 +6,7 @@ import argparse
 import json
 import math
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from robot_sf.benchmark.camera_ready._config import (
     _apply_fixed_campaign_horizon,
@@ -25,6 +25,7 @@ from robot_sf.benchmark.map_runner_policies.map_runner_policy_resolution import 
 )
 from robot_sf.benchmark.utils import _git_hash_fallback
 from robot_sf.common.artifact_paths import get_repository_root
+from robot_sf.errors import RobotSfError
 from robot_sf.planner.guarded_ppo import build_guarded_ppo_config
 from robot_sf.planner.hybrid_rule_local_planner import build_hybrid_rule_local_planner_config
 from robot_sf.planner.predictive_mppi import build_predictive_mppi_config
@@ -33,6 +34,7 @@ from robot_sf.planner.risk_dwa import build_risk_dwa_config
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
+    from robot_sf.benchmark.algorithm_readiness import BenchmarkProfile
     from robot_sf.benchmark.camera_ready._config_types import CampaignConfig, PlannerSpec
 
 CONFIG_PATTERN = "configs/benchmarks/issue_10516_timestep_dev_v1_{ms:03d}ms.yaml"
@@ -123,6 +125,17 @@ def _planner_timing(algo: str, raw: dict[str, Any], dt: float) -> dict[str, Any]
     return {}
 
 
+def _step_size(cfg: CampaignConfig, planner: PlannerSpec) -> float:
+    """Read the step size from the declared campaign and planner settings.
+
+    Returns:
+        The effective step size in seconds.
+    """
+    if cfg.dt is None:
+        raise ValueError("The time-step study requires an explicit campaign dt")
+    return cfg.dt if planner.dt_override is None else planner.dt_override
+
+
 def _resolved_arm(
     planner: PlannerSpec,
     scenario: dict[str, Any],
@@ -141,7 +154,7 @@ def _resolved_arm(
         scenario=scenario,
         seed=scenario["seeds"][0],
     )
-    dt = planner.dt_override if planner.dt_override is not None else cfg.dt
+    dt = _step_size(cfg, planner)
     steps = scenario["simulation_config"]["max_episode_steps"]
     if planner.horizon_override is not None:
         steps = planner.horizon_override
@@ -257,7 +270,7 @@ def _run_witness(
     for planner in (p for p in cfg.planners if p.enabled):
         path = planner.algo_config_path
         output = output_dir / cfg.name / planner.key / "episodes.jsonl"
-        dt = planner.dt_override if planner.dt_override is not None else cfg.dt
+        dt = _step_size(cfg, planner)
         steps = round(WITNESS_SECONDS / dt)
         scoped = _scenario_with_kinematics(
             scenario,
@@ -279,7 +292,7 @@ def _run_witness(
                 record_forces=cfg.record_forces,
                 algo=planner.algo,
                 algo_config_path=str(path) if path is not None else None,
-                benchmark_profile=planner.benchmark_profile,
+                benchmark_profile=cast("BenchmarkProfile", planner.benchmark_profile),
                 socnav_missing_prereq_policy="fail-fast",
                 adapter_impact_eval=planner.adapter_impact_eval,
                 record_simulation_step_trace=True,
@@ -289,7 +302,15 @@ def _run_witness(
             rows = output.read_text(encoding="utf-8").splitlines() if output.is_file() else []
             row = json.loads(rows[0]) if len(rows) == 1 else {}
             result = _witness_result(summary, row, dt)
-        except Exception as exc:  # noqa: BLE001 - preserve the refusal and inspect every arm
+        except (
+            ImportError,
+            LookupError,
+            OSError,
+            RobotSfError,
+            RuntimeError,
+            TypeError,
+            ValueError,
+        ) as exc:
             result = {"status": "refused", "reason": f"{type(exc).__name__}: {exc}"}
         results.append(
             {"planner": planner.key, "scenario": WITNESS_SCENARIO, "seed": seed, **result}

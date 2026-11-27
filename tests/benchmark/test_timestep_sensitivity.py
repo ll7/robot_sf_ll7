@@ -6,6 +6,7 @@ import json
 from dataclasses import replace
 from typing import TYPE_CHECKING
 
+import pytest
 import yaml
 
 from robot_sf.benchmark import timestep_sensitivity as study
@@ -86,3 +87,11 @@ def test_witness_retains_native_steps_and_existing_runner_refusals(tmp_path: Pat
     assert native["seed"] == 1111
     assert refused["status"] == "refused"
     assert "Algorithm config file not found" in refused["reason"]
+
+
+def test_expansion_identifies_an_omitted_campaign_step() -> None:
+    """A campaign with no step size cannot report its timing contract."""
+    cfg = load_campaign_config(get_repository_root() / study.CONFIG_PATTERN.format(ms=100))
+    cfg = replace(cfg, dt=None)
+    with pytest.raises(ValueError, match="requires an explicit campaign dt"):
+        study.expand_timestep_campaign(cfg, _load_campaign_scenarios(cfg))

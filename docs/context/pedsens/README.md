@@ -1,9 +1,9 @@
 # Pedestrian sensitivity study (#10190)
 
-Preparation and workstation smoke only. Full study, release-baseline Slurm gate,
-model adoption and paper evidence admission are **unrun**. Keep #10190 open.
-The study starts after 0.0.8 sealed main **and** doorway runs are dispatched.
-No sub-agents or Slurm submissions were used for this preparation.
+The study measures how the named pedestrian settings affect planner outcomes
+on the 0.0.8 scenario and planner roster. Full acquisition, the release behaviour
+receipt, model adoption and paper evidence admission are pending. The study
+starts after the 0.0.8 main and doorway release runs are dispatched.
 
 The [study config](../../../configs/benchmarks/pedestrian_sensitivity_10190.yaml)
 consumes the authored 0.0.8 release matrix (48 scenarios), 14 planner bindings and
@@ -20,7 +20,7 @@ evaluation seed band. Repeats, booleans, floats and missing seeds are also refus
 | speed | mean 1.29, SD 0.19 m/s | #10190 / #10074 Bordeaux free-walking target, attributed to Moussaïd et al. (2009). |
 | spread | mean 0.65, SD 0.19 m/s | Mean-matched control separating dispersion from mean. |
 | wall | `obstacle_force_profile: gradient_v3` | The actual opt-in implementation from PR #10073; corrected surface-distance law and its development parameters. |
-| combined | radius + speed + wall | Same selectors together; refuses execution until #10073 supplies the selector. |
+| combined | radius + speed + wall | Uses all three selectors together. |
 
 Speed profiles use rejection-truncated normals on **[0, 3] m/s**, using the existing
 sampler and production speed binding. Ordinary tiers retain legacy clipping and
@@ -37,12 +37,12 @@ The preparation does not independently revalidate the snapshot's primary-source
 numbers. ANSUR outer shoulder width is a geometry approximation, not a measured
 human disc radius. Truncation bounds are an explicit modeling choice.
 
-**Dependency:** PR #10073 is open. This PR does not copy/reimplement its wall law.
-`gradient_v3` also changes gain/offset, so the wall factor estimates the entire
-named development profile's effect, not an isolated coefficient experiment.
-Wall/combined can be planned on main but cannot execute there until the dependency
-lands. The local integration smoke merges the real dependency branch; its source
-SHA is separate from the PR head. No integrated branch is published.
+The campaign branch combines the study driver from PR #10191 and the wall
+selector from PR #10073. The wall and combined arms explicitly select
+`surface_distance_unit_normal_v2`, the law required by `gradient_v3`.
+The profile changes the gain and offset along with the law, so the wall factor
+measures the effect of the profile as a whole.
+The combined source and launch packet require independent review before acquisition.
 
 ## Commands and launch boundary
 
@@ -55,32 +55,21 @@ uv run python scripts/benchmark/run_pedestrian_sensitivity.py \
   --mode smoke --out "$PEDSENS_ARTIFACT_ROOT/smoke" -n 2
 ```
 
-Before #10073 lands, the available-factor smoke adds
-`--factors legacy radius speed spread`. All-factor execution refuses the missing
-selector instead of labeling a speed/radius-only run as combined.
+In `plan` and `study` modes, use `--scenarios` and `--planners` to select
+names from the release matrix. Mode `plan` expands the same inputs and writes
+a manifest without dispatching any episodes. For the workstation batch, use
+all six profiles, five scenarios, two planners and five seeds for 300 episodes.
 
-**Prepared command; not submitted.** After both sealed dispatches, dependency merge,
-checkpoint hydration/preflight and artifact-root custody are verified:
+The full design has **6 × 48 × 14 × 30 = 120,960 episodes**. Each of ten
+three-seed shards retains every profile, scenario and planner. Use a fresh
+output directory for every attempt and verify the union of complete shard
+identities before computing the full-study summary. The launch packet follows
+the [Slurm playbook](../../../SLURM/AGENTS.md) for the shared environment and
+verified artifact custody.
 
-```bash
-sbatch --partition=l40s --cpus-per-task=32 --mem=64G --time=48:00:00 \
-  --job-name=pedsens-10190 --output=output/slurm/%j-pedsens.out \
-  --export=ALL,PEDSENS_ARTIFACT_ROOT \
-  --wrap='OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 uv run python scripts/benchmark/run_pedestrian_sensitivity.py --mode study --after-sealed-dispatch --out "$PEDSENS_ARTIFACT_ROOT/study" -n 32'
-```
-
-There is no node pin. `--after-sealed-dispatch` is an explicit operator
-acknowledgement, not proof that jobs were dispatched. The driver never submits
-Slurm itself. Set `PEDSENS_ARTIFACT_ROOT` on durable storage and preserve stdout
-and environment records there; do not rely on checkout-local `output/`.
-
-Full grid: **6 × 48 × 14 × 30 = 120,960 episodes**. Planning allocation estimate:
-**500 core-hours**, provisional. The cheap two-planner smoke's twice-cost linear
-extrapolation is recorded in the receipt (about 112–123 core-hours in initial
-runs). The 500 estimate allows matrix/horizon and unmeasured learned/search-arm
-costs; it is an engineering budget, not a measured full-roster runtime or guarantee.
-At 32 cores it corresponds to roughly 15.6 hours, excluding setup/inefficiency.
-Re-estimate after dispatch priority is satisfied; never use this PR to launch early.
+`--after-sealed-dispatch` records the operator's acknowledgement that both
+release dispatches have happened. The operator also verifies the reviewed
+source, checkpoint availability and durable artifact destination before starting.
 
 ## Outputs, summary and interpretation
 

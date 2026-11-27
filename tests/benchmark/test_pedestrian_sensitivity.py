@@ -240,3 +240,76 @@ def test_default_settings_bytes_and_profile_roundtrip():
     profile = replace(SimulationSettings(ped_force_radius=0.25, desired_speed_truncated=True))
     assert profile.to_dict()["ped_force_radius"] == 0.25
     assert profile.to_dict()["desired_speed_truncated"] is True
+
+
+def test_reduced_workstation_plan(tmp_path):
+    """Bind the released inputs to an exact 300-slot plan before dispatch."""
+    from scripts.benchmark.run_pedestrian_sensitivity import main
+
+    scenarios = [
+        "classic_bottleneck_medium",
+        "classic_doorway_medium",
+        "classic_head_on_corridor_low",
+        "classic_urban_crossing_medium",
+        "francis2023_perpendicular_traffic",
+    ]
+    out = tmp_path / "plan"
+    assert (
+        main(
+            [
+                "--mode",
+                "plan",
+                "--out",
+                str(out),
+                "-n",
+                "12",
+                "--scenarios",
+                *scenarios,
+                "--planners",
+                "goal",
+                "social_force",
+                "--seeds",
+                "1001",
+                "1002",
+                "1003",
+                "1004",
+                "1005",
+            ]
+        )
+        == 0
+    )
+    manifest = yaml.safe_load((out / "manifest.json").read_text())
+    assert manifest["status"] == "planned"
+    assert manifest["workers"] == 12
+    assert manifest["episode_count"] == 300
+    assert set(manifest["scenarios"]) == set(scenarios)
+    assert [planner["key"] for planner in manifest["planners"]] == ["goal", "social_force"]
+    assert manifest["config"]["selected_seeds"] == [1001, 1002, 1003, 1004, 1005]
+    assert manifest["config"]["selected_factors"] == [
+        "legacy",
+        "radius",
+        "speed",
+        "spread",
+        "wall",
+        "combined",
+    ]
+    assert list(out.iterdir()) == [out / "manifest.json"]
+
+
+@pytest.mark.parametrize(
+    ("selection", "message"),
+    [
+        (["--scenarios", "missing"], "unknown scenario"),
+        (["--scenarios", "classic_doorway_medium", "classic_doorway_medium"], "unique scenario"),
+        (["--planners", "goal", "missing"], "unknown planner"),
+        (["--planners", "goal"], "at least two planners"),
+    ],
+)
+def test_selection_errors_refuse_output(tmp_path, selection, message):
+    """A typo, duplicate or unrankable roster must not expand into a different run."""
+    from scripts.benchmark.run_pedestrian_sensitivity import main
+
+    out = tmp_path / "plan"
+    with pytest.raises(ValueError, match=message):
+        main(["--out", str(out), *selection])
+    assert not out.exists()

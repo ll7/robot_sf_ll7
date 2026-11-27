@@ -525,10 +525,7 @@ class SimulationSettings:
         """
         if name in {"ped_force_radius", "desired_speed_truncated"}:
             default = None if name == "ped_force_radius" else False
-            try:
-                return object.__getattribute__(self, "_" + name)
-            except AttributeError:
-                return default
+            return getattr(self, "_" + name, default)
         if name == "obstacle_force_profile":
             try:
                 return object.__getattribute__(self, "_obstacle_force_profile")

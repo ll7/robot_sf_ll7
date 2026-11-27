@@ -48,7 +48,29 @@ def write_json(path, value):
     temporary.replace(path)
 
 
-def prepare(config_path, *, smoke=False, seeds=None, factors=None, check_dependencies=True):
+def _select_named(items, key, requested, kind):
+    """Select unique known names in release order."""
+    if requested is None:
+        return items
+    names = set(requested)
+    if len(names) != len(requested) or not names:
+        raise ValueError(f"select nonempty, unique {kind} names")
+    unknown = names - {item[key] for item in items}
+    if unknown:
+        raise ValueError(f"unknown {kind} names: {sorted(unknown)}")
+    return [item for item in items if item[key] in names]
+
+
+def prepare(
+    config_path,
+    *,
+    smoke=False,
+    seeds=None,
+    factors=None,
+    scenario_names=None,
+    planner_keys=None,
+    check_dependencies=True,
+):
     """Load release matrix/roster, bind authored horizons and refuse seed leakage.
 
     Returns:
@@ -87,6 +109,11 @@ def prepare(config_path, *, smoke=False, seeds=None, factors=None, check_depende
         planners = [p for p in planners if p["key"] in cfg["smoke"]["planners"]]
         if len(scenarios) != 1 or len(planners) != 2 or len(selected_seeds) != 2:
             raise ValueError("smoke requires 1 scenario x 2 release planners x 2 dev seeds")
+    else:
+        scenarios = _select_named(scenarios, "name", scenario_names, "scenario")
+        planners = _select_named(planners, "key", planner_keys, "planner")
+        if len(planners) < 2:
+            raise ValueError("study requires at least two planners for rank comparison")
     for factor in selected_factors:
         if factor not in cfg["profiles"]:
             raise ValueError(f"unknown study factor: {factor}")
@@ -173,10 +200,14 @@ def main(argv=None):
     parser.add_argument("-n", "--workers", type=int, default=2)
     parser.add_argument("--seeds", type=int, nargs="+")
     parser.add_argument("--factors", nargs="+")
+    parser.add_argument("--scenarios", nargs="+", help="Subset of released scenario names")
+    parser.add_argument("--planners", nargs="+", help="Subset of released planner keys")
     parser.add_argument("--after-sealed-dispatch", action="store_true")
     args = parser.parse_args(argv)
-    if args.workers < 1 or (args.mode != "study" and args.workers > 2):
-        parser.error("plan/smoke supports workers 1..2 only")
+    if args.workers < 1 or (args.mode == "smoke" and args.workers > 2):
+        parser.error("workers must be positive and smoke supports at most two")
+    if args.mode == "smoke" and (args.scenarios is not None or args.planners is not None):
+        parser.error("smoke uses its configured scenario and planners")
     if args.mode == "study" and not args.after_sealed_dispatch:
         parser.error("full study starts only after 0.0.8 sealed main AND doorway dispatch")
     os.chdir(ROOT)
@@ -185,6 +216,8 @@ def main(argv=None):
         smoke=args.mode == "smoke",
         seeds=args.seeds,
         factors=args.factors,
+        scenario_names=args.scenarios,
+        planner_keys=args.planners,
         check_dependencies=args.mode != "plan",
     )
     args.out = args.out.resolve()
@@ -260,8 +293,8 @@ def main(argv=None):
             "episode_core_seconds": core_seconds,
             "mean_slot_seconds": core_seconds / len(rows),
             "estimated_full_core_hours_2x": core_seconds / len(rows) * 120960 / 3600 * 2,
-            "estimate_limitations": "Only goal/social_force on one scenario measured; "
-            "learned/search planners and matrix costs unmeasured. Not a resource guarantee.",
+            "estimate_limitations": "Linear extrapolation from this run's selected slots. "
+            "Setup, probes and allocation overhead are excluded.",
         }
         write_json(args.out / "summary.json", summary)
         manifest["status"] = "complete"

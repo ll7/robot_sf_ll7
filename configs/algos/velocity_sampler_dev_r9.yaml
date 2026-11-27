@@ -1,0 +1,31 @@
+# Experimental passing sampler with a guarded handoff for predicted contact.
+max_linear_speed: 2.0
+max_angular_speed: 1.0
+allow_testing_algorithms: true
+socnav_sampling_version: bounded_v2
+sampling_repulsion_weight: 0.0
+sampling_footprint_margin: 0.0
+sampling_pedestrian_prediction: true
+sampling_braking_envelope: false
+velocity_sampler:
+  variant: contact_recovery
+  horizon_s: 1.5
+  pedestrian_weight: 3.0
+  obstacle_weight: 2.0
+  clearance_scale: 0.3
+  progress_weight: 1.0
+  heading_weight: 0.5
+  speed_weight: 0.3
+  switch_weight: 0.04
+  speed_samples: 3
+  turn_samples: 9
+  stage_s: 0.4
+  continuation_s: 0.2
+  stall_seconds: 4.0
+  stall_distance_m: 0.5
+  recovery_pedestrian_weight: 0.75
+  approach_range_m: 10.0
+  approach_weight: 1.5
+  passing_padding_m: 0.3
+  clearance_margin_m: 0.1
+  clearance_weight: 4.0

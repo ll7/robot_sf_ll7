@@ -1,0 +1,10 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/planner_search_2026-11/outcome_intervals.csv.gz",
+  "artifact_sha256": "c47021045f79be64323223ef923f7c6a76eb493e9ff50dbdee98e5ee0975def6",
+  "preserved_exact_bytes": true,
+  "review_marker": [
+    "AI-GENERATED",
+    "NEEDS-REVIEW"
+  ]
+}

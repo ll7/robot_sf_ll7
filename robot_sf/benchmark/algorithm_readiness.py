@@ -59,6 +59,7 @@ _ALGORITHMS: tuple[AlgorithmReadiness, ...] = (
         note="Social-force adapter baseline.",
     ),
     _contract_readiness("orca"),
+    _contract_readiness("velocity_sampler"),
     _contract_readiness("socnav_orca_nonholonomic"),
     _contract_readiness("socnav_orca_dd"),
     _contract_readiness("socnav_orca_relaxed"),
@@ -302,6 +303,13 @@ _ALGORITHMS: tuple[AlgorithmReadiness, ...] = (
         tier="experimental",
         aliases=("mppi_social",),
         note="Sampling-based MPPI/CEM social local planner.",
+        requires_explicit_opt_in=True,
+    ),
+    AlgorithmReadiness(
+        canonical_name="dra_mppi",
+        tier="experimental",
+        aliases=("dra_mppi",),
+        note="Dynamic risk-aware MPPI with a unimodal constant-velocity pedestrian forecast.",
         requires_explicit_opt_in=True,
     ),
     AlgorithmReadiness(

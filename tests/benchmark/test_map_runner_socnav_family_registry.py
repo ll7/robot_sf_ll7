@@ -145,7 +145,7 @@ class TestRegistryCoverage:
 
     def test_registry_key_set_matches_historical_dispatch(self) -> None:
         registered = {algo for spec in SOCNAV_FAMILY_SPECS for algo in spec.algorithms}
-        assert registered == HISTORICAL_SOCNAV_KEYS
+        assert registered == HISTORICAL_SOCNAV_KEYS | {"velocity_sampler"}
 
     def test_every_key_resolves_to_exactly_one_spec(self) -> None:
         seen: set[str] = set()

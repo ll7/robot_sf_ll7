@@ -264,8 +264,32 @@ def _build_topology_parallel_nmpc_policy_spec(algo_config: dict[str, Any]) -> Ad
     )
 
 
+def _build_dra_mppi_policy_spec(algo_config: dict[str, Any]) -> AdapterPolicySpec:
+    """Construct the opt-in dynamic risk-aware MPPI policy.
+
+    Returns:
+        Adapter construction payload for the map runner.
+    """
+    from robot_sf.benchmark.algorithm_readiness import require_algorithm_allowed  # noqa: PLC0415
+    from robot_sf.planner.dra_mppi import DRAMPPIAdapter, build_dra_mppi_config  # noqa: PLC0415
+
+    require_algorithm_allowed(
+        algo="dra_mppi",
+        benchmark_profile="experimental",
+        ppo_paper_ready=False,
+        allow_testing_algorithms=algo_config.get("allow_testing_algorithms") is True,
+    )
+    return AdapterPolicySpec(
+        algo_key="dra_mppi",
+        algo_config=algo_config,
+        adapter=DRAMPPIAdapter(build_dra_mppi_config(algo_config)),
+        adapter_name="DRAMPPIAdapter",
+    )
+
+
 _ADAPTER_POLICY_BUILDERS: dict[str, Callable[[dict[str, Any]], AdapterPolicySpec]] = {
     "chance_constrained_mpc": _build_chance_constrained_mpc_policy_spec,
+    "dra_mppi": _build_dra_mppi_policy_spec,
     **dict.fromkeys(LEARNED_PREDICTION_MPC_ALIASES, _build_learned_prediction_mpc_policy_spec),
     "cv_prediction_mpc": _build_prediction_mpc_policy_spec,
     "prediction_aware_mpc": _build_prediction_mpc_policy_spec,

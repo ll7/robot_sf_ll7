@@ -49,8 +49,9 @@ def _fixture() -> dict:
 def test_every_migrated_family_has_exactly_one_record() -> None:
     """Each migrated canonical algorithm owns exactly one registry record."""
     fixture = _fixture()
-    assert sorted(CONTRACT_RECORDS_BY_NAME) == sorted(fixture["families"])
-    assert len(MIGRATED_ALGORITHM_RECORDS) == len(fixture["families"])
+    expected = set(fixture["families"]) | {"velocity_sampler"}
+    assert set(CONTRACT_RECORDS_BY_NAME) == expected
+    assert len(MIGRATED_ALGORITHM_RECORDS) == len(expected)
 
 
 def _jsonable(value: object) -> object:

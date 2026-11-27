@@ -1,0 +1,181 @@
+{
+  "schema_version": 1,
+  "acquisition": {
+    "branch": "planner-dra-mppi-r3-20261124",
+    "commit": "5a024156cbae7b79c44009178298827f89db4b41",
+    "final_identity_pin": "4d4ebc84044920744537cf85c8188c5e1ffe8efcb4b2670dc95a3e3cd8ed7f95",
+    "adversarial_source_commit": "f7a16a9c1d46fd23623f3872c57675d69bb2b2e3",
+    "source_sha256": {
+      "run.sh": "e7a70f45e8825ad5e8aa567793ad79a2e9271d2c88ed713b957ba75dd8f8fda0",
+      "sources/planadv2_scenarios.py": "8240b6489435569c194291430b8a1a2273c0902f201b51d6ac21cb2039185dc0",
+      "sources/planadv_run.py": "2b4d156cadd3ae2b724bca7c4d404da4b5c3511983748bac2ee634c348898da2",
+      "sources/planadv_scenarios.py": "5c973b6869afc0e83b31244f1a5651a0a2999da60bafebdfaa7a2d0aaf94e313",
+      "study.py": "2c55bcb30ab6f7244bc87e3390c3ce5db8dd03f08c2a6461bb50e293f4264c66"
+    },
+    "original_worker_count": 20
+  },
+  "arms": {
+    "orca": {
+      "profile_branch": "planner-dra-mppi-r3-20261124",
+      "profile_commit": "c3958eba5ccf85fad6a8c2551ca315a33dd7ef46",
+      "evaluated_commit": "5a024156cbae7b79c44009178298827f89db4b41",
+      "config_path": "configs/algos/orca_release_v0_0_8.yaml",
+      "config_sha256": "5840b9e47088a3da14d684091ad0880a6480340fd274fbf88d3ab5b9a1bda5e4",
+      "factory_key": "orca",
+      "adapter_class": "ORCAPlannerAdapter",
+      "config_overrides": {
+        "allow_fallback": false
+      }
+    },
+    "drammpi2": {
+      "profile_branch": "planner-dra-mppi-r2-20261123",
+      "profile_commit": "5575f0a622f4f22d9870b104171273b093f1abda",
+      "evaluated_commit": "5a024156cbae7b79c44009178298827f89db4b41",
+      "config_path": "configs/algos/dra_mppi_r2.yaml",
+      "config_sha256": "8219a3bc49f966436e9bc4a87555d32fdf6eb9c0c1529b72400de5242ef667e6",
+      "factory_key": "dra_mppi",
+      "adapter_class": "DRAMPPIAdapter"
+    },
+    "drammpi3": {
+      "profile_branch": "planner-dra-mppi-r3-20261124",
+      "profile_commit": "c3958eba5ccf85fad6a8c2551ca315a33dd7ef46",
+      "evaluated_commit": "5a024156cbae7b79c44009178298827f89db4b41",
+      "config_path": "configs/algos/dra_mppi_r3.yaml",
+      "config_sha256": "2cdab241cd3099c987f8b9ab15dac54180cf5258ab571b4d8ec8798c439bb8a9",
+      "factory_key": "dra_mppi",
+      "adapter_class": "DRAMPPIAdapter"
+    },
+    "sampler": {
+      "config_path": "configs/algos/velocity_sampler_dev_r9.yaml",
+      "config_sha256": "6a71ddd4a7b3c5fbd0441b110888b95c5cbf517fe9684f92a0ab173c2c068816",
+      "factory_key": "velocity_sampler",
+      "adapter_class": "ContactVelocitySamplerAdapter",
+      "profile_source_commit": "6bdfa6cee0ab38f2883c7e9a000159a2e840852e",
+      "integration_base": "c9bc60504c5e087126f54a481775e31019cae082",
+      "rvo2_extension_sha256": "8ba668aa80c1a7679c3005e26ba1c5a8c87d93ef6725230356f562f768198435",
+      "acquisition": "Port with zero half-plane weight, replayed on the frozen 30-seed grid"
+    }
+  },
+  "grids": {
+    "release": 48,
+    "v1": 8,
+    "v2": 18,
+    "v3": 15
+  },
+  "final_seeds": [
+    7301,
+    7302,
+    7303,
+    7304,
+    7305,
+    7306,
+    7307,
+    7308,
+    7309,
+    7310,
+    7311,
+    7312,
+    7313,
+    7314,
+    7315,
+    7316,
+    7317,
+    7318,
+    7319,
+    7320,
+    7321,
+    7322,
+    7323,
+    7324,
+    7325,
+    7326,
+    7327,
+    7328,
+    7329,
+    7330
+  ],
+  "replay": {
+    "arms": [
+      "orca",
+      "drammpi2",
+      "drammpi3",
+      "sampler"
+    ],
+    "seeds": [
+      7301,
+      7319,
+      7330
+    ]
+  },
+  "files_sha256": {
+    "input_hashes.json.gz": "9af171d0b470199f925031c1678fb7e049090e40ba6a94f7c9f2636dbf7d658a",
+    "challenge_inputs.json.gz": "af7a5d0b6e92298b41eb2bedb20c57626f045ca547ce51ef84b0de7d75bdf1ed",
+    "release_cases.json.gz": "0e135d16fa032500d95555ea890e9705dcd9516237d788648bfaa27a3d48dbd6",
+    "paired_outcomes.csv.gz": "1d9b3fa0d9397b286203de098e0711e4a288c17a63ee54e789a448292e185c83",
+    "paired_intervals.csv.gz": "9c95735fc85b26de62ae42d55e3f403938bee482e804df94f282fc93e591b147",
+    "outcome_intervals.csv.gz": "c47021045f79be64323223ef923f7c6a76eb493e9ff50dbdee98e5ee0975def6",
+    "sampler_outcomes.csv.gz": "6d82095e8954aec2d96876c09e7ce6e7ba0ec6aefce031be892c85e8e9b66edf",
+    "challenge_suite.v1.json.gz": "a09ce8600ceca0530d889ab47a05cffa5a1c9c1928f2c8c200ea70178d59509b",
+    "challenge_suite.v2.json.gz": "1a8b98128a3abb9a9eff120f1bc56ea4f95714fe9bebe6415ef6be66bc1e3d20",
+    "challenge_suite.v3.json.gz": "1db6bac3c928ce2d3505cd8245bbab6d6d9a21a79796a9c07db7abbccc636dc8"
+  },
+  "original_csv_sha256": {
+    "paired_outcomes.csv": "5143f7835773752dc43da1076a0e811ee6dfe1d023ae34c3da14ae02cfea7ba1",
+    "paired_intervals.csv": "eae42fb5817fae167e170354416054ce7a056993ad8f305c06e7ed99ad103990",
+    "outcome_intervals.csv": "f89329cdd17f4542a181b31a47f9c9050ce31472b38042dc353b11aeeff1f9eb"
+  },
+  "simulator": {
+    "factory_entry": "robot_sf.benchmark.map_runner.map_runner.build_map_policy",
+    "episode_entry": "robot_sf.benchmark.map_runner.map_runner._run_map_episode",
+    "drive": "DifferentialDriveRobot",
+    "robot_radius_m": 1.0,
+    "control_period_s": 0.1,
+    "observation_level": "tracked_agents_no_noise",
+    "record_forces": true,
+    "pedestrian_contact_radius_m": 0.4,
+    "release_horizon_schedule": "configs/benchmarks/horizon_schedules/release_0_0_8_authored_v1.yaml",
+    "release_horizon_schedule_sha256": "032bbf8ad354ea9394492659aa50188e2bc40078930975ef30cd3ba77208675e",
+    "release_scenario_path": "configs/scenarios/classic_interactions_francis2023.yaml",
+    "challenge_horizon_steps": 450
+  },
+  "environment": {
+    "python": "3.13.14 (main, Jun 11 2026, 04:03:13) [Clang 22.1.3 ]",
+    "packages": {
+      "PyYAML": "6.0.3",
+      "numba": "0.67.0",
+      "numpy": "2.4.6",
+      "pytest": "9.1.1",
+      "scipy": "1.17.1",
+      "shapely": "2.1.2",
+      "pyrvo2": "0.0.0"
+    },
+    "rvo2_extension_sha256": "a393f37d7147992a03d124867c3eedb627f2e841e8ff1bf9f615fd2fb18d8ebc",
+    "rvo2_source_path": "third_party/python-rvo2",
+    "pysocialforce": "fast-pysf/pysocialforce/__init__.py",
+    "lockfiles_sha256": {
+      "uv.lock": "ccc4cc808d1095c225fb058a25e2284f5d67bf68a04d6f57be82b97a2fa3ec0d",
+      "fast-pysf/uv.lock": "eda0769404d02859b1d09c6db83d917bc60699a8abafa064520eebc2d5769647"
+    },
+    "thread_counts": {
+      "OPENBLAS_NUM_THREADS": 1,
+      "OMP_NUM_THREADS": 1,
+      "MKL_NUM_THREADS": 1,
+      "NUMEXPR_NUM_THREADS": 1
+    }
+  },
+  "paired_intervals": {
+    "method": "percentile bootstrap of whole paired seed blocks",
+    "confidence": 0.95,
+    "draws": 20000,
+    "bootstrap_rng_seed": 194621
+  },
+  "review_marker": [
+    "AI-GENERATED",
+    "NEEDS-REVIEW"
+  ],
+  "challenge_suite_json_sha256": {
+    "v1": "5a355b9dff7ee4bd4a4473b30f9d8bb25254743053fa52e2c14b0802bf84ff19",
+    "v2": "876bee6fad28b7df207041149c1dc89a795d11ebd62845ca496015b492db670b",
+    "v3": "330cb158c194f69c99f4754e8626ab8c61452951175afad75d0fc293145b3c22"
+  }
+}

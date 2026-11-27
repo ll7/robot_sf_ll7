@@ -215,7 +215,11 @@ def _robot_trial(
         },
         *trace["steps"],
     ]
-    return frames, str(record["termination_reason"]), record["effective_physics"]
+    # The map runner appends this provenance field to the episode wire record.
+    physics = dict(record)["effective_physics"]
+    if not isinstance(physics, dict):
+        raise ValueError("invalid effective physics in the episode record")
+    return frames, str(record["termination_reason"]), physics
 
 
 def _wall_clearance(frames: list[Frame], walls: list[Polygon], actor: str, radius: float) -> float:
@@ -240,7 +244,8 @@ def run_proof(config_path: Path, trace_path: Path) -> dict[str, Any]:
     """
     launch = yaml.safe_load(config_path.read_text())
     scenario_path = (config_path.parent / launch["scenario_matrix"]).resolve()
-    (scenario,) = load_scenarios(scenario_path)
+    (loaded_scenario,) = load_scenarios(scenario_path)
+    scenario = dict(loaded_scenario)
     seeds = scenario["seeds"]
     if not seeds or len(set(seeds)) != len(seeds) or any(seed not in DEV_SEEDS for seed in seeds):
         raise ValueError("the proof requires unique development seeds")

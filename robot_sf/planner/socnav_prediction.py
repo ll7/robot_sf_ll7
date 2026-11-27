@@ -36,6 +36,21 @@ PredictiveTrajectoryModel = _socnav.PredictiveTrajectoryModel
 _DEFAULT_FORECAST_VARIANT_RISK_DISTANCE_M = 3.0
 
 
+def bound_drive_substep_durations(control_dt: float, sample_dt: float) -> list[float]:
+    """Divide one prediction sample into steps on the observed control clock.
+
+    Returns:
+        Ordered substep durations in seconds, with the last step clipped to the sample boundary.
+    """
+    durations = []
+    remaining = sample_dt
+    while remaining > 1e-12:
+        step_dt = min(control_dt, remaining)
+        durations.append(step_dt)
+        remaining -= step_dt
+    return durations
+
+
 class PredictionPlannerAdapter(SamplingPlannerAdapter):
     """Predictive local planner with deterministic sampled-rollout search.
 
@@ -591,6 +606,10 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             mask_t = runtime_torch.from_numpy(mask[None]).to(self._device)
             out = model(state_t, mask_t)
             future = out["future_positions"][0].detach().cpu().numpy().astype(np.float32)
+        self._foresight_provenance["forecast_grid"] = {
+            "interval_s": float(self.config.predictive_rollout_dt),
+            "steps": int(future.shape[1]),
+        }
         return future
 
     def _predict_with_baseline(self, state: np.ndarray, mask: np.ndarray) -> np.ndarray:
@@ -970,15 +989,13 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         )
         drive.state.wheel_speeds = drive.movement._resulting_wheel_speeds(drive.current_speed)
         control_dt = self._simulation_timestep(observation) if observation is not None else dt
+        substeps = bound_drive_substep_durations(control_dt, dt)
         positions, headings = [], []
         for command in commands:
-            remaining = dt
-            while remaining > 1e-12:
-                step_dt = min(control_dt, remaining)
+            for step_dt in substeps:
                 drive.apply_action(
                     tuple((np.asarray(command) - drive.current_speed) / step_dt), step_dt
                 )
-                remaining -= step_dt
             positions.append(drive.pos)
             headings.append(drive.pose[1])
         return np.asarray(positions), np.asarray(headings)

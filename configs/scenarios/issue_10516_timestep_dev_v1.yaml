@@ -1,0 +1,10 @@
+# Shared selection with the release maps, population and robot settings.
+schema_version: robot_sf.scenario_matrix.v1
+includes:
+  - classic_interactions_francis2023_release_0_0_8_v1.yaml
+select_scenarios:
+  - classic_bottleneck_medium
+  - classic_doorway_medium
+  - classic_head_on_corridor_low
+  - classic_urban_crossing_medium
+  - francis2023_perpendicular_traffic

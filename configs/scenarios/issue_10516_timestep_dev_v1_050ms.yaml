@@ -1,0 +1,7 @@
+# Declare the step budget for a 60 s simulation cap.
+schema_version: robot_sf.scenario_matrix.v1
+includes:
+  - issue_10516_timestep_dev_v1.yaml
+scenario_overrides:
+  simulation_config:
+    max_episode_steps: 1200

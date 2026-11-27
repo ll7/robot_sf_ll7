@@ -616,3 +616,30 @@ def test_fixed_scope_runner_binds_remaining_planner_prerequisites() -> None:
         "baseline_social_force",
         "hybrid_rule_v0_minimal",
     ]
+
+
+@pytest.mark.parametrize(("dt_ms", "steps"), [(50, 1200), (100, 600), (200, 300)])
+def test_development_campaign_binds_simulator_and_runner_to_sixty_seconds(
+    dt_ms: int, steps: int
+) -> None:
+    """The normal map runner must bind the simulator cap as well as its own loop."""
+    from robot_sf.benchmark.camera_ready._config import (
+        _load_campaign_scenarios,
+        load_campaign_config,
+    )
+    from robot_sf.benchmark.map_runner.map_runner_env import build_env_config
+    from robot_sf.benchmark.map_runner.map_runner_episode import _bind_episode_horizon
+
+    cfg = load_campaign_config(
+        REPO_ROOT / f"configs/benchmarks/issue_10516_timestep_dev_v1_{dt_ms:03d}ms.yaml"
+    )
+    assert cfg.dt is not None
+    for scenario in _load_campaign_scenarios(cfg):
+        config = build_env_config(scenario, scenario_path=REPO_ROOT / "scoped_scenarios.json")
+        config.sim_config.time_per_step_in_secs = cfg.dt
+        scenario_steps = scenario["simulation_config"]["max_episode_steps"]
+        runner_steps = _bind_episode_horizon(scenario, config, cfg.horizon, steps, scenario_steps)
+
+        assert cfg.horizon == runner_steps == config.sim_config.episode_step_limit == steps
+        assert config.sim_config.max_sim_steps == steps
+        assert config.sim_config.sim_time_in_secs == pytest.approx(60.0)

@@ -68,6 +68,7 @@ _SUPPORTED_VARIANTS = {
     "actuation_aware_hybrid_rule_v0",
 }
 _EPS = 1e-9
+PROGRESS_HISTORY_SAMPLE_CAPACITY = 256
 
 
 def _clip01(value: float) -> float:
@@ -621,8 +622,12 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         self._recent_commands: deque[tuple[float, float]] = deque(
             maxlen=max(int(self.config.oscillation_window), 2)
         )
-        self._progress_history: deque[tuple[float, float]] = deque(maxlen=256)
-        self._route_distance_history: deque[tuple[float, float]] = deque(maxlen=256)
+        self._progress_history: deque[tuple[float, float]] = deque(
+            maxlen=PROGRESS_HISTORY_SAMPLE_CAPACITY
+        )
+        self._route_distance_history: deque[tuple[float, float]] = deque(
+            maxlen=PROGRESS_HISTORY_SAMPLE_CAPACITY
+        )
         self._route_trace_recovery_hold_remaining = 0
         self._selected_source_counts: Counter[str] = Counter()
         self._rejection_counts: Counter[str] = Counter()

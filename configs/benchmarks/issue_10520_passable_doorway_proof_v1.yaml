@@ -1,0 +1,5 @@
+# Explicit development-only launch. The script also runs matched solo controls.
+scenario_matrix: ../scenarios/single/issue_10520_passable_doorway_dev_v1.yaml
+planners:
+  goal: {max_speed: 1.0}
+  orca: {max_linear_speed: 1.0}

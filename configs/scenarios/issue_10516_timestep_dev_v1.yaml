@@ -1,5 +1,4 @@
-# Reuse the release maps, population and robot settings. Permit a 60 s
-# campaign cap even at the smallest step size. The campaign binds the exact cap.
+# Shared selection with the release maps, population and robot settings.
 schema_version: robot_sf.scenario_matrix.v1
 includes:
   - classic_interactions_francis2023_release_0_0_8_v1.yaml
@@ -9,6 +8,3 @@ select_scenarios:
   - classic_head_on_corridor_low
   - classic_urban_crossing_medium
   - francis2023_perpendicular_traffic
-scenario_overrides:
-  simulation_config:
-    max_episode_steps: 1200

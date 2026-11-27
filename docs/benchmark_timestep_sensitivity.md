@@ -2,9 +2,9 @@
 
 The [time-step study](https://github.com/ll7/robot_sf_ll7/issues/10516) pairs each of five scenarios
 with ten development seeds and the 14 planners from the benchmark-data template. The three
-`issue_10516_timestep_dev_v1_*ms.yaml` campaign configs use the same scenario manifest, seeds, robot
-motion model, and planner inputs. The scenario manifest permits the longest step budget. Each
-campaign binds the exact limit in both the runner and the simulator.
+`issue_10516_timestep_dev_v1_*ms.yaml` campaign configs use the same scenario selection, seeds, robot
+motion model, and planner inputs. Each step size has a scenario file that adds its step budget to
+the shared selection. The campaign binds that limit in both the runner and the simulator.
 
 | Campaign step (s) | Episode cap (steps) | Episode cap (s) | Planned episodes |
 | --- | --- | --- | --- |

@@ -3,7 +3,7 @@
 name: issue_10516_timestep_dev_v1_100ms
 paper_facing: false
 protocol_version: 0.0.8
-scenario_matrix: configs/scenarios/issue_10516_timestep_dev_v1.yaml
+scenario_matrix: configs/scenarios/issue_10516_timestep_dev_v1_100ms.yaml
 route_clearance_certifications: configs/benchmarks/route_clearance_certifications_v1.yaml
 seed_policy:
   mode: fixed-list

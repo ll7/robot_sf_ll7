@@ -31,6 +31,7 @@ from robot_sf.benchmark.constants import NEAR_MISS_DIST
 from robot_sf.benchmark.effective_physics import capture_effective_physics
 from robot_sf.benchmark.event_ledger import build_event_ledger
 from robot_sf.benchmark.failure_mechanism_taxonomy import unknown_failure_mechanism_record
+from robot_sf.benchmark.fallback_policy import planner_runtime_fallback_reason
 from robot_sf.benchmark.group_space_metrics import group_specs_from_map
 from robot_sf.benchmark.interaction_exposure import (
     InteractionExposureError,
@@ -4048,7 +4049,7 @@ def _finalize_planner_runtime_metadata(
     benchmark_track: str | None,
     track_schema_version: str | None,
 ) -> AlgoMeta:
-    """Attach planner runtime snapshot and foresight prediction to metadata.
+    """Attach runtime diagnostics and record fallback in the episode mode.
 
     Returns:
         AlgoMeta: The enriched algorithm metadata.
@@ -4056,6 +4057,11 @@ def _finalize_planner_runtime_metadata(
     if not isinstance(planner_runtime_snapshot, dict):
         return algo_meta
     algo_meta["planner_runtime"] = planner_runtime_snapshot
+    fallback_reason = planner_runtime_fallback_reason(planner_runtime_snapshot)
+    if fallback_reason is not None:
+        if algo_meta.get("status") in (None, "ok"):
+            algo_meta["status"] = "fallback"
+        algo_meta.setdefault("fallback_reason", fallback_reason)
     foresight = planner_runtime_snapshot.get("foresight_prediction")
     if isinstance(foresight, Mapping):
         # Issue #6190: policy builders expose live predictive-foresight
@@ -4064,11 +4070,13 @@ def _finalize_planner_runtime_metadata(
         # before enrichment so a model-load fallback becomes structurally
         # evidence-ineligible in map-runner records as well.
         algo_meta["foresight_prediction"] = dict(foresight)
+    if fallback_reason is not None or isinstance(foresight, Mapping):
         algo_meta = cast(
             "AlgoMeta",
             enrich_algorithm_metadata(
                 algo=algo,
                 metadata=cast("dict[str, Any]", algo_meta),
+                execution_mode="fallback" if fallback_reason is not None else None,
                 robot_kinematics=robot_kinematics,
                 observation_mode=active_observation_mode,
                 observation_level=active_observation_level,

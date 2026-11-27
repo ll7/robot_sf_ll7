@@ -152,14 +152,14 @@ def test_combined_profile_dependency_is_not_silently_ignored():
     )["profiles"]
     assert profiles["combined"]["ped_radius"] == 0.25
     assert profiles["combined"]["desired_speed_mean"] == 1.29
-    assert profiles["combined"]["obstacle_force_profile"] == "gradient_v3"
+    assert profiles["combined"]["obstacle_force_profile"] == "body_edge_v3"
     if "obstacle_force_profile" not in SimulationSettings.__dataclass_fields__:
         with pytest.raises(ValueError, match="PR #10073"):
             profile_scenario({}, profiles["combined"], 1001)
     else:
         bound = profile_scenario({}, profiles["combined"], 1001)
         config = build_robot_config_from_scenario(bound, scenario_path=ROOT / "test.yaml")
-        assert str(config.sim_config.obstacle_force_profile) == "gradient_v3"
+        assert str(config.sim_config.obstacle_force_profile) == "body_edge_v3"
         from robot_sf.benchmark.pedestrian_manipulation_checks import build_probe
         from robot_sf.nav.map_config import SinglePedestrianDefinition
 
@@ -171,10 +171,36 @@ def test_combined_profile_dependency_is_not_silently_ignored():
         )
         assert radius == 0.25
         assert sim.peds.agent_radius == 0.25
-        assert (
-            str(sim.config.obstacle_force_config.law_version) == "surface_distance_unit_normal_v2"
-        )
-        assert sim.config.obstacle_force_config.factor == 0.001
+        assert str(sim.config.obstacle_force_config.law_version) == "body_edge_exponential_v3"
+        assert sim.config.obstacle_force_config.factor == 10.0
+
+
+def test_study_wall_force_depends_on_pedestrian_radius():
+    """At a fixed wall distance, only the larger pedestrian is within force range."""
+    from pysocialforce.forces import ObstacleForce
+
+    from robot_sf.benchmark.pedestrian_manipulation_checks import build_probe
+    from robot_sf.nav.map_config import SinglePedestrianDefinition
+    from robot_sf.nav.obstacle import Obstacle
+
+    profiles = yaml.safe_load(
+        (ROOT / "configs/benchmarks/pedestrian_sensitivity_10190.yaml").read_text()
+    )["profiles"]
+    actor = SinglePedestrianDefinition(id="walker", start=(7.55, 3.0), goal=(12.0, 3.0))
+    wall = Obstacle([(8, 0), (8.1, 0), (8.1, 6), (8, 6)])
+    forces = []
+    laws = []
+    for factor, radius in [("wall", 0.35), ("combined", 0.25)]:
+        sim, _, _ = build_probe(profiles[factor], 1001, [actor], [wall], width=16, height=6)
+        assert sim.peds.agent_radius == radius
+        np.testing.assert_array_equal(sim.peds.state[0, :2], actor.start)
+        force = next(force for force in sim.forces if isinstance(force, ObstacleForce))
+        forces.append(force()[0])
+        laws.append(force.config.law_version)
+
+    assert forces[0][0] < 0
+    np.testing.assert_array_equal(forces[1], [0.0, 0.0])
+    assert laws == ["body_edge_exponential_v3", "body_edge_exponential_v3"]
 
 
 def test_legacy_profile_retains_default_kernel_and_geometry():
@@ -208,6 +234,56 @@ def test_native_goal_seconds_reconstructed_without_failure_imputation():
     record["metrics"]["success"] = False
     record["metrics"].pop("time_to_goal_norm_success_only")
     assert metric_values(record)["time_to_goal"] is None
+
+
+@pytest.mark.parametrize("runtime_fallback", [False, True], ids=["finite", "nonfinite"])
+def test_sacadrl_runtime_stop_is_recorded_as_fallback(tmp_path, monkeypatch, runtime_fallback):
+    """A runtime stop bars pairing even when the fail-fast planner can load its model."""
+    import json
+    from types import SimpleNamespace
+
+    from robot_sf.planner.socnav_sacadrl import SACADRLPlannerAdapter
+    from scripts.benchmark import run_pedestrian_sensitivity as driver
+
+    cfg, release, matrix, scenarios, planners = driver.prepare(
+        driver.DEFAULT_CONFIG, check_dependencies=False
+    )
+    scenario = next(
+        scenario for scenario in scenarios if scenario["name"] == cfg["smoke"]["scenario"]
+    )
+    planner = next(planner for planner in planners if planner["key"] == "sacadrl")
+    predictions = iter([np.nan] if runtime_fallback else [])
+
+    def build_model(adapter):
+        assert adapter._allow_fallback is False
+        return SimpleNamespace(
+            predict=lambda _obs: np.array([[next(predictions, 1.0)]]),
+            actions=np.array([[1.0, 0.0]]),
+        )
+
+    monkeypatch.setattr(SACADRLPlannerAdapter, "_build_model", build_model)
+    job = ("legacy", planner, scenario, 1001, {}, matrix, tmp_path, release)
+    if runtime_fallback:
+        with pytest.raises(
+            ValueError, match=r"non-native episode refused:.*nonfinite_model_output"
+        ):
+            driver.run_slot(job)
+    else:
+        paired_row = driver.run_slot(job)
+        assert paired_row["execution_mode"] == "adapter"
+
+    episode = tmp_path / "legacy" / "sacadrl" / f"{scenario['name']}--1001.jsonl"
+    metadata = json.loads(episode.read_text())["algorithm_metadata"]
+    checkpoint = metadata["planner_runtime"]["checkpoint_provenance"]
+    assert checkpoint["load_succeeded"] is True
+    assert checkpoint["fallback_triggered"] is runtime_fallback
+    assert metadata["planner_kinematics"]["execution_mode"] == (
+        "fallback" if runtime_fallback else "adapter"
+    )
+    if runtime_fallback:
+        assert checkpoint["fallback_reason"] == "nonfinite_model_output"
+        assert metadata["status"] == "fallback"
+        assert metadata["fallback_reason"] == "nonfinite_model_output"
 
 
 def test_plan_inventory_and_pre_dispatch_seed_guard():

@@ -39,6 +39,7 @@ import yaml
 from robot_sf.benchmark.algorithm_metadata import (
     resolve_learned_checkpoint_observation_contract,
 )
+from robot_sf.benchmark.fallback_policy import planner_runtime_fallback_reason
 from scripts.validation.build_issue_8871_pedestrian_speed_canary import (
     DEFAULT_CONFIG as DEFAULT_CANARY_CONFIG,
 )
@@ -337,6 +338,9 @@ def _execution_disposition(  # noqa: C901, PLR0912
     metadata = record.get("algorithm_metadata")
     if not isinstance(metadata, Mapping):
         return "failed", "missing algorithm_metadata"
+    fallback_reason = planner_runtime_fallback_reason(metadata.get("planner_runtime"))
+    if fallback_reason is not None:
+        return "fallback", fallback_reason
     status = str(metadata.get("status", "")).strip().lower()
     if status.startswith(
         ("fallback", "degraded", "policy_step_error_fallback", "policy_step_timeout_fallback")

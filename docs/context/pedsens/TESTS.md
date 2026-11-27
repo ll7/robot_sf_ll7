@@ -20,6 +20,9 @@ regression and the closest coverage gap; parametrizations share these answers.
 | `test_summary_hand_fixture` | Tau-b=-0.5; A success=-1, contact=+1; C paired seconds=+2; empty time pairs stay null | Tie-skipping tau-a, reversed delta sign, time imputation, unpaired CI | Existing rank/fidelity summaries do not cover this paired factor/seed estimand |
 | `test_summary_refuses_unpaired_grid` | Incomplete grids cannot produce apparently complete CIs | Dropping missing slots | Existing ranking accepts arbitrary keyed score sets |
 | `test_combined_profile_dependency_is_not_silently_ignored` | Combined needs #10073; when present its real law/gain reach substrate | Silently deleting missing wall selection | #10073 selector tests cover its profile alone, not combined measured size/speed |
+| `test_study_wall_force_depends_on_pedestrian_radius` | Both study arms build the body-edge force and respond differently at the same wall distance | Binding the fixed-offset law in the study | Component tests build each profile directly |
+| `test_sacadrl_runtime_stop_is_recorded_as_fallback` | A nonfinite stop with a loaded model appears as fallback in the raw episode and blocks pairing | Taking the record's mode from the adapter type alone | The two-planner smoke has no checkpoint-based planner |
+| `test_execution_disposition_rejects_runtime_fallback` | The worker's classifier preserves the reason from direct adapter or checkpoint diagnostics | Checking only one location for the flag | The foresight case uses a different diagnostics field |
 | `test_legacy_profile_retains_default_kernel_and_geometry` | Legacy geometry 0.40/0.35 and nominal speed 0.65 persist | Opt-in binding applied globally | Existing speed tests do not jointly check force/placement radius |
 | `test_native_goal_seconds_reconstructed_without_failure_imputation` | Native successful normalized goal time becomes 30.8 s; failure stays null | Treating omitted raw seconds as absent success data | Existing metrics cover native normalization, not this study extractor |
 | `test_plan_inventory_and_pre_dispatch_seed_guard` | Plan resolves 48 × 14 × 30; non-dev sentinel refused before dispatch | Accidentally inheriting release seed policy or shrinking roster | Existing release tests intentionally use a different seed policy |
@@ -84,7 +87,7 @@ uv run pytest tests/sim_config_test.py -n 2 -q
 
 **79 passed** and **15 passed**. Integration checkout with the real #10073:
 `test_pedestrian_sensitivity.py` plus `test_obstacle_force_profile.py`: **41 passed**.
-The dependency test verifies its live surface-distance law, .001 gain and .25 radius.
+The dependency test now verifies the body-edge law with gain 10 and force radius 0.25 m.
 
 The default settings digest was independently measured on base and matched on
 branch: `0d054279f4a6e090d40e1fa54accaf58e955e624a3309472b44107f8790bb78d`.

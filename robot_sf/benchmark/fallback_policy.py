@@ -92,6 +92,23 @@ _DECLARATIVE_ALGORITHM_METADATA_CONTAINERS = frozenset(
 )
 
 
+def planner_runtime_fallback_reason(runtime: Any) -> str | None:
+    """Read an explicit fallback flag from adapter or checkpoint diagnostics.
+
+    Returns:
+        The recorded reason or the triggering field, if a fallback occurred.
+    """
+    if not isinstance(runtime, Mapping):
+        return None
+    for path, diagnostics in (
+        ("planner_runtime", runtime),
+        ("planner_runtime.checkpoint_provenance", runtime.get("checkpoint_provenance")),
+    ):
+        if isinstance(diagnostics, Mapping) and diagnostics.get("fallback_triggered") is True:
+            return str(diagnostics.get("fallback_reason") or f"{path}.fallback_triggered=true")
+    return None
+
+
 def is_verified_guarded_ppo(metadata: Any, *, expected_algorithm: str | None) -> bool:
     """Bind guarded telemetry to an independently declared algorithm and its contract.
 

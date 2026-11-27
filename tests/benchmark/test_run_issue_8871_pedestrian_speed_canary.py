@@ -150,6 +150,17 @@ def test_execution_disposition_rejects_foresight_fallback() -> None:
     )
 
 
+@pytest.mark.parametrize("checkpoint", [False, True], ids=["adapter", "checkpoint"])
+def test_execution_disposition_rejects_runtime_fallback(checkpoint: bool) -> None:
+    record = _record()
+    diagnostics = {"fallback_triggered": True, "fallback_reason": "runtime_stop"}
+    record["algorithm_metadata"]["planner_runtime"] = (
+        {"checkpoint_provenance": diagnostics} if checkpoint else diagnostics
+    )
+
+    assert canary._execution_disposition(record) == ("fallback", "runtime_stop")
+
+
 def test_runtime_binding_sets_explicit_seeded_controls_and_restores_builder(monkeypatch) -> None:
     from robot_sf.benchmark.map_runner import map_runner_episode
 

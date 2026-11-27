@@ -19,7 +19,7 @@ evaluation seed band. Repeats, booleans, floats and missing seeds are also refus
 | radius | `ped_radius: 0.25`, `ped_force_radius: 0.25` | #10190's width-preserving rigid-disc approximation to ANSUR outer shoulder half-width, roughly 0.225–0.255 m. |
 | speed | mean 1.29, SD 0.19 m/s | #10190 / #10074 Bordeaux free-walking target, attributed to Moussaïd et al. (2009). |
 | spread | mean 0.65, SD 0.19 m/s | Mean-matched control separating dispersion from mean. |
-| wall | `obstacle_force_profile: gradient_v3` | The actual opt-in implementation from PR #10073; corrected surface-distance law and its development parameters. |
+| wall | `obstacle_force_profile: body_edge_v3` | PR #10073's wall force, which uses clearance from the pedestrian's body edge. |
 | combined | radius + speed + wall | Uses all three selectors together. |
 
 Speed profiles use rejection-truncated normals on **[0, 3] m/s**, using the existing
@@ -38,10 +38,10 @@ numbers. ANSUR outer shoulder width is a geometry approximation, not a measured
 human disc radius. Truncation bounds are an explicit modeling choice.
 
 The campaign branch combines the study driver from PR #10191 and the wall
-selector from PR #10073. The wall and combined arms explicitly select
-`surface_distance_unit_normal_v2`, the law required by `gradient_v3`.
-The profile changes the gain and offset along with the law, so the wall factor
-measures the effect of the profile as a whole.
+selector from PR #10073. Both wall arms use `body_edge_exponential_v3`.
+The law subtracts the pedestrian's force radius from the distance to the wall
+and uses the resulting clearance to set the force. With the smaller radius
+in the combined arm, the same position gives more clearance.
 The combined source and launch packet require independent review before acquisition.
 
 ## Commands and launch boundary
@@ -88,13 +88,14 @@ factor together; scenarios are the fixed release matrix, not a population sample
 Time-to-goal deltas condition on both arms succeeding; `paired_n` exposes this
 selection. Undefined tie-only correlations or no-common-success draws remain null,
 with valid/undefined draw counts. Two-seed smoke CIs cannot support conclusions.
-Missing/duplicate paired slots, invalid metrics and fallback/degraded execution
-refuse successful completion.
+The driver refuses completion if a paired slot is missing or duplicated, a metric is
+invalid, or a planner falls back or degrades. A planner that uses a fallback stop
+during execution leaves a raw episode with the fallback mode and its runtime reason.
 
 `new_failures` inventories every lost success and new collision with paired event
 and raw-trace pointers. Event classes are descriptive; causal mechanism attribution
-remains explicit until paired-trace review. Smoke's three new contacts are classified
-in the receipt; no tuning follows from failures. The #10000 release-baseline Slurm
+remains explicit until paired-trace review. The historical smoke receipt classifies
+three new contacts from its recorded source. The #10000 release-baseline Slurm
 sweep, exception check and adversarial review remain unrun; **no passed-gate claim**.
 
 `manipulation_FACTOR.json` records raw desired/realized free speeds; lone disc
@@ -115,7 +116,7 @@ manifest is an end-to-end success receipt.
 
 ## Verification
 
-See [test-value notes](TESTS.md), [smoke receipt](smoke_receipt.json) and
+See [test-value notes](TESTS.md), [historical smoke receipt](smoke_receipt.json) and
 [plan](PLAN.md). Raw runs/logs remain in the lane evidence directory, outside
 checkout-local output; public receipt and summary are versioned without raw private
 paths. Scientific runs, SNQI-v2 calibration/admission, full-roster cost validation,

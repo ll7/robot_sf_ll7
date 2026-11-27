@@ -266,6 +266,7 @@
                                 "native_command",
                                 "adapter",
                                 "mixed",
+                                "fallback",
                                 "unknown"
                             ]
                         },

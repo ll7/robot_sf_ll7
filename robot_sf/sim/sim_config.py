@@ -20,6 +20,7 @@ from robot_sf.ped_npc.residual_adversary import (
     ResidualAdversaryConfig,
     _normalize_residual_adversary_config,
 )
+from robot_sf.sim.obstacle_force_profile import resolve_obstacle_force_profile
 from robot_sf.sim.pedestrian_model_variants import (
     HSFM_ALIGNMENT_TORQUE_V1,
     HSFM_ANISOTROPIC_FOV_V1,
@@ -458,6 +459,9 @@ class SimulationSettings:
     social_force_kernel_version: InitVar[Any] = None
     """Versioned pedestrian pair-kernel selector; missing preserves 0.0.7."""
 
+    obstacle_force_profile: InitVar[str | None] = None
+    """Opt-in wall calibration; missing preserves released parameters and hashes."""
+
     episode_step_limit: InitVar[int | None] = field(default=None, kw_only=True)
     """Explicit whole-step episode budget; None retains duration-based ceiling semantics.
 
@@ -485,6 +489,11 @@ class SimulationSettings:
             if not isinstance(value, bool):
                 raise TypeError("desired_speed_truncated must be a boolean")
             object.__setattr__(self, "_desired_speed_truncated", value)
+            return
+        if name == "obstacle_force_profile":
+            resolved = resolve_obstacle_force_profile(value)
+            object.__setattr__(self, "_obstacle_force_profile", resolved)
+            object.__setattr__(self, "_obstacle_force_profile_explicit", resolved.explicit)
             return
         if name == "obstacle_force_law":
             resolved, mode = resolve_obstacle_force_law_with_mode(value)
@@ -520,6 +529,11 @@ class SimulationSettings:
                 return object.__getattribute__(self, "_" + name)
             except AttributeError:
                 return default
+        if name == "obstacle_force_profile":
+            try:
+                return object.__getattribute__(self, "_obstacle_force_profile")
+            except AttributeError:
+                return resolve_obstacle_force_profile()
         if name == "social_force_kernel_version":
             try:
                 return object.__getattribute__(self, "_social_force_kernel_version")
@@ -554,6 +568,8 @@ class SimulationSettings:
             overrides["group_allocation_mode"] = self.group_allocation_mode
         if self.episode_step_limit is not None:
             overrides["episode_step_limit"] = self.episode_step_limit
+        if getattr(self, "_obstacle_force_profile_explicit", False):
+            overrides["obstacle_force_profile"] = str(self.obstacle_force_profile)
         return overrides
 
     def to_dict(self) -> dict[str, Any]:

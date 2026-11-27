@@ -303,7 +303,6 @@ def _run_witness(
             row = json.loads(rows[0]) if len(rows) == 1 else {}
             result = _witness_result(summary, row, dt)
         except (
-            ImportError,
             LookupError,
             OSError,
             RobotSfError,
